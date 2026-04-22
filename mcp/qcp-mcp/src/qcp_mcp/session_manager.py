@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import threading
 import os
 import shlex
@@ -66,8 +67,11 @@ class SessionManager:
         script_bin = shutil.which("script") if os.name == "posix" else None
         if script_bin:
             # Run mcp behind a PTY so the lexer behaves interactively on stdin.
-            cmd_str = " ".join(shlex.quote(part) for part in cmd)
-            cmd = [script_bin, "-qf", "-E", "never", "-c", cmd_str, "/dev/null"]
+            if sys.platform == "darwin":
+                cmd = [script_bin, "-q", "/dev/null"] + cmd 
+            else:
+                cmd_str = " ".join(shlex.quote(part) for part in cmd)
+                cmd = [script_bin, "-qf", "-E", "never", "-c", cmd_str, "/dev/null"]
         logger.info("spawning qcp process: %s", cmd)
         try:
             proc = subprocess.Popen(
