@@ -1,10 +1,4 @@
-#include "string_def.h"
-
-/*@ Import Coq Require Import SimpleC.EE.LLM_bench.Engineering.string.strcmp_lib */
-
-/*@ Extern Coq (strcmp_result : list Z -> list Z -> Z -> Prop)
-               (strncmp_result : list Z -> list Z -> Z -> Z -> Prop)
- */
+#include "string.h"
 
 int strcmp(char *s1, char *s2)
 /*@ With str1 str2

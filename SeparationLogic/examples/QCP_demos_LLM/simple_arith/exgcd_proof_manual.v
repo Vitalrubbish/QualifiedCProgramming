@@ -1,11 +1,10 @@
-Require Import Coq.ZArith.ZArith.
+﻿Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Coq.Lists.List.
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.micromega.Psatz.
-Require Import Coq.setoid_ring.Ring.
 Require Import Coq.Sorting.Permutation.
 From AUXLib Require Import int_auto Axioms Feq Idents ListLib VMap.
 Require Import SetsClass.SetsClass. Import SetsNotation.
@@ -171,517 +170,175 @@ Proof.
   apply (exgcd_reduction' _ _ _ _ H H0 H1).
 Qed.
 
-Lemma proof_of_exgcd_return_wit_3 : exgcd_return_wit_3.
-Proof.
-  pre_process.
-  pose proof Z.gcd_rem a_pre b_pre H4 as Hgcd.
-  rewrite H1 in Hgcd.
-  rewrite Z.gcd_0_l in Hgcd.
-  rewrite Z.gcd_comm in Hgcd.
-  Left.
-  Right.
-  Exists x_callee_v.
-  Exists 0.
-  split_pure_spatial.
-  - rewrite H3.
-    replace (x_callee_v - a_pre ÷ b_pre * 0) with x_callee_v by lia.
-    cancel.
-  - split_pures.
-    + dump_pre_spatial.
-      rewrite H1 in H.
-      rewrite Z.gcd_0_r in H.
-      rewrite H.
-      exact Hgcd.
-    + dump_pre_spatial.
-      rewrite H3, H1 in H0.
-      rewrite Z.gcd_0_r in H0.
-      rewrite <- Hgcd.
-      lia.
-    + dump_pre_spatial. exact H4.
-    + dump_pre_spatial. exact H1.
-    + dump_pre_spatial. reflexivity.
-    + dump_pre_spatial. exact H2.
-Qed.
-
-Lemma proof_of_exgcd_return_wit_2 : exgcd_return_wit_2.
-Proof.
-  pre_process.
-  assert (Hgcd1 : Zgcd b_pre (a_pre % (b_pre)) = Zgcd a_pre b_pre).
-  {
-    rewrite Z.gcd_comm.
-    rewrite (Z.gcd_comm a_pre b_pre).
-    apply Z.gcd_rem.
-    exact H5.
-  }
-  assert (Hy_bound :
-    Zabs y_callee_v <= Zabs b_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-  {
-    assert (Hgcd2 : Zgcd b_pre (a_pre % (b_pre)) = Zabs (a_pre % (b_pre))).
-    {
-      pose proof Z.gcd_rem b_pre (a_pre % (b_pre)) H1 as Htmp.
-      rewrite H2 in Htmp.
-      rewrite Z.gcd_0_l in Htmp.
-      rewrite Z.gcd_comm.
-      exact (eq_sym Htmp).
-    }
-    pose proof Z_gcd_divide_l b_pre (a_pre % (b_pre)) as Hdiv.
-    destruct Hdiv as [k Hk].
-    assert (Hk_nonzero : k <> 0).
-    {
-      intro Hk0.
-      rewrite Hk0 in Hk.
-      apply H5.
-      lia.
-    }
-    assert (Hq_ge_1 : 1 <= Zabs b_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-    {
-      assert (Hquotk : Zabs b_pre ÷ Zgcd b_pre (a_pre % (b_pre)) = Zabs k).
-      {
-        rewrite Hgcd2.
-        assert (Habsb : Zabs b_pre = Zabs (k * Zgcd b_pre (a_pre % (b_pre)))).
-        {
-          replace b_pre with (k * Zgcd b_pre (a_pre % (b_pre))) at 1 by exact (eq_sym Hk).
-          reflexivity.
-        }
-        rewrite Habsb.
-        rewrite Z.abs_mul.
-        replace (Zabs (Zgcd b_pre (a_pre % (b_pre)))) with (Zgcd b_pre (a_pre % (b_pre))) by lia.
-        rewrite Hgcd2.
-        replace
-          ((Zabs k * Zabs (a_pre % (b_pre))) ÷ Zabs (a_pre % (b_pre)))
-          with (Zabs k).
-        - reflexivity.
-        - rewrite Z.quot_mul.
-          + reflexivity.
-          + assert (Zabs (a_pre % (b_pre)) <> 0) by lia.
-            exact H10.
-      }
-      rewrite Hquotk.
-      assert (1 <= Zabs k) by lia.
-      lia.
-    }
-    lia.
-  }
-  assert (Hbound :
-    Zabs (0 - a_pre ÷ b_pre * y_callee_v) <=
-    Zabs a_pre ÷ Zgcd a_pre b_pre).
-  {
-    pose proof (exgcd_reduction a_pre b_pre 0 y_callee_v H5) as Htmp.
-    assert (0 <= Zabs (a_pre % (b_pre)) ÷ Zgcd b_pre (a_pre % (b_pre))).
-    {
-      apply Z.quot_pos.
-      - pose proof Z.abs_nonneg (a_pre % (b_pre)).
-        lia.
-      - pose proof (Z_gcd_pos_r b_pre (a_pre % (b_pre)) H1).
-        lia.
-    }
-    assert (Zabs 0 <= Zabs (a_pre % (b_pre)) ÷ Zgcd b_pre (a_pre % (b_pre))) by lia.
-    specialize (Htmp H11 Hy_bound).
-    rewrite Hgcd1 in Htmp.
-    exact Htmp.
-  }
-  pose proof Z.quot_rem a_pre b_pre H5 as Hqr.
-  Right.
-  Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v).
-  Exists y_callee_v.
-  split_pure_spatial.
-  - cancel.
-  - split_pures.
-    + dump_pre_spatial. rewrite H. exact Hgcd1.
-    + dump_pre_spatial.
-      rewrite <- Hgcd1.
-      assert (Heq:
-        a_pre * y_callee_v + b_pre * (x_callee_v - a_pre ÷ b_pre * y_callee_v) =
-        b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v).
-      {
-        assert (Haqy:
-          a_pre * y_callee_v =
-          (b_pre * (a_pre ÷ b_pre) + a_pre % (b_pre)) * y_callee_v).
-        {
-          replace a_pre with (b_pre * (a_pre ÷ b_pre) + a_pre % (b_pre)) at 1 by exact (eq_sym Hqr).
-          reflexivity.
-        }
-        rewrite Haqy.
-        replace
-          ((b_pre * (a_pre ÷ b_pre) + a_pre % (b_pre)) * y_callee_v)
-          with (b_pre * (a_pre ÷ b_pre) * y_callee_v + a_pre % (b_pre) * y_callee_v)
-          by nia.
-        replace
-          (b_pre * (x_callee_v - a_pre ÷ b_pre * y_callee_v))
-          with (b_pre * x_callee_v - b_pre * (a_pre ÷ b_pre) * y_callee_v)
-          by nia.
-        replace
-          (b_pre * (a_pre ÷ b_pre) * y_callee_v + a_pre % (b_pre) * y_callee_v +
-           (b_pre * x_callee_v - b_pre * (a_pre ÷ b_pre) * y_callee_v))
-          with
-          ((b_pre * (a_pre ÷ b_pre) * y_callee_v -
-            b_pre * (a_pre ÷ b_pre) * y_callee_v) +
-           (a_pre % (b_pre) * y_callee_v + b_pre * x_callee_v))
-          by nia.
-        replace
-          (b_pre * (a_pre ÷ b_pre) * y_callee_v -
-           b_pre * (a_pre ÷ b_pre) * y_callee_v) with 0 by nia.
-        replace (a_pre % (b_pre) * y_callee_v + b_pre * x_callee_v)
-          with (b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v) by nia.
-        replace (0 + (b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v))
-          with (b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v) by nia.
-        reflexivity.
-      }
-      rewrite Heq.
-      rewrite H3.
-      rewrite H3 in H0.
-      exact H0.
-    + dump_pre_spatial. exact H5.
-    + dump_pre_spatial. exact H1.
-    + dump_pre_spatial. rewrite <- Hgcd1. exact Hy_bound.
-    + dump_pre_spatial. rewrite H3. exact Hbound.
-Qed.
-
-Lemma proof_of_exgcd_return_wit_1 : exgcd_return_wit_1.
-Proof.
-  pre_process.
-  assert (Hgcd : Zgcd b_pre (a_pre % (b_pre)) = Zgcd a_pre b_pre).
-  {
-    rewrite Z.gcd_comm.
-    rewrite (Z.gcd_comm a_pre b_pre).
-    apply Z.gcd_rem.
-    exact H5.
-  }
-  pose proof Z.quot_rem a_pre b_pre H5 as Hqr.
-  pose proof (exgcd_reduction a_pre b_pre x_callee_v y_callee_v H5 H3 H4) as Hbound.
-  rewrite Hgcd in Hbound.
-  Right.
-  Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v).
-  Exists y_callee_v.
-  split_pure_spatial.
-  - cancel.
-  - split_pures.
-    + dump_pre_spatial. rewrite H. exact Hgcd.
-    + dump_pre_spatial.
-      rewrite <- Hgcd.
-      assert (Heq:
-        a_pre * y_callee_v + b_pre * (x_callee_v - a_pre ÷ b_pre * y_callee_v) =
-        b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v).
-      {
-        assert (Haqy:
-          a_pre * y_callee_v =
-          (b_pre * (a_pre ÷ b_pre) + a_pre % (b_pre)) * y_callee_v).
-        {
-          replace a_pre with (b_pre * (a_pre ÷ b_pre) + a_pre % (b_pre)) at 1 by exact (eq_sym Hqr).
-          reflexivity.
-        }
-        rewrite Haqy.
-        replace
-          ((b_pre * (a_pre ÷ b_pre) + a_pre % (b_pre)) * y_callee_v)
-          with (b_pre * (a_pre ÷ b_pre) * y_callee_v + a_pre % (b_pre) * y_callee_v)
-          by nia.
-        replace
-          (b_pre * (x_callee_v - a_pre ÷ b_pre * y_callee_v))
-          with (b_pre * x_callee_v - b_pre * (a_pre ÷ b_pre) * y_callee_v)
-          by nia.
-        replace
-          (b_pre * (a_pre ÷ b_pre) * y_callee_v + a_pre % (b_pre) * y_callee_v +
-           (b_pre * x_callee_v - b_pre * (a_pre ÷ b_pre) * y_callee_v))
-          with
-          ((b_pre * (a_pre ÷ b_pre) * y_callee_v -
-            b_pre * (a_pre ÷ b_pre) * y_callee_v) +
-           (a_pre % (b_pre) * y_callee_v + b_pre * x_callee_v))
-          by nia.
-        replace
-          (b_pre * (a_pre ÷ b_pre) * y_callee_v -
-           b_pre * (a_pre ÷ b_pre) * y_callee_v) with 0 by nia.
-        replace (a_pre % (b_pre) * y_callee_v + b_pre * x_callee_v)
-          with (b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v) by nia.
-        replace (0 + (b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v))
-          with (b_pre * x_callee_v + a_pre % (b_pre) * y_callee_v) by nia.
-        reflexivity.
-      }
-      rewrite Heq.
-      exact H0.
-    + dump_pre_spatial. exact H5.
-    + dump_pre_spatial. exact H1.
-    + dump_pre_spatial. rewrite <- Hgcd. exact H4.
-    + dump_pre_spatial. exact Hbound.
-Qed.
-
 Lemma proof_of_exgcd_return_wit_4 : exgcd_return_wit_4.
 Proof.
   pre_process.
-  Left.
-  Left.
-  Exists 0.
-  Exists 1.
-  split_pure_spatial.
-  - cancel.
-  - split_pures.
-    + dump_pre_spatial. rewrite H, H2, Z.gcd_0_r. rewrite Z.abs_eq; lia.
-    + dump_pre_spatial. rewrite H2, Z.gcd_0_r. rewrite Z.abs_eq; lia.
-    + dump_pre_spatial. exact H2.
-    + dump_pre_spatial. lia.
-    + dump_pre_spatial. reflexivity.
+  subst b_pre.
+  Left. Left.
+  Exists 0 (-1).
+  entailer!.
+  + rewrite Z.gcd_0_r; lia.
+  + rewrite Z.gcd_0_r; exact PreH1.
 Qed.
 
 Lemma proof_of_exgcd_return_wit_5 : exgcd_return_wit_5.
 Proof.
   pre_process.
-  Left.
-  Left.
-  Exists 0.
-  Exists 0.
-  split_pure_spatial.
-  - cancel.
-  - split_pures.
-    + dump_pre_spatial. rewrite H, H0, H2, Z.gcd_0_r. reflexivity.
-    + dump_pre_spatial. rewrite H0, H2, Z.gcd_0_r. lia.
-    + dump_pre_spatial. exact H2.
-    + dump_pre_spatial. lia.
-    + dump_pre_spatial. reflexivity.
+  subst b_pre.
+  Left. Left.
+  Exists 0 0.
+  entailer!.
+  + rewrite Z.gcd_0_r; lia.
+  + rewrite Z.gcd_0_r; exact PreH1.
 Qed.
 
 Lemma proof_of_exgcd_return_wit_6 : exgcd_return_wit_6.
 Proof.
   pre_process.
-  Left.
-  Left.
-  Exists 0.
-  Exists (-1).
-  split_pure_spatial.
-  - cancel.
-  - split_pures.
-    + dump_pre_spatial. rewrite H, H1, Z.gcd_0_r. rewrite Z.abs_neq; lia.
-    + dump_pre_spatial.
-      rewrite H1, Z.gcd_0_r.
-      replace (a_pre * -1 + b_pre * 0) with (- a_pre) by lia.
-      rewrite Z.abs_neq; lia.
-    + dump_pre_spatial. exact H1.
-    + dump_pre_spatial. lia.
-    + dump_pre_spatial. reflexivity.
+  subst b_pre.
+  Left. Left.
+  Exists 0 1.
+  entailer!.
+  + rewrite Z.gcd_0_r; lia.
+  + rewrite Z.gcd_0_r; exact PreH1.
+Qed.
+
+Lemma proof_of_exgcd_return_wit_1 : exgcd_return_wit_1.
+Proof.
+  pre_process.
+  Left. Right.
+  Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v) y_callee_v .
+  rewrite Z.gcd_comm.
+  rewrite <- (Z.gcd_rem a_pre b_pre PreH6).
+  rewrite Z.gcd_comm.
+  entailer!.
+Qed.
+
+Lemma proof_of_exgcd_return_wit_2 : exgcd_return_wit_2.
+Proof.
+  pre_process.
+  Right.
+  Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v) y_callee_v .
+  subst x_callee_v.
+  rewrite Z.gcd_comm.
+  rewrite <- (Z.gcd_rem a_pre b_pre PreH7).
+  rewrite Z.gcd_comm.
+  replace (0 - a_pre ÷ b_pre * y_callee_v) with (-(a_pre ÷ b_pre * y_callee_v)) by lia.
+  replace (Zabs (-(a_pre ÷ b_pre * y_callee_v))) with (Zabs(a_pre ÷ b_pre * y_callee_v)) by lia.
+  replace (Zgcd b_pre (a_pre % (b_pre))) with (Zabs (a_pre % (b_pre))) in *.
+  2: { rewrite Z.gcd_comm.
+      rewrite <- (Z.gcd_rem b_pre (a_pre % (b_pre)) ltac:(lia)).
+      rewrite PreH4.
+      symmetry.
+      apply Z.gcd_0_l.  }
+  entailer!. 
+  + rewrite Z.abs_mul.
+    apply (Z.le_trans _ (Zabs (a_pre ÷ b_pre))).
+    1: nia.
+    pose proof Z.rem_bound_abs a_pre b_pre PreH7.
+    rewrite <- (Z.quot_abs _ _ PreH7).
+    pose proof Z.abs_nonneg a_pre.
+    apply Z.quot_le_compat_l; lia.
+  + apply (Z.le_trans _ (Zabs b_pre ÷ Zabs b_pre)).
+    1: { rewrite Z.quot_same; lia. }
+    pose proof Z.rem_bound_abs a_pre b_pre PreH7.
+    apply Z.quot_le_compat_l; lia.
+  + pose proof Z.quot_rem a_pre b_pre PreH7.
+    rewrite <- PreH2.
+    pose proof (Z.quot_rem a_pre b_pre ltac:(lia)).
+    lia.
+Qed.
+
+Lemma proof_of_exgcd_return_wit_3 : exgcd_return_wit_3.
+Proof.
+  pre_process.
+  Right.
+  Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v) y_callee_v .
+  rewrite Z.gcd_comm.
+  rewrite <- (Z.gcd_rem a_pre b_pre PreH7).
+  rewrite Z.gcd_comm.
+  entailer!.
+  + apply (exgcd_reduction _ _ _ _ PreH7 PreH5 PreH6).
+  + rewrite <- PreH2.
+    pose proof (Z.quot_rem a_pre b_pre ltac:(lia)).
+    lia.
 Qed.
 
 Lemma proof_of_exgcd_partial_solve_wit_4_pure : exgcd_partial_solve_wit_4_pure.
 Proof.
   pre_process.
-  pose proof Z.rem_bound_abs a_pre b_pre H.
-  split_pures.
-  - dump_pre_spatial. exact H2.
-  - dump_pre_spatial. exact H3.
-  - dump_pre_spatial. lia.
-  - dump_pre_spatial. lia.
+  pose proof Z.rem_bound_abs a_pre b_pre PreH1.
+  entailer!.
 Qed.
 
 Lemma proof_of_exgcd_safety_wit_12 : exgcd_safety_wit_12.
 Proof.
   pre_process.
-  assert (Hgpos : Zgcd b_pre (a_pre % (b_pre)) > 0).
-  { apply Z_gcd_pos_r. exact H1. }
-  assert (Habs_bound :
-    Zabs (x_callee_v - a_pre ÷ b_pre * y_callee_v) <=
-    Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-  {
-    apply exgcd_reduction; auto.
-  }
-  assert (Hquot_le : Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre)) <= Zabs a_pre).
-  {
-    apply Z.quot_le_upper_bound; try lia.
-    pose proof Z.abs_nonneg a_pre.
-    nia.
-  }
-  assert (Ha_int : Zabs a_pre <= INT_MAX) by lia.
-  assert (Habs_int : Zabs (x_callee_v - a_pre ÷ b_pre * y_callee_v) <= INT_MAX).
-  {
-    eapply Z.le_trans with (m := Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-    - exact Habs_bound.
-    - eapply Z.le_trans.
-      + exact Hquot_le.
-      + exact Ha_int.
-  }
-  apply (proj1 (Z.abs_le (x_callee_v - a_pre ÷ b_pre * y_callee_v) INT_MAX)) in Habs_int.
-  destruct Habs_int as [Hlo Hhi].
-  split_pures.
-  - dump_pre_spatial. exact Hhi.
-  - dump_pre_spatial. lia.
 Qed.
 
 Lemma proof_of_exgcd_safety_wit_13 : exgcd_safety_wit_13.
 Proof.
   pre_process.
-  assert (Hgpos : Zgcd b_pre (a_pre % (b_pre)) > 0).
-  { apply Z_gcd_pos_r. exact H1. }
-  assert (Habs_bound0 :
-    Zabs (0 - a_pre ÷ b_pre * y_callee_v) <=
-    Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-  {
-    apply exgcd_reduction with (x := 0); auto.
-    lia.
-  }
-  assert (Habs_bound :
-    Zabs (a_pre ÷ b_pre * y_callee_v) <=
-    Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-  {
-    replace (a_pre ÷ b_pre * y_callee_v) with (- (0 - a_pre ÷ b_pre * y_callee_v)) by lia.
-    rewrite Z.abs_opp.
-    exact Habs_bound0.
-  }
-  assert (Hquot_le : Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre)) <= Zabs a_pre).
-  {
-    apply Z.quot_le_upper_bound; try lia.
-    pose proof Z.abs_nonneg a_pre.
-    nia.
-  }
-  assert (Ha_int : Zabs a_pre <= INT_MAX) by lia.
-  assert (Habs_int : Zabs (a_pre ÷ b_pre * y_callee_v) <= INT_MAX).
-  {
-    eapply Z.le_trans with (m := Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre))).
-    - exact Habs_bound.
-    - eapply Z.le_trans.
-      + exact Hquot_le.
-      + exact Ha_int.
-  }
-  apply (proj1 (Z.abs_le (a_pre ÷ b_pre * y_callee_v) INT_MAX)) in Habs_int.
-  destruct Habs_int as [Hlo Hhi].
-  split_pures.
-  - dump_pre_spatial. exact Hhi.
-  - dump_pre_spatial. lia.
 Qed.
 
 Lemma proof_of_exgcd_safety_wit_15 : exgcd_safety_wit_15.
 Proof.
   pre_process.
-  assert (Hbabs_pos : Zabs b_pre > 0) by lia.
-  assert (Hquot_abs : Zabs (a_pre ÷ b_pre) = Zabs a_pre ÷ Zabs b_pre).
-  { rewrite Z.quot_abs; lia. }
-  assert (Hquot_le : Zabs (a_pre ÷ b_pre) <= Zabs a_pre).
-  {
-    rewrite Hquot_abs.
-    apply Z.quot_le_upper_bound; try lia.
-    pose proof Z.abs_nonneg a_pre.
-    nia.
-  }
-  assert (Hmul_le : Zabs (a_pre ÷ b_pre * y_callee_v) <= Zabs (a_pre ÷ b_pre)).
-  {
+  assert(Zabs(a_pre ÷ b_pre * y_callee_v) <= 2147483647). {
     rewrite Z.abs_mul.
+    rewrite <- Z.quot_abs by ltac:(lia).
+    pose proof Z.quot_le_upper_bound (Zabs(a_pre)) (Zabs(b_pre)) 2147483647 ltac:(lia) ltac:(lia).
     nia.
   }
-  assert (Habs_int : Zabs (x_callee_v - a_pre ÷ b_pre * y_callee_v) <= INT_MAX).
-  {
-    rewrite H3.
-    replace (0 - a_pre ÷ b_pre * y_callee_v) with (- (a_pre ÷ b_pre * y_callee_v)) by lia.
-    rewrite Z.abs_opp.
-    eapply Z.le_trans with (m := Zabs (a_pre ÷ b_pre)).
-    - exact Hmul_le.
-    - eapply Z.le_trans.
-      + exact Hquot_le.
-      + lia.
-  }
-  apply (proj1 (Z.abs_le (x_callee_v - a_pre ÷ b_pre * y_callee_v) INT_MAX)) in Habs_int.
-  destruct Habs_int as [Hlo Hhi].
-  split_pures.
-  - dump_pre_spatial. exact Hhi.
-  - dump_pre_spatial. lia.
+  entailer!.
 Qed.
 
 Lemma proof_of_exgcd_safety_wit_16 : exgcd_safety_wit_16.
 Proof.
   pre_process.
-  assert (Hbabs_pos : Zabs b_pre > 0) by lia.
-  assert (Hquot_abs : Zabs (a_pre ÷ b_pre) = Zabs a_pre ÷ Zabs b_pre).
-  { rewrite Z.quot_abs; lia. }
-  assert (Hquot_le : Zabs (a_pre ÷ b_pre) <= Zabs a_pre).
-  {
-    rewrite Hquot_abs.
-    apply Z.quot_le_upper_bound; try lia.
-    pose proof Z.abs_nonneg a_pre.
-    nia.
-  }
-  assert (Hmul_le : Zabs (a_pre ÷ b_pre * y_callee_v) <= Zabs (a_pre ÷ b_pre)).
-  {
+  assert(Zabs(a_pre ÷ b_pre * y_callee_v) <= 2147483647). {
     rewrite Z.abs_mul.
+    rewrite <- Z.quot_abs by ltac:(lia).
+    pose proof Z.quot_le_upper_bound (Zabs(a_pre)) (Zabs(b_pre)) 2147483647 ltac:(lia) ltac:(lia).
     nia.
   }
-  assert (Habs_int : Zabs (a_pre ÷ b_pre * y_callee_v) <= INT_MAX).
-  {
-    eapply Z.le_trans with (m := Zabs (a_pre ÷ b_pre)).
-    - exact Hmul_le.
-    - eapply Z.le_trans.
-      + exact Hquot_le.
-      + lia.
-  }
-  apply (proj1 (Z.abs_le (a_pre ÷ b_pre * y_callee_v) INT_MAX)) in Habs_int.
-  destruct Habs_int as [Hlo Hhi].
-  split_pures.
-  - dump_pre_spatial. exact Hhi.
-  - dump_pre_spatial. lia.
+  entailer!.
 Qed.
 
 Lemma proof_of_exgcd_safety_wit_18 : exgcd_safety_wit_18.
 Proof.
   pre_process.
+  pose proof exgcd_reduction a_pre b_pre x_callee_v y_callee_v PreH7 PreH5 PreH6.
+  assert(Zgcd b_pre (a_pre % (b_pre)) >= 1). {
+    pose proof (Z_gcd_pos_l b_pre (a_pre % (b_pre)) PreH7).
+    lia.
+  }
+  assert(Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre)) <= 2147483647). {
+    apply Z.quot_le_upper_bound; lia.
+  }
+  entailer!.
 Qed.
 
 Lemma proof_of_exgcd_safety_wit_19 : exgcd_safety_wit_19.
 Proof.
   pre_process.
+  pose proof exgcd_reduction' a_pre b_pre x_callee_v y_callee_v PreH7 PreH5 PreH6.
+  assert(Zgcd b_pre (a_pre % (b_pre)) >= 1). {
+    pose proof (Z_gcd_pos_l b_pre (a_pre % (b_pre)) PreH7).
+    nia.
+  }
+  assert(Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre)) <= 2147483647). {
+    apply Z.quot_le_upper_bound; lia.
+  }
+  assert(Zabs (a_pre ÷ b_pre * y_callee_v) <= Zabs x_callee_v + Zabs (a_pre ÷ b_pre * y_callee_v)) by lia.
+  entailer!.
 Qed.
 
 Lemma proof_of_exgcd_derive_Inter_by_Proof: exgcd_derive_Inter_by_Proof.
 Proof.
   pre_process.
-  split_pure_spatial.
-  - cancel.
-    apply derivable1_wand_sepcon_adjoint.
-    rewrite (logic_equiv_sepcon_comm emp
-      ((EX y_callee_v x_callee_v retval_2,
-        “ retval_2 = Zgcd a_pre b_pre ” &&
-        “ a_pre * x_callee_v + b_pre * y_callee_v = Zgcd a_pre b_pre ” &&
-        “ b_pre <> 0 ” && “ a_pre % (b_pre) <> 0 ” &&
-        “ Zabs x_callee_v <= Zabs b_pre ÷ Zgcd a_pre b_pre ” &&
-        “ Zabs y_callee_v <= Zabs a_pre ÷ Zgcd a_pre b_pre ” &&
-        x_pre # Int |-> x_callee_v ** y_pre # Int |-> y_callee_v)
-       || (EX y_callee_v_2 x_callee_v_2 retval_2,
-           “ retval_2 = Zgcd a_pre b_pre ” &&
-           “ a_pre * x_callee_v_2 + b_pre * y_callee_v_2 = Zgcd a_pre b_pre ” &&
-           “ b_pre <> 0 ” && “ a_pre % (b_pre) = 0 ” &&
-           “ x_callee_v_2 = 0 ” && “ Zabs y_callee_v_2 <= 1 ” &&
-           x_pre # Int |-> x_callee_v_2 ** y_pre # Int |-> y_callee_v_2)
-       || (EX y_callee_v_3 x_callee_v_3 retval_2,
-           “ retval_2 = Zgcd a_pre b_pre ” &&
-           “ a_pre * x_callee_v_3 + b_pre * y_callee_v_3 = Zgcd a_pre b_pre ” &&
-           “ b_pre = 0 ” && “ Zabs x_callee_v_3 <= 1 ” &&
-           “ y_callee_v_3 = 0 ” &&
-           x_pre # Int |-> x_callee_v_3 ** y_pre # Int |-> y_callee_v_3))).
-    rewrite sepcon_emp_equiv.
-    apply derivable1_orp_elim.
-    + apply derivable1_orp_elim.
-      * Intros y_callee_v x_callee_v retval_2.
-        Exists y_callee_v.
-        Exists x_callee_v.
-        Exists retval_2.
-        split_pure_spatial.
-        -- cancel.
-        -- split_pures.
-           ++ dump_pre_spatial. exact H3.
-           ++ dump_pre_spatial. exact H4.
-      * Intros y_callee_v x_callee_v retval_2.
-        Exists y_callee_v.
-        Exists x_callee_v.
-        Exists retval_2.
-        split_pure_spatial.
-        -- cancel.
-        -- split_pures.
-           ++ dump_pre_spatial. exact H3.
-           ++ dump_pre_spatial. exact H4.
-    + Intros y_callee_v x_callee_v retval_2.
-      Exists y_callee_v.
-      Exists x_callee_v.
-      Exists retval_2.
-      split_pure_spatial.
-      * cancel.
-      * split_pures.
-        -- dump_pre_spatial. exact H3.
-        -- dump_pre_spatial. exact H4.
-  - split_pures.
-    + dump_pre_spatial. exact H.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
-    + dump_pre_spatial. exact H2.
+  entailer!.
+  apply derivable1_wand_sepcon_adjoint.
+  entailer!.
+  repeat apply derivable1_orp_elim; Intros x y ret; Exists x y ret; entailer!.
 Qed.

@@ -46,7 +46,7 @@ Proof.
 	+ dump_pre_spatial.
 	  tauto.
 	+ dump_pre_spatial.
-	  exact H3.
+	  assumption.
 	+ dump_pre_spatial.
 	  lia.
 	+ dump_pre_spatial.
@@ -72,7 +72,7 @@ Proof.
 	  cancel (store_tree b_right r0).
 	  apply derivable1_sepcon_comm.
 	+ dump_pre_spatial.
-	  exact H1.
+	  assumption.
 	+ dump_pre_spatial.
 	  lia.
 Qed.
@@ -125,7 +125,7 @@ Proof.
 	pre_process.
 	sep_apply_l_atomic (store_tree_zero b_pre tr_low_level_spec).
 	- dump_pre_spatial.
-	  exact H0.
+	  assumption.
 	- Intros_p Hempty.
 	  subst.
 	  simpl.
@@ -137,7 +137,7 @@ Proof.
 	    cancel (&(retval # "tree" ->ₛ "left") # Ptr |-> 0).
 	    cancel (&(retval # "tree" ->ₛ "right") # Ptr |-> 0).
 	  + dump_pre_spatial.
-	    exact H.
+	    assumption.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
@@ -171,4 +171,3 @@ Proof.
 	  + dump_pre_spatial.
 	    exact H0.
 Qed.
-

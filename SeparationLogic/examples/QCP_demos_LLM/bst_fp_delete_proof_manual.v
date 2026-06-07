@@ -29,7 +29,7 @@ Proof.
 	repeat (split_pure_spatial || split_pures).
 	- repeat cancel.
 	- dump_pre_spatial.
-	  exact H.
+	  exact PreH1.
 	- dump_pre_spatial.
 	  reflexivity.
 	- dump_pre_spatial.
@@ -37,7 +37,7 @@ Proof.
 	- dump_pre_spatial.
 	  reflexivity.
 	- dump_pre_spatial.
-	  exact H2.
+	  exact PreH4.
 	- dump_pre_spatial.
 	  reflexivity.
 	- dump_pre_spatial.
@@ -124,37 +124,37 @@ Proof.
 	  repeat (split_pure_spatial || split_pures).
 	  + repeat cancel.
 	  + dump_pre_spatial.
-	    exact H1.
+	    exact PreH3.
 	  + dump_pre_spatial.
-	    exact H2.
+	    exact PreH4.
 	  + dump_pre_spatial.
-	    exact H3.
+	    exact PreH5.
 	  + dump_pre_spatial.
-	    exact H4.
+	    exact PreH6.
 	  + dump_pre_spatial.
 	    reflexivity.
 	  + dump_pre_spatial.
-	    exact H5.
+	    exact PreH7.
 	  + dump_pre_spatial.
-	    exact H0.
+	    exact PreH2.
 	  + dump_pre_spatial.
-	    exact H6.
+	    exact PreH8.
 	  + dump_pre_spatial.
-	    exact H7.
+	    exact PreH9.
 	  + dump_pre_spatial.
-	    exact H8.
+	    exact PreH10.
 	  + dump_pre_spatial.
-	    exact H9.
+	    exact PreH11.
 	  + dump_pre_spatial.
-	    exact H10.
+	    exact PreH12.
+	  + dump_pre_spatial.
+	    exact PreH1.
+	  + dump_pre_spatial.
+	    lia.
+	  + dump_pre_spatial.
+	    lia.
 	  + dump_pre_spatial.
 	    exact H.
-	  + dump_pre_spatial.
-	    lia.
-	  + dump_pre_spatial.
-	    lia.
-	  + dump_pre_spatial.
-	    exact H11.
 	  + dump_pre_spatial.
 	    reflexivity.
 Qed. 
@@ -187,90 +187,39 @@ Proof.
 	        simpl.
 	        cancel. }
 	      { lia. }
-	      { exact H4. }
+	      { exact PreH6. }
 	  + dump_pre_spatial.
-	    exact H0.
+	    exact PreH2.
 	  + dump_pre_spatial.
-	    rewrite H9 in H1.
+	    rewrite PreH11 in PreH3.
 	    match goal with
-	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in H1
+	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in PreH3
 	    end.
-	    simpl in H1.
-	    exact H1.
+	    simpl in PreH3.
+	    exact PreH3.
 	  + dump_pre_spatial.
-	    rewrite H9 in H2.
+	    rewrite PreH11 in PreH4.
 	    match goal with
-	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in H2
+	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in PreH4
 	    end.
-	    simpl in H2.
-	    exact H2.
+	    simpl in PreH4.
+	    exact PreH4.
 	  + dump_pre_spatial.
-	    rewrite H9 in H3.
+	    rewrite PreH11 in PreH5.
 	    match goal with
-	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in H3
+	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in PreH5
 	    end.
-	    simpl in H3.
-	    exact H3.
+	    simpl in PreH5.
+	    exact PreH5.
 	  + dump_pre_spatial.
-	    exact H.
+	    exact PreH1.
 	  + dump_pre_spatial.
-	    rewrite H9 in H5.
+	    rewrite PreH11 in PreH7.
 	    match goal with
-	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in H5
+	    | Htree : l0 = make_tree _ _ _ _ |- _ => rewrite Htree in PreH7
 	    end.
-	    simpl in H5.
-	    exact H5.
-Qed. 
-
-Lemma proof_of_replace_min_return_wit_1 : replace_min_return_wit_1.
-Proof.
-	pre_process.
-	subst b_v_father.
-	sep_apply_l_atomic (store_tree_make_tree b_v_right b_v_right_key b_v_right_value b_v_right_left b_v_right_right fa l0 r0).
-	- dump_pre_spatial.
-	  exact H11.
-	- dump_pre_spatial.
-	  lia.
-	- rewrite <- H14.
-	  sep_apply store_ptb_store_tree.
-	  Intros p_root.
-	  Exists p_root.
-	  Exists b_v_value.
-	  Exists b_v_key.
-	  sep_apply_l_atomic (store_tree_zero b_v_left b_v l1).
-	  + dump_pre_spatial.
-	    exact H5.
-	  + repeat (split_pure_spatial || split_pures).
-	    * Intros_p Hempty.
-	      rewrite H6.
-	      rewrite H10.
-	      rewrite Hempty.
-	      simpl.
-	      cancel.
-	    * Intros_p Hempty.
-	      dump_pre_spatial.
-	      rewrite H10 in *.
-	      rewrite Hempty in *.
-	      simpl in *.
-	      first [exact H7 | exact H8 | exact H1 | exact H2 | symmetry; exact H1 | symmetry; exact H2].
-	    * Intros_p Hempty.
-	      dump_pre_spatial.
-	      rewrite H10 in *.
-	      rewrite Hempty in *.
-	      simpl in *.
-	      first [exact H7 | exact H8 | exact H1 | exact H2 | symmetry; exact H1 | symmetry; exact H2].
-	    * Intros_p Hempty.
-	      dump_pre_spatial.
-	      rewrite H10 in *.
-	      rewrite Hempty in *.
-	      simpl in *.
-	      first [exact H7 | exact H8 | exact H1 | exact H2 | symmetry; exact H1 | symmetry; exact H2].
-	    * Intros_p Hempty.
-	      dump_pre_spatial.
-	      rewrite H10 in *.
-	      rewrite Hempty in *.
-	      simpl in *.
-	      first [exact H7 | exact H8 | exact H1 | exact H2 | symmetry; exact H1 | symmetry; exact H2].
+	    simpl in PreH7.
+	    exact PreH7.
 Qed. 
 
 Lemma proof_of_replace_min_return_wit_2 : replace_min_return_wit_2.
@@ -280,7 +229,7 @@ Proof.
 	- dump_pre_spatial.
 	  tauto.
 	- Intros_p Hr0empty.
-	  rewrite H.
+	  rewrite PreH1.
 	  sep_apply_l_atomic (store_tree_zero b_v_left b_v l0).
 	  {
 	    dump_pre_spatial.
@@ -301,8 +250,8 @@ Proof.
 	  Exists p_root.
 	  Exists b_v_value.
 	  Exists b_v_key.
-	  rewrite H6.
-	  rewrite H10 in *.
+	  rewrite PreH8.
+	  rewrite PreH12 in *.
 	  rewrite Hl0empty in *.
 	  rewrite Hr0empty in *.
 	  simpl in *.
@@ -310,14 +259,61 @@ Proof.
 	  + repeat cancel.
 	  + dump_pre_spatial.
 	    symmetry.
-	    exact H3.
+	    exact PreH5.
 	  + dump_pre_spatial.
 	    symmetry.
-	    exact H4.
+	    exact PreH6.
 	  + dump_pre_spatial.
-	    exact H7.
+	    exact PreH9.
 	  + dump_pre_spatial.
-	    exact H8.
+	    exact PreH10.
+Qed. 
+
+Lemma proof_of_replace_min_return_wit_1 : replace_min_return_wit_1.
+Proof.
+	pre_process.
+	subst b_v_father.
+	sep_apply_l_atomic (store_tree_make_tree b_v_right b_v_right_key b_v_right_value b_v_right_left b_v_right_right fa l0 r0).
+	- dump_pre_spatial.
+	  exact PreH13.
+	- dump_pre_spatial.
+	  lia.
+	- rewrite <- PreH16.
+	  sep_apply store_ptb_store_tree.
+	  Intros p_root.
+	  Exists p_root.
+	  Exists b_v_value.
+	  Exists b_v_key.
+	  sep_apply_l_atomic (store_tree_zero b_v_left b_v l1).
+	  + dump_pre_spatial.
+	    exact PreH7.
+	  + Intros_p Hempty.
+	    rewrite PreH8.
+	    rewrite PreH12.
+	    rewrite Hempty.
+	    simpl.
+	  repeat (split_pure_spatial || split_pures).
+	    * cancel.
+	    * dump_pre_spatial.
+	      rewrite PreH12 in *.
+	      rewrite Hempty in *.
+	      simpl in *.
+	      first [exact PreH9 | exact PreH10 | exact PreH3 | exact PreH4 | symmetry; exact PreH3 | symmetry; exact PreH4].
+	    * dump_pre_spatial.
+	      rewrite PreH12 in *.
+	      rewrite Hempty in *.
+	      simpl in *.
+	      first [exact PreH9 | exact PreH10 | exact PreH3 | exact PreH4 | symmetry; exact PreH3 | symmetry; exact PreH4].
+	    * dump_pre_spatial.
+	      rewrite PreH12 in *.
+	      rewrite Hempty in *.
+	      simpl in *.
+	      first [exact PreH9 | exact PreH10 | exact PreH3 | exact PreH4 | symmetry; exact PreH3 | symmetry; exact PreH4].
+	    * dump_pre_spatial.
+	      rewrite PreH12 in *.
+	      rewrite Hempty in *.
+	      simpl in *.
+	      first [exact PreH9 | exact PreH10 | exact PreH3 | exact PreH4 | symmetry; exact PreH3 | symmetry; exact PreH4].
 Qed. 
 
 Lemma proof_of_Delete_entail_wit_1 : Delete_entail_wit_1.
@@ -379,9 +375,9 @@ Proof.
 	    cancel (store_tree b_v_right b_v_2 r0).
 	  + repeat split_pures.
 	    * dump_pre_spatial.
-	      exact H.
+	      exact PreH1.
 	    * dump_pre_spatial.
-	      exact H0.
+	      exact PreH2.
 	    * dump_pre_spatial.
 	      lia.
 	    * dump_pre_spatial.
@@ -389,7 +385,7 @@ Proof.
 	    * dump_pre_spatial.
 	      reflexivity.
 	    * dump_pre_spatial.
-	      exact H1.
+	      exact H.
 Qed. 
 
 Lemma proof_of_Delete_entail_wit_3 : Delete_entail_wit_3.
@@ -442,25 +438,25 @@ Proof.
 	    * dump_pre_spatial.
 	      reflexivity.
 	    * dump_pre_spatial.
-	      exact H3.
+	      exact PreH5.
 	    * dump_pre_spatial.
-	      exact H0.
+	      exact PreH2.
 	    * dump_pre_spatial.
-	      exact H1.
+	      exact PreH3.
 	    * dump_pre_spatial.
-	      exact H2.
+	      exact PreH4.
 	    * dump_pre_spatial.
-	      exact H4.
+	      exact PreH6.
 	    * dump_pre_spatial.
-	      exact H5.
+	      exact PreH7.
 	    * dump_pre_spatial.
-	      exact H6.
+	      exact PreH8.
 	    * dump_pre_spatial.
-	      exact H7.
+	      exact PreH9.
 	    * dump_pre_spatial.
-	      exact H8.
+	      exact PreH10.
 	    * dump_pre_spatial.
-	      exact H.
+	      exact PreH1.
 	    * dump_pre_spatial.
 	      lia.
 	    * dump_pre_spatial.
@@ -468,7 +464,7 @@ Proof.
 	    * dump_pre_spatial.
 	      reflexivity.
 	    * dump_pre_spatial.
-	      exact H9.
+	      exact H.
 Qed. 
 
 Lemma proof_of_Delete_entail_wit_4 : Delete_entail_wit_4.
@@ -526,7 +522,7 @@ Proof.
 	pre_process.
 	sep_apply_l_atomic (store_tree_not_zero b_v_left_2 b_v_2 l0).
 	- dump_pre_spatial.
-	  exact H.
+	  exact PreH1.
 	- Intros l1_left.
 	  Intros l1_key.
 	  Intros l1_value.
@@ -535,7 +531,7 @@ Proof.
 	  Intros lpr.
 	  sep_apply_l_atomic (store_tree_not_zero b_v_right_2 b_v_2 r0).
 	  + dump_pre_spatial.
-	    exact H0.
+	    exact PreH2.
 	  + Intros tr0_left.
 	    Intros tr0_key.
 	    Intros tr0_value.
@@ -567,16 +563,19 @@ Proof.
 	      sep_apply_l_atomic (store_tree_make_tree b_v_right_2 tr0_key tr0_value rpl rpr b_v_2 tr0_left tr0_right).
 	      { dump_pre_spatial. lia. }
 	      { dump_pre_spatial. lia. }
-	      { rewrite H7.
-	        repeat cancel. }
+	      { rewrite <- H.
+	        rewrite <- H3.
+	        rewrite PreH9.
+	        repeat cancel;
+	        try solve [dump_pre_spatial; reflexivity | dump_pre_spatial; assumption | dump_pre_spatial; lia]. }
 	    * dump_pre_spatial.
-	      exact H3.
+	      exact PreH5.
 	    * dump_pre_spatial.
-	      exact H1.
+	      exact PreH3.
 	    * dump_pre_spatial.
-	      exact H2.
+	      exact PreH4.
 	    * dump_pre_spatial.
-	      exact H4.
+	      exact PreH6.
 	    * dump_pre_spatial.
 	      lia.
 	    * dump_pre_spatial.
@@ -584,21 +583,21 @@ Proof.
 	    * dump_pre_spatial.
 	      reflexivity.
 	    * dump_pre_spatial.
-	      rewrite H8.
-	      rewrite H9.
-	      rewrite H13.
+	      rewrite PreH10.
+	      rewrite H.
+	      rewrite H3.
 	      reflexivity.
 	    * dump_pre_spatial.
 	      reflexivity.
 	    * dump_pre_spatial.
 	      reflexivity.
 	    * dump_pre_spatial.
-	      exact H.
+	      exact PreH1.
 	    * dump_pre_spatial.
-	      exact H0.
+	      exact PreH2.
 Qed.
 
-Lemma proof_of_Delete_entail_wit_6_1 : Delete_entail_wit_6_1.
+Lemma proof_of_Delete_entail_wit_6_2 : Delete_entail_wit_6_2.
 Proof.
 	pre_process.
 	subst b_v_father.
@@ -607,7 +606,7 @@ Proof.
 	Exists r0.
 	split_pure_spatial.
 	- assert (Hnonnull : b_v_2 <> NULL).
-	  { unfold NULL. exact H1. }
+	  { unfold NULL. exact PreH3. }
 	  assert (Hrange : INT_MIN <= b_v_key <= INT_MAX).
 	  { lia. }
 	  sep_apply (store_ptb_RH b b_v_2 b_v_left fa b_v_key b_v_value l0 Hnonnull Hrange).
@@ -631,7 +630,7 @@ Proof.
 	    Key.order.
 Qed. 
 
-Lemma proof_of_Delete_entail_wit_6_2 : Delete_entail_wit_6_2.
+Lemma proof_of_Delete_entail_wit_6_1 : Delete_entail_wit_6_1.
 Proof.
 	pre_process.
 	subst b_v_father.
@@ -667,11 +666,11 @@ Qed.
 Lemma proof_of_Delete_return_wit_1 : Delete_return_wit_1.
 Proof.
 	pre_process.
-	sep_apply (store_tree_zero b_v fa tr0 H).
+	sep_apply (store_tree_zero b_v fa tr0 PreH1).
 	Intros_p Htr0.
 	assert (Hb : (b # Ptr |-> b_v) |-- (b # Ptr |-> b_v ** store_tree b_v fa tr0)).
 	{
-	  rewrite H.
+	  rewrite PreH1.
 	  rewrite Htr0.
 	  simpl.
 	  split_pure_spatial.
@@ -684,7 +683,7 @@ Proof.
 	sep_apply store_ptb_store_tree.
 	Intros p_root.
 	Exists p_root.
-	rewrite <- H0.
+	rewrite <- PreH2.
 	rewrite Htr0.
 	simpl.
 	apply derivable1_refl.
@@ -697,18 +696,18 @@ Proof.
 	assert (Hkey : INT_MIN <= ptr_callee_key <= INT_MAX) by lia.
 	sep_apply_l_atomic (store_tree_make_tree b_v ptr_callee_key ptr_callee_value b_v_left b_callee_v fa l1 (delete_min tr0)).
 	- dump_pre_spatial.
-	  exact H3.
+	  exact PreH5.
 	- dump_pre_spatial.
 	  exact Hkey.
 	- sep_apply store_ptb_store_tree.
 	  Intros p_root.
 	  Exists p_root.
-	  rewrite <- H6.
-	  rewrite H10.
+	  rewrite <- PreH8.
+	  rewrite PreH12.
 	  assert (Heqkey : x_pre = b_v_key) by lia.
 	  subst x_pre.
-	  rewrite H11.
-	  rewrite H12.
+	  rewrite PreH13.
+	  rewrite PreH14.
 	  unfold tree_delete.
 	  destruct (Key.dec b_v_key b_v_key) as [[Hlt | Hgt] | Heq].
 	  + exfalso.
@@ -722,9 +721,9 @@ Proof.
 	      | make_tree _ _ _ _ => min_key b_v_key tr0_left
 	      end).
 	    {
-	      rewrite H12 in H.
-	      simpl in H.
-	      exact H.
+	      rewrite PreH14 in PreH1.
+	      simpl in PreH1.
+	      exact PreH1.
 	    }
 	    assert (Hvalue_eq : ptr_callee_value =
 	      match tr0_left with
@@ -732,9 +731,9 @@ Proof.
 	      | make_tree _ _ _ _ => min_value b_v_value tr0_left
 	      end).
 	    {
-	      rewrite H12 in H0.
-	      simpl in H0.
-	      exact H0.
+	      rewrite PreH14 in PreH2.
+	      simpl in PreH2.
+	      exact PreH2.
 	    }
 	    rewrite Hkey_eq.
 	    rewrite Hvalue_eq.
@@ -747,55 +746,22 @@ Proof.
 	assert (Hright_key : INT_MIN <= b_v_right_key <= INT_MAX) by lia.
 	sep_apply_l_atomic (store_tree_make_tree b_v_right b_v_right_key b_v_right_value b_v_right_left b_v_right_right fa l0 r0).
 	- dump_pre_spatial.
-	  exact H9.
+	  exact PreH11.
 	- dump_pre_spatial.
 	  exact Hright_key.
 	- sep_apply_l_atomic (store_tree_zero b_v_left b_v l1).
 	  + dump_pre_spatial.
-	    exact H1.
+	    exact PreH3.
 	  + sep_apply store_ptb_store_tree.
 	    Intros p_root.
 	    Exists p_root.
-	    rewrite <- H4.
-	    rewrite H8.
-	    rewrite H13.
+	    rewrite <- PreH6.
+	    rewrite PreH10.
+	    rewrite PreH15.
 	    assert (Heqkey : x_pre = b_v_key) by lia.
 	    subst x_pre.
 	    match goal with
 	    | Hempty : l1 = empty |- _ => rewrite Hempty
-	    end.
-	    unfold tree_delete.
-	    destruct (Key.dec b_v_key b_v_key) as [[Hlt | Hgt] | Heq].
-	    * exfalso.
-	      Key.order.
-	    * exfalso.
-	      Key.order.
-	    * simpl.
-	      apply derivable1_refl.
-Qed.
-
-Lemma proof_of_Delete_return_wit_4 : Delete_return_wit_4.
-Proof.
-	pre_process.
-	assert (Hleft_key : INT_MIN <= b_v_left_key <= INT_MAX) by lia.
-	sep_apply_l_atomic (store_tree_make_tree b_v_left b_v_left_key b_v_left_value b_v_left_left b_v_left_right fa l0 r0).
-	- dump_pre_spatial.
-	  exact H9.
-	- dump_pre_spatial.
-	  exact Hleft_key.
-	- sep_apply_l_atomic (store_tree_zero b_v_right b_v r1).
-	  + dump_pre_spatial.
-	    exact H1.
-	  + sep_apply store_ptb_store_tree.
-	    Intros p_root.
-	    Exists p_root.
-	    rewrite <- H4.
-	    rewrite H8.
-	    rewrite H13.
-	    assert (Heqkey : x_pre = b_v_key) by lia.
-	    subst x_pre.
-	    match goal with
-	    | Hempty : r1 = empty |- _ => rewrite Hempty
 	    end.
 	    unfold tree_delete.
 	    destruct (Key.dec b_v_key b_v_key) as [[Hlt | Hgt] | Heq].
@@ -812,13 +778,13 @@ Proof.
 	pre_process.
 	sep_apply_l_atomic (store_tree_zero b_v_right b_v r0).
 	- dump_pre_spatial.
-	  exact H0.
+	  exact PreH2.
 	- Intros_p Hempty_r.
 	  sep_apply_l_atomic (store_tree_zero b_v_left b_v l0).
 	  + dump_pre_spatial.
-	    exact H.
+	    exact PreH1.
 	  + Intros_p Hempty_l.
-	    rewrite H.
+	    rewrite PreH1.
 	    assert (Hb : (b # Ptr |-> 0) |-- (b # Ptr |-> 0 ** store_tree 0 fa empty)).
 	    {
 	      simpl.
@@ -831,12 +797,45 @@ Proof.
 	    sep_apply store_ptb_store_tree.
 	    Intros p_root.
 	    Exists p_root.
-	    rewrite <- H4.
-	    rewrite H8.
+	    rewrite <- PreH6.
+	    rewrite PreH10.
 	    assert (Heqkey : x_pre = b_v_key) by lia.
 	    subst x_pre.
 	    rewrite Hempty_l.
 	    rewrite Hempty_r.
+	    unfold tree_delete.
+	    destruct (Key.dec b_v_key b_v_key) as [[Hlt | Hgt] | Heq].
+	    * exfalso.
+	      Key.order.
+	    * exfalso.
+	      Key.order.
+	    * simpl.
+	      apply derivable1_refl.
+Qed.
+
+Lemma proof_of_Delete_return_wit_4 : Delete_return_wit_4.
+Proof.
+	pre_process.
+	assert (Hleft_key : INT_MIN <= b_v_left_key <= INT_MAX) by lia.
+	sep_apply_l_atomic (store_tree_make_tree b_v_left b_v_left_key b_v_left_value b_v_left_left b_v_left_right fa l0 r0).
+	- dump_pre_spatial.
+	  exact PreH11.
+	- dump_pre_spatial.
+	  exact Hleft_key.
+	- sep_apply_l_atomic (store_tree_zero b_v_right b_v r1).
+	  + dump_pre_spatial.
+	    exact PreH3.
+	  + sep_apply store_ptb_store_tree.
+	    Intros p_root.
+	    Exists p_root.
+	    rewrite <- PreH6.
+	    rewrite PreH10.
+	    rewrite PreH15.
+	    assert (Heqkey : x_pre = b_v_key) by lia.
+	    subst x_pre.
+	    match goal with
+	    | Hempty : r1 = empty |- _ => rewrite Hempty
+	    end.
 	    unfold tree_delete.
 	    destruct (Key.dec b_v_key b_v_key) as [[Hlt | Hgt] | Heq].
 	    * exfalso.
@@ -877,4 +876,3 @@ Proof.
 	- dump_pre_spatial.
 	  exact H0.
 Qed.
-

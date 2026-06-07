@@ -16,7 +16,7 @@ Local Open Scope sets.
 Local Open Scope string.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 
 Lemma proof_of_strlen_entail_wit_1 : strlen_entail_wit_1.
@@ -36,15 +36,7 @@ Lemma proof_of_strlen_entail_wit_2 : strlen_entail_wit_2.
 Proof.
   pre_process.
   assert (Hi_lt : i < string_length str).
-  { destruct (Z_lt_ge_dec i (string_length str)) as [Hlt | Hge]; auto.
-    assert (i = string_length str) by lia.
-    subst i.
-    exfalso.
-    apply H.
-    unfold c_string, string_length.
-    rewrite app_Znth2 by lia.
-    replace (Zlength str - Zlength str) with 0 by lia.
-    reflexivity. }
+  { eapply c_string_nonzero_index_lt; eauto. }
   split_pure_spatial.
   - unfold store_string; cancel.
   - split_pures.
@@ -56,11 +48,11 @@ Proof.
       intros k Hk.
       destruct (Z.eq_dec k i) as [Heq | Hneq].
       * subst k.
-        unfold c_string in H.
-        rewrite app_Znth1 in H by
+        unfold c_string in PreH1.
+        rewrite app_Znth1 in PreH1 by
           (unfold string_length in Hi_lt; lia).
-        exact H.
-      * apply H4; lia.
+        exact PreH1.
+      * apply PreH6; lia.
 Qed.
 
 Lemma proof_of_strlen_return_wit_1 : strlen_return_wit_1.
@@ -70,10 +62,10 @@ Proof.
   - unfold store_string; cancel.
   - dump_pre_spatial.
     unfold string_length in *.
-    unfold c_string in H.
-    destruct H0 as [_ Hno].
+    unfold c_string in PreH1.
+    destruct PreH2 as [_ Hno].
     destruct (Z_lt_ge_dec i (Zlength str)) as [Hi | Hi].
-    + rewrite app_Znth1 in H by lia.
+    + rewrite app_Znth1 in PreH1 by lia.
       specialize (Hno i ltac:(lia)).
       contradiction.
     + lia.

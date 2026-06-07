@@ -78,7 +78,7 @@ Proof.
   unfold store_Z at 1.
   Exists ptr_2; Exists size_2; Exists cap_2.
   replace (Zabs n) with (Zabs m) by lia.
-  rewrite H3, H6.
+  rewrite PreH8, PreH5.
   rewrite derivable1_sepcon_comm.
   entailer!.
 Qed.
@@ -86,9 +86,9 @@ Qed.
 Lemma proof_of_mpz_abs_sub_return_wit_2 : mpz_abs_sub_return_wit_2.
 Proof.
   pre_process.
-  pose proof (is_compact_Z_mono_size (Zabs m) (Zabs n) bn an ltac:(lia) H2 H3)
+  pose proof (is_compact_Z_mono_size (Zabs m) (Zabs n) bn an ltac:(lia) PreH4 PreH5)
     as Hbn_ge_an.
-  pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs n) an H3)
+  pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs n) an PreH5)
     as [Han_nonneg _].
   pose proof (mpn_sub_ret_0 b_pre__mp_d a_pre__mp_d rp
     (Zabs m) (Zabs n) val_r_out bn an retval retval_2
@@ -109,11 +109,12 @@ Proof.
   replace (Zabs a_pre__mp_size) with an by lia.
   replace (Zabs b_pre__mp_size) with bn by lia.
   replace (Zabs (- retval)) with retval by lia.
-  replace (Zabs (Zabs n - Zabs m)) with (Zabs m - Zabs n) by lia.
+  assert (Habs_mn: Zabs (Zabs n - Zabs m) = Zabs m - Zabs n) by lia.
+  rewrite Habs_mn.
   replace val_r_out with (Zabs m - Zabs n) by lia.
-  rewrite H17, H18.
-  sep_apply (mpd_store_Z_to_mpd_store_Z_compact b_pre__mp_d (Zabs m) bn H2).
-  sep_apply (mpd_store_Z_to_mpd_store_Z_compact a_pre__mp_d (Zabs n) an H3).
+  rewrite PreH19, PreH20.
+  sep_apply (mpd_store_Z_to_mpd_store_Z_compact b_pre__mp_d (Zabs m) bn PreH4).
+  sep_apply (mpd_store_Z_to_mpd_store_Z_compact a_pre__mp_d (Zabs n) an PreH5).
   sep_apply UIntArray.undef_seg_merge_to_undef_seg.
   entailer!.
   - unfold same_sign; right; lia.
@@ -123,9 +124,9 @@ Qed.
 Lemma proof_of_mpz_abs_sub_return_wit_3 : mpz_abs_sub_return_wit_3.
 Proof.
   pre_process.
-  pose proof (is_compact_Z_mono_size (Zabs n) (Zabs m) an bn ltac:(lia) H3 H2)
+  pose proof (is_compact_Z_mono_size (Zabs n) (Zabs m) an bn ltac:(lia) PreH5 PreH4)
     as Han_ge_bn.
-  pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs m) bn H2)
+  pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs m) bn PreH4)
     as [Hbn_nonneg _].
   pose proof (mpn_sub_ret_0 a_pre__mp_d b_pre__mp_d rp
     (Zabs n) (Zabs m) val_r_out an bn retval retval_2
@@ -145,11 +146,12 @@ Proof.
   Exists rp; Exists rsize; Exists r__mp_alloc.
   replace (Zabs a_pre__mp_size) with an by lia.
   replace (Zabs b_pre__mp_size) with bn by lia.
-  replace (Zabs (Zabs n - Zabs m)) with (Zabs n - Zabs m) by lia.
+  assert (Habs_diff_nm: Zabs (Zabs n - Zabs m) = Zabs n - Zabs m) by lia.
+  rewrite Habs_diff_nm.
   replace val_r_out with (Zabs n - Zabs m) by lia.
-  rewrite H16, H17.
-  sep_apply (mpd_store_Z_to_mpd_store_Z_compact a_pre__mp_d (Zabs n) an H3).
-  sep_apply (mpd_store_Z_to_mpd_store_Z_compact b_pre__mp_d (Zabs m) bn H2).
+  rewrite PreH18, PreH19.
+  sep_apply (mpd_store_Z_to_mpd_store_Z_compact a_pre__mp_d (Zabs n) an PreH5).
+  sep_apply (mpd_store_Z_to_mpd_store_Z_compact b_pre__mp_d (Zabs m) bn PreH4).
   sep_apply UIntArray.undef_seg_merge_to_undef_seg.
   replace (Zabs retval) with retval by lia.
   rewrite derivable1_sepcon_comm.
@@ -296,7 +298,7 @@ Qed.
 Lemma proof_of_mpz_add_safety_wit_3 : mpz_add_safety_wit_3.
 Proof.
   pre_process.
-  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n - Zabs m) retval).
+  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n + Zabs m) retval).
   Intros.
   split_pures; dump_pre_spatial; lia.
 Qed.
@@ -304,45 +306,25 @@ Qed.
 Lemma proof_of_mpz_add_safety_wit_5 : mpz_add_safety_wit_5.
 Proof.
   pre_process.
-  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n + Zabs m) retval).
+  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n - Zabs m) retval).
   Intros.
   split_pures; dump_pre_spatial; lia.
 Qed.
 
-Lemma proof_of_mpz_add_return_wit_1 : mpz_add_return_wit_1.
-Proof.
-  pre_process.
-  assert (n >= 0 /\ m < 0) as Hnm.
-  { unfold same_sign in *.
-    destruct (lxor_negative_implies_opposite_signs_simple size size_2 ltac:(lia));
-      lia. }
-  assert (same_sign (n + m) retval) as Hsg.
-  { unfold same_sign in *. replace (n + m) with (Zabs n - Zabs m) by lia; lia. }
-  replace (Zabs (Zabs n - Zabs m)) with (Zabs (n + m)) by lia.
-  unfold store_Z at 1.
-  Intros bptr bsize bcap.
-  unfold store_Z at 1.
-  Exists ptr; Exists size_3; Exists cap_3.
-  unfold store_Z at 1.
-  Exists bptr; Exists bsize; Exists bcap.
-  unfold store_Z at 1.
-  Exists ptr_2; Exists retval; Exists cap_4.
-  entailer!.
-Qed.
-
-Lemma proof_of_mpz_add_return_wit_2 : mpz_add_return_wit_2.
+Lemma proof_of_mpz_add_return_wit_4 : mpz_add_return_wit_4.
 Proof.
   pre_process.
   assert (n < 0 /\ m >= 0) as Hnm.
-  { unfold same_sign in *.
+  { unfold same_sign in PreH4, PreH7, PreH9.
     destruct (lxor_negative_implies_opposite_signs_simple size size_2 ltac:(lia));
       lia. }
   prop_apply (mpd_store_Z_to_is_compact_Z ptr_2 (Zabs (Zabs n - Zabs m)) (Zabs retval)).
   Intros.
   assert (same_sign (n + m) (- retval)) as Hsg.
   { replace (n + m) with (-(Zabs n - Zabs m)) by lia.
-    apply same_sign_opp_compact_abs; assumption. }
-  replace (Zabs (Zabs n - Zabs m)) with (Zabs (n + m)) by lia.
+    apply same_sign_opp_compact_abs; [exact PreH1 | assumption]. }
+  assert (Habs_add_1: Zabs (Zabs n - Zabs m) = Zabs (n + m)) by lia.
+  rewrite Habs_add_1.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -358,13 +340,15 @@ Qed.
 Lemma proof_of_mpz_add_return_wit_3 : mpz_add_return_wit_3.
 Proof.
   pre_process.
-  assert (n >= 0 /\ m >= 0) as Hnm.
-  { unfold same_sign in *.
-    pose proof (proj1 (Z.lxor_nonneg size size_2) ltac:(lia)).
-    lia. }
+  assert (n >= 0 /\ m < 0) as Hnm.
+  { unfold same_sign in PreH4, PreH7, PreH9.
+    destruct (lxor_negative_implies_opposite_signs_simple size size_2 ltac:(lia));
+      lia. }
   assert (same_sign (n + m) retval) as Hsg.
-  { unfold same_sign in *. lia. }
-  replace (Zabs (Zabs n + Zabs m)) with (Zabs (n + m)) by lia.
+  { replace (n + m) with (Zabs n - Zabs m) by lia.
+    exact PreH1. }
+  assert (Habs_add_2: Zabs (Zabs n - Zabs m) = Zabs (n + m)) by lia.
+  rewrite Habs_add_2.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -376,18 +360,20 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_mpz_add_return_wit_4 : mpz_add_return_wit_4.
+Lemma proof_of_mpz_add_return_wit_2 : mpz_add_return_wit_2.
 Proof.
   pre_process.
   assert (n < 0 /\ m < 0) as Hnm.
-  { unfold same_sign in *.
-    destruct (lxor_nonneg_implies_same_sign size size_2 ltac:(lia)); lia. }
+  { unfold same_sign in PreH4, PreH7, PreH9.
+    destruct (lxor_nonneg_implies_same_sign size size_2 ltac:(lia));
+      lia. }
   prop_apply (mpd_store_Z_to_is_compact_Z ptr_2 (Zabs (Zabs n + Zabs m)) (Zabs retval)).
   Intros.
   assert (same_sign (n + m) (- retval)) as Hsg.
   { replace (n + m) with (-(Zabs n + Zabs m)) by lia.
-    apply same_sign_opp_compact_abs; assumption. }
-  replace (Zabs (Zabs n + Zabs m)) with (Zabs (n + m)) by lia.
+    apply same_sign_opp_compact_abs; [exact PreH1 | assumption]. }
+  assert (Habs_add_3: Zabs (Zabs n + Zabs m) = Zabs (n + m)) by lia.
+  rewrite Habs_add_3.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -400,32 +386,17 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_mpz_sub_safety_wit_3 : mpz_sub_safety_wit_3.
+Lemma proof_of_mpz_add_return_wit_1 : mpz_add_return_wit_1.
 Proof.
   pre_process.
-  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n + Zabs m) retval).
-  Intros.
-  split_pures; dump_pre_spatial; lia.
-Qed.
-
-Lemma proof_of_mpz_sub_safety_wit_5 : mpz_sub_safety_wit_5.
-Proof.
-  pre_process.
-  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n - Zabs m) retval).
-  Intros.
-  split_pures; dump_pre_spatial; lia.
-Qed.
-
-Lemma proof_of_mpz_sub_return_wit_1 : mpz_sub_return_wit_1.
-Proof.
-  pre_process.
-  assert (n >= 0 /\ m < 0) as Hnm.
-  { unfold same_sign in *.
-    destruct (lxor_negative_implies_opposite_signs_simple size size_2 ltac:(lia));
-      lia. }
-  assert (same_sign (n - m) retval) as Hsg.
-  { unfold same_sign in *. replace (n - m) with (Zabs n + Zabs m) by lia; lia. }
-  replace (Zabs (Zabs n + Zabs m)) with (Zabs (n - m)) by lia.
+  assert (n >= 0 /\ m >= 0) as Hnm.
+  { unfold same_sign in PreH4, PreH7, PreH9.
+    destruct (lxor_nonneg_implies_same_sign size size_2 ltac:(lia)); lia. }
+  assert (same_sign (n + m) retval) as Hsg.
+  { replace (n + m) with (Zabs n + Zabs m) by lia.
+    exact PreH1. }
+  assert (Habs_add_4: Zabs (Zabs n + Zabs m) = Zabs (n + m)) by lia.
+  rewrite Habs_add_4.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -437,19 +408,36 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_mpz_sub_return_wit_2 : mpz_sub_return_wit_2.
+Lemma proof_of_mpz_sub_safety_wit_3 : mpz_sub_safety_wit_3.
+Proof.
+  pre_process.
+  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n - Zabs m) retval).
+  Intros.
+  split_pures; dump_pre_spatial; lia.
+Qed.
+
+Lemma proof_of_mpz_sub_safety_wit_5 : mpz_sub_safety_wit_5.
+Proof.
+  pre_process.
+  prop_apply_p (store_Z_remain_size_int_range r_pre (Zabs n + Zabs m) retval).
+  Intros.
+  split_pures; dump_pre_spatial; lia.
+Qed.
+
+Lemma proof_of_mpz_sub_return_wit_4 : mpz_sub_return_wit_4.
 Proof.
   pre_process.
   assert (n < 0 /\ m >= 0) as Hnm.
-  { unfold same_sign in *.
+  { unfold same_sign in PreH4, PreH7, PreH9.
     destruct (lxor_negative_implies_opposite_signs_simple size size_2 ltac:(lia));
       lia. }
   prop_apply (mpd_store_Z_to_is_compact_Z ptr_2 (Zabs (Zabs n + Zabs m)) (Zabs retval)).
   Intros.
   assert (same_sign (n - m) (- retval)) as Hsg.
   { replace (n - m) with (-(Zabs n + Zabs m)) by lia.
-    apply same_sign_opp_compact_abs; assumption. }
-  replace (Zabs (Zabs n + Zabs m)) with (Zabs (n - m)) by lia.
+    apply same_sign_opp_compact_abs; [exact PreH1 | assumption]. }
+  assert (Habs_sub_1: Zabs (Zabs n + Zabs m) = Zabs (n - m)) by lia.
+  rewrite Habs_sub_1.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -465,12 +453,15 @@ Qed.
 Lemma proof_of_mpz_sub_return_wit_3 : mpz_sub_return_wit_3.
 Proof.
   pre_process.
-  assert (n >= 0 /\ m >= 0) as Hnm.
-  { unfold same_sign in *.
-    destruct (lxor_nonneg_implies_same_sign size size_2 ltac:(lia)); lia. }
+  assert (n >= 0 /\ m < 0) as Hnm.
+  { unfold same_sign in PreH4, PreH7, PreH9.
+    destruct (lxor_negative_implies_opposite_signs_simple size size_2 ltac:(lia));
+      lia. }
   assert (same_sign (n - m) retval) as Hsg.
-  { unfold same_sign in *. replace (n - m) with (Zabs n - Zabs m) by lia; lia. }
-  replace (Zabs (Zabs n - Zabs m)) with (Zabs (n - m)) by lia.
+  { replace (n - m) with (Zabs n + Zabs m) by lia.
+    exact PreH1. }
+  assert (Habs_sub_2: Zabs (Zabs n + Zabs m) = Zabs (n - m)) by lia.
+  rewrite Habs_sub_2.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -482,18 +473,19 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_mpz_sub_return_wit_4 : mpz_sub_return_wit_4.
+Lemma proof_of_mpz_sub_return_wit_2 : mpz_sub_return_wit_2.
 Proof.
   pre_process.
   assert (n < 0 /\ m < 0) as Hnm.
-  { unfold same_sign in *.
+  { unfold same_sign in PreH4, PreH7, PreH9.
     destruct (lxor_nonneg_implies_same_sign size size_2 ltac:(lia)); lia. }
   prop_apply (mpd_store_Z_to_is_compact_Z ptr_2 (Zabs (Zabs n - Zabs m)) (Zabs retval)).
   Intros.
   assert (same_sign (n - m) (- retval)) as Hsg.
   { replace (n - m) with (-(Zabs n - Zabs m)) by lia.
-    apply same_sign_opp_compact_abs; assumption. }
-  replace (Zabs (Zabs n - Zabs m)) with (Zabs (n - m)) by lia.
+    apply same_sign_opp_compact_abs; [exact PreH1 | assumption]. }
+  assert (Habs_sub_3: Zabs (Zabs n - Zabs m) = Zabs (n - m)) by lia.
+  rewrite Habs_sub_3.
   unfold store_Z at 1.
   Intros bptr bsize bcap.
   unfold store_Z at 1.
@@ -503,5 +495,26 @@ Proof.
   unfold store_Z at 1.
   Exists ptr_2; Exists (- retval); Exists cap_4.
   replace (Zabs (- retval)) with (Zabs retval) by lia.
+  entailer!.
+Qed.
+
+Lemma proof_of_mpz_sub_return_wit_1 : mpz_sub_return_wit_1.
+Proof.
+  pre_process.
+  assert (n >= 0 /\ m >= 0) as Hnm.
+  { unfold same_sign in PreH4, PreH7, PreH9.
+    destruct (lxor_nonneg_implies_same_sign size size_2 ltac:(lia)); lia. }
+  assert (same_sign (n - m) retval) as Hsg.
+  { replace (n - m) with (Zabs n - Zabs m) by lia; exact PreH1. }
+  assert (Habs_sub_4: Zabs (Zabs n - Zabs m) = Zabs (n - m)) by lia.
+  rewrite Habs_sub_4.
+  unfold store_Z at 1.
+  Intros bptr bsize bcap.
+  unfold store_Z at 1.
+  Exists ptr; Exists size_3; Exists cap_3.
+  unfold store_Z at 1.
+  Exists bptr; Exists bsize; Exists bcap.
+  unfold store_Z at 1.
+  Exists ptr_2; Exists retval; Exists cap_4.
   entailer!.
 Qed.

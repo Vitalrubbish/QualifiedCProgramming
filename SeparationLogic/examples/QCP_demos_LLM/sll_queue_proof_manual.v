@@ -1,4 +1,4 @@
-Require Import Coq.ZArith.ZArith.
+﻿Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Coq.Lists.List.
@@ -49,7 +49,7 @@ Proof.
   - cancel.
     cancel.
   - dump_pre_spatial.
-    exact H.
+    exact PreH1.
 Qed.
 
 Lemma proof_of_dequeue_entail_wit_1 : dequeue_entail_wit_1.
@@ -89,7 +89,7 @@ Proof.
     + dump_pre_spatial.
       reflexivity.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
 Qed.
 
 Lemma proof_of_init_empty_queue_return_wit_1 : init_empty_queue_return_wit_1.
@@ -102,7 +102,7 @@ Proof.
   - cancel.
   - split_pures.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
       reflexivity.
 Qed.

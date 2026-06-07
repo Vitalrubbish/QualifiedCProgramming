@@ -21,12 +21,8 @@ Local Open Scope sac.
 (*----- Function add -----*)
 
 Definition add_safety_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) ,
-  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  ((( &( "z" ) )) # Int  |->_)
+forall (y_pre: Z) (x_pre: Z) (PreH1 : (0 <= x_pre)) (PreH2 : (x_pre <= 100)) (PreH3 : (0 <= y_pre)) (PreH4 : (y_pre <= 100)) ,
+  ((( &( "z" ) )) # Int  |->_)
   **  ((( &( "y" ) )) # Int  |-> y_pre)
   **  ((( &( "x" ) )) # Int  |-> x_pre)
 |--
@@ -35,12 +31,8 @@ forall (y_pre: Z) (x_pre: Z) ,
 .
 
 Definition add_return_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) ,
-  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  emp
+forall (y_pre: Z) (x_pre: Z) (PreH1 : (0 <= x_pre)) (PreH2 : (x_pre <= 100)) (PreH3 : (0 <= y_pre)) (PreH4 : (y_pre <= 100)) ,
+  TT && emp 
 |--
   “ ((x_pre + y_pre ) = (x_pre + y_pre )) ”
   &&  emp
@@ -49,17 +41,8 @@ forall (y_pre: Z) (x_pre: Z) ,
 (*----- Function slow_add -----*)
 
 Definition slow_add_safety_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  ((( &( "x" ) )) # Int  |-> x)
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (0 <= x)) (PreH2 : (x <= 100)) (PreH3 : (0 <= y)) (PreH4 : (y <= 200)) (PreH5 : ((x + y ) = (x_pre + y_pre ))) (PreH6 : (0 <= x_pre)) (PreH7 : (x_pre <= 100)) (PreH8 : (0 <= y_pre)) (PreH9 : (y_pre <= 100)) ,
+  ((( &( "x" ) )) # Int  |-> x)
   **  ((( &( "y" ) )) # Int  |-> y)
 |--
   “ (0 <= INT_MAX) ” 
@@ -67,18 +50,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 .
 
 Definition slow_add_safety_wit_2 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (x > 0) ” 
-  &&  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  ((( &( "x" ) )) # Int  |-> x)
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (x > 0)) (PreH2 : (0 <= x)) (PreH3 : (x <= 100)) (PreH4 : (0 <= y)) (PreH5 : (y <= 200)) (PreH6 : ((x + y ) = (x_pre + y_pre ))) (PreH7 : (0 <= x_pre)) (PreH8 : (x_pre <= 100)) (PreH9 : (0 <= y_pre)) (PreH10 : (y_pre <= 100)) ,
+  ((( &( "x" ) )) # Int  |-> x)
   **  ((( &( "y" ) )) # Int  |-> y)
 |--
   “ ((x - 1 ) <= INT_MAX) ” 
@@ -86,18 +59,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 .
 
 Definition slow_add_safety_wit_3 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (x > 0) ” 
-  &&  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  ((( &( "x" ) )) # Int  |-> x)
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (x > 0)) (PreH2 : (0 <= x)) (PreH3 : (x <= 100)) (PreH4 : (0 <= y)) (PreH5 : (y <= 200)) (PreH6 : ((x + y ) = (x_pre + y_pre ))) (PreH7 : (0 <= x_pre)) (PreH8 : (x_pre <= 100)) (PreH9 : (0 <= y_pre)) (PreH10 : (y_pre <= 100)) ,
+  ((( &( "x" ) )) # Int  |-> x)
   **  ((( &( "y" ) )) # Int  |-> y)
 |--
   “ (1 <= INT_MAX) ” 
@@ -105,18 +68,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 .
 
 Definition slow_add_safety_wit_4 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (x > 0) ” 
-  &&  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  ((( &( "x" ) )) # Int  |-> (x - 1 ))
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (x > 0)) (PreH2 : (0 <= x)) (PreH3 : (x <= 100)) (PreH4 : (0 <= y)) (PreH5 : (y <= 200)) (PreH6 : ((x + y ) = (x_pre + y_pre ))) (PreH7 : (0 <= x_pre)) (PreH8 : (x_pre <= 100)) (PreH9 : (0 <= y_pre)) (PreH10 : (y_pre <= 100)) ,
+  ((( &( "x" ) )) # Int  |-> (x - 1 ))
   **  ((( &( "y" ) )) # Int  |-> y)
 |--
   “ ((y + 1 ) <= INT_MAX) ” 
@@ -124,18 +77,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 .
 
 Definition slow_add_safety_wit_5 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (x > 0) ” 
-  &&  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  ((( &( "x" ) )) # Int  |-> (x - 1 ))
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (x > 0)) (PreH2 : (0 <= x)) (PreH3 : (x <= 100)) (PreH4 : (0 <= y)) (PreH5 : (y <= 200)) (PreH6 : ((x + y ) = (x_pre + y_pre ))) (PreH7 : (0 <= x_pre)) (PreH8 : (x_pre <= 100)) (PreH9 : (0 <= y_pre)) (PreH10 : (y_pre <= 100)) ,
+  ((( &( "x" ) )) # Int  |-> (x - 1 ))
   **  ((( &( "y" ) )) # Int  |-> y)
 |--
   “ (1 <= INT_MAX) ” 
@@ -143,12 +86,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 .
 
 Definition slow_add_entail_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) ,
-  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  emp
+forall (y_pre: Z) (x_pre: Z) (PreH1 : (0 <= x_pre)) (PreH2 : (x_pre <= 100)) (PreH3 : (0 <= y_pre)) (PreH4 : (y_pre <= 100)) ,
+  TT && emp 
 |--
   “ (0 <= x_pre) ” 
   &&  “ (x_pre <= 100) ” 
@@ -163,18 +102,8 @@ forall (y_pre: Z) (x_pre: Z) ,
 .
 
 Definition slow_add_entail_wit_2 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (x > 0) ” 
-  &&  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  emp
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (x > 0)) (PreH2 : (0 <= x)) (PreH3 : (x <= 100)) (PreH4 : (0 <= y)) (PreH5 : (y <= 200)) (PreH6 : ((x + y ) = (x_pre + y_pre ))) (PreH7 : (0 <= x_pre)) (PreH8 : (x_pre <= 100)) (PreH9 : (0 <= y_pre)) (PreH10 : (y_pre <= 100)) ,
+  TT && emp 
 |--
   “ (0 <= (x - 1 )) ” 
   &&  “ ((x - 1 ) <= 100) ” 
@@ -189,18 +118,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 .
 
 Definition slow_add_return_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
-  “ (x <= 0) ” 
-  &&  “ (0 <= x) ” 
-  &&  “ (x <= 100) ” 
-  &&  “ (0 <= y) ” 
-  &&  “ (y <= 200) ” 
-  &&  “ ((x + y ) = (x_pre + y_pre )) ” 
-  &&  “ (0 <= x_pre) ” 
-  &&  “ (x_pre <= 100) ” 
-  &&  “ (0 <= y_pre) ” 
-  &&  “ (y_pre <= 100) ”
-  &&  emp
+forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) (PreH1 : (x <= 0)) (PreH2 : (0 <= x)) (PreH3 : (x <= 100)) (PreH4 : (0 <= y)) (PreH5 : (y <= 200)) (PreH6 : ((x + y ) = (x_pre + y_pre ))) (PreH7 : (0 <= x_pre)) (PreH8 : (x_pre <= 100)) (PreH9 : (0 <= y_pre)) (PreH10 : (y_pre <= 100)) ,
+  TT && emp 
 |--
   “ (y = (x_pre + y_pre )) ”
   &&  emp
@@ -209,10 +128,8 @@ forall (y_pre: Z) (x_pre: Z) (y: Z) (x: Z) ,
 (*----- Function add1_1 -----*)
 
 Definition add1_1_safety_wit_1 := 
-forall (x_pre: Z) ,
-  “ (INT_MIN <= x_pre) ” 
-  &&  “ (x_pre < INT_MAX) ”
-  &&  ((( &( "y" ) )) # Int  |->_)
+forall (x_pre: Z) (PreH1 : (INT_MIN <= x_pre)) (PreH2 : (x_pre < INT_MAX)) ,
+  ((( &( "y" ) )) # Int  |->_)
   **  ((( &( "x" ) )) # Int  |-> x_pre)
 |--
   “ ((x_pre + 1 ) <= INT_MAX) ” 
@@ -220,10 +137,8 @@ forall (x_pre: Z) ,
 .
 
 Definition add1_1_safety_wit_2 := 
-forall (x_pre: Z) ,
-  “ (INT_MIN <= x_pre) ” 
-  &&  “ (x_pre < INT_MAX) ”
-  &&  ((( &( "y" ) )) # Int  |->_)
+forall (x_pre: Z) (PreH1 : (INT_MIN <= x_pre)) (PreH2 : (x_pre < INT_MAX)) ,
+  ((( &( "y" ) )) # Int  |->_)
   **  ((( &( "x" ) )) # Int  |-> x_pre)
 |--
   “ (1 <= INT_MAX) ” 
@@ -231,10 +146,8 @@ forall (x_pre: Z) ,
 .
 
 Definition add1_1_return_wit_1 := 
-forall (x_pre: Z) ,
-  “ (INT_MIN <= x_pre) ” 
-  &&  “ (x_pre < INT_MAX) ”
-  &&  emp
+forall (x_pre: Z) (PreH1 : (INT_MIN <= x_pre)) (PreH2 : (x_pre < INT_MAX)) ,
+  TT && emp 
 |--
   “ ((x_pre + 1 ) = (x_pre + 1 )) ”
   &&  emp
@@ -243,10 +156,8 @@ forall (x_pre: Z) ,
 (*----- Function add1_2 -----*)
 
 Definition add1_2_safety_wit_1 := 
-forall (x_pre: Z) (v: Z) ,
-  “ (INT_MIN <= v) ” 
-  &&  “ (v < INT_MAX) ”
-  &&  ((( &( "x" ) )) # Ptr  |-> x_pre)
+forall (x_pre: Z) (v: Z) (PreH1 : (INT_MIN <= v)) (PreH2 : (v < INT_MAX)) ,
+  ((( &( "x" ) )) # Ptr  |-> x_pre)
   **  ((x_pre) # Int  |-> v)
 |--
   “ ((v + 1 ) <= INT_MAX) ” 
@@ -254,10 +165,8 @@ forall (x_pre: Z) (v: Z) ,
 .
 
 Definition add1_2_return_wit_1 := 
-forall (x_pre: Z) (v: Z) ,
-  “ (INT_MIN <= v) ” 
-  &&  “ (v < INT_MAX) ”
-  &&  ((x_pre) # Int  |-> (v + 1 ))
+forall (x_pre: Z) (v: Z) (PreH1 : (INT_MIN <= v)) (PreH2 : (v < INT_MAX)) ,
+  ((x_pre) # Int  |-> (v + 1 ))
 |--
   EX (x_pre_v: Z) ,
   “ (x_pre_v = (v + 1 )) ”
@@ -267,10 +176,8 @@ forall (x_pre: Z) (v: Z) ,
 (*----- Function add1_3 -----*)
 
 Definition add1_3_safety_wit_1 := 
-forall (x_pre: Z) (v: Z) (x_pre_v: Z) ,
-  “ (INT_MIN <= v) ” 
-  &&  “ (v < INT_MAX) ”
-  &&  ((( &( "x" ) )) # Ptr  |-> x_pre)
+forall (x_pre: Z) (v: Z) (x_pre_v: Z) (PreH1 : (INT_MIN <= v)) (PreH2 : (v < INT_MAX)) ,
+  ((( &( "x" ) )) # Ptr  |-> x_pre)
   **  ((x_pre) # Ptr  |-> x_pre_v)
   **  ((x_pre_v) # Int  |-> v)
 |--
@@ -279,10 +186,8 @@ forall (x_pre: Z) (v: Z) (x_pre_v: Z) ,
 .
 
 Definition add1_3_safety_wit_2 := 
-forall (x_pre: Z) (v: Z) (x_pre_v: Z) ,
-  “ (INT_MIN <= v) ” 
-  &&  “ (v < INT_MAX) ”
-  &&  ((( &( "x" ) )) # Ptr  |-> x_pre)
+forall (x_pre: Z) (v: Z) (x_pre_v: Z) (PreH1 : (INT_MIN <= v)) (PreH2 : (v < INT_MAX)) ,
+  ((( &( "x" ) )) # Ptr  |-> x_pre)
   **  ((x_pre) # Ptr  |-> x_pre_v)
   **  ((x_pre_v) # Int  |-> v)
 |--
@@ -291,10 +196,8 @@ forall (x_pre: Z) (v: Z) (x_pre_v: Z) ,
 .
 
 Definition add1_3_return_wit_1 := 
-forall (x_pre: Z) (v: Z) (x_pre_v_2: Z) ,
-  “ (INT_MIN <= v) ” 
-  &&  “ (v < INT_MAX) ”
-  &&  ((x_pre) # Ptr  |-> x_pre_v_2)
+forall (x_pre: Z) (v: Z) (x_pre_v_2: Z) (PreH1 : (INT_MIN <= v)) (PreH2 : (v < INT_MAX)) ,
+  ((x_pre) # Ptr  |-> x_pre_v_2)
   **  ((x_pre_v_2) # Int  |-> (v + 1 ))
 |--
   EX (x_pre_v_v: Z)  (x_pre_v: Z) ,

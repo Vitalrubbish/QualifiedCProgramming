@@ -22,9 +22,8 @@ Local Open Scope sac.
 (*----- Function swap0 -----*)
 
 Definition swap0_return_wit_1_eq := 
-forall (py_pre: Z) (px_pre: Z) (x_eq: Z) ,
-  “ (px_pre = py_pre) ”
-  &&  ((py_pre) # Int  |-> x_eq)
+forall (py_pre: Z) (px_pre: Z) (x_eq: Z) (PreH1 : (px_pre = py_pre)) ,
+  ((py_pre) # Int  |-> x_eq)
 |--
   ((px_pre) # Int  |-> x_eq)
 .
@@ -39,27 +38,24 @@ forall (py_pre: Z) (px_pre: Z) (y_neq: Z) (x_neq: Z) ,
 .
 
 Definition swap0_partial_solve_wit_1_eq := 
-forall (py_pre: Z) (px_pre: Z) (x_eq: Z) ,
-  “ (px_pre = py_pre) ”
-  &&  ((px_pre) # Int  |-> x_eq)
+forall (py_pre: Z) (px_pre: Z) (x_eq: Z) (PreH1 : (px_pre = py_pre)) ,
+  ((px_pre) # Int  |-> x_eq)
 |--
   “ (px_pre = py_pre) ”
   &&  ((py_pre) # Int  |-> x_eq)
 .
 
 Definition swap0_partial_solve_wit_2_eq := 
-forall (py_pre: Z) (px_pre: Z) (x_eq: Z) ,
-  “ (px_pre = py_pre) ”
-  &&  ((py_pre) # Int  |-> x_eq)
+forall (py_pre: Z) (px_pre: Z) (x_eq: Z) (PreH1 : (px_pre = py_pre)) ,
+  ((py_pre) # Int  |-> x_eq)
 |--
   “ (px_pre = py_pre) ”
   &&  ((px_pre) # Int  |->_)
 .
 
 Definition swap0_partial_solve_wit_3_eq := 
-forall (py_pre: Z) (px_pre: Z) (x_eq: Z) ,
-  “ (px_pre = py_pre) ”
-  &&  ((px_pre) # Int  |-> x_eq)
+forall (py_pre: Z) (px_pre: Z) (x_eq: Z) (PreH1 : (px_pre = py_pre)) ,
+  ((px_pre) # Int  |-> x_eq)
 |--
   “ (px_pre = py_pre) ”
   &&  ((py_pre) # Int  |->_)
@@ -71,43 +67,66 @@ Definition swap_entail_wit_1 :=
 forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) ,
   (swap_pre px_pre py_pre para_all )
 |--
-  (EX (x: Z) ,
+  (EX (y: Z)  (x: Z) ,
+  “ (para_all = (swap_neq_para (x) (y))) ”
+  &&  ((px_pre) # Int  |-> x)
+  **  ((py_pre) # Int  |-> y))
+  ||
+  (EX (x_2: Z) ,
   “ (px_pre = py_pre) ” 
   &&  “ (px_pre = py_pre) ” 
-  &&  “ (para_all = (swap_eq_para (x))) ”
-  &&  ((px_pre) # Int  |-> x))
-  ||
-  (EX (y: Z)  (x_2: Z) ,
-  “ (para_all = (swap_neq_para (x_2) (y))) ”
-  &&  ((px_pre) # Int  |-> x_2)
-  **  ((py_pre) # Int  |-> y))
+  &&  “ (para_all = (swap_eq_para (x_2))) ”
+  &&  ((px_pre) # Int  |-> x_2))
 .
 
 Definition swap_return_wit_1 := 
-forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
-  “ (px_pre = py) ” 
-  &&  “ (px_pre = py_pre) ” 
-  &&  “ (para_all = (swap_eq_para (x))) ”
-  &&  ((py) # Int  |-> x)
+(
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (y: Z) (PreH1 : (para_all = (swap_neq_para (x) (y)))) ,
+  ((px_pre) # Int  |-> y)
+  **  ((py_pre) # Int  |-> x)
 |--
   (swap_post px_pre py_pre para_all )
-.
+) \/
+(
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (y: Z) (PreH1 : (x <= INT_MAX)) (PreH2 : (y <= INT_MAX)) (PreH3 : (x >= INT_MIN)) (PreH4 : (y >= INT_MIN)) (PreH5 : (para_all = (swap_neq_para (x) (y)))) ,
+  ((px_pre) # Int  |-> y)
+  **  ((py_pre) # Int  |-> x)
+|--
+  (swap_post px_pre py_pre para_all )
+).
 
-Definition swap_return_wit_2 := 
-forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (y: Z) ,
-  “ (para_all = (swap_neq_para (x) (y))) ”
-  &&  ((px_pre) # Int  |-> y)
+Definition swap_return_wit_1_split_goal_spatial := 
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (y: Z) (PreH1 : (x <= INT_MAX)) (PreH2 : (y <= INT_MAX)) (PreH3 : (x >= INT_MIN)) (PreH4 : (y >= INT_MIN)) (PreH5 : (para_all = (swap_neq_para (x) (y)))) ,
+  ((px_pre) # Int  |-> y)
   **  ((py_pre) # Int  |-> x)
 |--
   (swap_post px_pre py_pre para_all )
 .
 
+Definition swap_return_wit_2 := 
+(
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) (PreH1 : (px_pre = py)) (PreH2 : (px_pre = py_pre)) (PreH3 : (para_all = (swap_eq_para (x)))) ,
+  ((py) # Int  |-> x)
+|--
+  (swap_post px_pre py_pre para_all )
+) \/
+(
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) (PreH1 : (x <= INT_MAX)) (PreH2 : (x >= INT_MIN)) (PreH3 : (px_pre = py)) (PreH4 : (px_pre = py_pre)) (PreH5 : (para_all = (swap_eq_para (x)))) ,
+  ((py) # Int  |-> x)
+|--
+  (swap_post px_pre py_pre para_all )
+).
+
+Definition swap_return_wit_2_split_goal_spatial := 
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) (PreH1 : (x <= INT_MAX)) (PreH2 : (x >= INT_MIN)) (PreH3 : (px_pre = py)) (PreH4 : (px_pre = py_pre)) (PreH5 : (para_all = (swap_eq_para (x)))) ,
+  ((py) # Int  |-> x)
+|--
+  (swap_post px_pre py_pre para_all )
+.
+
 Definition swap_partial_solve_wit_1 := 
-forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
-  “ (px_pre = py) ” 
-  &&  “ (px_pre = py_pre) ” 
-  &&  “ (para_all = (swap_eq_para (x))) ”
-  &&  ((px_pre) # Int  |-> x)
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) (PreH1 : (px_pre = py)) (PreH2 : (px_pre = py_pre)) (PreH3 : (para_all = (swap_eq_para (x)))) ,
+  ((px_pre) # Int  |-> x)
 |--
   “ (px_pre = py) ” 
   &&  “ (px_pre = py_pre) ” 
@@ -116,11 +135,8 @@ forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
 .
 
 Definition swap_partial_solve_wit_2 := 
-forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
-  “ (px_pre = py) ” 
-  &&  “ (px_pre = py_pre) ” 
-  &&  “ (para_all = (swap_eq_para (x))) ”
-  &&  ((py) # Int  |-> x)
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) (PreH1 : (px_pre = py)) (PreH2 : (px_pre = py_pre)) (PreH3 : (para_all = (swap_eq_para (x)))) ,
+  ((py) # Int  |-> x)
 |--
   “ (px_pre = py) ” 
   &&  “ (px_pre = py_pre) ” 
@@ -129,11 +145,8 @@ forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
 .
 
 Definition swap_partial_solve_wit_3 := 
-forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
-  “ (px_pre = py) ” 
-  &&  “ (px_pre = py_pre) ” 
-  &&  “ (para_all = (swap_eq_para (x))) ”
-  &&  ((px_pre) # Int  |-> x)
+forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) (PreH1 : (px_pre = py)) (PreH2 : (px_pre = py_pre)) (PreH3 : (para_all = (swap_eq_para (x)))) ,
+  ((px_pre) # Int  |-> x)
 |--
   “ (px_pre = py) ” 
   &&  “ (px_pre = py_pre) ” 
@@ -144,11 +157,8 @@ forall (py_pre: Z) (px_pre: Z) (para_all: swap_para) (x: Z) (py: Z) ,
 (*----- Function swap_test1 -----*)
 
 Definition swap_test1_return_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) (x_pre_v_2: Z) (y_pre_v_2: Z) ,
-  “ (x_pre <> y_pre) ” 
-  &&  “ (x_pre_v_2 = 1) ” 
-  &&  “ (y_pre_v_2 = 2) ”
-  &&  ((x_pre) # Int  |-> y_pre_v_2)
+forall (y_pre: Z) (x_pre: Z) (x_pre_v_2: Z) (y_pre_v_2: Z) (PreH1 : (x_pre <> y_pre)) (PreH2 : (x_pre_v_2 = 1)) (PreH3 : (y_pre_v_2 = 2)) ,
+  ((x_pre) # Int  |-> y_pre_v_2)
   **  ((y_pre) # Int  |-> x_pre_v_2)
 |--
   EX (x_pre_v: Z)  (y_pre_v: Z) ,
@@ -159,11 +169,8 @@ forall (y_pre: Z) (x_pre: Z) (x_pre_v_2: Z) (y_pre_v_2: Z) ,
 .
 
 Definition swap_test1_partial_solve_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) (y_pre_v: Z) ,
-  “ (x_pre <> y_pre) ” 
-  &&  “ (x_pre_v = 1) ” 
-  &&  “ (y_pre_v = 2) ”
-  &&  ((x_pre) # Int  |-> x_pre_v)
+forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) (y_pre_v: Z) (PreH1 : (x_pre <> y_pre)) (PreH2 : (x_pre_v = 1)) (PreH3 : (y_pre_v = 2)) ,
+  ((x_pre) # Int  |-> x_pre_v)
   **  ((y_pre) # Int  |-> y_pre_v)
 |--
   “ (x_pre <> y_pre) ” 
@@ -176,10 +183,8 @@ forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) (y_pre_v: Z) ,
 (*----- Function swap_test2 -----*)
 
 Definition swap_test2_return_wit_1 := 
-forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) ,
-  “ (x_pre = y_pre) ” 
-  &&  “ (x_pre_v = 1) ”
-  &&  ((y_pre) # Int  |-> x_pre_v)
+forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) (PreH1 : (x_pre = y_pre)) (PreH2 : (x_pre_v = 1)) ,
+  ((y_pre) # Int  |-> x_pre_v)
 |--
   EX (y_pre_v: Z) ,
   “ (y_pre_v = 1) ”
@@ -187,10 +192,8 @@ forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) ,
 .
 
 Definition swap_test2_partial_solve_wit_1_pure := 
-forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) ,
-  “ (x_pre = y_pre) ” 
-  &&  “ (x_pre_v = 1) ”
-  &&  ((( &( "y" ) )) # Ptr  |-> y_pre)
+forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) (PreH1 : (x_pre = y_pre)) (PreH2 : (x_pre_v = 1)) ,
+  ((( &( "y" ) )) # Ptr  |-> y_pre)
   **  ((( &( "x" ) )) # Ptr  |-> x_pre)
   **  ((x_pre) # Int  |-> x_pre_v)
 |--
@@ -198,10 +201,8 @@ forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) ,
 .
 
 Definition swap_test2_partial_solve_wit_1_aux := 
-forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) ,
-  “ (x_pre = y_pre) ” 
-  &&  “ (x_pre_v = 1) ”
-  &&  ((x_pre) # Int  |-> x_pre_v)
+forall (y_pre: Z) (x_pre: Z) (x_pre_v: Z) (PreH1 : (x_pre = y_pre)) (PreH2 : (x_pre_v = 1)) ,
+  ((x_pre) # Int  |-> x_pre_v)
 |--
   “ (x_pre = y_pre) ” 
   &&  “ (x_pre = y_pre) ” 

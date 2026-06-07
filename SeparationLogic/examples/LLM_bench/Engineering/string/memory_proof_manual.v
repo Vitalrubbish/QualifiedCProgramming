@@ -16,7 +16,7 @@ Local Open Scope sets.
 Local Open Scope string.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 
 Lemma proof_of_memcpy_entail_wit_1 : memcpy_entail_wit_1.
@@ -147,6 +147,22 @@ Proof.
       * split_pures; dump_pre_spatial; try lia; try assumption.
 Qed.
 
+Lemma proof_of_memmove_return_wit_2 : memmove_return_wit_2.
+Proof.
+  pre_process.
+  assert (Hi : i = 0) by lia.
+  subst i.
+  assert (HlenZ : Zlength bytes = n_pre) by lia.
+  rewrite (sublist_self bytes n_pre) by exact (eq_sym HlenZ).
+  replace (dest_pre + 0 * sizeof(CHAR)) with dest_pre by lia.
+  replace (n_pre - 0) with n_pre by lia.
+  rewrite (CharArray.undef_seg_empty dest_pre 0).
+  split_pure_spatial.
+  - cancel (CharArray.full dest_pre n_pre bytes).
+    cancel (CharArray.full src_pre n_pre bytes).
+  - split_pures; dump_pre_spatial; reflexivity.
+Qed.
+
 Lemma proof_of_memmove_return_wit_1 : memmove_return_wit_1.
 Proof.
   pre_process.
@@ -155,22 +171,6 @@ Proof.
   assert (HlenZ : Zlength bytes = n_pre) by lia.
   rewrite (sublist_self bytes n_pre) by exact (eq_sym HlenZ).
   rewrite (CharArray.undef_seg_empty dest_pre n_pre).
-  split_pure_spatial.
-  - cancel (CharArray.full dest_pre n_pre bytes).
-    cancel (CharArray.full src_pre n_pre bytes).
-  - split_pures; dump_pre_spatial; reflexivity.
-Qed.
-
-Lemma proof_of_memmove_return_wit_2 : memmove_return_wit_2.
-Proof.
-  pre_process.
-  assert (Hi : i = 0) by lia.
-  subst i.
-  assert (HlenZ : Zlength bytes = n_pre) by lia.
-  rewrite (sublist_self bytes n_pre) by exact (eq_sym HlenZ).
-  rewrite (CharArray.undef_seg_empty dest_pre 0).
-  replace (dest_pre + 0 * sizeof(CHAR)) with dest_pre by lia.
-  replace (n_pre - 0) with n_pre by lia.
   split_pure_spatial.
   - cancel (CharArray.full dest_pre n_pre bytes).
     cancel (CharArray.full src_pre n_pre bytes).

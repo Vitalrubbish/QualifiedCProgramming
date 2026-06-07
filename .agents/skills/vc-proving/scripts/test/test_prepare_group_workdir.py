@@ -18,11 +18,12 @@ from manual_goal_utils import (
     copy_tutorial,
     generate_rocq_mcp_config,
     make_readonly,
+    prepare_simplec_case_dependencies,
     require_import_lines,
     simplec_case_dependency_modules,
     setup_lib_copy,
 )
-from prepare_group_workdir import prepare_group
+from prepare_group_workdir import _case_deps_from_seed, prepare_group
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +161,39 @@ class TestSimpleCCaseDependencyParsing:
             "SimpleC.EE.QCP_demos_LLM.bar_goal",
             "SimpleC.EE.QCP_demos_LLM.bar_lib",
         ]
+
+    def test_case_deps_seed_is_copied_and_remapped(self, tmp_path):
+        seed_root = tmp_path / "base" / "case_deps"
+        seed_module_dir = seed_root / "QCP_demos_LLM"
+        seed_module_dir.mkdir(parents=True)
+        seed_file = seed_module_dir / "foo_goal.v"
+        seed_file.write_text("Definition x := 1.\n", encoding="utf-8")
+        seed_file.with_suffix(".vo").write_text("compiled", encoding="utf-8")
+        seed = {
+            "root": str(seed_root),
+            "flags": ["-Q", str(seed_module_dir), "SimpleC.EE.QCP_demos_LLM"],
+            "files": [str(seed_file)],
+            "modules": ["SimpleC.EE.QCP_demos_LLM.foo_goal"],
+            "module_map": {"SimpleC.EE.QCP_demos_LLM.foo_goal": str(seed_file)},
+            "task_local_scratch_lib_module": None,
+            "task_local_scratch_lib_modules": [],
+            "task_local_scratch_lib_files": [],
+        }
+        work = tmp_path / "group"
+        work.mkdir()
+
+        copied = _case_deps_from_seed(work, seed)
+
+        assert copied is not None
+        copied_file = work / "case_deps" / "QCP_demos_LLM" / "foo_goal.v"
+        assert copied_file.is_file()
+        assert copied_file.with_suffix(".vo").is_file()
+        assert copied["files"] == [str(copied_file.resolve())]
+        assert copied["module_map"]["SimpleC.EE.QCP_demos_LLM.foo_goal"] == str(
+            copied_file.resolve()
+        )
+        assert str((work / "case_deps" / "QCP_demos_LLM").resolve()) in copied["flags"]
+        assert copied["cache_mode"] == "copied_from_base_overlay"
 
 
 class TestCopyTutorial:
@@ -425,6 +459,7 @@ class TestPrepareGroup:
         work = tmp / "group_0"
         result = prepare_group(work, goal_files, tmp / "foo_rel_lib.v", tmp / "foo_manual.v")
         assert result["use_rocq_mcp"] is True
+        assert result["worker_execution_mode"] == "rocq_mcp"
         agents_md = (work / "AGENTS.md").read_text(encoding="utf-8")
         assert "rocq-mcp" in agents_md
 
@@ -436,6 +471,7 @@ class TestPrepareGroup:
             use_rocq_mcp=False,
         )
         assert result["use_rocq_mcp"] is False
+        assert result["worker_execution_mode"] == "coqc_only"
         agents_md = (work / "AGENTS.md").read_text(encoding="utf-8")
         assert "Show." in agents_md
         assert "Search" in agents_md
@@ -513,7 +549,7 @@ class TestPrepareGroup:
         assert f"-Q {work.resolve()} VCWorker" not in coqproject
         assert f"-Q {(work / 'worker_helper').resolve()} VCWorker" in coqproject
         assert "VCWorker" in coqproject
-        assert "examples SimpleC.EE" in coqproject
+        assert "examples SimpleC.EE" not in coqproject
 
     def test_overlay_preserves_shared_lib_imports(self, tmp_path):
         (tmp_path / "_CoqProject").write_text(
@@ -737,6 +773,240 @@ class TestPrepareGroup:
         assert dep_strategy_proof.with_suffix(".vo").exists()
         assert "SimpleC.EE.QCP_demos_LLM.int_array_strategy_goal" in result["case_dependency_modules"]
         assert "SimpleC.EE.QCP_demos_LLM.int_array_strategy_proof" in result["case_dependency_modules"]
+
+    def test_overlay_copies_direct_simplec_helper_imports(self, tmp_path):
+        (tmp_path / "_CoqProject").write_text(
+            "-Q examples SimpleC.EE\n",
+            encoding="utf-8",
+        )
+        helper_dir = tmp_path / "examples" / "Applications_human" / "typeinfer"
+        helper_dir.mkdir(parents=True)
+        (helper_dir / "sound_pv.v").write_text(
+            "Lemma sound_pv_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        case_dir = tmp_path / "examples" / "CurrentCase"
+        case_dir.mkdir(parents=True)
+        (case_dir / "foo_lib.v").write_text(
+            "Lemma task_local_scratch_lib_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        (case_dir / "foo_goal.v").write_text(
+            "Require Import SimpleC.EE.CurrentCase.foo_lib.\n"
+            "Lemma generated_goal : True.\nProof. exact task_local_scratch_lib_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        task_local_scratch_lib = tmp_path / "foo__vc_proving_subagent_tmp_lib.v"
+        task_local_scratch_lib.write_text(
+            "Lemma task_local_scratch_lib_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        src = tmp_path / "foo__vc_proving_subagent_tmp_proof_manual.v"
+        src.write_text(
+            "Require Import SimpleC.EE.Applications_human.typeinfer.sound_pv.\n"
+            "From SimpleC.EE.CurrentCase Require Import foo_goal.\n\n"
+            "Lemma proof_of_foo : True.\nProof. exact sound_pv_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        goal = tmp_path / "goal_01__proof_of_foo.v"
+        goal.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        goals = [{
+            "index": 1,
+            "name": "proof_of_foo",
+            "split_rocq_file": str(goal),
+            "statement_header": "Lemma proof_of_foo : True.",
+            "original_start_line": 4,
+            "original_end_line": 5,
+        }]
+
+        work = tmp_path / "group_0"
+        result = prepare_group(work, goals, task_local_scratch_lib, src, use_rocq_mcp=False)
+
+        dep_helper = work / "case_deps" / "Applications_human" / "typeinfer" / "sound_pv.v"
+        assert dep_helper.with_suffix(".vo").exists()
+        assert "SimpleC.EE.Applications_human.typeinfer.sound_pv" in result["case_dependency_modules"]
+        assert "examples SimpleC.EE" not in (work / "_CoqProject").read_text(encoding="utf-8")
+
+    def test_overlay_copies_case_local_bare_string_strategy_imports(self, tmp_path):
+        (tmp_path / "_CoqProject").write_text(
+            "-Q examples SimpleC.EE\n",
+            encoding="utf-8",
+        )
+        case_dir = tmp_path / "examples" / "LLM_bench" / "Engineering" / "string"
+        case_dir.mkdir(parents=True)
+        (case_dir / "string_strategy_goal.v").write_text(
+            "Lemma string_goal_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        (case_dir / "string_strategy_proof.v").write_text(
+            "From SimpleC.EE.LLM_bench.Engineering.string Require Import string_strategy_goal.\n"
+            "Lemma string_proof_marker : True.\nProof. exact string_goal_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        (case_dir / "memchr_lib.v").write_text(
+            "Lemma task_local_scratch_lib_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        (case_dir / "memchr_goal.v").write_text(
+            "Require Import SimpleC.EE.LLM_bench.Engineering.string.memchr_lib.\n"
+            "Require Import string_strategy_goal.\n"
+            "Require Import string_strategy_proof.\n"
+            "Lemma generated_goal : True.\nProof. exact string_proof_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        task_local_scratch_lib = tmp_path / "memchr__vc_proving_subagent_tmp_lib.v"
+        task_local_scratch_lib.write_text(
+            "Lemma task_local_scratch_lib_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        src = tmp_path / "memchr__vc_proving_subagent_tmp_proof_manual.v"
+        src.write_text(
+            "From SimpleC.EE.LLM_bench.Engineering.string Require Import memchr_goal.\n\n"
+            "Lemma proof_of_memchr : True.\nProof. exact generated_goal. Qed.\n",
+            encoding="utf-8",
+        )
+        goal = tmp_path / "goal_01__proof_of_memchr.v"
+        goal.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        goals = [{
+            "index": 1,
+            "name": "proof_of_memchr",
+            "split_rocq_file": str(goal),
+            "statement_header": "Lemma proof_of_memchr : True.",
+            "original_start_line": 3,
+            "original_end_line": 4,
+        }]
+
+        work = tmp_path / "group_0"
+        result = prepare_group(work, goals, task_local_scratch_lib, src, use_rocq_mcp=False)
+
+        bare_goal = work / "case_deps" / "bare" / "string_strategy_goal.v"
+        bare_proof = work / "case_deps" / "bare" / "string_strategy_proof.v"
+        namespaced_goal = (
+            work / "case_deps" / "LLM_bench" / "Engineering" / "string"
+            / "string_strategy_goal.v"
+        )
+        assert bare_goal.with_suffix(".vo").exists()
+        assert bare_proof.with_suffix(".vo").exists()
+        assert namespaced_goal.with_suffix(".vo").exists()
+        assert "string_strategy_goal" in result["case_dependency_modules"]
+        assert "string_strategy_proof" in result["case_dependency_modules"]
+        assert (
+            "SimpleC.EE.LLM_bench.Engineering.string.string_strategy_goal"
+            in result["case_dependency_modules"]
+        )
+        coqproject = (work / "_CoqProject").read_text(encoding="utf-8")
+        assert "case_deps/bare ''" in coqproject
+        assert "examples SimpleC.EE" not in coqproject
+
+    def test_overlay_copies_qcp_llm_bare_strategy_without_human_duplicate(self, tmp_path):
+        (tmp_path / "_CoqProject").write_text(
+            "-Q examples SimpleC.EE\n",
+            encoding="utf-8",
+        )
+        qcp_dir = tmp_path / "examples" / "QCP_demos_LLM"
+        qcp_dir.mkdir(parents=True)
+        human_dir = tmp_path / "examples" / "QCP_demos_human"
+        human_dir.mkdir(parents=True)
+        (qcp_dir / "int_array_strategy_goal.v").write_text(
+            "Lemma strategy_goal_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        (qcp_dir / "int_array_strategy_proof.v").write_text(
+            "From SimpleC.EE.QCP_demos_LLM Require Import int_array_strategy_goal.\n"
+            "Lemma strategy_proof_marker : True.\nProof. exact strategy_goal_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        (human_dir / "int_array_strategy_goal.v").write_text(
+            "Lemma human_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        case_dir = tmp_path / "examples" / "LLM_bench" / "Algorithms" / "super_piano"
+        case_dir.mkdir(parents=True)
+        (case_dir / "super_piano_lib.v").write_text(
+            "Lemma task_local_scratch_lib_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        (case_dir / "super_piano_goal.v").write_text(
+            "Require Import SimpleC.EE.LLM_bench.Algorithms.super_piano.super_piano_lib.\n"
+            "Require Import int_array_strategy_goal.\n"
+            "Require Import int_array_strategy_proof.\n"
+            "Lemma generated_goal : True.\nProof. exact strategy_proof_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        task_local_scratch_lib = tmp_path / "super_piano__vc_proving_subagent_tmp_lib.v"
+        task_local_scratch_lib.write_text(
+            "Lemma task_local_scratch_lib_marker : True.\nProof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        src = tmp_path / "super_piano__vc_proving_subagent_tmp_proof_manual.v"
+        src.write_text(
+            "From SimpleC.EE.LLM_bench.Algorithms.super_piano Require Import super_piano_goal.\n\n"
+            "Lemma proof_of_super_piano : True.\nProof. exact generated_goal. Qed.\n",
+            encoding="utf-8",
+        )
+        goal = tmp_path / "goal_01__proof_of_super_piano.v"
+        goal.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        goals = [{
+            "index": 1,
+            "name": "proof_of_super_piano",
+            "split_rocq_file": str(goal),
+            "statement_header": "Lemma proof_of_super_piano : True.",
+            "original_start_line": 3,
+            "original_end_line": 4,
+        }]
+
+        work = tmp_path / "group_0"
+        result = prepare_group(work, goals, task_local_scratch_lib, src, use_rocq_mcp=False)
+
+        bare_goal = work / "case_deps" / "bare" / "int_array_strategy_goal.v"
+        bare_proof = work / "case_deps" / "bare" / "int_array_strategy_proof.v"
+        qcp_goal = work / "case_deps" / "QCP_demos_LLM" / "int_array_strategy_goal.v"
+        assert bare_goal.with_suffix(".vo").exists()
+        assert bare_proof.with_suffix(".vo").exists()
+        assert qcp_goal.with_suffix(".vo").exists()
+        assert "human_marker" not in bare_goal.read_text(encoding="utf-8")
+        assert "int_array_strategy_goal" in result["case_dependency_modules"]
+        assert "SimpleC.EE.QCP_demos_LLM.int_array_strategy_goal" in result["case_dependency_modules"]
+
+    def test_explicit_task_local_module_resolves_ambiguous_lib_mapping(self, tmp_path):
+        (tmp_path / "_CoqProject").write_text(
+            "-Q examples SimpleC.EE\n",
+            encoding="utf-8",
+        )
+        case_dir = tmp_path / "examples" / "CurrentCase"
+        case_dir.mkdir(parents=True)
+        same_text = "Lemma shared_marker : True.\nProof. exact I. Qed.\n"
+        (case_dir / "shared_lib.v").write_text(same_text, encoding="utf-8")
+        (case_dir / "foo_lib.v").write_text(same_text, encoding="utf-8")
+        (case_dir / "foo_goal.v").write_text(
+            "Require Import SimpleC.EE.CurrentCase.foo_lib.\n"
+            "Lemma generated_goal : True.\nProof. exact shared_marker. Qed.\n",
+            encoding="utf-8",
+        )
+        task_local_scratch_lib = tmp_path / "scratch_lib.v"
+        task_local_scratch_lib.write_text(same_text, encoding="utf-8")
+        src = tmp_path / "scratch_manual.v"
+        src.write_text(
+            "Require Import SimpleC.EE.CurrentCase.shared_lib.\n"
+            "From SimpleC.EE.CurrentCase Require Import foo_goal.\n\n"
+            "Lemma proof_of_foo : True.\nProof. exact generated_goal. Qed.\n",
+            encoding="utf-8",
+        )
+        work = tmp_path / "group_0"
+
+        result = prepare_simplec_case_dependencies(
+            work_dir=work,
+            source_file=src,
+            lib_file=task_local_scratch_lib,
+            coqproject_root=tmp_path,
+            coqc_flags=["-Q", "examples", "SimpleC.EE"],
+            task_local_logical_module="SimpleC.EE.CurrentCase.foo_lib",
+        )
+
+        assert result["task_local_scratch_lib_module"] == "SimpleC.EE.CurrentCase.foo_lib"
+        assert result["task_local_scratch_lib_files"] == [
+            str(work / "case_deps" / "CurrentCase" / "foo_lib.v")
+        ]
 
     def test_prepare_clears_stale_case_deps(self, tmp_path):
         (tmp_path / "_CoqProject").write_text(

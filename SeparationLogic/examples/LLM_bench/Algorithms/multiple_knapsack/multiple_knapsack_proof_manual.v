@@ -24,10 +24,10 @@ Lemma proof_of_multipleKnapsack_safety_wit_12 : multipleKnapsack_safety_wit_12.
 Proof.
   pre_process.
   entailer!.
-  - destruct H35 as [_ Hold_bound].
+  - destruct PreH37 as [_ Hold_bound].
     specialize (Hold_bound pos ltac:(lia)).
     nia.
-  - destruct H35 as [_ Hold_bound].
+  - destruct PreH37 as [_ Hold_bound].
     specialize (Hold_bound pos ltac:(lia)).
     nia.
 Qed.
@@ -131,17 +131,17 @@ Proof.
   assert (Hj : j = capacity_pre + 1) by lia.
   rewrite Hj in *.
   assert (Hweight_current : 1 <= Znth i weights_l 0 <= capacity_pre + 1)
-    by (pose proof (H17 i ltac:(lia)) as Hcur; tauto).
+    by (pose proof (PreH19 i ltac:(lia)) as Hcur; tauto).
   assert (Hvalue_current : 0 <= Znth i values_l 0 <= 1000)
-    by (pose proof (H17 i ltac:(lia)) as Hcur; tauto).
+    by (pose proof (PreH19 i ltac:(lia)) as Hcur; tauto).
   assert (Hcount_current : 0 <= Znth i counts_l 0 <= capacity_pre)
-    by (pose proof (H17 i ltac:(lia)) as Hcur; tauto).
+    by (pose proof (PreH19 i ltac:(lia)) as Hcur; tauto).
   assert (Hglobal_bounds :
     forall idx, 0 <= idx < Zlength weights_l ->
       1 <= Znth idx weights_l 0 /\ 0 <= Znth idx values_l 0 <= 1000).
   {
     intros idx Hidx.
-    pose proof (H17 idx ltac:(lia)) as Hidx_bounds.
+    pose proof (PreH19 idx ltac:(lia)) as Hidx_bounds.
     tauto.
   }
   Exists qval_l_2. Exists qidx_l_2. Exists old_l_2. Exists dp_l_2.
@@ -198,7 +198,7 @@ Proof.
     - apply Z.mul_le_mono_nonneg_l; lia.
     - exact Hkwcap.
   }
-  pose proof H35 as H35_value_bound.
+  pose proof PreH37 as H35_value_bound.
   destruct H35_value_bound as [_ Hold_value_bound].
   pose proof (Hold_value_bound pos ltac:(lia)) as Hold_pos_bound.
   assert (Hkv_nonneg : 0 <= k * v) by (apply Z.mul_nonneg_nonneg; lia).
@@ -219,7 +219,7 @@ Proof.
       try eassumption;
       try lia.
     apply MKResidueLoopState_to_MKQueueDropLoopState_predrop with (dp := dp_l_2).
-    exact H38.
+    exact PreH40.
 Qed.
 
 Lemma proof_of_multipleKnapsack_entail_wit_11 : multipleKnapsack_entail_wit_11.
@@ -232,7 +232,7 @@ Proof.
     apply MKQueueDropLoopState_pop_expired_preserves_predrop; auto.
 Qed.
 
-Lemma proof_of_multipleKnapsack_entail_wit_12_1 : multipleKnapsack_entail_wit_12_1.
+Lemma proof_of_multipleKnapsack_entail_wit_12_2 : multipleKnapsack_entail_wit_12_2.
 Proof.
   pre_process.
   Exists qval_l_2. Exists qidx_l_2. Exists old_l_2. Exists dp_l_2.
@@ -242,7 +242,7 @@ Proof.
     apply MKQueueDropLoopState_empty_exit_to_MKQueueAfterDrop; auto.
 Qed.
 
-Lemma proof_of_multipleKnapsack_entail_wit_12_2 : multipleKnapsack_entail_wit_12_2.
+Lemma proof_of_multipleKnapsack_entail_wit_12_1 : multipleKnapsack_entail_wit_12_1.
 Proof.
   pre_process.
   Exists qval_l_2. Exists qidx_l_2. Exists old_l_2. Exists dp_l_2.
@@ -287,7 +287,7 @@ Proof.
       head (tail + 1) r w v cnt (k + 1) capacity_pre).
   {
     eapply MKQueuePendingState_push_to_MKQueueState; eauto; try lia.
-    rewrite <- H26. exact H31.
+    rewrite PreH33, PreH28. reflexivity.
   }
   assert (Hpush_trans :
     MKTransitionValue old_l_2 w v cnt capacity_pre (r + k * w)
@@ -322,7 +322,7 @@ Proof.
       try assumption;
       try exact Hpush;
       try exact Hpush_bound;
-      try (rewrite H26; exact Hpush_trans);
+      try (rewrite PreH28; exact Hpush_trans);
       try lia.
 Qed. 
 
@@ -340,7 +340,7 @@ Proof.
       head (tail + 1) r w v cnt (k + 1) capacity_pre).
   {
     eapply MKQueuePendingState_push_to_MKQueueState; eauto; try lia.
-    rewrite <- H25. exact H30.
+    rewrite PreH32, PreH27. reflexivity.
   }
   assert (Hpush_trans :
     MKTransitionValue old_l_2 w v cnt capacity_pre (r + k * w)
@@ -375,7 +375,7 @@ Proof.
       try assumption;
       try exact Hpush;
       try exact Hpush_bound;
-      try (rewrite H25; exact Hpush_trans);
+      try (rewrite PreH27; exact Hpush_trans);
       try lia.
 Qed. 
 
@@ -398,7 +398,7 @@ Proof.
     + eapply MKItemResiduePrefixProgress_extend_after_dp_write; eauto; lia.
     + eapply MKResidueLoopState_after_dp_write.
       * eapply MKItemResiduePrefixProgress_extend_after_dp_write; eauto; lia.
-      * exact H42.
+      * exact PreH44.
 Qed.
 
 Lemma proof_of_multipleKnapsack_entail_wit_17 : multipleKnapsack_entail_wit_17.
@@ -426,20 +426,20 @@ Proof.
   - split_pures.
     all: dump_pre_spatial; auto.
     eapply MKItemResidueProgress_complete_implies_MKDPTable_next_item.
-    + rewrite H4. lia.
+    + rewrite PreH6. lia.
     + lia.
     + lia.
-    + exact H13.
-    + exact H14.
-    + exact H15.
+    + exact PreH15.
+    + exact PreH16.
+    + exact PreH17.
     + intros idx Hidx.
-      specialize (H29 idx).
-      assert (0 <= idx < n_pre) by (rewrite H4 in Hidx; exact Hidx).
-      specialize (H29 H30).
+      specialize (PreH31 idx).
+      assert (Hidx_n : 0 <= idx < n_pre) by (rewrite PreH6 in Hidx; exact Hidx).
+      specialize (PreH31 Hidx_n).
       lia.
-    + exact H.
-    + exact H25.
-    + exact H28.
+    + exact PreH1.
+    + exact PreH27.
+    + exact PreH30.
 Qed.
 
 Lemma proof_of_multipleKnapsack_entail_wit_21 : multipleKnapsack_entail_wit_21.
@@ -452,7 +452,7 @@ Proof.
     all: dump_pre_spatial; auto.
     + assert (i = n_pre) by lia.
       subst i.
-      exact H13.
+      exact PreH15.
     + assert (i = n_pre) by lia.
       subst i.
       eapply MKDPTable_final_capacity_implies_MultipleKnapsackAnswer; eauto.

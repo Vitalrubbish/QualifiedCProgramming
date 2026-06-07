@@ -40,33 +40,33 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_dequeue_return_wit_2 : dequeue_return_wit_2.
-Proof.
-  pre_process.
-  subst.
-  unfold store_queue.
-  simpl in H2.
-  injection H2 as ? ?.
-  subst.
-  Exists p_callee_v q_l2 l1_tail l2.
-  entailer!.
-Qed.
-
 Lemma proof_of_dequeue_return_wit_1 : dequeue_return_wit_1.
 Proof.
   pre_process.
   subst.
   unfold store_queue.
-  Exists p_callee_v 0 l nil.
   sep_apply (sll_zero 0); [ | tauto ].
   Intros.
   subst.
+  Exists p_callee_v 0 l nil.
   entailer!.
-  + simpl.
+  - simpl.
     entailer!.
-  + simpl.
+  - simpl.
     rewrite app_nil_r.
     reflexivity.
+Qed.
+
+Lemma proof_of_dequeue_return_wit_2 : dequeue_return_wit_2.
+Proof.
+  pre_process.
+  subst.
+  simpl in PreH4.
+  injection PreH4 as ? ?.
+  subst.
+  unfold store_queue.
+  Exists p_callee_v q_l2 l1_tail l2.
+  entailer!.
 Qed.
 
 Lemma proof_of_dequeue_partial_solve_wit_3_pure : dequeue_partial_solve_wit_3_pure.
@@ -75,7 +75,7 @@ Proof.
   subst.
   sep_apply (sll_zero 0); auto.
   clear H; entailer!.
-  subst; rewrite app_nil_l in H0.
+  subst; rewrite app_nil_l in PreH2.
   auto.
 Qed.
 

@@ -24,8 +24,8 @@ Local Open Scope sac.
 Lemma proof_of_split_while_entail_wit_2 : split_while_entail_wit_2.
 Proof.
 	pre_process.
-	Exists q_v_2.
-	Exists p_v_2.
+	Exists qv_2.
+	Exists pv_2.
 	sep_apply_l_atomic (sll_not_zero x l_2).
 	- dump_pre_spatial.
 		unfold NULL.
@@ -41,24 +41,24 @@ Proof.
 		+ cancel (&(x # "list" ->ₛ "data") # Int |-> x_data).
 			cancel (&(x # "list" ->ₛ "next") # Ptr |-> x_next).
 			cancel (sll x_next l1_new).
-			cancel (p_pre # Ptr |-> p_v_2).
-			cancel (sll p_v_2 l1_2).
-			cancel (q_pre # Ptr |-> q_v_2).
-			cancel (sll q_v_2 l2_2).
+			cancel (p_pre # Ptr |-> pv_2).
+			cancel (sll pv_2 l1_2).
+			cancel (q_pre # Ptr |-> qv_2).
+			cancel (sll qv_2 l2_2).
 		+ repeat split_pures.
 			* dump_pre_spatial.
-			  exact H0.
+			  exact PreH2.
 			* dump_pre_spatial.
-			  exact H.
+			  exact PreH1.
 			* dump_pre_spatial.
-			  exact H1.
+			  assumption.
 Qed.
 
 Lemma proof_of_split_while_entail_wit_3 : split_while_entail_wit_3.
 Proof.
 	pre_process.
-	Exists q_v_2.
-	Exists p_v_2.
+	Exists pv.
+	Exists qv_2.
 	Exists x.
 	Exists l_2.
 	Exists l1_new.
@@ -68,23 +68,23 @@ Proof.
 	repeat split_pure_spatial.
 	- cancel (p_pre # Ptr |-> x).
 		cancel (&(x # "list" ->ₛ "data") # Int |-> x_data_2).
-		cancel (&(x # "list" ->ₛ "next") # Ptr |-> p_v_2).
-		cancel (sll p_v_2 l1_2).
+		cancel (&(x # "list" ->ₛ "next") # Ptr |-> pv).
+		cancel (sll pv l1_2).
 		cancel (sll x_next l1_new).
-		cancel (q_pre # Ptr |-> q_v_2).
-		cancel (sll q_v_2 l2_2).
+		cancel (q_pre # Ptr |-> qv_2).
+		cancel (sll qv_2 l2_2).
 		sep_apply store_ptr_undef_store_ptr.
 		cancel (&( "t") # Ptr |->_).
 	- repeat split_pures.
 		+ dump_pre_spatial.
-		  rewrite H1 in H.
+		  rewrite PreH3 in PreH1.
 		  unfold split_rec_rel in *.
-		  apply split_rel_eval_xnotnil in H.
-		  exact H.
+		  apply split_rel_eval_xnotnil in PreH1.
+		  exact PreH1.
 		+ dump_pre_spatial.
-		  exact H1.
+		  exact PreH3.
 		+ dump_pre_spatial.
-		  exact H0.
+		  exact PreH2.
 Qed.
 
 Lemma proof_of_split_while_entail_wit_4 : split_while_entail_wit_4.
@@ -94,81 +94,81 @@ Proof.
 	- dump_pre_spatial.
 		unfold NULL.
 		lia.
-	- Intros x_next x_data_2 l1_new.
+	- Intros x_next x_data2 l1_new.
+		Exists qv_2.
+		Exists p_head_2.
 		Exists x_next.
-		Exists q_v_2.
-		Exists p_v_2.
-		Exists x_data_2.
+		Exists x_data2.
 		Exists l1_new.
 		Exists l_new.
 		Exists l2_2.
-		Exists x_data_3.
+		Exists x_data_2.
 		Exists l1_2.
 		repeat split_pure_spatial.
-		+ cancel (&(x # "list" ->ₛ "data") # Int |-> x_data_2).
+		+ cancel (&(x # "list" ->ₛ "data") # Int |-> x_data2).
 		  cancel (&(x # "list" ->ₛ "next") # Ptr |-> x_next).
 		  cancel (sll x_next l1_new).
-		  cancel (q_pre # Ptr |-> q_v_2).
-		  cancel (sll q_v_2 l2_2).
-		  cancel (p_pre # Ptr |-> p_v_2).
+		  cancel (q_pre # Ptr |-> qv_2).
+		  cancel (sll qv_2 l2_2).
+		  cancel (p_pre # Ptr |-> p_head_2).
 		  simpl sll.
-          Exists p_v_next.
+          Exists p_next.
 		  split_pure_spatial.
 		  * cancel.
 		    cancel.
           * dump_pre_spatial.
-		    exact H2.
+		    exact PreH4.
 		+ repeat split_pures.
 		  * dump_pre_spatial.
-		    exact H0.
+		    exact PreH2.
 		  * dump_pre_spatial.
-		    exact H.
+		    exact PreH1.
 		  * dump_pre_spatial.
-		    exact H3.
+		    assumption.
 Qed.
 
 Lemma proof_of_split_while_entail_wit_5 : split_while_entail_wit_5.
 Proof.
 	pre_process.
-	Exists p_v_2.
-	Exists q_v_2.
+	Exists qv.
+	Exists p_head_2.
 	Exists x.
 	Exists l_2.
 	Exists l1_new.
 	Exists x_data_2.
 	Exists l1_2.
-	Exists x_data_3.
+	Exists x_data2_2.
 	Exists l2_2.
 	repeat split_pure_spatial.
-	- cancel (&(x # "list" ->ₛ "data") # Int |-> x_data_3).
-		cancel (p_pre # Ptr |-> p_v_2).
-		cancel (sll p_v_2 (x_data_2 :: l1_2)).
+	- cancel (&(x # "list" ->ₛ "data") # Int |-> x_data2_2).
+		cancel (p_pre # Ptr |-> p_head_2).
+		cancel (sll p_head_2 (x_data_2 :: l1_2)).
 		cancel (q_pre # Ptr |-> x).
-		cancel (sll q_v_2 l2_2).
-		cancel (&(x # "list" ->ₛ "next") # Ptr |-> q_v_2).
+		cancel (sll qv l2_2).
+		cancel (&(x # "list" ->ₛ "next") # Ptr |-> qv).
 		cancel (sll x_next l1_new).
 		apply store_ptr_undef_store_ptr.
 	- repeat split_pures.
 		+ dump_pre_spatial.
-		  rewrite H1 in H.
+		  rewrite PreH3 in PreH1.
 		  unfold split_rec_rel in *.
-		  erewrite (program_para_equiv (split_rec_rel_unfold)) in H.
-		  unfold split_rec_rel_f in H.
-		  rewrite bind_assoc in H.
+		  erewrite (program_para_equiv (split_rec_rel_unfold)) in PreH1.
+		  unfold split_rec_rel_f in PreH1.
+		  rewrite bind_assoc in PreH1.
 		  change (safeExec ATrue
-		    (x0 <- split_rec_rel' (l1_new, x_data_2 :: l1_2, x_data_3 :: l2_2) ;;
+		    (x0 <- split_rec_rel' (l1_new, x_data_2 :: l1_2, x_data2_2 :: l2_2) ;;
 		     (fun p => z <- reversepair p ;; reversepair z) x0)
-		    X_low_level_spec) in H.
-		  setoid_rewrite bind_2_reversepair_equiv_Id in H.
-		  rewrite bind_ret_right in H.
-		  exact H.
+		    X_low_level_spec) in PreH1.
+		  setoid_rewrite bind_2_reversepair_equiv_Id in PreH1.
+		  rewrite bind_ret_right in PreH1.
+		  exact PreH1.
 		+ dump_pre_spatial.
-		  exact H1.
+		  exact PreH3.
 		+ dump_pre_spatial.
-		  exact H0.
+		  exact PreH2.
 Qed.
 
-Lemma proof_of_split_while_entail_wit_6_1 : split_while_entail_wit_6_1.
+Lemma proof_of_split_while_entail_wit_6_2 : split_while_entail_wit_6_2.
 Proof.
 	pre_process.
 	sep_apply_l_atomic (sll_zero x l_new).
@@ -176,19 +176,19 @@ Proof.
 		unfold NULL.
 		lia.
 	- Intros_p Hl.
-		Exists q_v_2.
-		Exists p_v_2.
+		Exists qv_2.
+		Exists p_head.
 		Exists nil.
 		Exists (x_data :: l1_2).
 		Exists l2_2.
 		repeat split_pure_spatial.
 		+ rewrite Hp.
-		  cancel (q_pre # Ptr |-> q_v_2).
-		  cancel (sll q_v_2 l2_2).
-		  cancel (p_pre # Ptr |-> p_v_2).
+		  cancel (q_pre # Ptr |-> qv_2).
+		  cancel (sll qv_2 l2_2).
+		  cancel (p_pre # Ptr |-> p_head).
 		  simpl sll.
 		  rewrite logic_equiv_coq_prop_andp_sepcon.
-          Exists p_v_next.
+          Exists p_next.
           split_pure_spatial.
 		  * cancel.
             cancel.
@@ -196,16 +196,16 @@ Proof.
 		    reflexivity.
             auto.
 		+ dump_pre_spatial.
-			rewrite Hl in H0.
+			rewrite Hl in PreH2.
 			unfold split_rec_rel in *.
-			erewrite (program_para_equiv (split_rec_rel_unfold)) in H0.
-			unfold split_rec_rel_f in H0.
-			unfold reversepair in H0.
-			prog_nf in H0.
+			erewrite (program_para_equiv (split_rec_rel_unfold)) in PreH2.
+			unfold split_rec_rel_f in PreH2.
+			unfold reversepair in PreH2.
+			prog_nf in PreH2.
 			unfold split_rec_rel'.
 			erewrite (program_para_equiv (split_rec_rel_unfold)).
 			unfold split_rec_rel_f.
-			exact H0.
+			exact PreH2.
 Qed.
 
 Lemma proof_of_split_while_return_wit_1 : split_while_return_wit_1.
@@ -216,21 +216,20 @@ Proof.
 		unfold NULL.
 		lia.
 	- Intros_p Hl.
-		Exists q_v.
-		Exists p_v.
+		Exists qv.
+		Exists pv.
 		Exists l1.
 		Exists l2.
 		repeat split_pure_spatial.
-		+ cancel (p_pre # Ptr |-> p_v).
-			cancel (sll p_v l1).
-			cancel (q_pre # Ptr |-> q_v).
-			cancel (sll q_v l2).
+		+ cancel (p_pre # Ptr |-> pv).
+			cancel (sll pv l1).
+			cancel (q_pre # Ptr |-> qv).
+			cancel (sll qv l2).
 		+ dump_pre_spatial.
-			rewrite Hl in H0.
-			unfold split_rec_rel in H0.
-			erewrite (program_para_equiv (split_rec_rel_unfold)) in H0.
-			unfold split_rec_rel_f in H0.
-			unfold maketuple in H0.
-			exact H0.
+			rewrite Hl in PreH2.
+			unfold split_rec_rel in PreH2.
+			erewrite (program_para_equiv (split_rec_rel_unfold)) in PreH2.
+			unfold split_rec_rel_f in PreH2.
+			unfold maketuple in PreH2.
+			exact PreH2.
 Qed.
-

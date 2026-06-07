@@ -106,7 +106,7 @@ Proof.
       intro Hlen.
       eapply KnapsackRowProgress_append_cell;
         [ rewrite Zlength_app_cons in Hlen; unfold KnapsackCellIndex; lia
-        | exact H19
+        | exact PreH21
         | lia
         | apply KnapsackCellCorrect_row0_zero; lia ].
     + dump_pre_spatial.
@@ -125,10 +125,10 @@ Proof.
   - repeat split_pures; try solve [dump_pre_spatial; auto; try lia].
     + dump_pre_spatial.
       apply KnapsackCellCorrect_col0_zero.
-      * rewrite H8; lia.
+      * rewrite PreH10; lia.
       * lia.
       * intros k Hk.
-        specialize (H22 k ltac:(lia)).
+        specialize (PreH24 k ltac:(lia)).
         lia.
     + eapply derivable1_trans.
       { eapply derivable1_trans.
@@ -140,13 +140,13 @@ Proof.
       intro Hlen.
       eapply KnapsackRowProgress_append_cell;
         [ rewrite Zlength_app_cons in Hlen; unfold KnapsackCellIndex; lia
-        | exact H20
+        | exact PreH22
         | lia
         | apply KnapsackCellCorrect_col0_zero;
-          [ rewrite H8; lia
+          [ rewrite PreH10; lia
           | lia
           | intros k Hk;
-            specialize (H22 k ltac:(lia));
+            specialize (PreH24 k ltac:(lia));
             lia ] ].
     + dump_pre_spatial.
       intros k Hk.
@@ -157,8 +157,8 @@ Lemma proof_of_zeroOneKnapsack_entail_wit_7 : zeroOneKnapsack_entail_wit_7.
 Proof.
   pre_process.
   assert (Hitem_bounds : 0 <= i - 1 < n_pre) by lia.
-  pose proof (H22 (i - 1) Hitem_bounds) as Hweight_bounds.
-  pose proof (H23 (i - 1) Hitem_bounds) as Hvalue_bounds.
+  pose proof (PreH24 (i - 1) Hitem_bounds) as Hweight_bounds.
+  pose proof (PreH25 (i - 1) Hitem_bounds) as Hvalue_bounds.
   assert (Hprev_nonneg : 0 <= (i - 1) * width + j) by nia.
   assert (Hprev_lt_idx : (i - 1) * width + j < idx) by nia.
   assert (Hprev_lt_total : (i - 1) * width + j < (n_pre + 1) * (capacity_pre + 1)) by lia.
@@ -183,7 +183,7 @@ Proof.
   - assert (Hidx_in : 0 <= (i - 1) * width + j < Zlength dp_l).
     {
       eapply (KnapsackRowProgress_index_bound weights_l values_l capacity_pre dp_l i j); eauto.
-      rewrite <- H; rewrite <- H21; lia.
+      rewrite <- PreH1; rewrite <- PreH23; lia.
     }
     match goal with
     | Hbound : forall k : Z, 0 <= k < Zlength dp_l ->
@@ -196,9 +196,9 @@ Proof.
     {
       replace ((i - 1) * width + j)
         with (KnapsackCellIndex capacity_pre (i - 1) j)
-        by (unfold KnapsackCellIndex; rewrite H; lia).
+        by (unfold KnapsackCellIndex; rewrite PreH1; lia).
       eapply KnapsackRowProgress_lookup_cell; eauto; try lia.
-      unfold KnapsackCellIndex; rewrite <- H; rewrite <- H21; lia.
+      unfold KnapsackCellIndex; rewrite <- PreH1; rewrite <- PreH23; lia.
     }
     split_pures; dump_pre_spatial;
       repeat match goal with
@@ -237,7 +237,7 @@ Proof.
       0 <= (i - 1) * width + (j - w) < Zlength dp_l).
     {
       eapply (KnapsackRowProgress_index_bound weights_l values_l capacity_pre dp_l i j); eauto.
-      rewrite <- H; rewrite <- H21; lia.
+      rewrite <- PreH1; rewrite <- PreH23; lia.
     }
     match goal with
     | Hbound : forall k : Z, 0 <= k < Zlength dp_l ->
@@ -251,9 +251,9 @@ Proof.
     {
       replace ((i - 1) * width + (j - w))
         with (KnapsackCellIndex capacity_pre (i - 1) (j - w))
-        by (unfold KnapsackCellIndex; rewrite H; lia).
+        by (unfold KnapsackCellIndex; rewrite PreH1; lia).
       eapply KnapsackRowProgress_lookup_cell; eauto; try lia.
-      unfold KnapsackCellIndex; rewrite <- H; rewrite <- H21; lia.
+      unfold KnapsackCellIndex; rewrite <- PreH1; rewrite <- PreH23; lia.
     }
     split_pures; dump_pre_spatial;
       repeat match goal with
@@ -273,34 +273,37 @@ Proof.
     cancel (IntArray.undef_seg dp_pre (idx + 1) ((n_pre + 1) * (capacity_pre + 1))).
   - prop_apply_p (IntArray.seg_Zlength dp_pre 0 (idx + 1) (dp_l_2 ++ (prev + v) :: nil)).
     Intros.
-    rewrite Zlength_app_cons in H40.
-    assert (Hdp_len : Zlength dp_l_2 = idx) by lia.
+    match goal with
+    | Hlen_seg : Zlength (dp_l_2 ++ (prev + v) :: nil) = _ |- _ =>
+        rewrite Zlength_app_cons in Hlen_seg;
+        assert (Hdp_len : Zlength dp_l_2 = idx) by lia
+    end.
     assert (Hcell_new : KnapsackCellCorrect weights_l values_l i j (prev + v)).
     {
       replace i with (item + 1) by lia.
       eapply KnapsackCellCorrect_take_better with (without := without) (w := w) (v := v).
-      - rewrite H7. lia.
+      - rewrite PreH9. lia.
       - lia.
-      - exact H16.
-      - exact H17.
+      - exact PreH18.
+      - exact PreH19.
       - lia.
-      - intros k Hk. specialize (H38 k). lia.
-      - replace item with (i - 1) by lia. exact H34.
-      - replace item with (i - 1) by lia. exact H35.
+      - intros k Hk. specialize (PreH40 k). lia.
+      - replace item with (i - 1) by lia. exact PreH36.
+      - replace item with (i - 1) by lia. exact PreH37.
       - lia.
     }
-    pose proof (KnapsackCellCorrect_value_bound weights_l values_l i j (prev + v) n_pre H8 (conj H1 H2) H39 Hcell_new) as Hcell_bound.
+    pose proof (KnapsackCellCorrect_value_bound weights_l values_l i j (prev + v) n_pre PreH10 (conj PreH3 PreH4) PreH41 Hcell_new) as Hcell_bound.
     assert (Hrow_new : KnapsackRowProgress weights_l values_l capacity_pre (dp_l_2 ++ (prev + v) :: nil) i (j + 1)).
     {
       eapply KnapsackRowProgress_append_cell_recurrence; eauto; try lia.
     }
     split_pures; dump_pre_spatial; auto; try lia.
-    + rewrite app_Znth1; [exact H26 |]. rewrite Hdp_len. lia.
-    + rewrite app_Znth1; [exact H27 |]. rewrite Hdp_len. lia.
+    + rewrite app_Znth1; [exact PreH28 |]. rewrite Hdp_len. lia.
+    + rewrite app_Znth1; [exact PreH29 |]. rewrite Hdp_len. lia.
     + intros k Hk.
       rewrite Zlength_app_cons in Hk.
       destruct (Z_lt_dec k (Zlength dp_l_2)) as [Hklt | Hknlt].
-      * rewrite app_Znth1 by lia. apply H37. lia.
+      * rewrite app_Znth1 by lia. apply PreH39. lia.
       * assert (k = Zlength dp_l_2) by lia.
         subst k.
         rewrite app_Znth2 by lia.
@@ -320,20 +323,23 @@ Proof.
     cancel (IntArray.undef_seg dp_pre (idx + 1) ((n_pre + 1) * (capacity_pre + 1))).
   - prop_apply_p (IntArray.seg_Zlength dp_pre 0 (idx + 1) (dp_l_2 ++ without :: nil)).
     Intros.
-    rewrite Zlength_app_cons in H40.
-    assert (Hdp_len : Zlength dp_l_2 = idx) by lia.
+    match goal with
+    | Hlen_seg : Zlength (dp_l_2 ++ without :: nil) = _ |- _ =>
+        rewrite Zlength_app_cons in Hlen_seg;
+        assert (Hdp_len : Zlength dp_l_2 = idx) by lia
+    end.
     assert (Hcell_new : KnapsackCellCorrect weights_l values_l i j without).
     {
       replace i with (item + 1) by lia.
       eapply KnapsackCellCorrect_keep_without_when_better_or_equal with (w := w) (v := v) (prev := prev).
-      - rewrite H7. lia.
+      - rewrite PreH9. lia.
       - lia.
-      - exact H16.
-      - exact H17.
+      - exact PreH18.
+      - exact PreH19.
       - lia.
-      - intros k Hk. specialize (H38 k). lia.
-      - replace item with (i - 1) by lia. exact H34.
-      - replace item with (i - 1) by lia. exact H35.
+      - intros k Hk. specialize (PreH40 k). lia.
+      - replace item with (i - 1) by lia. exact PreH36.
+      - replace item with (i - 1) by lia. exact PreH37.
       - lia.
     }
     assert (Hrow_new : KnapsackRowProgress weights_l values_l capacity_pre (dp_l_2 ++ without :: nil) i (j + 1)).
@@ -341,12 +347,12 @@ Proof.
       eapply KnapsackRowProgress_append_cell_recurrence; eauto; try lia.
     }
     split_pures; dump_pre_spatial; auto; try lia.
-    + rewrite app_Znth1; [exact H26 |]. rewrite Hdp_len. lia.
-    + rewrite app_Znth1; [exact H27 |]. rewrite Hdp_len. lia.
+    + rewrite app_Znth1; [exact PreH28 |]. rewrite Hdp_len. lia.
+    + rewrite app_Znth1; [exact PreH29 |]. rewrite Hdp_len. lia.
     + intros k Hk.
       rewrite Zlength_app_cons in Hk.
       destruct (Z_lt_dec k (Zlength dp_l_2)) as [Hklt | Hknlt].
-      * rewrite app_Znth1 by lia. apply H37. lia.
+      * rewrite app_Znth1 by lia. apply PreH39. lia.
       * assert (k = Zlength dp_l_2) by lia.
         subst k.
         rewrite app_Znth2 by lia.
@@ -366,30 +372,33 @@ Proof.
     cancel (IntArray.undef_seg dp_pre (idx + 1) ((n_pre + 1) * (capacity_pre + 1))).
   - prop_apply_p (IntArray.seg_Zlength dp_pre 0 (idx + 1) (dp_l_2 ++ without :: nil)).
     Intros.
-    rewrite Zlength_app_cons in H34.
-    assert (Hdp_len : Zlength dp_l_2 = idx) by lia.
+    match goal with
+    | Hlen_seg : Zlength (dp_l_2 ++ without :: nil) = _ |- _ =>
+        rewrite Zlength_app_cons in Hlen_seg;
+        assert (Hdp_len : Zlength dp_l_2 = idx) by lia
+    end.
     assert (Hcell_new : KnapsackCellCorrect weights_l values_l i j without).
     {
       replace i with (item + 1) by lia.
       eapply KnapsackCellCorrect_too_heavy with (w := w) (v := v).
-      - rewrite H7. lia.
+      - rewrite PreH9. lia.
       - lia.
-      - exact H16.
-      - exact H17.
+      - exact PreH18.
+      - exact PreH19.
       - lia.
-      - intros k Hk. specialize (H32 k). lia.
-      - replace item with (i - 1) by lia. exact H29.
+      - intros k Hk. specialize (PreH34 k). lia.
+      - replace item with (i - 1) by lia. exact PreH31.
     }
     assert (Hrow_new : KnapsackRowProgress weights_l values_l capacity_pre (dp_l_2 ++ without :: nil) i (j + 1)).
     {
       eapply KnapsackRowProgress_append_cell_recurrence; eauto; try lia.
     }
     split_pures; dump_pre_spatial; auto; try lia.
-    + rewrite app_Znth1; [exact H26 |]. rewrite Hdp_len. lia.
+    + rewrite app_Znth1; [exact PreH28 |]. rewrite Hdp_len. lia.
     + intros k Hk.
       rewrite Zlength_app_cons in Hk.
       destruct (Z_lt_dec k (Zlength dp_l_2)) as [Hklt | Hknlt].
-      * rewrite app_Znth1 by lia. apply H31. lia.
+      * rewrite app_Znth1 by lia. apply PreH33. lia.
       * assert (k = Zlength dp_l_2) by lia.
         subst k.
         rewrite app_Znth2 by lia.
@@ -445,7 +454,7 @@ Proof.
   subst i.
   Exists dp_l_2.
   split_pure_spatial.
-  - rewrite H0.
+  - rewrite PreH2.
     cancel (IntArray.full weights_pre n_pre weights_l).
     cancel (IntArray.full values_pre n_pre values_l).
     rewrite IntArray.undef_seg_empty.
@@ -460,7 +469,7 @@ Proof.
     {
       eapply (KnapsackRowsDone_index_bound
         weights_l values_l capacity_pre dp_l_2 (n_pre + 1)); eauto.
-      rewrite H0; nia.
+      rewrite PreH2; nia.
     }
     match goal with
     | Hbound : forall k : Z, 0 <= k < Zlength dp_l_2 ->
@@ -476,7 +485,7 @@ Proof.
         (Znth (n_pre * width + capacity_pre) dp_l_2 0)).
       replace (n_pre * width + capacity_pre)
         with (KnapsackCellIndex capacity_pre n_pre capacity_pre)
-        by (unfold KnapsackCellIndex; rewrite H0; nia).
+        by (unfold KnapsackCellIndex; rewrite PreH2; nia).
       eapply KnapsackRowsDone_lookup_cell; eauto; try lia.
       unfold KnapsackCellIndex; nia.
     }

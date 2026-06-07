@@ -170,7 +170,7 @@ Proof.
   apply (exgcd_reduction' _ _ _ _ H H0 H1).
 Qed.
 
-Lemma proof_of_exgcd_return_wit_4 : exgcd_return_wit_4.
+Lemma proof_of_exgcd_return_wit_6 : exgcd_return_wit_6.
 Proof.
   pre_process.
   subst b_pre.
@@ -178,7 +178,7 @@ Proof.
   Exists 0 1.
   entailer!.
   + rewrite Z.gcd_0_r; lia.
-  + rewrite Z.gcd_0_r; exact H.
+  + rewrite Z.gcd_0_r; exact PreH1.
 Qed.
 
 Lemma proof_of_exgcd_return_wit_5 : exgcd_return_wit_5.
@@ -189,10 +189,10 @@ Proof.
   Exists 0 0.
   entailer!.
   + rewrite Z.gcd_0_r; lia.
-  + rewrite Z.gcd_0_r; exact H.
+  + rewrite Z.gcd_0_r; exact PreH1.
 Qed.
 
-Lemma proof_of_exgcd_return_wit_6 : exgcd_return_wit_6.
+Lemma proof_of_exgcd_return_wit_4 : exgcd_return_wit_4.
 Proof.
   pre_process.
   subst b_pre.
@@ -200,16 +200,16 @@ Proof.
   Exists 0 (-1).
   entailer!.
   + rewrite Z.gcd_0_r; lia.
-  + rewrite Z.gcd_0_r; exact H.
+  + rewrite Z.gcd_0_r; exact PreH1.
 Qed.
 
-Lemma proof_of_exgcd_return_wit_3 : exgcd_return_wit_3.
+Lemma proof_of_exgcd_return_wit_1 : exgcd_return_wit_1.
 Proof.
   pre_process.
   Left. Right.
   Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v) y_callee_v .
   rewrite Z.gcd_comm.
-  rewrite <- (Z.gcd_rem a_pre b_pre H4).
+  rewrite <- (Z.gcd_rem a_pre b_pre PreH6).
   rewrite Z.gcd_comm.
   entailer!.
 Qed.
@@ -221,45 +221,45 @@ Proof.
   Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v) y_callee_v .
   subst x_callee_v.
   rewrite Z.gcd_comm.
-  rewrite <- (Z.gcd_rem a_pre b_pre H5).
+  rewrite <- (Z.gcd_rem a_pre b_pre PreH7).
   rewrite Z.gcd_comm.
   replace (0 - a_pre ÷ b_pre * y_callee_v) with (-(a_pre ÷ b_pre * y_callee_v)) by lia.
   replace (Zabs (-(a_pre ÷ b_pre * y_callee_v))) with (Zabs(a_pre ÷ b_pre * y_callee_v)) by lia.
   replace (Zgcd b_pre (a_pre % (b_pre))) with (Zabs (a_pre % (b_pre))) in *.
   2: { rewrite Z.gcd_comm.
       rewrite <- (Z.gcd_rem b_pre (a_pre % (b_pre)) ltac:(lia)).
-      rewrite H2.
+      rewrite PreH4.
       symmetry.
       apply Z.gcd_0_l.  }
   entailer!. 
   + rewrite Z.abs_mul.
     apply (Z.le_trans _ (Zabs (a_pre ÷ b_pre))).
     1: nia.
-    pose proof Z.rem_bound_abs a_pre b_pre H5.
-    rewrite <- (Z.quot_abs _ _ H5).
+    pose proof Z.rem_bound_abs a_pre b_pre PreH7.
+    rewrite <- (Z.quot_abs _ _ PreH7).
     pose proof Z.abs_nonneg a_pre.
     apply Z.quot_le_compat_l; lia.
   + apply (Z.le_trans _ (Zabs b_pre ÷ Zabs b_pre)).
     1: { rewrite Z.quot_same; lia. }
-    pose proof Z.rem_bound_abs a_pre b_pre H5.
+    pose proof Z.rem_bound_abs a_pre b_pre PreH7.
     apply Z.quot_le_compat_l; lia.
-  + pose proof Z.quot_rem a_pre b_pre H5.
-    rewrite <- H0.
+  + pose proof Z.quot_rem a_pre b_pre PreH7.
+    rewrite <- PreH2.
     pose proof (Z.quot_rem a_pre b_pre ltac:(lia)).
     lia.
 Qed.
 
-Lemma proof_of_exgcd_return_wit_1 : exgcd_return_wit_1.
+Lemma proof_of_exgcd_return_wit_3 : exgcd_return_wit_3.
 Proof.
   pre_process.
   Right.
   Exists (x_callee_v - a_pre ÷ b_pre * y_callee_v) y_callee_v .
   rewrite Z.gcd_comm.
-  rewrite <- (Z.gcd_rem a_pre b_pre H5).
+  rewrite <- (Z.gcd_rem a_pre b_pre PreH7).
   rewrite Z.gcd_comm.
   entailer!.
-  + apply (exgcd_reduction _ _ _ _ H5 H3 H4).
-  + rewrite <- H0.
+  + apply (exgcd_reduction _ _ _ _ PreH7 PreH5 PreH6).
+  + rewrite <- PreH2.
     pose proof (Z.quot_rem a_pre b_pre ltac:(lia)).
     lia.
 Qed.
@@ -267,16 +267,16 @@ Qed.
 Lemma proof_of_exgcd_partial_solve_wit_4_pure : exgcd_partial_solve_wit_4_pure.
 Proof.
   pre_process.
-  pose proof Z.rem_bound_abs a_pre b_pre H.
+  pose proof Z.rem_bound_abs a_pre b_pre PreH1.
   entailer!.
 Qed.
 
-Lemma proof_of_exgcd_safety_wit_12 : exgcd_safety_wit_12.
+Lemma proof_of_exgcd_safety_wit_18 : exgcd_safety_wit_18.
 Proof.
   pre_process.
-  pose proof exgcd_reduction _ _ _ _ H5 H3 H4.
+  pose proof exgcd_reduction _ _ _ _ PreH7 PreH5 PreH6.
   assert(Zgcd b_pre (a_pre % (b_pre)) >= 1). {
-    pose proof (Z_gcd_pos_l b_pre (a_pre % (b_pre)) H5).
+    pose proof (Z_gcd_pos_l b_pre (a_pre % (b_pre)) PreH7).
     lia.
   }
   assert(Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre)) <= 2147483647). {
@@ -285,12 +285,12 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_exgcd_safety_wit_13 : exgcd_safety_wit_13.
+Lemma proof_of_exgcd_safety_wit_19 : exgcd_safety_wit_19.
 Proof.
   pre_process.
-  pose proof exgcd_reduction' a_pre b_pre x_callee_v y_callee_v H5 H3 H4.
+  pose proof exgcd_reduction' a_pre b_pre x_callee_v y_callee_v PreH7 PreH5 PreH6.
   assert(Zgcd b_pre (a_pre % (b_pre)) >= 1). {
-    pose proof (Z_gcd_pos_l b_pre (a_pre % (b_pre)) H5).
+    pose proof (Z_gcd_pos_l b_pre (a_pre % (b_pre)) PreH7).
     lia.
   }
   assert(Zabs a_pre ÷ Zgcd b_pre (a_pre % (b_pre)) <= 2147483647). {
@@ -324,12 +324,12 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_exgcd_safety_wit_18 : exgcd_safety_wit_18.
+Lemma proof_of_exgcd_safety_wit_12 : exgcd_safety_wit_12.
 Proof.
   pre_process.
 Qed.
 
-Lemma proof_of_exgcd_safety_wit_19 : exgcd_safety_wit_19.
+Lemma proof_of_exgcd_safety_wit_13 : exgcd_safety_wit_13.
 Proof.
   pre_process.
 Qed.
@@ -342,4 +342,3 @@ Proof.
   entailer!.
   repeat apply derivable1_orp_elim; Intros x y ret; Exists x y ret; entailer!.
 Qed.
-

@@ -22,41 +22,49 @@ Local Open Scope sac.
 
 Lemma proof_of_mpz_clear_return_wit_2 : mpz_clear_return_wit_2.
 Proof.
-  pre_process.
+  unfold mpz_clear_return_wit_2.
+  right.
+  intros n ptr_2 size_2 cap_2 PreH1 PreH2 PreH3.
   subst cap_2.
-  assert (size_2 = 0) by lia.
-  subst size_2.
-  Exists ptr_2 0 0.
-  entailer!.
-  unfold mpd_store_Z_compact, mpd_store_list.
-  Intros l.
-  assert (l = nil).
-  { apply Zlength_nil_inv. lia. }
-  subst l.
+  assert (Hsize_abs: Zabs size_2 = 0) by lia.
+  rewrite Hsize_abs.
   rewrite UIntArray.undef_seg_empty.
+  unfold mpd_store_Z_compact, mpd_store_list.
+  Intros data.
+  assert (data = nil).
+  { apply Zlength_nil_inv. lia. }
+  subst data.
   rewrite UIntArray.full_empty.
   entailer!.
 Qed.
 
 Lemma proof_of_mpz_realloc_return_wit_1 : mpz_realloc_return_wit_1.
 Proof.
-  pre_process.
+  unfold mpz_realloc_return_wit_1.
+  left.
+  intros size_pre r_pre n cap old ptr retval_2 retval retval_3
+    PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9 PreH10.
+  assert (Hold_zero: old = 0) by lia.
+  subst old.
   Exists retval_2.
+  rewrite PreH3.
+  entailer!.
   sep_apply (UIntArray.undef_full_to_undef_seg retval); try lia.
-  assert (old = 0) by lia.
-  subst old cap.
   unfold mpd_store_Z_compact, mpd_store_list.
   Intros l.
-  symmetry in H9.
-  apply Zlength_nil_inv in H9.
+  assert (l = nil).
+  { apply Zlength_nil_inv. lia. }
   subst l.
+  rewrite UIntArray.full_empty.
   Exists (@nil Z).
   rewrite UIntArray.full_empty.
+  try rewrite UIntArray.undef_seg_empty.
+  entailer!.
+  rewrite PreH10.
+  change (Zabs 0) with 0.
   rewrite UIntArray.undef_seg_empty.
   entailer!.
-  rewrite UIntArray.full_empty.
-  replace (Z.max size_pre 1) with retval_2 by lia.
-  entailer!.
+  all: try lia; try tauto.
 Qed.
 
 Lemma proof_of_mpz_realloc_return_wit_3 : mpz_realloc_return_wit_3.
@@ -66,7 +74,15 @@ Qed.
 
 Lemma proof_of_mpz_realloc_return_wit_4 : mpz_realloc_return_wit_4.
 Proof.
-  pre_process.
+  unfold mpz_realloc_return_wit_4.
+  left.
+  intros size_pre r_pre n cap old retval_2 retval retval_3
+    PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9 PreH10.
+  exfalso.
+  subst retval_3 retval_2.
+  assert (cap > 0) by lia.
+  assert (Z.max size_pre 1 = size_pre) by lia.
+  lia.
 Qed.
 
 Lemma proof_of_mpz_realloc_partial_solve_wit_2_pure : mpz_realloc_partial_solve_wit_2_pure.
@@ -118,15 +134,11 @@ Qed.
 Lemma proof_of_mpz_sgn_return_wit_1 : mpz_sgn_return_wit_1.
 Proof. 
   pre_process. 
-  Right. unfold store_Z.
+  Left. Left. unfold store_Z.
   Exists ptr size cap.
-  replace (Zabs size) with size by lia.
-  prop_apply (mpd_store_Z_compact_pos) ; try lia.
-  Intros.
-  assert (n > 0) by (unfold same_sign in H1; destruct H1 as [[? ?] | [? ?]]; lia).
-  replace (Zabs n) with n by lia.
   entailer!.
-  unfold UINT_MOD. lia.
+  unfold same_sign in PreH3.
+  destruct PreH3 as [[_ Hsize_nonneg] | [Hn_neg _]]; [lia | exact Hn_neg].
 Qed.
 
 Lemma proof_of_mpz_sgn_return_wit_2 : mpz_sgn_return_wit_2.
@@ -146,13 +158,18 @@ Qed.
 Lemma proof_of_mpz_sgn_return_wit_3 : mpz_sgn_return_wit_3.
 Proof.
   pre_process. 
-  Left. Left. unfold store_Z.
+  Right. unfold store_Z.
   Exists ptr size cap.
-  replace (Zabs size) with (- size) by lia.
-  prop_apply (mpd_store_Z_compact_pos) ; try lia.
+  replace (Zabs size) with size by lia.
+  prop_apply (mpd_store_Z_compact_pos); try lia.
   Intros.
-  assert (n < 0) by (unfold same_sign in H1; destruct H1 as [[? ?] | [? ?]]; lia).
-  replace (Zabs n) with (- n) by lia.
+  assert (Hn_pos: n > 0).
+  { unfold same_sign in PreH3.
+    match goal with
+    | [ Habs_pos : Zabs n > 0 |- _ ] =>
+        destruct PreH3 as [[Hn_nonneg _] | [_ Hsize_neg]]; lia
+    end. }
+  replace (Zabs n) with n by lia.
   entailer!.
-  unfold UINT_MOD. lia.
+  unfold UINT_MOD; lia.
 Qed.

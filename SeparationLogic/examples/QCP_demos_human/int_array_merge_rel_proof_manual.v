@@ -39,12 +39,12 @@ Proof.
   replace (i - i) with 0 in * by lia.
   prop_apply (IntArray.seg_length arr_pre j).
   Intros.
-  destruct l2_2; [simpl in H10 ; lia | ].
-  clear H10.
+  destruct l2_2; [simpl in H ; lia | ].
+  clear H.
   prop_apply (IntArray.seg_length ret_pre k).
   Intros.
-  destruct l6_2;[simpl in H10 ; lia | ].
-  clear H10.
+  destruct l6_2;[simpl in H ; lia | ].
+  clear H.
   rewrite Znth0_cons.
   replace (replace_Znth 0 z (z0 :: l6_2)) with (z :: l6_2) by easy.
   rewrite (IntArray.seg_unfold ret_pre).
@@ -58,11 +58,11 @@ Proof.
   Exists l1_2 l2_2 (l3_2 ++ z :: nil).
   entailer!.
   unfold merge_from_mid_rel in *.
-  rewrite (repeat_break_unfold _ _) in H2.
+  rewrite (repeat_break_unfold _ _) in PreH4.
   prove_by_one_abs_step (by_continue (l1_2, l2_2, l3_2 ++ z :: nil)).
-  destruct l1_2 ; [ simpl in H12; lia | ].
+  destruct l1_2 ; [ simpl in H1; lia | ].
   unfold merge_body.
-  rewrite !Znth0_cons in H.
+  rewrite !Znth0_cons in PreH1.
   abs_choice_right.
   abs_test_step; [ lia | ].
   abs_ret_step.
@@ -76,12 +76,12 @@ Proof.
   replace (i - i) with 0 in * by lia.
   prop_apply (IntArray.seg_length arr_pre i).
   Intros.
-  destruct l1_2;[simpl in H10;lia | ].
-  clear H10.
+  destruct l1_2;[simpl in H ; lia | ].
+  clear H.
   prop_apply (IntArray.seg_length ret_pre k).
   Intros.
-  destruct l6_2;[simpl in H10;lia | ].
-  clear H10.
+  destruct l6_2;[simpl in H ; lia | ].
+  clear H.
   rewrite Znth0_cons.
   replace (replace_Znth 0 z (z0 :: l6_2)) with (z :: l6_2) by easy.
   rewrite (IntArray.seg_unfold ret_pre).
@@ -95,11 +95,11 @@ Proof.
   Exists l1_2 l2_2 (l3_2 ++ z :: nil).
   entailer!.
   unfold merge_from_mid_rel in *.
-  rewrite (repeat_break_unfold _ _) in H2.
+  rewrite (repeat_break_unfold _ _) in PreH4.
   prove_by_one_abs_step (by_continue (l1_2, l2_2, l3_2 ++ z :: nil)).
-  destruct l2_2 ; [ simpl in H12 ; lia | ].
+  destruct l2_2 ; [ simpl in H1 ; lia | ].
   unfold merge_body.
-  rewrite !Znth0_cons in H.
+  rewrite !Znth0_cons in PreH1.
   abs_choice_left.
   abs_test_step; [ lia | ].
   abs_ret_step.
@@ -111,23 +111,21 @@ Proof.
   Left.
   Exists l6_2 l5_2 l4_2.
   Exists l1_2 l2_2 l3_2.
-  prop_apply (IntArray.seg_length arr_pre j).
+  prop_apply (IntArray.seg_length arr_pre i).
   Intros.
-  assert (j > r_pre + 1 \/ j <= r_pre + 1) as [ | ] by lia. 
-  lia.
+  assert (i = q_pre + 1) by lia.
   entailer!.
 Qed.
 
 Lemma proof_of_merge_entail_wit_3_2 : merge_entail_wit_3_2.
 Proof. 
   pre_process.
-  rewrite <- derivable1_orp_intros2.
+  Right.
   Exists l6_2 l5_2 l4_2.
   Exists l1_2 l2_2 l3_2.
-  prop_apply (IntArray.seg_length arr_pre i).
+  prop_apply (IntArray.seg_length arr_pre j).
   Intros.
-  assert (i > q_pre + 1 \/ i <= q_pre + 1) as [ | ] by lia. 
-  lia.
+  assert (j = r_pre + 1) by lia.
   entailer!.
 Qed. 
 
@@ -139,12 +137,12 @@ Proof.
   replace (i - i) with 0 in * by lia.
   prop_apply (IntArray.seg_length arr_pre i).
   Intros.
-  destruct l1_2;[simpl in H9;lia | ].
-  clear H9.
+  destruct l1_2;[simpl in H ; lia | ].
+  clear H.
   prop_apply (IntArray.seg_length ret_pre k).
   Intros.
-  destruct l6_2;[simpl in H9;lia | ].
-  clear H9.
+  destruct l6_2;[simpl in H ; lia | ].
+  clear H.
   rewrite Znth0_cons.
   replace (replace_Znth 0 z (z0 :: l6_2)) with (z :: l6_2) by easy.
   rewrite (IntArray.seg_unfold ret_pre).
@@ -154,14 +152,14 @@ Proof.
   sep_apply (IntArray.seg_merge_to_seg arr_pre p_pre i (i + 1));[ | lia].
   sep_apply (IntArray.seg_merge_to_seg ret_pre p_pre k (k + 1));[ | lia].
   prop_apply (IntArray.seg_length arr_pre j).
-  Left.
+  Right.
   Exists l6_2 l5_2 (l4_2 ++ z :: nil).
   Exists l1_2 l2_2 (l3_2 ++ z :: nil).
   entailer!.
   replace (r_pre + 1 - j) with 0 in * by lia.
-  destruct l2_2. 2:{ simpl in H11. lia. }
+  destruct l2_2. 2:{ simpl in H1. lia. }
   unfold merge_from_mid_rel in *.
-  rewrite (repeat_break_unfold _ _) in H0.
+  rewrite (repeat_break_unfold _ _) in PreH2.
   rewrite (repeat_break_unfold _ _).
   cbn [merge_body] in *.
   destruct l1_2.
@@ -174,7 +172,7 @@ Proof.
   pre_process.
   prop_apply (IntArray.seg_length arr_pre i).
   Intros.
-  destruct l1. 2:{ simpl in H9.  lia. }
+  destruct l1. 2:{ simpl in H.  lia. }
   Exists l6_2 l5_2 l4_2.
   Exists l2_2 l3_2.
   rewrite (IntArray.seg_empty). entailer!.
@@ -185,7 +183,7 @@ Proof.
   pre_process.
   prop_apply (IntArray.seg_length arr_pre i).
   Intros.
-  destruct l1. 2:{  simpl in H9. lia. }
+  destruct l1. 2:{  simpl in H. lia. }
   Exists l6_2 l5_2 l4_2.
   Exists l2_2 l3_2.
   rewrite (IntArray.seg_empty). 
@@ -200,12 +198,12 @@ Proof.
   replace (i - i) with 0 in * by lia.
   prop_apply (IntArray.seg_length arr_pre j).
   Intros.
-  destruct l2_2;[simpl in H9;lia | ].
-  clear H9.
+  destruct l2_2;[simpl in H ;lia | ].
+  clear H.
   prop_apply (IntArray.seg_length ret_pre k).
   Intros.
-  destruct l6_2;[simpl in H9;lia | ].
-  clear H9.
+  destruct l6_2;[simpl in H;lia | ].
+  clear H.
   rewrite Znth0_cons.
   replace (replace_Znth 0 z (z0 :: l6_2)) with (z :: l6_2) by easy.
   rewrite (IntArray.seg_unfold ret_pre).
@@ -218,7 +216,7 @@ Proof.
   Exists l2_2 (l3_2 ++ z :: nil).
   entailer!.
   unfold merge_from_mid_rel in *.
-  rewrite (repeat_break_unfold _ _) in H0.
+  rewrite (repeat_break_unfold _ _) in PreH2.
   rewrite (repeat_break_unfold _ _).
   cbn [merge_body] in *.
   rewrite <- app_assoc. easy.
@@ -230,20 +228,20 @@ Proof.
   subst i.
   prop_apply (IntArray.seg_length arr_pre j).
   Intros.
-  destruct l2 ; simpl in H8 ; try lia.
+  destruct l2 ; simpl in H ; try lia.
   replace j with (r_pre + 1) in * by lia.
   replace k with (r_pre + 1) in * by lia.
   prop_apply (IntArray.seg_length ret_pre (r_pre + 1)).
   Intros.
   destruct l6.
-  2: { simpl in H9. lia.  }
+  2: { simpl in H0. lia.  }
   do 2 rewrite (IntArray.seg_empty).
   Intros.
   sep_apply (IntArray.seg_merge_to_seg) ; try lia.
   Exists (l4 ++ l5) l3.
   entailer!.
-  unfold merge_from_mid_rel in H0.
-  rewrite (repeat_break_unfold _ _) in H0.
+  unfold merge_from_mid_rel in PreH2.
+  rewrite (repeat_break_unfold _ _) in PreH2.
   rewrite <- (app_nil_r l3).
   prove_by_one_abs_step (by_break (l3 ++ nil)).
   abs_ret_step.
@@ -278,11 +276,11 @@ Proof.
   assert (Zlength  (sublist ((r_pre - l_pre) ÷ 2 + 1) (r_pre + 1 - l_pre) s1) = (r_pre - l_pre) - ((r_pre - l_pre) ÷ 2)).
   { rewrite Zlength_sublist ; try lia. }
   destruct (sublist ((r_pre - l_pre) ÷ 2 + 1) (r_pre + 1 - l_pre) s1) eqn:?. 
-  rewrite Zlength_nil in H6. lia.
+  rewrite Zlength_nil in H1. lia.
   unfold mergesortrec_loc1.
-  rewrite (gmergesortrec_unfold s1) in H0.
-  unfold gmergesortrec_f in H0.
-  safe_choice_r H0 ; try lia.
+  rewrite (gmergesortrec_unfold s1) in PreH2.
+  unfold gmergesortrec_f in PreH2.
+  safe_choice_r PreH2 ; try lia.
   prove_by_one_abs_step ((sublist 0 ((r_pre - l_pre) ÷ 2 + 1) s1), (z::l)).
   apply hseval_stateless_ret.
   unfold ext_split.
@@ -311,20 +309,18 @@ Proof.
 Qed.
 
 Lemma proof_of_mergeSort_return_wit_2 : mergeSort_return_wit_2.
-Proof. 
+Proof.
   pre_process.
-  rename X_low_level_spec into X.
-  rename s1_low_level_spec into s1.
   prop_apply (IntArray.seg_length arr_pre l_pre).
   Intros.
-  Exists s1 s1.
+  Exists s1_low_level_spec s1_low_level_spec.
   entailer!.
-  destruct s1. simpl in H4. lia.
-  destruct s1. 2:{ simpl in H4.  lia.  }
-  rewrite (gmergesortrec_unfold _) in H0.
-  unfold gmergesortrec_f in H0.
-  safe_choice_l H0.
-  eapply highstependret_derive with (P':= (fun _ => ATrue));eauto.
+  destruct s1_low_level_spec. simpl in H. lia.
+  destruct s1_low_level_spec. 2:{ simpl in H. lia. }
+  rewrite (gmergesortrec_unfold _) in PreH2.
+  unfold gmergesortrec_f in PreH2.
+  safe_choice_l PreH2.
+  eapply highstependret_derive with (P':= (fun _ => ATrue)); eauto.
   apply hseval_stateless_ret.
   unfold ext_sort.
   easy.
@@ -349,4 +345,3 @@ Proof.
   unfold applyf.
   entailer!.
 Qed. 
-

@@ -1,9 +1,0 @@
-fastmcp>=3.1.0
-
-[dev]
-pytest>=8.0
-pytest-asyncio>=0.25
-black>=24.0
-
-[interactive]
-pytanque @ git+https://github.com/LLM4Rocq/pytanque

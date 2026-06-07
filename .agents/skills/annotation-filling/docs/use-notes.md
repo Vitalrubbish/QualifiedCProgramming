@@ -10,8 +10,11 @@
 - annotation filling 的默认顺序是：先确认 / 修正 `annotation_scratch_lib` 中的 spec 定义，再填写 C 侧 annotation。
 - spec 定义必须是严格数学性质定义，不应是在 Rocq 中把 C 程序本体、循环或状态转移重写一遍。
 - `annotation-subagent` 可以在 scratch 上使用 `qcp-mcp`；不得在正式 `.c` 上做交互式实验。
+- `QCP_examples/LLM_bench` case 复用 `QCP_demos_LLM` 公共头文件时，C 文件应统一保持裸 include（例如 `#include "verification_stdlib.h"` / `#include "verification_list.h"` / `#include "int_array_def.h"`）。annotation C scratch 上的 `qcp-mcp` 检查必须使用能解析 `QCP_examples/QCP_demos_LLM/` 的 include search path；若头文件解析失败，应修正 qcp-mcp wrapper / 启动配置 / include 参数，而不是把源码改成 `../../../QCP_demos_LLM/...`。
+- 若 direct `qcp-mcp` wrapper 因仓库中的 ELF 缺少执行位而失败，允许使用同一 `qcp-mcp` 链路的 loader fallback；但 direct `symexec` 不能替代 `qcp-mcp` requirement。
 - `annotation-subagent` 可以编辑本轮 `annotation_scratch_lib`；不得直接编辑 `common_case_formal_lib`。`common_case_formal_lib` 回填只能由主 agent 在 annotation-checking 通过后执行。
 - 每轮 `annotation-filling` 得到候选 annotation 后，必须由同一 `annotation-subagent` 调用 `annotation-checking`。只有检查结果为 `passed`，本轮结果才可交给主 agent 回填并触发正式 symexec。
+- 即使 `annotation-checking` 返回 `passed`，若 report 中 `qcp_mcp_requirement_satisfied != yes` 或 `annotation_scratch_lib_coqc_status != passed`，主 agent 也不得进入正式 symexec。
 - 如果 `annotation-checking` 返回 `failed`，不要把候选 patch 交给主 agent；继续回到 annotation filling 修正 C scratch 或 `annotation_scratch_lib`，再重新检查。
 - `annotation` 是长时间迭代 phase；本轮一旦交给 `annotation-subagent`，就应持续工作到 `completed`、`blocked` 或 `stale`，而不是只交第一版尝试。
 - 如果本轮是回流轮次，先读 `Re-entry Brief`，不要自己猜测为什么再次进入 `annotation`。

@@ -1,13 +1,14 @@
 """Tests for the rocq_step_multi tool.
 
 rocq_step_multi tries N tactics against the current proof state and returns
-all results WITHOUT advancing the session. Since it requires pytanque, most
-tests use mocks.
+all results WITHOUT advancing the state table. Since it requires pytanque,
+most tests use mocks.
 
 Tests are grouped into:
 - TestStepMultiForbidden: tactic with forbidden command rejected (calls _check_forbidden_commands)
 - TestStepMultiReal: tests that call the real run_step_multi with mocked pet
 - TestStepMultiIntegration: integration tests (require pet)
+- TestStepMultiTimeoutBudget: per-tactic timeout budget is divided correctly
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.conftest import PET_AVAILABLE
+from tests.conftest import PET_AVAILABLE, add_mock_state, make_lifespan_state
 
 # ---------------------------------------------------------------------------
 # Helpers to build mock states and goals
@@ -135,17 +136,14 @@ class TestStepMultiReal:
     """Tests that call the actual run_step_multi function (with mocked pet)."""
 
     @pytest.fixture(autouse=True)
-    def _reset_session_and_semaphore(self):
+    def _reset_state_and_semaphore(self):
         import rocq_mcp.server as srv
+        from rocq_mcp.interactive import _state_invalidate_all
 
-        srv._session.update(
-            {"state": None, "file": None, "theorem": None, "history": []}
-        )
+        _state_invalidate_all()
         srv._pet_semaphore = None  # reset so each asyncio.run() gets a fresh one
         yield
-        srv._session.update(
-            {"state": None, "file": None, "theorem": None, "history": []}
-        )
+        _state_invalidate_all()
         srv._pet_semaphore = None
 
     @pytest.fixture(autouse=True)
@@ -157,11 +155,15 @@ class TestStepMultiReal:
 
     def test_too_many_tactics_rejected(self):
         """run_step_multi rejects >20 tactics with success:False."""
-        from rocq_mcp.server import run_step_multi
+        from rocq_mcp.interactive import run_step_multi
 
-        lifespan_state = {"pet_client": None, "pet_timeout": 30.0}
+        lifespan_state = make_lifespan_state()
         result = asyncio.run(
-            run_step_multi(tactics=["auto"] * 25, lifespan_state=lifespan_state)
+            run_step_multi(
+                tactics=["auto"] * 25,
+                lifespan_state=lifespan_state,
+                from_state=1,
+            )
         )
         assert result["success"] is False
         assert "25" in result["error"]
@@ -169,13 +171,14 @@ class TestStepMultiReal:
 
     def test_forbidden_command_rejected(self):
         """run_step_multi rejects tactics with forbidden commands."""
-        from rocq_mcp.server import run_step_multi
+        from rocq_mcp.interactive import run_step_multi
 
-        lifespan_state = {"pet_client": None, "pet_timeout": 30.0}
+        lifespan_state = make_lifespan_state()
         result = asyncio.run(
             run_step_multi(
                 tactics=["auto.", 'Load "evil".', "lia."],
                 lifespan_state=lifespan_state,
+                from_state=1,
             )
         )
         assert result["success"] is False
@@ -183,11 +186,19 @@ class TestStepMultiReal:
 
     def test_valid_tactics_with_mocked_pet(self):
         """run_step_multi with valid tactics returns structured results."""
-        from rocq_mcp.server import run_step_multi, _session
+        from rocq_mcp.interactive import _state_add, _state_table, run_step_multi
 
-        # Set up a mock session state (simulating an active session)
+        # Inject a mock state into the state table
         parent_state = _make_mock_state(proof_finished=False)
-        _session["state"] = parent_state
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
 
         # Build a mock pet that returns structured goals
         mock_pet = MagicMock()
@@ -204,13 +215,15 @@ class TestStepMultiReal:
             )
         )
 
-        lifespan_state = {"pet_client": None, "pet_timeout": 30.0}
+        lifespan_state = make_lifespan_state()
+        lifespan_state["current_workspace"] = "/tmp"
 
         with patch("rocq_mcp.server._ensure_pet", return_value=mock_pet):
             result = asyncio.run(
                 run_step_multi(
                     tactics=["auto", "lia", "ring"],
                     lifespan_state=lifespan_state,
+                    from_state=injected_id,
                 )
             )
 
@@ -226,23 +239,304 @@ class TestStepMultiReal:
             assert "goals" in entry
             assert "proof_finished" in entry
 
-        # Session state should NOT have been advanced
-        assert _session["state"] is parent_state
+        # step_multi is read-only — the injected state must still be in the
+        # table, not consumed/replaced by the exploration.
+        assert injected_id in _state_table
 
-    def test_no_session_error(self):
-        """run_step_multi with no active session returns error."""
-        from rocq_mcp.server import run_step_multi
+    def test_valid_tactics_with_from_state(self):
+        """run_step_multi with from_state uses the specified state."""
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
 
-        lifespan_state = {"pet_client": None, "pet_timeout": 30.0}
+        # Inject two states into the state table
+        state_a = _make_mock_state(proof_finished=False)
+        id_a = _state_add(
+            state=state_a,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+        state_b = _make_mock_state(proof_finished=False)
+        _state_add(
+            state=state_b,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=id_a,
+            tactic="intros.",
+            step=1,
+        )
+
+        # Build a mock pet
+        mock_pet = MagicMock()
+        new_state = _make_mock_state(proof_finished=True)
+        mock_pet.run = MagicMock(return_value=new_state)
+        mock_pet.complete_goals = MagicMock(return_value=_make_complete_goals(goals=[]))
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", return_value=mock_pet):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["reflexivity"],
+                    lifespan_state=lifespan_state,
+                    from_state=id_a,
+                )
+            )
+
+        assert result["success"] is True
+        assert result["from_state_id"] == id_a
+
+        # Verify pet.run was called with state_a (not state_b which is current)
+        mock_pet.run.assert_called()
+        call_args = mock_pet.run.call_args
+        assert call_args[0][0] is state_a
+
+    def test_unknown_state_error(self):
+        """run_step_multi with a never-existed state id returns a clear error."""
+        from rocq_mcp.interactive import run_step_multi
+
+        lifespan_state = make_lifespan_state()
 
         mock_pet = MagicMock()
         with patch("rocq_mcp.server._ensure_pet", return_value=mock_pet):
             result = asyncio.run(
-                run_step_multi(tactics=["auto"], lifespan_state=lifespan_state)
+                run_step_multi(
+                    tactics=["auto"],
+                    lifespan_state=lifespan_state,
+                    from_state=999999,
+                )
             )
 
         assert result["success"] is False
-        assert "no active session" in result["error"].lower()
+        assert "does not exist" in result["error"].lower()
+
+    def test_broken_pipe_returns_pet_restarted(self):
+        """run_step_multi returns pet_restarted=True on BrokenPipeError."""
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        # Inject a mock state into the state table
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a mock pet that raises BrokenPipeError on run()
+        mock_pet = MagicMock()
+        mock_pet.run = MagicMock(side_effect=BrokenPipeError("pet died"))
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", return_value=mock_pet):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["auto."],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is False
+        assert result.get("pet_restarted") is True
+        assert "died" in result["error"].lower() or "pet" in result["error"].lower()
+
+    def test_connection_error_returns_pet_restarted(self):
+        """run_step_multi returns pet_restarted=True on ConnectionError."""
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        # Inject a mock state into the state table
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a mock pet that raises ConnectionError on run()
+        mock_pet = MagicMock()
+        mock_pet.run = MagicMock(side_effect=ConnectionError("connection lost"))
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", return_value=mock_pet):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["auto."],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is False
+        assert result.get("pet_restarted") is True
+
+    def test_petanque_error_with_dead_pet_returns_pet_restarted(self):
+        """run_step_multi returns pet_restarted=True when PetanqueError + dead pet.
+
+        When _ensure_pet raises PetanqueError and the pet process has exited
+        (poll() returns non-None), run_step_multi should detect the dead pet,
+        invalidate it, and return pet_restarted=True.
+        """
+        from pytanque import PetanqueError
+
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        # Inject a mock state into the state table
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a PetanqueError to raise from _ensure_pet
+        err = PetanqueError.__new__(PetanqueError)
+        err.message = "pet crashed unexpectedly"
+
+        # Build a mock pet with dead process (poll() returns exit code)
+        mock_dead_pet = MagicMock()
+        mock_dead_pet.process = MagicMock()
+        mock_dead_pet.process.poll = MagicMock(return_value=1)
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["pet_client"] = mock_dead_pet
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", side_effect=err):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["auto."],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is False
+        assert result.get("pet_restarted") is True
+        assert "died" in result["error"].lower()
+
+    def test_petanque_error_with_alive_pet_returns_error(self):
+        """run_step_multi returns plain error when PetanqueError + alive pet.
+
+        When _ensure_pet raises PetanqueError but the pet process is still
+        alive (poll() returns None), run_step_multi should return a normal
+        error without pet_restarted.
+        """
+        from pytanque import PetanqueError
+
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        # Inject a mock state into the state table
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a PetanqueError to raise from _ensure_pet
+        err = PetanqueError.__new__(PetanqueError)
+        err.message = "tactic failed"
+
+        # Build a mock pet with alive process (poll() returns None)
+        mock_alive_pet = MagicMock()
+        mock_alive_pet.process = MagicMock()
+        mock_alive_pet.process.poll = MagicMock(return_value=None)
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["pet_client"] = mock_alive_pet
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", side_effect=err):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["auto."],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is False
+        assert "pet_restarted" not in result
+        assert "tactic failed" in result["error"]
+
+    def test_per_tactic_failure_tags_reason_tactic_failed(self):
+        """A per-tactic PetanqueError (tactic was rejected by Coq, pet
+        still alive) must tag the entry with reason="tactic_failed" so
+        agents can dispatch on it the same way they do on rocq_check
+        mid-batch failures — not just `{success: False, error}`."""
+        from pytanque import PetanqueError
+
+        from rocq_mcp.interactive import run_step_multi, _state_add
+
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a mock pet whose .run raises a live PetanqueError.
+        err = PetanqueError.__new__(PetanqueError)
+        err.message = "Reference omega_bad_tactic not found."
+        mock_alive_pet = MagicMock()
+        mock_alive_pet.process = MagicMock()
+        mock_alive_pet.process.poll = MagicMock(return_value=None)
+        mock_alive_pet.run = MagicMock(side_effect=err)
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["pet_client"] = mock_alive_pet
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", return_value=mock_alive_pet):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["omega_bad_tactic.", "lia."],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        # Top-level call succeeds — step_multi's contract is "try them
+        # all and report each result"; only transport failures abort.
+        assert result["success"] is True
+        assert len(result["results"]) == 2
+        for entry in result["results"]:
+            assert entry["success"] is False
+            assert entry["reason"] == "tactic_failed"
+            assert "error" in entry
 
 
 # ---------------------------------------------------------------------------
@@ -255,12 +549,12 @@ class TestStepMultiIntegration:
     """Integration tests for rocq_step_multi (require pet subprocess)."""
 
     @pytest.fixture(autouse=True)
-    def _reset_session(self):
-        from rocq_mcp.server import _session
+    def _reset_state(self):
+        from rocq_mcp.interactive import _state_invalidate_all
 
-        _session.update({"state": None, "file": None, "theorem": None, "history": []})
+        _state_invalidate_all()
         yield
-        _session.update({"state": None, "file": None, "theorem": None, "history": []})
+        _state_invalidate_all()
 
     @staticmethod
     def _make_state(timeout: float = 30.0) -> dict:
@@ -268,13 +562,19 @@ class TestStepMultiIntegration:
 
     @pytest.mark.asyncio
     async def test_step_multi_concept(self, workspace):
-        """Verify the concept: try tactics, session state unchanged.
+        """Verify the concept: try tactics via step_multi, state unchanged.
 
-        This test starts a session with rocq_step, then manually tries
-        multiple tactics against the same state (simulating step_multi
-        behavior) and verifies the session state is not corrupted.
+        This test starts a proof context with run_start, executes a tactic
+        with run_check, then tries multiple tactics via run_step_multi
+        and verifies the state table is not corrupted.
         """
-        from rocq_mcp.server import run_step, _session, _invalidate_pet
+        from rocq_mcp.interactive import (
+            _state_table,
+            run_check,
+            run_start,
+            run_step_multi,
+        )
+        from rocq_mcp.server import _invalidate_pet
 
         vfile = workspace / "step_multi_test.v"
         vfile.write_text(
@@ -283,42 +583,450 @@ class TestStepMultiIntegration:
 
         state = self._make_state()
         try:
-            # Start session
-            r1 = await run_step(
-                tactic="intros",
+            # Start proof context
+            r1 = await run_start(
                 file=str(vfile),
                 theorem="t",
                 workspace=str(workspace),
                 lifespan_state=state,
             )
             assert r1["success"] is True
+            start_state_id = r1["state_id"]
 
-            # Record the session state before exploration
-            saved_state = _session["state"]
-            saved_history_len = len(_session["history"])
-
-            # Now try a wrong tactic (simulating step_multi exploration)
-            r2 = await run_step(
-                tactic="omega_nonexistent",
-                file="",
-                theorem="",
-                workspace=str(workspace),
+            # Execute intros to get a state with a goal
+            r2 = await run_check(
+                body="intros.",
+                timeout=30.0,
                 lifespan_state=state,
+                from_state=start_state_id,
             )
-            assert r2["success"] is False
+            assert r2["success"] is True
+            intros_state_id = r2["state_id"]
 
-            # Session state should NOT have advanced (failed tactic)
-            assert len(_session["history"]) == saved_history_len
+            # Snapshot the state-table keys before exploration.
+            keys_before = set(_state_table.keys())
 
-            # Now try the correct tactic
-            r3 = await run_step(
-                tactic="reflexivity",
-                file="",
-                theorem="",
-                workspace=str(workspace),
+            # Try multiple tactics via run_step_multi (read-only exploration)
+            r3 = await run_step_multi(
+                tactics=["reflexivity", "auto", "omega_nonexistent"],
                 lifespan_state=state,
+                from_state=intros_state_id,
             )
             assert r3["success"] is True
-            assert r3["proof_finished"] is True
+            assert len(r3["results"]) == 3
+
+            # reflexivity should succeed
+            assert r3["results"][0]["success"] is True
+            assert r3["results"][0]["proof_finished"] is True
+
+            # step_multi is read-only: no new persistent entries should
+            # have been added to the table.
+            assert set(_state_table.keys()) == keys_before
+
+            # Commit the winning tactic via run_check
+            r4 = await run_check(
+                body="reflexivity.",
+                timeout=30.0,
+                lifespan_state=state,
+                from_state=intros_state_id,
+            )
+            assert r4["success"] is True
+            assert r4["proof_finished"] is True
         finally:
             _invalidate_pet(state)
+
+
+# ---------------------------------------------------------------------------
+# TestStepMultiTimeoutBudget: per-tactic timeout budget
+# ---------------------------------------------------------------------------
+
+
+class TestStepMultiTimeoutBudget:
+    """Test that per-tactic Rocq timeout is budgeted correctly."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_state_and_semaphore(self):
+        import rocq_mcp.server as srv
+        from rocq_mcp.interactive import _state_invalidate_all
+
+        _state_invalidate_all()
+        srv._pet_semaphore = None
+        yield
+        _state_invalidate_all()
+        srv._pet_semaphore = None
+
+    @pytest.fixture(autouse=True)
+    def _mock_pytanque(self):
+        """Ensure pytanque is importable even if not installed."""
+        cleanup = _ensure_pytanque_importable()
+        yield
+        cleanup()
+
+    def test_per_tactic_timeout_is_divided(self):
+        """Each tactic gets timeout/len(tactics) as its Rocq timeout."""
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        # Track what timeout was passed to pet.run
+        recorded_timeouts = []
+
+        # Inject a mock state into the state table
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a mock pet that records the timeout arg
+        mock_pet = MagicMock()
+        new_state = _make_mock_state(proof_finished=False)
+
+        def fake_run(state, tac, timeout=None):
+            recorded_timeouts.append(timeout)
+            return new_state
+
+        mock_pet.run = fake_run
+        mock_pet.complete_goals = MagicMock(return_value=_make_complete_goals(goals=[]))
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with (
+            patch("rocq_mcp.server._ensure_pet", return_value=mock_pet),
+            patch("rocq_mcp.server._set_workspace_if_needed"),
+        ):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=[
+                        "auto.",
+                        "lia.",
+                        "ring.",
+                        "tauto.",
+                        "simpl.",
+                        "intros.",
+                        "eauto.",
+                        "trivial.",
+                        "reflexivity.",
+                        "omega.",
+                    ],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is True
+        assert len(result["results"]) == 10
+        # 10 tactics, timeout=30 -> per_tactic_budget = max(1, int(30/10)) = 3
+        for t in recorded_timeouts:
+            assert t == 3, f"Expected per-tactic budget of 3, got {t}"
+
+    def test_per_tactic_timeout_minimum_is_one(self):
+        """Per-tactic budget is at least 1 even with many tactics."""
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        recorded_timeouts = []
+
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        mock_pet = MagicMock()
+        new_state = _make_mock_state(proof_finished=False)
+
+        def fake_run(state, tac, timeout=None):
+            recorded_timeouts.append(timeout)
+            return new_state
+
+        mock_pet.run = fake_run
+        mock_pet.complete_goals = MagicMock(return_value=_make_complete_goals(goals=[]))
+
+        # Very short timeout with many tactics: 2s / 20 tactics = 0.1
+        # Should clamp to 1 via max(1, int(...))
+        lifespan_state = make_lifespan_state(pet_timeout=2.0)
+        lifespan_state["current_workspace"] = "/tmp"
+
+        # Use 20 tactics (the maximum allowed)
+        tactics_list = [f"tac{i}." for i in range(20)]
+
+        with (
+            patch("rocq_mcp.server._ensure_pet", return_value=mock_pet),
+            patch("rocq_mcp.server._set_workspace_if_needed"),
+        ):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=tactics_list,
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is True
+        # max(1, int(2.0 / 20)) = max(1, 0) = 1
+        for t in recorded_timeouts:
+            assert t == 1, f"Expected minimum per-tactic budget of 1, got {t}"
+
+    def test_non_eligible_tactics_get_none_timeout(self):
+        """Tactics that are not timeout-eligible (e.g., bullets) get timeout=None."""
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        recorded_calls = []
+
+        parent_state = _make_mock_state(proof_finished=False)
+        injected_id = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="t",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        mock_pet = MagicMock()
+        new_state = _make_mock_state(proof_finished=False)
+
+        def fake_run(state, tac, timeout=None):
+            recorded_calls.append({"tactic": tac, "timeout": timeout})
+            return new_state
+
+        mock_pet.run = fake_run
+        mock_pet.complete_goals = MagicMock(return_value=_make_complete_goals(goals=[]))
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["current_workspace"] = "/tmp"
+
+        # Mix of eligible and non-eligible tactics
+        # Bullet markers (-/+/*) are not timeout-eligible
+        # { and } are not timeout-eligible (no dot ending)
+        with (
+            patch("rocq_mcp.server._ensure_pet", return_value=mock_pet),
+            patch("rocq_mcp.server._set_workspace_if_needed"),
+        ):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["auto.", "- simpl.", "{", "}"],
+                    lifespan_state=lifespan_state,
+                    from_state=injected_id,
+                )
+            )
+
+        assert result["success"] is True
+        assert len(recorded_calls) == 4
+
+        # "auto." is eligible -> should get a numeric timeout
+        assert recorded_calls[0]["timeout"] is not None
+        # "- simpl." starts with bullet '-' -> not eligible -> None
+        assert recorded_calls[1]["timeout"] is None
+        # "{" does not end with "." -> not eligible -> None
+        assert recorded_calls[2]["timeout"] is None
+        # "}" does not end with "." -> not eligible -> None
+        assert recorded_calls[3]["timeout"] is None
+
+
+# ---------------------------------------------------------------------------
+# TestStepMultiDeadPetDetection: dead pet inside tactic loop (TL-1)
+# ---------------------------------------------------------------------------
+
+
+class TestStepMultiDeadPetDetection:
+    """Test that run_step_multi detects dead pet inside the tactic loop."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_state_and_semaphore(self):
+        import rocq_mcp.server as srv
+        from rocq_mcp.interactive import _state_invalidate_all
+
+        _state_invalidate_all()
+        srv._pet_semaphore = None
+        yield
+        _state_invalidate_all()
+        srv._pet_semaphore = None
+
+    @pytest.fixture(autouse=True)
+    def _mock_pytanque(self):
+        """Ensure pytanque is importable even if not installed."""
+        cleanup = _ensure_pytanque_importable()
+        yield
+        cleanup()
+
+    def test_dead_pet_in_tactic_loop_returns_pet_restarted(self):
+        """When pet dies mid-tactic-loop, should return pet_restarted=True.
+
+        This tests the TL-1 fix: PetanqueError inside the tactic-loop
+        combined with _pet_alive() returning False triggers a re-raise,
+        which the outer handler catches and returns pet_restarted=True.
+        """
+        from pytanque import PetanqueError
+
+        from rocq_mcp.interactive import run_step_multi
+        from rocq_mcp.interactive import _state_add
+
+        # Inject a mock state into the state table
+        parent_state = _make_mock_state(proof_finished=False)
+        sid = _state_add(
+            state=parent_state,
+            file="test.v",
+            theorem="test",
+            workspace="/tmp",
+            parent_id=None,
+            tactic=None,
+            step=0,
+        )
+
+        # Build a PetanqueError for pet.run() to raise
+        err = PetanqueError.__new__(PetanqueError)
+        err.message = "connection lost"
+
+        # Build a mock pet that dies when run() is called:
+        # _ensure_pet is patched to return mock_pet directly (no poll check),
+        # so pet.run() raises PetanqueError, then _pet_alive checks poll()
+        # which returns 1 (dead), triggering the re-raise path.
+        mock_pet = MagicMock()
+        mock_pet.process = MagicMock()
+        # poll() returns 1 (dead) when _pet_alive is checked after the error.
+        mock_pet.process.poll = MagicMock(return_value=1)
+        mock_pet.run = MagicMock(side_effect=err)
+
+        lifespan_state = make_lifespan_state()
+        lifespan_state["pet_client"] = mock_pet
+        lifespan_state["current_workspace"] = "/tmp"
+
+        with patch("rocq_mcp.server._ensure_pet", return_value=mock_pet):
+            result = asyncio.run(
+                run_step_multi(
+                    tactics=["auto."],
+                    lifespan_state=lifespan_state,
+                    from_state=sid,
+                )
+            )
+
+        assert result["success"] is False
+        assert result.get("pet_restarted") is True
+
+
+# ---------------------------------------------------------------------------
+# TestStepMultiTimeoutForwarding: per-call timeout reaches _run_with_pet
+# ---------------------------------------------------------------------------
+
+
+class TestStepMultiTimeoutForwarding:
+    """Per-call ``timeout`` is plumbed from run_step_multi to _run_with_pet.
+
+    The wrapper passes ``timeout=hard_timeout`` (= timeout + grace).
+    Verifies the per-call value drives the budget, not the session default.
+    """
+
+    @pytest.mark.asyncio
+    async def test_forwards_per_call_timeout(self, monkeypatch):
+        """run_step_multi(timeout=120) → _run_with_pet sees 120 + grace."""
+        import rocq_mcp.server as srv
+        from rocq_mcp.interactive import _PET_TIMEOUT_GRACE, run_step_multi
+
+        captured: dict = {}
+
+        async def fake_run_with_pet(fn, lifespan_state, tool, **kw):
+            captured.update(kw)
+            captured["tool"] = tool
+            return {"success": True, "results": []}
+
+        monkeypatch.setattr(srv, "_run_with_pet", fake_run_with_pet)
+
+        sid = add_mock_state(parent_id=None, tactic=None)
+
+        lifespan_state = make_lifespan_state()
+        await run_step_multi(
+            tactics=["auto."],
+            lifespan_state=lifespan_state,
+            from_state=sid,
+            timeout=120.0,
+        )
+        assert captured["tool"] == "rocq_step_multi"
+        assert captured["timeout"] == 120.0 + _PET_TIMEOUT_GRACE
+
+    @pytest.mark.asyncio
+    async def test_default_uses_session_timeout(self, monkeypatch):
+        """Without timeout, falls back to lifespan_state['pet_timeout']."""
+        import rocq_mcp.server as srv
+        from rocq_mcp.interactive import _PET_TIMEOUT_GRACE, run_step_multi
+
+        captured: dict = {}
+
+        async def fake_run_with_pet(fn, lifespan_state, tool, **kw):
+            captured.update(kw)
+            return {"success": True, "results": []}
+
+        monkeypatch.setattr(srv, "_run_with_pet", fake_run_with_pet)
+
+        sid = add_mock_state(parent_id=None, tactic=None)
+
+        lifespan_state = make_lifespan_state(pet_timeout=45.0)
+        await run_step_multi(
+            tactics=["auto."],
+            lifespan_state=lifespan_state,
+            from_state=sid,
+        )
+        assert captured["timeout"] == 45.0 + _PET_TIMEOUT_GRACE
+
+    @pytest.mark.asyncio
+    async def test_wrapper_clamps_to_pet_timeout_cap(self, monkeypatch):
+        """rocq_step_multi clamps timeout to ROCQ_QUERY_TIMEOUT_CAP and echoes it."""
+        import rocq_mcp.server as srv
+
+        monkeypatch.setattr(srv, "ROCQ_QUERY_TIMEOUT_CAP", 60)
+
+        captured: dict = {}
+
+        async def fake_run_step_multi(**kw):
+            captured.update(kw)
+            return {"success": True, "results": []}
+
+        monkeypatch.setattr(srv, "run_step_multi", fake_run_step_multi)
+
+        ctx = SimpleNamespace(lifespan_context={"pet_timeout": 30.0})
+        result = await srv.rocq_step_multi(
+            tactics=["auto."],
+            from_state=1,
+            timeout=600,
+            ctx=ctx,
+        )
+        assert captured["timeout"] == 60.0
+        assert result["clamped_timeout"] == 60
+
+    @pytest.mark.asyncio
+    async def test_wrapper_does_not_clamp_below_cap(self, monkeypatch):
+        """A timeout under the cap is forwarded unchanged with no clamped_timeout."""
+        import rocq_mcp.server as srv
+
+        monkeypatch.setattr(srv, "ROCQ_QUERY_TIMEOUT_CAP", 300)
+
+        captured: dict = {}
+
+        async def fake_run_step_multi(**kw):
+            captured.update(kw)
+            return {"success": True, "results": []}
+
+        monkeypatch.setattr(srv, "run_step_multi", fake_run_step_multi)
+
+        ctx = SimpleNamespace(lifespan_context={"pet_timeout": 30.0})
+        result = await srv.rocq_step_multi(
+            tactics=["auto."],
+            from_state=1,
+            timeout=120,
+            ctx=ctx,
+        )
+        assert captured["timeout"] == 120.0
+        assert "clamped_timeout" not in result

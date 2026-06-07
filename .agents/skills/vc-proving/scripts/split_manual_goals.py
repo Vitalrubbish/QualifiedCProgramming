@@ -13,10 +13,15 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from manual_goal_utils import (
     ensure_unique_lemma_names,
+    goal_definition_hash_for_lemma,
+    lemma_proof_block_hash,
+    lemma_statement_hash,
+    lemma_target_symbol,
     make_run_workdir,
     parse_manual_file,
     prepare_keep_dest,
     resolve_keep_dest,
+    stable_text_digest,
 )
 
 
@@ -69,9 +74,24 @@ def main() -> int:
         prepare_keep_dest(keep_dest, force=args.force)
     work_dir = make_run_workdir(manual_path.stem, manual_path)
 
+    def lemma_manifest_metadata(lemma: dict[str, object]) -> dict[str, object]:
+        goal_metadata = goal_definition_hash_for_lemma(
+            prelude,
+            lemma,
+            source_file=manual_path,
+        )
+        return {
+            "statement_hash": lemma_statement_hash(lemma),
+            "proof_block_hash": lemma_proof_block_hash(lemma),
+            "target_symbol": lemma_target_symbol(lemma),
+            **goal_metadata,
+        }
+
     manifest = {
         "source_file": str(manual_path),
         "source_kind": "proof_manual",
+        "case_id": str(manual_path),
+        "source_goal_version": stable_text_digest(text),
         "work_dir": str(work_dir),
         "keep_dest": str(keep_dest) if keep else None,
         "goal_count": len(target_lemmas),
@@ -87,6 +107,7 @@ def main() -> int:
                 "statement_header": str(lemma["header_line"]),
                 "original_start_line": int(lemma["start_line"]),
                 "original_end_line": int(lemma["end_line"]),
+                **lemma_manifest_metadata(lemma),
             }
             for index, lemma in enumerate(lemmas, start=1)
         ],
@@ -106,6 +127,7 @@ def main() -> int:
                 "statement_header": str(lemma["header_line"]),
                 "original_start_line": int(lemma["start_line"]),
                 "original_end_line": int(lemma["end_line"]),
+                **lemma_manifest_metadata(lemma),
             }
         )
 

@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "mcp[cli]>=1.26.0",
+    "pywinpty>=3.0.0; platform_system == 'Windows'",
 ]
 
 [project.scripts]
 qcp-mcp = "qcp_mcp.server:main"
-

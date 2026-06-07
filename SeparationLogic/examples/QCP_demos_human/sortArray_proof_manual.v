@@ -24,7 +24,7 @@ Local Open Scope sac.
 Lemma proof_of_sortArray_entail_wit_1 : sortArray_entail_wit_1.
 Proof.
 	pre_process.
-	destruct l as [ | a l']; simpl in H; [ rewrite Zlength_nil in H ;  lia | ].
+	destruct l as [ | a l']; simpl in PreH1; [ rewrite Zlength_nil in PreH1 ;  lia | ].
 	rewrite (IntArray.full_unfold nums_pre numsSize_pre l' a).
 	Exists (a :: nil) (a :: nil) l'.
 	entailer!.
@@ -36,8 +36,8 @@ Lemma proof_of_sortArray_entail_wit_2 : sortArray_entail_wit_2.
 Proof.
 	pre_process.
 	prop_apply (IntArray.seg_length nums_pre i numsSize_pre l2).
-	Intros.
-	destruct l2 as [ | a l4]; [simpl in H8; lia | ].
+	Intros_p Hlen_tail.
+	destruct l2 as [ | a l4]; [simpl in Hlen_tail; lia | ].
 	replace (i - i) with 0 by lia.
 	replace (i - 1 + 1) with i by lia.
 	rewrite Znth0_cons.
@@ -64,22 +64,21 @@ Proof.
 	{ rewrite sublist_self ; auto. }
 	assert (l2_2 = sublist 0 j l2_2 ++ sublist j (Zlength l2_2) l2_2).
 	{ rewrite <- sublist_split with (lo := 0) (mid := j) (hi := Zlength l2_2); auto; try lia.
-	  rewrite <- Zlength_correct. lia.
 	}
-	rewrite <- H10 in H14.
-	rewrite (sublist_single j l2_2 0) in H14.
 	entailer!.
 	sep_apply (IntArray.seg_split_to_seg nums_pre 0 j (j + 1) l2_2); try lia.
 	replace (j - 0) with j by lia.
 	replace (j + 1 - 0) with (j + 1) by lia.
 	entailer!.
-	rewrite (sublist_single j l2_2 0).
+	rewrite (sublist_single 0 j l2_2) by lia.
 	rewrite IntArray.seg_unfold.
 	sep_apply (IntArray.seg_nil).
 	entailer!.
-	+ rewrite <- Zlength_correct. lia. 
-	+ rewrite Zlength_sublist. lia. lia.
-	+ rewrite <- Zlength_correct. lia. 
+	+ rewrite Zlength_sublist; lia.
+	+ rewrite H0 at 1.
+	  rewrite <- PreH12.
+	  rewrite (sublist_single 0 j l2_2) by lia.
+	  reflexivity.
 Qed.
 
 Lemma proof_of_sortArray_entail_wit_4 : sortArray_entail_wit_4.
@@ -105,11 +104,11 @@ Proof.
 	pre_process.
 	Exists l5 ((Znth j l2_2 0) :: l3_2) l0_2 l1_2 l4_2.
 	entailer!.
-	- rewrite H5. rewrite H.
+	- try rewrite PreH12. try rewrite PreH1.
 	  replace (j - 1 + 1) with j by lia.
 	  entailer!.
-	- simpl. split; [lia | exact H11].
-	- rewrite H10. rewrite H. rewrite <- app_assoc.
+	- simpl. split; [lia | exact PreH13].
+	- try rewrite PreH12. rewrite PreH1. rewrite <- app_assoc.
 	  rewrite app_Znth2 ; try lia.
 	  replace (j - Zlength l5) with 0 by lia.
 	  rewrite Znth0_cons.
@@ -117,21 +116,20 @@ Proof.
 	  reflexivity.
 Qed.
 
-Lemma proof_of_sortArray_entail_wit_6_1 : sortArray_entail_wit_6_1.
+Lemma proof_of_sortArray_entail_wit_6_2 : sortArray_entail_wit_6_2.
 Proof.
 	pre_process.
-	prop_apply (IntArray.seg_length nums_pre (i + 1) numsSize_pre l4). Intros.
-	rewrite <- Zlength_correct in H13.
+	prop_apply (IntArray.seg_Zlength nums_pre (i + 1) numsSize_pre l4). Intros_p Hlen_l4.
 	destruct l2_2 using rev_ind.
-	- rewrite Zlength_nil in H10. lia.
+	- rewrite Zlength_nil in PreH12. lia.
 	- assert (j = Zlength l2_2). 
-	  { rewrite Zlength_app in H10; simpl in H10.
-	    rewrite Zlength_cons in H10; simpl in H10.
+	  { rewrite Zlength_app in PreH12; simpl in PreH12.
+	    rewrite Zlength_cons in PreH12; simpl in PreH12.
 	    lia. }
 		subst j.
-		rewrite app_Znth2 in H by (rewrite Zlength_correct; simpl; lia).
-		replace (Zlength l2_2 - 0 - Zlength l2_2) with 0 in H by lia.
-		rewrite Znth0_cons in H.
+		rewrite app_Znth2 in PreH1 by (rewrite Zlength_correct; simpl; lia).
+		replace (Zlength l2_2 - 0 - Zlength l2_2) with 0 in PreH1 by lia.
+		rewrite Znth0_cons in PreH1.
 		rewrite (IntArray.missing_i_unfold nums_pre (Zlength l2_2 + 1) (Zlength l2_2 + 1) (i + 1) l3 key); try lia.
 		Split ; Intros ; try lia.
 		Exists (l2_2 ++ x :: key :: l3) (l1_2 ++ key :: nil) l4.
@@ -142,11 +140,11 @@ Proof.
 		  simpl.
 		  rewrite <- app_assoc.
 		  entailer!.
-		+ rewrite H9 in H8. rewrite <- app_assoc in H8. simpl in H8.
+		+ rewrite PreH11 in PreH10. rewrite <- app_assoc in PreH10. simpl in PreH10.
 		  apply increasing_middle ; auto.
 		+ eapply Permutation_trans.
-		  * apply Permutation_app_tail. exact H7.
-		  * rewrite H9. rewrite <- app_assoc. 
+		  * apply Permutation_app_tail. exact PreH9.
+		  * rewrite PreH11. rewrite <- app_assoc. 
 		  	rewrite <- app_assoc. simpl.
 			apply Permutation_app_head.
 			constructor.
@@ -159,20 +157,19 @@ Proof.
 		+ rewrite <- app_assoc. simpl. auto. 
 Qed.
 
-Lemma proof_of_sortArray_entail_wit_6_2 : sortArray_entail_wit_6_2.
+Lemma proof_of_sortArray_entail_wit_6_1 : sortArray_entail_wit_6_1.
 Proof.
 	pre_process.
 	assert (l2_2 = nil).
 	{ destruct l2_2 as [ | z l2_2].
 	  - reflexivity.
 	  - pose proof (Zlength_nonneg l2_2) as Hlen. 
-	    rewrite Zlength_cons in H9. simpl in H9. lia.
+	    rewrite Zlength_cons in PreH11. simpl in PreH11. lia.
 	}
 	subst l2_2.
 	rewrite Zlength_nil in *.
 	replace (j + 1) with 0 by lia.
-	prop_apply (IntArray.seg_length nums_pre (i + 1) numsSize_pre l4). Intros.
-	rewrite <- Zlength_correct in H12.
+	prop_apply (IntArray.seg_Zlength nums_pre (i + 1) numsSize_pre l4). Intros_p Hlen_l4.
 	rewrite (IntArray.seg_empty nums_pre 0 0).
 	rewrite (IntArray.missing_i_unfold nums_pre 0 0 (i + 1) l3 key); try lia.
 	Split ; Intros ; try lia.
@@ -180,10 +177,10 @@ Proof.
 	entailer!.
 	- destruct l3.
 	  + simpl. auto.
-	  + rewrite H8 in H7. simpl in *. split ; auto. lia.
-	- rewrite H8 in H6. simpl in H6.
+	  + rewrite PreH10 in PreH9. simpl in *. split ; auto. lia.
+	- rewrite PreH10 in PreH8. simpl in PreH8.
 		eapply Permutation_trans.
-		* apply Permutation_app_tail. exact H6.
+		* apply Permutation_app_tail. exact PreH8.
 		* apply Permutation_sym. apply Permutation_cons_append.
 	- assert (0 <= Zlength l4).
 	  { apply Zlength_nonneg. }
@@ -197,15 +194,14 @@ Proof.
 	pre_process.
 	assert (i = numsSize_pre) by lia.
 	subst i.
-	rewrite H8.
-	prop_apply (IntArray.seg_length nums_pre numsSize_pre numsSize_pre l2).
-	Intros.
-	destruct l2 as [ | a l2']; [ | simpl in H3; lia].
+	prop_apply (IntArray.seg_Zlength nums_pre (Zlength l1_2) numsSize_pre l2).
+	Intros_p Hlen_tail.
+	destruct l2 as [ | a l2'];
+	  [| rewrite Zlength_cons in Hlen_tail; pose proof (Zlength_nonneg l2'); lia].
+	replace (Zlength l1_2) with numsSize_pre by lia.
 	rewrite (IntArray.seg_empty nums_pre numsSize_pre numsSize_pre).
 	Exists l0. Intros.
-	prop_apply (IntArray.seg_length nums_pre 0 numsSize_pre l0). Intros.
-	rewrite <- Zlength_correct in H10.
+	prop_apply (IntArray.seg_Zlength nums_pre 0 numsSize_pre l0). Intros_p Hlen_l0.
 	entailer!.
-	rewrite app_nil_r in H2. subst. auto.
+	rewrite app_nil_r in PreH4. subst. auto.
 Qed.
-

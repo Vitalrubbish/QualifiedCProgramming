@@ -11,7 +11,7 @@
   - 允许的不重叠工作：ticket/ledger 草稿更新、stale 标记、scratch 清理、后续命令准备。
   - 禁止的不重叠工作：在 main 线程里继续执行该 phase 已绑定给 subagent 的 domain 分析，或继续推进该 phase 的交互式 MCP 会话。
 - 同一个子 agent 只服务自己绑定的 phase；phase、目标 witness 集或冻结版本变化后，必须以同名角色重新开新进程。
-- stale 结果不得复用；必须按 `invalidation-rules.md` 立即失效。
+- stale 结果不得作为正式结论或 direct-reuse 输入复用；若只作为 proof-pattern reference，必须按 `invalidation-rules.md` 显式降级标注，并重新适配当前 VC。
 - `qcp-mcp` 与 `rocq-mcp` 都按 phase owner 隔离对待；拥有本轮 scratch / worker workdir 的 subagent 是当前唯一合法 MCP 调度者。`vc-proving` 中的 proof search 默认由脚本创建的 worker-local `rocq-mcp` 会话完成；若 worker 内 `rocq-mcp` 启动或调用失败但 `coqc` 可用，则该 worker 应记录 MCP 失败并使用生成的 `coqc` 命令继续证明同一 worker-local manual；若 Codex worker 环境整体不可恢复，则可由同一 `vc-proving-subagent` 在 proving scratch / scratch-local manual 上以隔离串行 fallback 完成。
 - `annotation` 与 `vc-proving` 是长时间迭代 phase；main 把轮次交给 subagent 后，应等待它以 `completed`、`blocked` 或 `stale` 返回，而不是把“还没做完”视为 main 可以接手的信号。
 - `annotation-subagent` 的完整迭代必须包含 `spec-definition review/edit -> annotation-filling -> annotation-checking`。如果 checking 返回 `failed`，本轮不能返回 `completed`，必须继续在 scratch 上修正 C annotation 或 `annotation_scratch_lib` spec。
@@ -21,8 +21,10 @@
   - 不允许采用的 Rocq 算法镜像模式
   - 正例 / 反例参考
 - 每份 delegation ticket 都必须要求 timing：记录本轮开始/结束时间、关键命令耗时、subagent 内部人工/脚本活动耗时、慢 witness/helper 或慢步骤，以及主要耗时原因。若某些耗时无法精确统计，应在返回报告中列为 timing gap，而不是省略。
+- 每份 delegation ticket 都必须要求 `activity_ledger_required: true`，并给出 `activity_ledger_path`。subagent 必须在每段 proof-planning / proof-generation activity 前写 `START`、结束后写 `END`；vc-proving 必须按 witness/helper 拆出 proof-state reduction、空间证明生成、pure 证明生成、helper 设计/证明、proof script edit、coqc run、coqc feedback analysis。禁止只在返回报告里写“proof search 约 X 分钟”。
 - 每份 delegation ticket 都必须给出持久 report 路径：`persistent_report_dir` 指向 `.agents/reports/<relative-case-dir>/<YYYY-MM-DD>/<case-name>-<YYYYMMDDTHHMMSS>/`，`round_report_dir` 指向 `<YYYYMMDDTHHMMSS>-<phase>-r<N>[-<scope>]/`，并列出 `timing_log_path` 与 expected report paths。新 report 文件名使用 snake_case。
-- 主 agent 启动 subagent 后必须记录等待区间：从 subagent 启动或 ticket 交付完成开始，到 subagent 返回 `completed` / `blocked` / `stale` 为止，计入 `subagent-wait`。如果等待期间主 agent 做了不重叠编排工作，应另记该活动耗时，不要把它从 wait 中扣除；最终报告可以说明二者重叠。
+- `vc-proving` ticket 若要复用上一轮局部成果，只能引用 `.agents/reports` 下的 `vc_proving_round_checkpoint.json` 或其 `partial_proof_packet.json`；不得引用旧 `.tmp` worker workdir 或旧 active scratch。ticket 必须写明 `checkpoint_reuse_policy` 和 direct-reuse stale 判定字段，默认策略是 `exact_or_pattern`：上下文匹配时尝试 direct reuse；上下文不匹配、helper payload 冲突或 direct candidate compile gate 失败时生成 worker proof-pattern reference。
+- 主 agent 启动 subagent 后必须记录等待区间并拆开边界：`subagent-launch-requested`、`subagent-spawn-returned`、subagent 自己第一条 `subagent-start`、`subagent-finished-observed`、以及可选 close 请求/完成。最终报告要区分启动开销、subagent 自身运行时间、main 等待通知时间和关闭开销。如果等待期间主 agent 做了不重叠编排工作，应另记该活动耗时，不要把它从 wait 中扣除；最终报告可以说明二者重叠。
 
 ## 不得提前抢回 phase
 
@@ -163,7 +165,7 @@
   - 已在 scratch 上验证过的 annotation patch
   - 已在 `annotation_scratch_lib` 上形成的 spec definition patch；如果为空必须写 `empty`
   - `qcp-mcp` 交互结论摘要
-  - `Annotation Checking Report`，且 `status` 必须为 `passed` 才能标记 `ready_for_main_symexec`
+  - `Annotation Checking Report`，且 `status` 必须为 `passed`、`qcp_mcp_requirement_satisfied: yes`、`annotation_scratch_lib_coqc_status: passed` 才能标记 `ready_for_main_symexec`
   - annotation 轮次总耗时、主要 `qcp-mcp` 检查/迭代耗时和最慢 annotation 点
   - spec definition 设计 / 修改耗时、annotation-checking 耗时、检查结论和失败后是否发生过 filling 返工
   - annotation 分析、scratch 编辑、QCP 失败归因、最终 patch 整理等 activity 耗时；无法精确拆分时必须写 timing gap
@@ -171,6 +173,7 @@
   - 本轮最终采用的隐藏性质 / 直观谓词列表
   - 哪些点可能影响后续 symexec / witness 结构
   - cleanup 确认
+- main 在正式回填 / symexec 前必须运行 `scripts/validate_annotation_gate.py`；若脚本失败，本轮 annotation 结果不得进入 `goal-frozen`
 - stale_if:
   - `Case Brief` 关键字段变化
   - 正式 annotation 已被主 agent 修改
@@ -216,7 +219,10 @@
   - `Subagent Return Report`
   - 已在 scratch `*_proof_manual.v` 上验证过、可回填到正式 manual 的 witness proofs，以及已在 `task_local_scratch_lib` 上验证过、可回填到 `common_case_formal_lib` 的 helper-suffix imports / helper lemmas
   - worker `proof_report.json` / `proof_strategy_report.json`、merged scratch manual 路径、migrated scratch manual 路径、`task_local_scratch_lib` 路径
+  - checkpoint reuse summary：`previous_vc_proving_checkpoint` 是否命中、packet applied count、reused witness、remaining worker goals、拒绝复用时的 stale / mismatch reason
+  - 本轮若已产生 compile-gated 局部成果，则给出 `reuse_checkpoints/<round-id>/vc_proving_round_checkpoint.json`、`partial_proof_packet.json`、`reuse_index.json` 持久路径；若本轮是 annotation-bug / stale 或没有可复用成果，则说明未生成 checkpoint 的原因
   - split / prepare / run / validate / migrate / verify 的命令耗时、worker 耗时、最慢 witness/helper，以及主要 proof bottleneck
+  - activity ledger：每个 witness/helper 的 proof-state reduction、空间证明生成、pure 证明生成、helper 设计/证明、proof script edit、coqc run、coqc feedback analysis 的 start/end/elapsed/status；无法精确拆分时必须写 open/incomplete event 或 timing gap，不能只写 proof search 总时长
   - proof search 分析、manual proof 编辑、helper lemma 设计/迁移、冗余 lemma 清理、worker 等待或 fallback 切换等 activity 耗时；无法精确拆分时必须写 timing gap
   - `protected_prefix_respected`
   - 参考案例映射
@@ -234,9 +240,10 @@
 
 - 只要出现新的正式 `*_proof_manual.v`，旧 proving scratch 必须先删除，再从最新正式 `*_proof_manual.v` / `common_case_formal_lib` 重建。
 - proving scratch `*_proof_manual.v` 应继续依赖最新正式 `*_goal.v` / `*_proof_auto.v`，但其 lib 依赖必须切换到本轮 `task_local_scratch_lib`。
-- `vc-proving-subagent` 默认在 proving scratch manual 上运行 split / prepare concurrent / run concurrent / validate / migrate helpers to lib / verify 流水线；优先消费 `vc-checking` 的 `witness_group_plan`，每个 proof group 产生一个 worker-local manual、一个组内 `worker_helper_scratch_lib` 和 worker report；没有 group plan 时才使用排序分块 fallback。若 worker 内 `rocq-mcp` 启动或调用失败但 worker-local `coqc` 可用，继续在 worker-local manual / `worker_helper_scratch_lib` 上用 `coqc` 证明并保留失败证据；若本轮已记录 Codex worker 环境整体不可恢复，则允许切换到串行 fallback，并改为在 proving scratch 上直接完成 proof / helper migration / verify，同时保留 `.tmp` 下可审计的串行报告。
+- `vc-proving-subagent` 默认在 proving scratch manual 上运行 split / checkpoint/packet reuse prepass / prepare concurrent / run concurrent / validate / migrate helpers to lib / verify / checkpoint_round 流水线；优先消费 `vc-checking` 的 `witness_group_plan`，每个 proof group 产生一个 worker-local manual、一个组内 `worker_helper_scratch_lib` 和 worker report；没有 group plan 时才使用排序分块 fallback。若 worker 内 `rocq-mcp` 启动或调用失败但 worker-local `coqc` 可用，继续在 worker-local manual / `worker_helper_scratch_lib` 上用 `coqc` 证明并保留失败证据；若本轮已记录 Codex worker 环境整体不可恢复，则允许切换到串行 fallback，并改为在 proving scratch 上直接完成 proof / helper migration / verify，同时保留 `.tmp` 下可审计的串行报告。
 - 在 proving scratch / worker manual 中写入的 helper lemma 必须是 proved lemma，且通过 merge gate 检查无 `Admitted`、无额外 `Axiom`、无 forbidden top-level definition；随后必须迁移到 `task_local_scratch_lib`。若 helper lemma 需要额外库，worker 只能在 `worker_helper_scratch_lib` 中加入最小 `Require Import` / `From ... Require Import` 行，且不能导入 `SimpleC.EE.*` 生成 case artifact。
 - `task_local_scratch_lib` 的冻结前缀必须与 `common_case_formal_lib` 快照逐字一致；只有 helper-migration 步骤可以在后缀追加 audited helper-suffix imports 与 proved helper lemmas。
+- checkpoint prepass 有两个合法结果：上下文匹配时，把 JSON packet 还原到 fresh proving scratch，用 packet helper payload 初始化本轮 `task_local_scratch_lib`，用当前 manual statement 加 packet proof script 重建 candidate witness proof，随后强制走 compile / merge / migration / verify gate；上下文不匹配、helper payload 冲突或 direct candidate compile gate 失败时，生成 `proof_reuse_pattern_references.json` 放入相关 worker workdir，让 worker 阅读 per-goal candidates、完整 proof reference pool、旧 informal proof / helper reference 并手动适配当前 VC。pattern reference 不能自动标记 solved，也不能替代 formal `.v` 交付物；direct candidate 失败时必须恢复 prepass 写入的 helper scratch。
 - 若 proving 过程中发现必须修改冻结前缀，必须引入新的顶层 `Definition` / `Fixpoint` / `Inductive` / `Notation` / `Axiom`，或必须迁入不在 helper import allowlist 内的依赖，应立刻以 `blocked` 返回。
 
 ## 强制启动的执行时点

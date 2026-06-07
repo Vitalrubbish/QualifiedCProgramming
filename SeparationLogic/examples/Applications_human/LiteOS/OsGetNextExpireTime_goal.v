@@ -28,11 +28,9 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function OsGetNextExpireTime -----*)
 
 Definition OsGetNextExpireTime_return_wit_1 := 
-forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval_2: Z) (retval: Z) ,
-  “ (retval_2 >= retval) ” 
-  &&  “ (retval = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre))) ” 
-  &&  “ (retval_2 = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre))) ”
-  &&  (store_swtmr_sorted_dll sg l2 )
+(
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval_2: Z) (retval: Z) (PreH1 : (retval_2 >= retval)) (PreH2 : (retval = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre)))) (PreH3 : (retval_2 = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  (store_swtmr_sorted_dll sg l2 )
   **  ((( &( "OS_SORT_LINK_UINT64_MAX" ) )) # UInt64  |-> ((Z.lxor 2 64) - 1 ))
   **  (store_task_sorted_dll sg l1 )
 |--
@@ -40,14 +38,26 @@ forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedL
   &&  (store_task_sorted_dll sg l1 )
   **  (store_swtmr_sorted_dll sg l2 )
   **  ((( &( "OS_SORT_LINK_UINT64_MAX" ) )) # UInt64  |-> ((Z.lxor 2 64) - 1 ))
+) \/
+(
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (retval_2: Z) (retval: Z) (PreH1 : (retval_2 >= retval)) (PreH2 : (retval = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre)))) (PreH3 : (retval_2 = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  TT && emp 
+|--
+  “ (retval = (getminExpireTime (l1) (l2) (startTime_pre) (tickPrecision_pre))) ”
+  &&  emp
+).
+
+Definition OsGetNextExpireTime_return_wit_1_split_goal_1 := 
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (retval_2: Z) (retval: Z) (PreH1 : (retval_2 >= retval)) (PreH2 : (retval = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre)))) (PreH3 : (retval_2 = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  TT && emp 
+|--
+  “ (retval = (getminExpireTime (l1) (l2) (startTime_pre) (tickPrecision_pre))) ”
 .
 
 Definition OsGetNextExpireTime_return_wit_2 := 
-forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval: Z) (retval_2: Z) ,
-  “ (retval < retval_2) ” 
-  &&  “ (retval_2 = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre))) ” 
-  &&  “ (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre))) ”
-  &&  (store_swtmr_sorted_dll sg l2 )
+(
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval: Z) (retval_2: Z) (PreH1 : (retval < retval_2)) (PreH2 : (retval_2 = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre)))) (PreH3 : (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  (store_swtmr_sorted_dll sg l2 )
   **  ((( &( "OS_SORT_LINK_UINT64_MAX" ) )) # UInt64  |-> ((Z.lxor 2 64) - 1 ))
   **  (store_task_sorted_dll sg l1 )
 |--
@@ -55,6 +65,20 @@ forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedL
   &&  (store_task_sorted_dll sg l1 )
   **  (store_swtmr_sorted_dll sg l2 )
   **  ((( &( "OS_SORT_LINK_UINT64_MAX" ) )) # UInt64  |-> ((Z.lxor 2 64) - 1 ))
+) \/
+(
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (retval: Z) (retval_2: Z) (PreH1 : (retval < retval_2)) (PreH2 : (retval_2 = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre)))) (PreH3 : (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  TT && emp 
+|--
+  “ (retval = (getminExpireTime (l1) (l2) (startTime_pre) (tickPrecision_pre))) ”
+  &&  emp
+).
+
+Definition OsGetNextExpireTime_return_wit_2_split_goal_1 := 
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (retval: Z) (retval_2: Z) (PreH1 : (retval < retval_2)) (PreH2 : (retval_2 = (getFirstNodeExpireTime (l2) (startTime_pre) (tickPrecision_pre)))) (PreH3 : (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  TT && emp 
+|--
+  “ (retval = (getminExpireTime (l1) (l2) (startTime_pre) (tickPrecision_pre))) ”
 .
 
 Definition OsGetNextExpireTime_partial_solve_wit_1_pure := 
@@ -84,9 +108,8 @@ forall (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sort
 Definition OsGetNextExpireTime_partial_solve_wit_1 := OsGetNextExpireTime_partial_solve_wit_1_pure -> OsGetNextExpireTime_partial_solve_wit_1_aux.
 
 Definition OsGetNextExpireTime_partial_solve_wit_2_pure := 
-forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval: Z) ,
-  “ (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre))) ”
-  &&  ((( &( "swtmrExpireTime" ) )) # UInt64  |->_)
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval: Z) (PreH1 : (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  ((( &( "swtmrExpireTime" ) )) # UInt64  |->_)
   **  (store_task_sorted_dll sg l1 )
   **  ((( &( "OS_SORT_LINK_UINT64_MAX" ) )) # UInt64  |-> ((Z.lxor 2 64) - 1 ))
   **  ((( &( "taskExpireTime" ) )) # UInt64  |-> retval)
@@ -98,9 +121,8 @@ forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedL
 .
 
 Definition OsGetNextExpireTime_partial_solve_wit_2_aux := 
-forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval: Z) ,
-  “ (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre))) ”
-  &&  (store_task_sorted_dll sg l1 )
+forall (tickPrecision_pre: Z) (startTime_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (retval: Z) (PreH1 : (retval = (getFirstNodeExpireTime (l1) (startTime_pre) (tickPrecision_pre)))) ,
+  (store_task_sorted_dll sg l1 )
   **  ((( &( "OS_SORT_LINK_UINT64_MAX" ) )) # UInt64  |-> ((Z.lxor 2 64) - 1 ))
   **  (store_swtmr_sorted_dll sg l2 )
 |--

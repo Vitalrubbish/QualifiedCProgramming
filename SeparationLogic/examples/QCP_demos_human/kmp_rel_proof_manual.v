@@ -29,11 +29,11 @@ Proof.
   prop_apply IntArray.full_Zlength.
   rewrite Zlength_app.
   replace (Zlength (0::nil)) with 1 by easy.
-  pose proof H as H'.
-  unfold inner_loop in H.
-  unfold_loop in H.
-  unfold inner_body at 1 in H.
-  safe_step H.
+  pose proof PreH1 as H'.
+  unfold inner_loop in PreH1.
+  unfold_loop in PreH1.
+  unfold inner_body at 1 in PreH1.
+  safe_step PreH1.
   entailer!.
 Qed. 
 
@@ -42,43 +42,43 @@ Proof.
   pre_process.
   entailer!.
   unfold inner_loop in *.
-  unfold_loop in H3.
-  unfold inner_body at 1 in H3.
-  safe_step H3.
-  rewrite app_Znth1 in H0 by auto.
-  safe_choice_r H3.
-  safe_choice_r H3; auto.
-  unfold continue in H3.
-  prog_nf in H3. auto.
+  unfold_loop in PreH5.
+  unfold inner_body at 1 in PreH5.
+  safe_step PreH5.
+  rewrite app_Znth1 in PreH2 by auto.
+  safe_choice_r PreH5.
+  safe_choice_r PreH5; auto.
+  unfold continue in PreH5.
+  prog_nf in PreH5. auto.
 Qed. 
 
 Lemma proof_of_inner_return_wit_2 : inner_return_wit_2.
 Proof. 
   pre_process.
   entailer!.
-  unfold inner_loop in H2.
-  unfold_loop in H2.
-  unfold inner_body at 1 in H2.
-  repeat (prog_nf in H2 ; safe_step H2).
-  rewrite app_Znth1 in H by lia.
-  safe_choice_l H2; auto.
-  unfold break in H2.
-  prog_nf in H2. auto.
+  unfold inner_loop in PreH4.
+  unfold_loop in PreH4.
+  unfold inner_body at 1 in PreH4.
+  repeat (prog_nf in PreH4 ; safe_step PreH4).
+  rewrite app_Znth1 in PreH1 by lia.
+  safe_choice_l PreH4; auto.
+  unfold break in PreH4.
+  prog_nf in PreH4. auto.
 Qed. 
 
 Lemma proof_of_inner_return_wit_1 : inner_return_wit_1.
 Proof. 
   pre_process.
   entailer!.
-  unfold inner_loop in H3.
-  unfold_loop in H3.
-  unfold inner_body at 1 in H3.
-  safe_step H3.
-  rewrite app_Znth1 in H0 by lia.
-  safe_choice_r H3.
-  safe_choice_l H3.
-  unfold break in H3.
-  prog_nf in H3.
+  unfold inner_loop in PreH5.
+  unfold_loop in PreH5.
+  unfold inner_body at 1 in PreH5.
+  safe_step PreH5.
+  rewrite app_Znth1 in PreH2 by lia.
+  safe_choice_r PreH5.
+  safe_choice_l PreH5.
+  unfold break in PreH5.
+  prog_nf in PreH5.
   auto.
 Qed. 
 
@@ -130,17 +130,17 @@ Lemma proof_of_constr_return_wit_1 : constr_return_wit_1.
 Proof. 
   pre_process.
   prop_apply (IntArray.full_length (vnext_2 + i * sizeof ( INT ))); Intros.
-  assert (i = n_low_level_spec) by lia; subst i; clear H3.
+  assert (i = n_low_level_spec) by lia; subst i; clear H.
   prop_apply CharArray.full_Zlength.  
   Exists vnext0; entailer!.
   - replace (n_low_level_spec-n_low_level_spec) with 0 by lia.
     prop_apply (IntArray.full_Zlength (vnext_2 + n_low_level_spec * sizeof ( INT ))).
-    Intros; apply Zlength_nil_inv in H4; subst l0.
+    Intros; apply Zlength_nil_inv in H0; subst l0.
     cbn. entailer!.
-  - unfold constr_loop_from in H0.
-    unfold_loop in H0.
-    apply string_Zlength in H3.
-    safe_choice_r H0.
+  - unfold constr_loop_from in PreH2.
+    unfold_loop in PreH2.
+    apply string_Zlength in H.
+    safe_choice_r PreH2.
     auto. lia.
 Qed. 
 
@@ -149,7 +149,7 @@ Proof.
   pre_process.
   prop_apply (IntArray.full_length vnext).
   prop_apply CharArray.full_Zlength.
-  entailer! ; apply string_Zlength in H4; 
+  entailer! ; apply string_Zlength in H0; 
   rewrite app_Znth1 by lia ; unfold constr_loop_from_after;
   unfold constr_loop_from in *.
   - rewrite range_iter_unfold.
@@ -162,12 +162,12 @@ Proof.
     prog_nf.
     easy.
   - 
-    unfold_loop in H0.
-    prog_nf in H0.
-    safe_choice_l H0; try lia.
-    unfold constr_body at 1 in H0.
-    prog_nf in H0.
-    safe_step H0. prog_nf in H0.
+    unfold_loop in PreH2.
+    prog_nf in PreH2.
+    safe_choice_l PreH2; try lia.
+    unfold constr_body at 1 in PreH2.
+    prog_nf in PreH2.
+    safe_step PreH2. prog_nf in PreH2.
     auto.
 Qed.
 
@@ -176,9 +176,9 @@ Proof.
   pre_process.
   prop_apply IntArray.full_length; Intros.
   destruct l0.
-  simpl in H0; lia.
+  simpl in H; lia.
   Exists z l0; entailer!.
-  rewrite <- Zlength_correct in H0.
+  rewrite <- Zlength_correct in H.
   rewrite (IntArray.full_unfold).
   replace (vnext + i * sizeof ( INT ) + 0 * sizeof ( INT )) with (vnext + i * sizeof ( INT )) by lia.
   sep_apply IntArray.seg_to_full.
@@ -197,20 +197,20 @@ Lemma proof_of_match_entail_wit_2 : match_entail_wit_2.
 Proof. 
   pre_process.
   prop_apply CharArray.full_Zlength; entailer!.
-  apply string_Zlength in H12. 
-  unfold match_loop_from_after, applyf in H0.
-  safe_choice_r H0; [auto | lia].
+  apply string_Zlength in H. 
+  unfold match_loop_from_after, applyf in PreH2.
+  safe_choice_r PreH2; [auto | lia].
 Qed. 
 
 Lemma proof_of_match_return_wit_2 : match_return_wit_2.
 Proof.
   pre_process; subst.
-  unfold match_loop_from_after, applyf in H0.
+  unfold match_loop_from_after, applyf in PreH2.
   prop_apply CharArray.full_Zlength; Intros.
   apply string_Zlength in H.
   rewrite H in *; clear H.
   Exists (Some(i-n_low_level_spec+1)); entailer!.
-  safe_choice_l H0; auto.
+  safe_choice_l PreH2; auto.
 Qed. 
 
 Lemma proof_of_match_return_wit_1 : match_return_wit_1.
@@ -218,11 +218,11 @@ Proof.
   pre_process.
   prop_apply (CharArray.full_Zlength text_pre).
   Exists None; entailer!.
-  apply string_Zlength in H9.
-  unfold match_loop_from in H0.
-  unfold_loop in H0.
-  prog_nf in H0.
-  safe_choice_r H0; [unfold continue in H0 ; prog_nf in H0 ; auto | lia].
+  apply string_Zlength in H.
+  unfold match_loop_from in PreH2.
+  unfold_loop in PreH2.
+  prog_nf in PreH2.
+  safe_choice_r PreH2; [unfold continue in PreH2 ; prog_nf in PreH2 ; auto | lia].
 Qed. 
 
 Lemma proof_of_match_partial_solve_wit_4_pure : match_partial_solve_wit_4_pure.
@@ -230,7 +230,7 @@ Proof.
   pre_process.
   prop_apply CharArray.full_Zlength.
   subst; Intros.
-  apply string_Zlength in H4.
+  apply string_Zlength in H.
   eassert (Heq: _).
   2:{
     entailer!.
@@ -282,10 +282,10 @@ Proof.
   destruct H8 as [σ H8]; subst prog.
   specialize (H7 ret tt σ I H8).
   destruct ret; simpl in H9.
-  - Left; Exists z.
+  - Right; Exists z.
     subst retval; entailer!.
     apply first_occur_nonneg in H7; auto.
-  - Right; Exists (-1); entailer!.
+  - Left; Exists (-1); entailer!.
 Qed.
 
 Lemma proof_of_constr_derive_high_level_spec_by_low_level_spec : constr_derive_high_level_spec_by_low_level_spec.

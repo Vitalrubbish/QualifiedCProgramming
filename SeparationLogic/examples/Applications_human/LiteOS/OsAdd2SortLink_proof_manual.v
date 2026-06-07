@@ -27,18 +27,19 @@ Proof.
     pre_process.
     intros.
     entailer!.
-    assert (unsigned_last_nbits (waitTicks_pre * g) 64 = waitTicks_pre * g).
-    pose proof (unsigned_last_nbits_eq (waitTicks_pre * g) 64).
-    rewrite H3.
+    assert (unsigned_last_nbits (waitTicks_pre * g) 64 = waitTicks_pre * g) as Hbits1.
+    pose proof (unsigned_last_nbits_eq (waitTicks_pre * g) 64) as Hbits1_eq.
+    rewrite Hbits1_eq.
+    clear Hbits1_eq.
     lia.
     lia.
-    rewrite H3.
+    rewrite Hbits1.
+    clear Hbits1.
     assert (unsigned_last_nbits (startTime_pre + waitTicks_pre * g ÷ 100) 64 = startTime_pre + waitTicks_pre * g ÷ 100).
     pose proof (unsigned_last_nbits_eq (startTime_pre + waitTicks_pre * g ÷ 100) 64).
-    rewrite H4.
+    apply H.
     lia.
-    lia.
-    rewrite H4.
+    rewrite H.
     lia.
 Qed. 
 
@@ -59,7 +60,7 @@ Proof.
     unfold OsAdd2SortLink_which_implies_wit_2.
     pre_process.
     intros.
-    rewrite H.
+    rewrite PreH1.
     unfold storesortedLinkTaskNode.
     Exists node.
     entailer!.
@@ -110,5 +111,3 @@ Proof.
     csimpl.
     entailer!.
 Qed. 
-
-

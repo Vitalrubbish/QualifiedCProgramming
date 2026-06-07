@@ -16,8 +16,7 @@ Local Open Scope sets.
 Local Open Scope string.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.search_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 
 Lemma proof_of_memchr_entail_wit_2 : memchr_entail_wit_2.
@@ -26,8 +25,8 @@ Proof.
   entailer!.
   intros k Hk.
   destruct (Z.eq_dec k i) as [-> | Hki].
-  - exact H.
-  - apply H9; lia.
+  - exact PreH1.
+  - apply PreH11; lia.
 Qed. 
 
 Lemma proof_of_memchr_return_wit_1 : memchr_return_wit_1.
@@ -66,17 +65,18 @@ Qed.
 Lemma proof_of_strchr_entail_wit_2 : strchr_entail_wit_2.
 Proof.
   pre_process.
-  assert (Hi_lt : i < string_length str).
-  { eapply c_string_nonzero_index_lt; eauto. }
+  assert (Hi_lt : i < SimpleC.StdLib.string_lib.string_length str).
+  { eapply SimpleC.StdLib.string_lib.c_string_nonzero_index_lt; eauto. }
   assert (Hi_neq : Znth i str 0 <> c_pre).
-  { rewrite <- (c_string_Znth_inside str i 0) by lia.
-    exact H. }
+  { pose proof (c_string_Znth_inside str i 0 (conj PreH7 Hi_lt)) as Hinside.
+    rewrite <- Hinside.
+    exact PreH1. }
   unfold store_string.
   entailer!.
-  intros k Hk.
-  destruct (Z.eq_dec k i) as [-> | Hki].
-  - exact Hi_neq.
-  - apply H7; lia.
+  - intros k Hk.
+    destruct (Z.eq_dec k i) as [-> | Hki].
+    + exact Hi_neq.
+    + apply PreH9; lia.
 Qed. 
 
 Lemma proof_of_strchr_return_wit_1 : strchr_return_wit_1.
@@ -91,7 +91,7 @@ Proof.
   right.
   split.
   - intros k Hk.
-    apply H7; lia.
+    apply PreH9; lia.
   - right.
     split; auto.
 Qed. 
@@ -108,7 +108,7 @@ Proof.
   right.
   split.
   - intros k Hk.
-    apply H7; lia.
+    apply PreH9; lia.
   - left.
     split; auto.
     rewrite sizeof_char.
@@ -122,7 +122,7 @@ Proof.
   { eapply c_string_nonzero_index_lt; eauto. }
   assert (Hi_eq : Znth i str 0 = c_pre).
   { rewrite <- (c_string_Znth_inside str i 0) by lia.
-    exact H. }
+    exact PreH1. }
   unfold store_string.
   entailer!.
   unfold strchr_result.

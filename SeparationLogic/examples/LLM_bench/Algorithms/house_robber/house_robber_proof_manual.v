@@ -24,10 +24,10 @@ Proof.
   pre_process.
   split_pures.
   - dump_pre_spatial.
-    pose proof (H3 i ltac:(lia)) as Hi.
+    pose proof (PreH5 i ltac:(lia)) as Hi.
     lia.
   - dump_pre_spatial.
-    pose proof (H3 i ltac:(lia)) as Hi.
+    pose proof (PreH5 i ltac:(lia)) as Hi.
     lia.
 Qed.
 
@@ -39,7 +39,7 @@ Proof.
   - entailer!.
     unfold HouseRobberDPState.
     split.
-    + rewrite H1. lia.
+    + rewrite PreH3. lia.
     + split.
       * apply RobPrefixOpt_zero.
       * left. split; reflexivity.
@@ -52,8 +52,7 @@ Proof.
   - cancel.
   - split_pures.
     all: dump_pre_spatial; auto; try lia.
-    + apply house_robber_take_value_bound with (n := n_pre) (prev1 := prev1); auto; lia.
-    + apply house_robber_dp_step_take with (n := n_pre); auto; lia.
+    eapply HouseRobberDPState_skip_step; eauto; lia.
 Qed. 
 
 Lemma proof_of_rob_entail_wit_2_2 : rob_entail_wit_2_2.
@@ -63,7 +62,8 @@ Proof.
   - cancel (IntArray.full nums_pre n_pre l).
   - split_pures.
     all: dump_pre_spatial; auto; try lia.
-    eapply HouseRobberDPState_skip_step; eauto; lia.
+    + apply house_robber_take_value_bound with (n := n_pre) (prev1 := prev1); auto; lia.
+    + apply house_robber_dp_step_take with (n := n_pre); auto; lia.
 Qed.
 
 Lemma proof_of_rob_return_wit_1 : rob_return_wit_1.
@@ -73,8 +73,8 @@ Proof.
   - cancel.
   - split_pures.
     + dump_pre_spatial.
-      unfold HouseRobberDPState in H10.
-      destruct H10 as [_ [Hopt _]].
+      unfold HouseRobberDPState in PreH12.
+      destruct PreH12 as [_ [Hopt _]].
       unfold HouseRobberAnswer.
       replace (Zlength l) with i by lia.
       exact Hopt.

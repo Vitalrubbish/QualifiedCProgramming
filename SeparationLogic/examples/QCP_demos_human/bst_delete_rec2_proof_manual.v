@@ -27,7 +27,7 @@ Proof.
   Exists t_pre_v_left t_pre_v_right t_left nil.
   Exists t_value t_key t_pre_v.
   sep_apply (store_tree_zero t_pre_v_right t_right); simpl.
-  entailer!; rewrite H4; simpl; auto.
+  entailer!; rewrite H0; simpl; auto.
   tauto.
 Qed.
 
@@ -43,10 +43,10 @@ Proof.
     entailer!.
     - tauto.
     - tauto.
-  + rewrite H9. simpl. tauto.
-  + rewrite H9. simpl. rewrite H4. tauto.
-  + rewrite H9. simpl. tauto.
-  + rewrite H9. simpl. tauto.
+  + rewrite PreH11. simpl. tauto.
+  + rewrite PreH11. simpl. rewrite PreH6. tauto.
+  + rewrite PreH11. simpl. tauto.
+  + rewrite PreH11. simpl. tauto.
 Qed.
 
 Lemma proof_of_get_pre_which_implies_wit_1 : get_pre_which_implies_wit_1.
@@ -67,29 +67,33 @@ Proof.
   entailer!.
   sep_apply (store_tree_zero); [ | tauto].
   entailer!.
-  rewrite H3.
+  rewrite H0.
   simpl. 
   entailer!.
 Qed.
 
-Lemma proof_of_delete_return_wit_5 : delete_return_wit_5.
+Lemma proof_of_delete_return_wit_2 : delete_return_wit_2.
 Proof.
   pre_process.
   Exists b_pre_v_2.
-  rewrite H15.
-  simpl.
   entailer!.
+  subst tr_low_level_spec.
+  simpl.
   destruct (Key.dec x_pre p_key) as [[? | ?] | ?]; try Key.order.
-  destruct l0.
-  + discriminate.
-  + inversion H9.
-    rewrite H2. rewrite H3. rewrite H4. rewrite H5.
-    sep_apply store_ptb_store_tree.
-    Intros p_root.
-    sep_apply store_tree_make_tree.
-    entailer!.
-    tauto.
-    tauto.
+  sep_apply store_tree_make_tree; try tauto.
+  reflexivity.
+Qed.
+
+Lemma proof_of_delete_return_wit_3 : delete_return_wit_3.
+Proof. 
+  pre_process.
+  Exists b_pre_v_2.
+  entailer!.
+  subst tr_low_level_spec.
+  simpl.
+  destruct (Key.dec x_pre p_key) as [[? | ?] | ?]; try Key.order.
+  sep_apply store_tree_make_tree; try tauto.
+  reflexivity.
 Qed.
 
 Lemma proof_of_delete_return_wit_4 : delete_return_wit_4.
@@ -99,41 +103,36 @@ Proof.
   entailer!.
   sep_apply (store_tree_zero); [ | tauto].
   entailer!.
-  destruct (Key.dec x_pre p_key) as [[? | ?] | ?]; try Key.order.
-  assert (r0 = tree_delete' x_pre tr_low_level_spec). {
-    rewrite e.
-    rewrite H4.
-    simpl.
-    destruct (Key.dec p_key p_key).
-    - destruct s ; lia.
-    - rewrite H9. simpl. tauto.
-  }
-  rewrite H10.
+  assert (x_pre = p_key) by lia.
+  subst x_pre tr_low_level_spec l0.
+  simpl.
+  destruct (Key.dec p_key p_key) as [[? | ?] | ?]; try lia.
   entailer!.
 Qed.
 
-Lemma proof_of_delete_return_wit_3 : delete_return_wit_3.
+Lemma proof_of_delete_return_wit_5 : delete_return_wit_5.
 Proof. 
   pre_process.
+  subst tr_low_level_spec l0.
+  assert (x_pre = p_key) by lia.
+  subst x_pre.
   Exists b_pre_v_2.
-  entailer!.
-  subst.
-  simpl.
-  destruct (Key.dec x_pre p_key) as [[? | ?] | ?]; try Key.order.
-  sep_apply store_tree_make_tree; try tauto.
-  reflexivity.
-Qed.
-
-Lemma proof_of_delete_return_wit_2 : delete_return_wit_2.
-Proof. 
-  pre_process.
-  Exists b_pre_v_2.
-  entailer!.
-  subst.
-  simpl.
-  destruct (Key.dec x_pre p_key) as [[? | ?] | ?]; try Key.order.
-  sep_apply store_tree_make_tree; try tauto.
-  reflexivity.
+  assert (Hdel:
+    tree_delete' p_key
+      (make_tree (make_tree l0' p_l_k p_l_v r0') p_key p_value r0) =
+    make_tree (combine_tree t_pt ret_left) retval_v_key retval_v_value r0).
+  { simpl. destruct (Key.dec p_key p_key) as [[Hlt | Hgt] | Heq]; try lia.
+    rewrite PreH4, PreH5, PreH6, PreH7. reflexivity. }
+  rewrite Hdel.
+  cancel (b_pre # Ptr |-> b_pre_v_2).
+  sep_apply_l_atomic (store_ptb_store_tree (&(b_pre_v_2 # "tree" ->ₛ "left"))
+    retval retval_v_left t_pt ret_left).
+  Intros p_root.
+  sep_apply_l_atomic (store_tree_make_tree b_pre_v_2 retval_v_key retval_v_value
+    p_root p_right (combine_tree t_pt ret_left) r0).
+  - dump_pre_spatial. exact PreH18.
+  - dump_pre_spatial. split; [exact PreH2 | exact PreH3].
+  - cancel.
 Qed.
 
 Lemma proof_of_delete_which_implies_wit_1 : delete_which_implies_wit_1.

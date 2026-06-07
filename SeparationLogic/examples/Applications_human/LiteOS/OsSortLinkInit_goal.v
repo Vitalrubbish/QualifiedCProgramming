@@ -28,18 +28,34 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function LOS_ListInit -----*)
 
 Definition LOS_ListInit_return_wit_1 := 
+(
 forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
 |--
-  (store_dll storeA list_pre nil )
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
+) \/
+(
+forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
+  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
+|--
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
+).
+
+Definition LOS_ListInit_return_wit_1_split_goal_spatial := 
+forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
+  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
+|--
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
 .
 
 (*----- Function OsSortLinkInit -----*)
 
 Definition OsSortLinkInit_safety_wit_1 := 
 forall (A: Type) (sortLinkHead_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
-  (store_dll storeA &((sortLinkHead_pre)  # "SortLinkAttribute" ->ₛ "sortLink") nil )
+  (store_dll storeA &((sortLinkHead_pre)  # "SortLinkAttribute" ->ₛ "sortLink") (@nil (@DL_Node A)) )
   **  ((( &( "sortLinkHead" ) )) # Ptr  |-> sortLinkHead_pre)
 |--
   “ (0 <= INT_MAX) ” 
@@ -48,10 +64,10 @@ forall (A: Type) (sortLinkHead_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
 
 Definition OsSortLinkInit_return_wit_1 := 
 forall (A: Type) (sortLinkHead_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
-  (store_dll storeA &((sortLinkHead_pre)  # "SortLinkAttribute" ->ₛ "sortLink") nil )
+  (store_dll storeA &((sortLinkHead_pre)  # "SortLinkAttribute" ->ₛ "sortLink") (@nil (@DL_Node A)) )
 |--
   “ (0 = 0) ”
-  &&  (store_dll storeA &((sortLinkHead_pre)  # "SortLinkAttribute" ->ₛ "sortLink") nil )
+  &&  (store_dll storeA &((sortLinkHead_pre)  # "SortLinkAttribute" ->ₛ "sortLink") (@nil (@DL_Node A)) )
 .
 
 Definition OsSortLinkInit_partial_solve_wit_1 := 

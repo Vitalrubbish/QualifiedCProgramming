@@ -91,9 +91,8 @@ Proof.
     unfold obtian_first_pointer.
     simpl.
     entailer!.
-    assert (h = &( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink")).
-    apply H2.
-    rewrite H3.
+    destruct H as [Hh _].
+    rewrite Hh.
     entailer!.
     +
     unfold obtian_first_pointer.
@@ -101,7 +100,7 @@ Proof.
     Intros z.
     Exists z.
     entailer!.
-    rewrite H2.
+    rewrite H.
     entailer!.
 Qed. 
 
@@ -110,10 +109,9 @@ Proof.
     pre_process.
     intros.
     Right.
-    entailer!.
-    pose proof map_eq_nil sortedLinkNodeMapping l.
+    pose proof map_eq_nil sortedLinkNodeMapping l as Hmap_nil.
     assert (l = nil).
-    apply H5.
+    apply Hmap_nil.
     auto.
     Exists SysTick_4.
     entailer!.
@@ -126,51 +124,39 @@ Proof.
     pre_process.
     intros.
     Left.
-    Left.
+    Right.
     Exists SysTick_5.
     unfold store_sorted_dll.
     entailer!.
-    assert (h = &( retval_3 # "SortLinkList" ->ₛ "sortLinkNode")).
-    lia.
-    rewrite <- H14.
-    pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) h (&( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink")) &( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink") (map sortedLinkNodeMapping l).
-    sep_apply H15.
+    assert (h = &( retval_3 # "SortLinkList" ->ₛ "sortLinkNode")) as Hhead by lia.
+    rewrite <- Hhead.
+    pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) h (&( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink")) &( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink") (map sortedLinkNodeMapping l) as Hdll.
+    sep_apply Hdll.
     Intros py.
     unfold store_dll.
     Exists h py.
     entailer!.
     csimpl.
     simpl.
-    assert (x_lSpec_pstNext = h).
-    lia.
-    rewrite H16.
+    assert (x_lSpec_pstNext = h) as Hnext by lia.
+    rewrite Hnext.
     entailer!.
     assert (l <> nil).
-    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l.
-    apply H14.
+    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l as Hmap_not_nil.
+    apply Hmap_not_nil.
     auto.
-    assert (getFirstNodeResponseTime l = getFirstNodeResponseTime (map sortedLinkNodeMapping l)).
+    assert (getFirstNodeResponseTime l = getFirstNodeResponseTime (map sortedLinkNodeMapping l)) as Hresp.
     unfold getFirstNodeResponseTime.
     destruct l.
     simpl.
     lia.
     simpl.
     lia.
-    rewrite H15.
-    rewrite <- H4.
-    apply H0.
-    assert (getFirstNodeResponseTime l = getFirstNodeResponseTime (map sortedLinkNodeMapping l)).
-    unfold getFirstNodeResponseTime.
-    destruct l.
-    simpl.
-    lia.
-    simpl.
-    lia.
-    rewrite H14.
-    rewrite <- H4.
-    apply H.
-    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l.
-    apply H14.
+    try rewrite Hresp.
+    try rewrite <- PreH6.
+    apply PreH1.
+    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l as Hmap_not_nil.
+    apply Hmap_not_nil.
     auto.
 Qed. 
 
@@ -179,30 +165,28 @@ Proof.
     pre_process.
     intros.
     Left.
-    Right.
+    Left.
     Exists SysTick_5.
     unfold store_sorted_dll.
     entailer!.
-    assert (h = &( retval_3 # "SortLinkList" ->ₛ "sortLinkNode")).
-    lia.
-    rewrite <- H14.
-    pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) h (&( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink")) &( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink") (map sortedLinkNodeMapping l).
-    sep_apply H15.
+    assert (h = &( retval_3 # "SortLinkList" ->ₛ "sortLinkNode")) as Hhead by lia.
+    rewrite <- Hhead.
+    pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) h (&( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink")) &( sortLinkHead_pre # "SortLinkAttribute" ->ₛ "sortLink") (map sortedLinkNodeMapping l) as Hdll.
+    sep_apply Hdll.
     Intros py.
     unfold store_dll.
     Exists h py.
     entailer!.
     csimpl.
     simpl.
-    assert (x_lSpec_pstNext = h).
-    lia.
-    rewrite H16.
+    assert (x_lSpec_pstNext = h) as Hnext by lia.
+    rewrite Hnext.
     entailer!.
     assert (l <> nil).
-    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l.
-    apply H14.
+    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l as Hmap_not_nil.
+    apply Hmap_not_nil.
     auto.
-    assert (getFirstNodeResponseTime l = getFirstNodeResponseTime (map sortedLinkNodeMapping l)).
+    assert (getFirstNodeResponseTime l = getFirstNodeResponseTime (map sortedLinkNodeMapping l)) as Hresp.
     unfold getFirstNodeResponseTime.
     destruct l.
     +
@@ -212,12 +196,23 @@ Proof.
     simpl.
     lia.
     +
-    rewrite H15.
-    rewrite <- H4.
-    lia.
+    try rewrite Hresp.
+    try rewrite <- PreH6.
+    apply PreH2.
     +
-    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l.
-    apply H14.
+    assert (getFirstNodeResponseTime l = getFirstNodeResponseTime (map sortedLinkNodeMapping l)) as Hresp.
+    unfold getFirstNodeResponseTime.
+    destruct l.
+    simpl.
+    lia.
+    simpl.
+    lia.
+    rewrite Hresp.
+    rewrite <- PreH6.
+    apply PreH1.
+    +
+    pose proof map_sortedLinkNodeMapping_not_nil sortedLinkNodeMapping l as Hmap_not_nil.
+    apply Hmap_not_nil.
     auto.
 Qed. 
 
@@ -381,18 +376,30 @@ Proof.
     csimpl.
     destruct l_lSpec.
     congruence.
-    assert (responseTime d.(dll_data) = t).
+    assert (Hrt: responseTime d.(dll_data) = t).
     inversion H3.
     simpl.
     csimpl.
     lia.
-    rewrite H6.
-    apply Z.ge_le in H4.
-    apply H4.
+    rewrite Hrt.
+    exact H5.
     entailer!.
-    Intros x0.
+    unfold getFirstNodeResponseTime.
+    simpl.
+    csimpl.
+    destruct l_lSpec.
+    congruence.
+    assert (Hrt: responseTime d.(dll_data) = t).
+    inversion H3.
+    simpl.
+    csimpl.
+    lia.
+    rewrite Hrt.
+    apply Z.lt_gt.
+    exact H4.
+    Intros py0.
     Left.
-    Exists x_pstNext x0.
+    Exists x_pstNext py0.
     entailer!.
     rewrite H3.
     pose proof dllseg_shift_rev_concat_a (storesortedLinkNode storeA_lSpec) x_lSpec y x_pstNext a t l_lSpec l1.
@@ -404,26 +411,13 @@ Proof.
     csimpl.
     destruct l_lSpec.
     congruence.
-    assert (responseTime d.(dll_data) = t).
+    assert (Hrt: responseTime d.(dll_data) = t).
     inversion H3.
     simpl.
     csimpl.
     lia.
-    rewrite H6.
-    apply H5.
-    unfold getFirstNodeResponseTime.
-    simpl.
-    csimpl.
-    destruct l_lSpec.
-    congruence.
-    assert (responseTime d.(dll_data) = t).
-    inversion H3.
-    simpl.
-    csimpl.
+    rewrite Hrt.
     lia.
-    rewrite H6.
-    apply Z.lt_gt in H4.
-    apply H4.
     apply H0.
 Qed. 
 
@@ -436,21 +430,19 @@ Proof.
     entailer!.
     apply derivable1_orp_elim.
     - Intros retval_2.
-    Right.
-    Exists retval_2.
-    entailer!.
-    - Intros retval_2.
-    Left.
     unfold store_dll.
     Intros h pt.
     unfold dllseg.
     destruct l_getfirstSpec.
     + entailer!.
     + Intros z.
+    Right.
     Exists d l_getfirstSpec retval_2.
     Exists h pt.
     Exists z.
     entailer!.
+    - Intros retval_2.
+    Left.
+    Exists retval_2.
+    entailer!.
 Qed.
-
-

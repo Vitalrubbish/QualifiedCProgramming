@@ -16,13 +16,14 @@ Local Open Scope sets.
 Local Open Scope string.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.strcat_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 
 Lemma proof_of_strcat_safety_wit_3 : strcat_safety_wit_3.
 Proof.
   pre_process.
+  assert (Hi_lt : i < string_lib.string_length dst_str).
+  { eapply string_lib.c_string_nonzero_index_lt; eauto. }
   split_pures; dump_pre_spatial;
     unfold string_lib.string_length in *;
     pose proof (Zlength_nonneg dst_str);
@@ -58,7 +59,7 @@ Proof.
   cancel.
   split_pures; dump_pre_spatial; auto; try lia.
   assert (i <> string_lib.string_length dst_str) by
-    (intro Hi; apply H; rewrite Hi; unfold string_lib.c_string, string_lib.string_length;
+    (intro Hi; apply PreH1; rewrite Hi; unfold string_lib.c_string, string_lib.string_length;
      rewrite app_Znth2 by lia; rewrite Z.sub_diag; apply Znth0_cons).
   lia.
   intros k Hk.
@@ -71,10 +72,10 @@ Proof.
     subst.
     assert (Hi_lt : i < string_lib.string_length dst_str) by
       (assert (i <> string_lib.string_length dst_str) by
-         (intro Hi; apply H; rewrite Hi; unfold string_lib.c_string, string_lib.string_length;
+         (intro Hi; apply PreH1; rewrite Hi; unfold string_lib.c_string, string_lib.string_length;
           rewrite app_Znth2 by lia; rewrite Z.sub_diag; apply Znth0_cons);
        lia).
-    intro Hz; apply H.
+    intro Hz; apply PreH1.
     unfold string_lib.c_string.
     rewrite app_Znth1 by (unfold string_lib.string_length in *; lia).
     exact Hz.
@@ -93,9 +94,9 @@ Proof.
       assert (i < string_lib.string_length dst_str) by lia;
       exfalso; apply (Hnul i);
       [unfold string_lib.string_length in *; lia |
-       unfold string_lib.c_string in H;
-       rewrite app_Znth1 in H by (unfold string_lib.string_length in *; lia);
-       exact H]]).
+       unfold string_lib.c_string in PreH1;
+       rewrite app_Znth1 in PreH1 by (unfold string_lib.string_length in *; lia);
+       exact PreH1]]).
   replace (string_lib.string_length dst_str + 0) with
     (string_lib.string_length dst_str) by lia.
   unfold string_lib.store_string; split_pure_spatial.
@@ -134,7 +135,7 @@ Proof.
   pre_process.
   assert (Hj_lt : j < string_lib.string_length src_str) by
     (assert (j <> string_lib.string_length src_str) by
-       (intro Hj; apply H; rewrite Hj; unfold string_lib.c_string, string_lib.string_length;
+       (intro Hj; apply PreH1; rewrite Hj; unfold string_lib.c_string, string_lib.string_length;
         rewrite app_Znth2 by lia; rewrite Z.sub_diag; apply Znth0_cons);
      lia).
   entailer!.
@@ -216,9 +217,9 @@ Proof.
       [ exfalso | lia ].
     assert (Hj_zero : Znth j src_str 0 = 0).
     {
-      unfold string_lib.c_string in H.
-      rewrite app_Znth1 in H by (unfold string_lib.string_length in l; lia).
-      exact H.
+      unfold string_lib.c_string in PreH1.
+      rewrite app_Znth1 in PreH1 by (unfold string_lib.string_length in l; lia).
+      exact PreH1.
     }
     match goal with
     | Hvalid : string_lib.valid_string src_str |- _ =>
@@ -278,20 +279,20 @@ Proof.
               (string_lib.string_length dst_str + n_pre + 1)).
   - assert (Hi_lt : i < string_lib.string_length dst_str).
     {
-      unfold string_lib.c_string in H.
+      unfold string_lib.c_string in PreH1.
       unfold string_lib.string_length in *.
       destruct (Z_lt_ge_dec i (Zlength dst_str)); [ lia | ].
-      rewrite app_Znth2 in H by lia.
+      rewrite app_Znth2 in PreH1 by lia.
       assert (Hi_off : i - Zlength dst_str = 0) by lia.
-      rewrite Hi_off in H.
-      simpl in H.
-      contradiction H; reflexivity.
+      rewrite Hi_off in PreH1.
+      simpl in PreH1.
+      contradiction PreH1; reflexivity.
     }
     assert (Hi_dst : Znth i dst_str 0 <> 0).
     {
-      unfold string_lib.c_string in H.
-      rewrite app_Znth1 in H by (unfold string_lib.string_length in Hi_lt; lia).
-      exact H.
+      unfold string_lib.c_string in PreH1.
+      rewrite app_Znth1 in PreH1 by (unfold string_lib.string_length in Hi_lt; lia).
+      exact PreH1.
     }
     split_pures.
     all: dump_pre_spatial; auto; try lia.
@@ -315,9 +316,9 @@ Proof.
       [ exfalso | lia ].
     assert (Hi_zero : Znth i dst_str 0 = 0).
     {
-      unfold string_lib.c_string in H.
-      rewrite app_Znth1 in H by (unfold string_lib.string_length in l; lia).
-      exact H.
+      unfold string_lib.c_string in PreH1.
+      rewrite app_Znth1 in PreH1 by (unfold string_lib.string_length in l; lia).
+      exact PreH1.
     }
     match goal with
     | Hvalid : string_lib.valid_string dst_str |- _ =>
@@ -377,7 +378,7 @@ Proof.
   pre_process.
   assert (Hj_lt : j < string_lib.string_length src_str) by
     (assert (j <> string_lib.string_length src_str) by
-       (intro Hj; apply H; rewrite Hj; unfold string_lib.c_string, string_lib.string_length;
+       (intro Hj; apply PreH1; rewrite Hj; unfold string_lib.c_string, string_lib.string_length;
         rewrite app_Znth2 by lia; rewrite Z.sub_diag; apply Znth0_cons);
      lia).
   entailer!.

@@ -1,6 +1,7 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
+Require Import Coq.Strings.Ascii.
 Require Import Coq.Lists.List.
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
@@ -13,7 +14,7 @@ From SimpleC.EE.QCP_demos_LLM Require Import array_cases_goal.
 Require Import Logic.LogicGenerator.demo932.Interface.
 Local Open Scope Z_scope.
 Local Open Scope sets.
-Local Open Scope string.
+Local Open Scope string_scope.
 Local Open Scope list.
 Import naive_C_Rules.
 Require Import SimpleC.EE.QCP_demos_LLM.sll_lib.
@@ -134,9 +135,6 @@ Lemma proof_of_array_max_safety_wit_5 : array_max_safety_wit_5.
 Proof. Admitted. 
 
 Lemma proof_of_array_max_entail_wit_1 : array_max_entail_wit_1.
-Proof. Admitted. 
-
-Lemma proof_of_array_max_entail_wit_2_2 : array_max_entail_wit_2_2.
 Proof. Admitted. 
 
 Lemma proof_of_array_max_partial_solve_wit_1 : array_max_partial_solve_wit_1.

@@ -21,82 +21,49 @@ Local Open Scope sac.
 
 Lemma proof_of_swap_entail_wit_1 : swap_entail_wit_1.
 Proof.
-	pre_process.
-	destruct para_all as [x | x y].
-	- Left.
-		Exists x.
-		simpl.
-		split_pure_spatial.
-		+ Intros_p Hpxeq.
-		  cancel (px_pre # Int |-> x).
-		+ split_pures.
-		  * Intros_p Hpxeq1.
-		    dump_pre_spatial.
-		    exact Hpxeq1.
-		  * Intros_p Hpxeq2.
-		    dump_pre_spatial.
-		    exact Hpxeq2.
-		  * dump_pre_spatial.
-		    reflexivity.
-	- Right.
-		Exists y.
-		Exists x.
-		simpl.
-		split_pure_spatial.
-		+ cancel (px_pre # Int |-> x).
-		  cancel (py_pre # Int |-> y).
-		+ split_pures.
-		  * dump_pre_spatial.
-		    reflexivity.
+  pre_process.
+  destruct para_all; simpl; entailer!.
+  + Right.
+    Exists z.
+    entailer!.
+  + Left.
+    Exists z0 z.
+    entailer!.
 Qed.
 
 Lemma proof_of_swap_return_wit_1 : swap_return_wit_1.
 Proof.
-	pre_process.
-	subst py.
-	subst para_all.
-	simpl.
-	split_pure_spatial.
-	- cancel (px_pre # Int |-> x).
-	- dump_pre_spatial.
-	  exact H0.
+  pre_process.
+  subst.
+  simpl.
+  entailer!.
 Qed.
 
 Lemma proof_of_swap_return_wit_2 : swap_return_wit_2.
 Proof.
-	pre_process.
-	subst para_all.
-	simpl.
-	cancel (px_pre # Int |-> y).
-	cancel (py_pre # Int |-> x).
+  pre_process.
+  subst.
+  simpl.
+  entailer!.
 Qed.
 
 Lemma proof_of_swap_derive_eq_by_all : swap_derive_eq_by_all.
 Proof.
-	pre_process.
-	Exists (swap_eq_para x_eq).
-	simpl.
-	asrt_complex_simpl.
-	apply _derivable1_andp_intros.
-	- dump_pre_spatial.
-	  exact H.
-	- cancel (px_pre # Int |-> x_eq).
-	apply_sepcon_adjoint.
-	elim_emp.
-	Intros_p H0.
-	subst py_pre.
-	cancel (px_pre # Int |-> x_eq).
+  pre_process.
+  subst py_pre.
+  Exists (swap_eq_para x_eq).
+  simpl.
+  entailer!.
+  apply derivable1_wand_sepcon_adjoint.
+  entailer!.
 Qed.
 
 Lemma proof_of_swap_derive_neq_by_all : swap_derive_neq_by_all.
 Proof.
-	pre_process.
-	Exists (swap_neq_para x_neq y_neq).
-	simpl.
-	cancel (px_pre # Int |-> x_neq).
-	cancel (py_pre # Int |-> y_neq).
-	apply_sepcon_adjoint.
-	elim_emp.
-	cancel (px_pre # Int |-> y_neq).
-	cancel (py_pre # Int |-> x_neq).
+  pre_process.
+  Exists (swap_neq_para x_neq y_neq).
+  simpl.
+  entailer!.
+  apply derivable1_wand_sepcon_adjoint.
+  entailer!.
 Qed.

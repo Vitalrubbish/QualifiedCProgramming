@@ -19,29 +19,31 @@ Import naive_C_Rules.
 From SimpleC.EE.QCP_demos_human Require Import dll_queue_lib.
 Local Open Scope sac.
 
+Lemma proof_of_enqueue_return_wit_1 : enqueue_return_wit_1.
+Proof.
+  pre_process.
+  subst.
+  unfold store_queue.
+  sep_apply dllseg_head_zero; [ | tauto ].
+  Intros.
+  subst.
+  Exists retval retval.
+  sep_apply dllseg_len1; [ | tauto ].
+  entailer!.
+Qed.
+
 Lemma proof_of_enqueue_return_wit_2 : enqueue_return_wit_2.
 Proof.
   pre_process.
   subst.
   unfold store_queue.
   Exists q_head retval.
-  sep_apply dllseg_len1; [ | tauto ].
-  sep_apply dllseg_len1; [ | tauto ].
-  sep_apply (dllseg_dllseg q_head).
+  sep_apply (dllseg_len1 q_tail); [ | tauto ].
+  sep_apply (dllseg_len1 retval); [ | tauto ].
+  sep_apply (dllseg_dllseg q_tail).
   sep_apply (dllseg_dllseg q_head).
   entailer!.
-Qed.
-
-Lemma proof_of_enqueue_return_wit_1 : enqueue_return_wit_1.
-Proof.
-  pre_process.
-  subst.
-  unfold store_queue.
-  Exists retval retval.
-  sep_apply dllseg_head_zero; [ | tauto ].
-  sep_apply dllseg_len1; [ | tauto ].
-  entailer!.
-  subst l.
+  rewrite app_assoc.
   entailer!.
 Qed.
 
@@ -63,17 +65,6 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_dequeue_return_wit_2 : dequeue_return_wit_2.
-Proof.
-  pre_process.
-  subst.
-  unfold store_queue.
-  Exists q_head_next q_tail.
-  simpl.
-  Exists q_head_next_2.
-  entailer!.
-Qed.
-
 Lemma proof_of_dequeue_return_wit_1 : dequeue_return_wit_1.
 Proof.
   pre_process.
@@ -84,6 +75,17 @@ Proof.
   subst.
   Exists 0 0.
   simpl.
+  entailer!.
+Qed.
+
+Lemma proof_of_dequeue_return_wit_2 : dequeue_return_wit_2.
+Proof.
+  pre_process.
+  subst.
+  unfold store_queue.
+  Exists q_head_next q_tail.
+  simpl.
+  Exists q_head_next_2.
   entailer!.
 Qed.
 

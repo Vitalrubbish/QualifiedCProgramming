@@ -709,7 +709,7 @@ Proof.
   intros picks n Hn Hnd HFor.
   pose proof (Forall_range_incl_seq picks n Hn HFor) as Hincl.
   pose proof (NoDup_incl_length Hnd Hincl) as Hlen.
-  rewrite map_length, seq_length in Hlen.
+  rewrite length_map, length_seq in Hlen.
   apply Nat2Z.inj_le in Hlen.
   rewrite Z2Nat.id in Hlen by lia.
   lia.

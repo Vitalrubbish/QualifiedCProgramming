@@ -60,6 +60,7 @@
   - 该 subagent 固定使用 `vc-proving`。
   - 每次进入 `vc-proving` 的新轮次，都必须先启动它，再继续本 phase。
   - 该 phase 默认由 `vc-proving-subagent` 运行脚本化并发 worker pipeline；若本轮已记录 Codex worker 环境不可恢复，则允许由同一 `vc-proving-subagent` 切换到 proving scratch 上的串行 fallback。`rocq-mcp` 只允许在当前 owner 的隔离 proving 载体上使用；如果 `rocq-mcp` 在 worker 内启动或调用失败但 worker-local `coqc` 可用，当前 worker / subagent 必须记录失败证据并改用生成的 `coqc` 命令继续证明。
+  - 若存在上一轮 `vc_proving_round_checkpoint.json`，只能由本轮 `vc-proving-subagent` 在 fresh proving scratch 上执行 checkpoint/packet proof-reuse prepass；上下文匹配且 candidate 编译通过时可构造 direct reuse candidate，上下文不匹配、helper payload 冲突或 candidate 编译失败时只能生成 proof-pattern reference；不得继续使用上一轮 `.tmp` scratch 或 worker workdir。
   - 该 phase 是长时间迭代 phase；main 线程必须等待 subagent 的显式返回，不能因等待较久而抢回。
 - `final-check`
   - 不开启 subagent。
@@ -106,6 +107,8 @@
 
 - `annotation-subagent` 已在 annotation C scratch 上把 `qcp-mcp` 稳定跑到文件尾；若无法继续，则只能以 `blocked` / `stale` 返回。
 - `annotation-subagent` 已对候选 annotation / spec 定义调用 `annotation-checking`，且检查结果为 `passed`；如果结果为 `failed`，必须留在本 phase 回到 `annotation-filling` 修正 C scratch 或 `annotation_scratch_lib`，不能退出到 symexec。
+- `Annotation Checking Report` 已明确给出 `qcp_mcp_requirement_satisfied: yes` 与 `annotation_scratch_lib_coqc_status: passed`。
+- 主 agent 在正式回填或 symexec 前，已运行 `.agents/skills/verification-orchestrator/scripts/validate_annotation_gate.py`，且校验成功。
 - 主 agent 已把被接受的 annotation 回填到正式 `.c`；若本轮修改了 `annotation_scratch_lib`，主 agent 已把 checked spec 定义回填到 `common_case_formal_lib`。
 - 主 agent 已在 `common_case_formal_lib` 回填后刷新 `Case Brief` 中的 `lib_frozen_prefix_end_line` / `lib_frozen_prefix_snapshot`。
 - symexec 已刷新当前 case 的正式生成文件。
@@ -145,6 +148,7 @@
 
 - 最新 annotation 已在 scratch 上通过 `qcp-mcp`。
 - 最新 annotation / spec 定义已通过 `annotation-checking`。
+- annotation gate script 已通过，确认 `qcp_mcp_requirement_satisfied: yes` 且 `annotation_scratch_lib` compile gate 通过。
 - 若 annotation phase 修改过 `annotation_scratch_lib`，`common_case_formal_lib` 已由 main 集成并重新冻结。
 - 最新 `goal` / witness 集合已生成。
 - annotation C scratch 和 `annotation_scratch_lib` 已清理。
@@ -196,7 +200,7 @@
 
 退出条件：
 
-  - 当前轮次需要处理的 witness 都已在 scratch 上证明完成，helper-suffix imports / helper lemmas 已从 merged manual 迁移到 `task_local_scratch_lib`，并可由主 agent 正式集成到 `common_case_formal_lib`，或暴露出必须返工 annotation / 必须阻塞等待用户定义调整的问题。
+  - 当前轮次需要处理的 witness 都已在 scratch 上证明完成，helper-suffix imports / helper lemmas 已从 merged manual 迁移到 `task_local_scratch_lib`，并可由主 agent 正式集成到 `common_case_formal_lib`，或已经把 compile-gated 局部成果固化为可审计 checkpoint 后暴露出必须返工 annotation / 必须阻塞等待用户定义调整的问题。
 - 不再需要的 proving scratch 已删除。
 
 分派规则：
@@ -216,7 +220,7 @@
   - 从最新正式 `*_proof_manual.v` / `common_case_formal_lib` 复制出 fresh proving scratch pair
   - 若旧 proving scratch 仍存在，先删除再创建
 - 允许分派：
-  - 默认是 `vc-proving` 脚本创建的 worker-local manual 上的 `rocq-mcp`；进入串行 fallback 时，改为 proving scratch 或 scratch-local manual 上的隔离 `rocq-mcp`。若 `rocq-mcp` 不可用但 `coqc` 可用，则在同一 worker-local manual / proving scratch 上用 `coqc` 编译反馈继续证明。
+  - Windows 下默认是 `vc-proving` 脚本创建的 worker-local manual 上的 `coqc.exe` / `coqtop.exe` 编译循环；进入串行 fallback 时，改为 proving scratch 或 scratch-local manual 上的隔离编译循环。不得调用 `rocq-mcp`。
 - 禁止分派：
   - 对 `*_proof_manual.v` / `common_case_formal_lib` 的正式集成
   - witness 的 `proved` 最终确认
@@ -224,6 +228,8 @@
 - 附加规则：
   - 每次 symexec 刷新出新的正式 `*_proof_manual.v` 后，旧 proving scratch 必须作废并删除，再开始新的 proving 轮次
   - 本轮默认运行 split / prepare concurrent / run concurrent / validate / migrate helpers to lib / verify 流水线；优先使用 `vc-checking` 的 `witness_group_plan` 启动 grouped worker，若缺失才使用排序分块 fallback；若已记录 Codex worker 环境不可恢复，则允许改为 proving scratch 上的串行 fallback，但仍必须完成 helper migration、结构审计与 verify
+  - 如果 ticket 提供上一轮 checkpoint，本轮 split 之后、prepare 之前运行 checkpoint/packet reuse prepass：若 direct-reuse 条件满足，把 helper payload 应用到 fresh `task_local_scratch_lib`，用当前 witness statement 和 packet proof script 重建 candidate manual，通过编译后才从 worker scope 移除已复用 witness；若条件不满足、helper payload 冲突或 candidate 编译失败，恢复失败写入的 helper scratch 并生成 worker proof-pattern reference，worker 可阅读 per-goal candidates、完整 proof reference pool、旧 informal proof / helper reference 并适配当前 VC，但不得自动标记 solved
+  - 本轮结束时若不是 annotation-bug / stale，且存在 solved witness 或 migrated helper payload，应在持久 report 目录生成 round checkpoint；checkpoint 是下一轮 fresh scratch 的输入，不是 active scratch
   - merged proving scratch `*_proof_manual.v` 可暂存 witness theorem 证明和 proved helper lemmas；migrated handoff manual 必须只保留 witness proofs
   - `task_local_scratch_lib` 的冻结前缀不可改写；`migrate_helpers_to_lib.py` 只能在冻结前缀之后追加 audited helper-suffix imports 与 proved helper lemmas
   - 如果证明需要改写冻结前缀，需要新增顶层 `Definition` / `Fixpoint` / `Inductive` / `Notation` / `Axiom`，或需要迁入不在 helper import allowlist 内的依赖，本轮应以 `blocked` 返回

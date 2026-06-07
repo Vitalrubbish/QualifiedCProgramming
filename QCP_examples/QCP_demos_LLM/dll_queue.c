@@ -12,8 +12,10 @@ struct list * malloc_list_cell()
   ;
 
 void free_list_cell(struct list * p)
-  /*@ Require exists x y z, p -> next == x && p -> prev == y && 
-             p -> data == z && emp
+  /*@ Require exists x y z, 
+             store(&(p -> next), x) *
+             store(&(p -> prev), y) *
+             store(&(p -> data), z)
       Ensure emp
    */
   ;
@@ -70,12 +72,13 @@ int dequeue(struct queue * q)
    */
 {
     /*@ Assert
-      exists qhead qtail,
+      exists qhead qtail qheadnext,
         q == q@pre &&
       qhead != 0 &&
-      qhead -> prev == 0 &&
-      qhead -> data == x &&
-      dllseg(qhead -> next, 0, qhead, qtail, l) *
+      store(&(qhead -> prev), 0) *
+      store(&(qhead -> data), x) *
+      store(&(qhead -> next), qheadnext) *
+      dllseg(qheadnext, 0, qhead, qtail, l) *
       store(&(q -> head), qhead) *
       store(&(q -> tail), qtail)
   */
@@ -87,14 +90,15 @@ int dequeue(struct queue * q)
     q -> tail = (void *)0;
   }
   else {
-        /*@ Assert exists qhead qtail headv l0,
+        /*@ Assert exists qhead qtail headv qheadnext l0,
           q == q@pre &&
           x0 == x &&
           qhead != 0 &&
           l == cons(headv, l0) &&
-          qhead -> prev == p &&
-          qhead -> data == headv &&
-          dllseg(qhead -> next, 0, qhead, qtail, l0) *
+          store(&(qhead -> prev), p) * 
+          store(&(qhead -> data), headv) *
+          store(&(qhead -> next), qheadnext) *
+          dllseg(qheadnext, 0, qhead, qtail, l0) *
           store(&(q -> head), qhead) *
           store(&(q -> tail), qtail)
     */

@@ -24,10 +24,8 @@ From SimpleC.EE.QCP_demos_LLM Require Import sll_shape_strategy_proof.
 (*----- Function arr_sum -----*)
 
 Definition arr_sum_safety_wit_1 := 
-forall (a_pre: Z) (n_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "ret" ) )) # UInt  |->_)
+forall (a_pre: Z) (n_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "ret" ) )) # UInt  |->_)
   **  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
@@ -38,10 +36,8 @@ forall (a_pre: Z) (n_pre: Z) ,
 .
 
 Definition arr_sum_safety_wit_2 := 
-forall (a_pre: Z) (n_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "ret" ) )) # UInt  |-> 0)
+forall (a_pre: Z) (n_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "ret" ) )) # UInt  |-> 0)
   **  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
@@ -52,13 +48,8 @@ forall (a_pre: Z) (n_pre: Z) ,
 .
 
 Definition arr_sum_safety_wit_3 := 
-forall (a_pre: Z) (n_pre: Z) (i: Z) (v: Z) (x: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (a_pre: Z) (n_pre: Z) (i: Z) (v: Z) (x: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= n_pre)) (PreH3 : (n_pre < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= n_pre)) ,
+  (UIntArray.full_shape a_pre n_pre )
   **  ((( &( "ret" ) )) # UInt  |-> (unsigned_last_nbits ((v + x )) (32)))
   **  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -69,10 +60,8 @@ forall (a_pre: Z) (n_pre: Z) (i: Z) (v: Z) (x: Z) ,
 .
 
 Definition arr_sum_entail_wit_1 := 
-forall (a_pre: Z) (n_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (a_pre: Z) (n_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape a_pre n_pre )
 |--
   “ (0 <= n_pre) ” 
   &&  “ (n_pre < INT_MAX) ” 
@@ -82,13 +71,8 @@ forall (a_pre: Z) (n_pre: Z) ,
 .
 
 Definition arr_sum_entail_wit_2 := 
-forall (a_pre: Z) (n_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (a_pre: Z) (n_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= n_pre)) (PreH3 : (n_pre < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= n_pre)) ,
+  (UIntArray.full_shape a_pre n_pre )
 |--
   “ (0 <= n_pre) ” 
   &&  “ (n_pre < INT_MAX) ” 
@@ -98,25 +82,15 @@ forall (a_pre: Z) (n_pre: Z) (i: Z) ,
 .
 
 Definition arr_sum_return_wit_1 := 
-forall (a_pre: Z) (n_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (a_pre: Z) (n_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= n_pre)) (PreH3 : (n_pre < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= n_pre)) ,
+  (UIntArray.full_shape a_pre n_pre )
 |--
   (UIntArray.full_shape a_pre n_pre )
 .
 
 Definition arr_sum_partial_solve_wit_1 := 
-forall (a_pre: Z) (n_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (a_pre: Z) (n_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= n_pre)) (PreH3 : (n_pre < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= n_pre)) ,
+  (UIntArray.full_shape a_pre n_pre )
 |--
   EX (x: Z) ,
   “ (i < n_pre) ” 
@@ -131,10 +105,8 @@ forall (a_pre: Z) (n_pre: Z) (i: Z) ,
 (*----- Function array_copy1 -----*)
 
 Definition array_copy1_safety_wit_1 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "src" ) )) # Ptr  |-> src_pre)
   **  ((( &( "dest" ) )) # Ptr  |-> dest_pre)
@@ -146,13 +118,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) ,
 .
 
 Definition array_copy1_safety_wit_2 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape dest_pre 0 (i + 1 ) )
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape dest_pre 0 (i + 1 ) )
   **  (IntArray.undef_seg dest_pre (i + 1 ) n_pre )
   **  (IntArray.full_shape src_pre n_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -165,10 +132,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
 .
 
 Definition array_copy1_entail_wit_1 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.undef_full dest_pre n_pre )
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (IntArray.undef_full dest_pre n_pre )
   **  (IntArray.full_shape src_pre n_pre )
 |--
   “ (0 <= 0) ” 
@@ -181,13 +146,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) ,
 .
 
 Definition array_copy1_entail_wit_2 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape dest_pre 0 (i + 1 ) )
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape dest_pre 0 (i + 1 ) )
   **  (IntArray.undef_seg dest_pre (i + 1 ) n_pre )
   **  (IntArray.full_shape src_pre n_pre )
 |--
@@ -201,13 +161,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
 .
 
 Definition array_copy1_return_wit_1 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape dest_pre 0 i )
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape dest_pre 0 i )
   **  (IntArray.undef_seg dest_pre i n_pre )
   **  (IntArray.full_shape src_pre n_pre )
 |--
@@ -216,13 +171,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
 .
 
 Definition array_copy1_partial_solve_wit_1 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape dest_pre 0 i )
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape dest_pre 0 i )
   **  (IntArray.undef_seg dest_pre i n_pre )
   **  (IntArray.full_shape src_pre n_pre )
 |--
@@ -239,13 +189,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
 .
 
 Definition array_copy1_partial_solve_wit_2 := 
-forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape src_pre n_pre )
+forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape src_pre n_pre )
   **  (IntArray.seg_shape dest_pre 0 i )
   **  (IntArray.undef_seg dest_pre i n_pre )
 |--
@@ -263,11 +208,8 @@ forall (n_pre: Z) (src_pre: Z) (dest_pre: Z) (i: Z) ,
 (*----- Function array_concat -----*)
 
 Definition array_concat_safety_wit_1 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (0 <= m_pre)) (PreH3 : ((n_pre + m_pre ) < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "m" ) )) # Int  |-> m_pre)
   **  ((( &( "b" ) )) # Ptr  |-> b_pre)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
@@ -282,14 +224,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) ,
 .
 
 Definition array_concat_safety_wit_2 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 (i + 1 ) )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 (i + 1 ) )
   **  (IntArray.undef_seg ret_pre (i + 1 ) (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -305,14 +241,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_safety_wit_3 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |-> i)
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "ret" ) )) # Ptr  |-> ret_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  ((( &( "b" ) )) # Ptr  |-> b_pre)
@@ -328,14 +258,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_safety_wit_4 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < m_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= m_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |-> i)
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < m_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= m_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "ret" ) )) # Ptr  |-> ret_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  ((( &( "b" ) )) # Ptr  |-> b_pre)
@@ -351,14 +275,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_safety_wit_5 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < m_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= m_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 ((n_pre + i ) + 1 ) )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < m_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= m_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 ((n_pre + i ) + 1 ) )
   **  (IntArray.undef_seg ret_pre ((n_pre + i ) + 1 ) (n_pre + m_pre ) )
   **  (IntArray.full_shape b_pre m_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -374,11 +292,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_entail_wit_1 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (0 <= m_pre)) (PreH3 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre m_pre )
   **  (IntArray.undef_full ret_pre (n_pre + m_pre ) )
 |--
@@ -394,14 +309,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) ,
 .
 
 Definition array_concat_entail_wit_2 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 (i + 1 ) )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 (i + 1 ) )
   **  (IntArray.undef_seg ret_pre (i + 1 ) (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre m_pre )
@@ -418,14 +327,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_entail_wit_3 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 i )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 i )
   **  (IntArray.undef_seg ret_pre i (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre m_pre )
@@ -442,14 +345,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_entail_wit_4 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < m_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= m_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 ((n_pre + i ) + 1 ) )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < m_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= m_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 ((n_pre + i ) + 1 ) )
   **  (IntArray.undef_seg ret_pre ((n_pre + i ) + 1 ) (n_pre + m_pre ) )
   **  (IntArray.full_shape b_pre m_pre )
   **  (IntArray.full_shape a_pre n_pre )
@@ -466,14 +363,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_return_wit_1 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i >= m_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= m_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 (n_pre + i ) )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i >= m_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= m_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 (n_pre + i ) )
   **  (IntArray.undef_seg ret_pre (n_pre + i ) (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre m_pre )
@@ -484,14 +375,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_partial_solve_wit_1 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 i )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 i )
   **  (IntArray.undef_seg ret_pre i (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre m_pre )
@@ -511,14 +396,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_partial_solve_wit_2 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.seg_shape ret_pre 0 i )
   **  (IntArray.undef_seg ret_pre i (n_pre + m_pre ) )
   **  (IntArray.full_shape b_pre m_pre )
@@ -537,14 +416,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_partial_solve_wit_3 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < m_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= m_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.seg_shape ret_pre 0 (n_pre + i ) )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < m_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= m_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.seg_shape ret_pre 0 (n_pre + i ) )
   **  (IntArray.undef_seg ret_pre (n_pre + i ) (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre m_pre )
@@ -564,14 +437,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_concat_partial_solve_wit_4 := 
-forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < m_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= m_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (0 <= m_pre) ” 
-  &&  “ ((n_pre + m_pre ) < INT_MAX) ”
-  &&  (IntArray.full_shape b_pre m_pre )
+forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < m_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= m_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (0 <= m_pre)) (PreH6 : ((n_pre + m_pre ) < INT_MAX)) ,
+  (IntArray.full_shape b_pre m_pre )
   **  (IntArray.seg_shape ret_pre 0 (n_pre + i ) )
   **  (IntArray.undef_seg ret_pre (n_pre + i ) (n_pre + m_pre ) )
   **  (IntArray.full_shape a_pre n_pre )
@@ -592,10 +459,8 @@ forall (m_pre: Z) (b_pre: Z) (n_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 (*----- Function array_swap -----*)
 
 Definition array_swap_safety_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "b" ) )) # Ptr  |-> b_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -607,13 +472,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_swap_safety_wit_2 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape b_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape b_pre n_pre )
   **  (IntArray.full_shape a_pre n_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -625,10 +485,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_swap_entail_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre n_pre )
 |--
   “ (0 <= 0) ” 
@@ -640,13 +498,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_swap_entail_wit_2 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape b_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape b_pre n_pre )
   **  (IntArray.full_shape a_pre n_pre )
 |--
   “ (0 <= (i + 1 )) ” 
@@ -658,13 +511,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_swap_return_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre n_pre )
 |--
   (IntArray.full_shape a_pre n_pre )
@@ -672,13 +520,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_swap_partial_solve_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre n_pre )
 |--
   EX (x: Z) ,
@@ -693,13 +536,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_swap_partial_solve_wit_2 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre n_pre )
 |--
   EX (x: Z) ,
@@ -714,13 +552,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_swap_partial_solve_wit_3 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape b_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape b_pre n_pre )
   **  (IntArray.full_shape a_pre n_pre )
 |--
   “ (i < n_pre) ” 
@@ -734,13 +567,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_swap_partial_solve_wit_4 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  (IntArray.full_shape b_pre n_pre )
 |--
   “ (i < n_pre) ” 
@@ -756,10 +584,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 (*----- Function array_vector_sum -----*)
 
 Definition array_vector_sum_safety_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "b" ) )) # Ptr  |-> b_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -773,13 +599,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) ,
 .
 
 Definition array_vector_sum_safety_wit_2 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape ret_pre 0 (i + 1 ) )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape ret_pre 0 (i + 1 ) )
   **  (UIntArray.undef_seg ret_pre (i + 1 ) n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
@@ -794,10 +615,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_vector_sum_entail_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.undef_full ret_pre n_pre )
 |--
@@ -812,13 +631,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) ,
 .
 
 Definition array_vector_sum_entail_wit_2 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape ret_pre 0 (i + 1 ) )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape ret_pre 0 (i + 1 ) )
   **  (UIntArray.undef_seg ret_pre (i + 1 ) n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
@@ -834,13 +648,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_vector_sum_return_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape ret_pre 0 i )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape ret_pre 0 i )
   **  (UIntArray.undef_seg ret_pre i n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
@@ -851,13 +660,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_vector_sum_partial_solve_wit_1 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape ret_pre 0 i )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape ret_pre 0 i )
   **  (UIntArray.undef_seg ret_pre i n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
@@ -876,13 +680,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_vector_sum_partial_solve_wit_2 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.seg_shape ret_pre 0 i )
   **  (UIntArray.undef_seg ret_pre i n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
@@ -901,13 +700,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 .
 
 Definition array_vector_sum_partial_solve_wit_3 := 
-forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape b_pre n_pre )
+forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.seg_shape ret_pre 0 i )
   **  (UIntArray.undef_seg ret_pre i n_pre )
@@ -927,10 +721,8 @@ forall (n_pre: Z) (b_pre: Z) (a_pre: Z) (ret_pre: Z) (i: Z) ,
 (*----- Function pointwise_mul -----*)
 
 Definition pointwise_mul_safety_wit_1 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "b" ) )) # Ptr  |-> b_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
@@ -944,13 +736,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) ,
 .
 
 Definition pointwise_mul_safety_wit_2 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape c_pre 0 (i + 1 ) )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape c_pre 0 (i + 1 ) )
   **  (UIntArray.undef_seg c_pre (i + 1 ) n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
@@ -965,10 +752,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition pointwise_mul_entail_wit_1 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.undef_full c_pre n_pre )
 |--
@@ -983,13 +768,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) ,
 .
 
 Definition pointwise_mul_entail_wit_2 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape c_pre 0 (i + 1 ) )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape c_pre 0 (i + 1 ) )
   **  (UIntArray.undef_seg c_pre (i + 1 ) n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
@@ -1005,13 +785,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition pointwise_mul_return_wit_1 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape c_pre 0 i )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape c_pre 0 i )
   **  (UIntArray.undef_seg c_pre i n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
@@ -1022,13 +797,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition pointwise_mul_partial_solve_wit_1 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.seg_shape c_pre 0 i )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.seg_shape c_pre 0 i )
   **  (UIntArray.undef_seg c_pre i n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
@@ -1047,13 +817,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition pointwise_mul_partial_solve_wit_2 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.seg_shape c_pre 0 i )
   **  (UIntArray.undef_seg c_pre i n_pre )
   **  (UIntArray.full_shape b_pre n_pre )
@@ -1072,13 +837,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition pointwise_mul_partial_solve_wit_3 := 
-forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (UIntArray.full_shape b_pre n_pre )
+forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (UIntArray.full_shape b_pre n_pre )
   **  (UIntArray.full_shape a_pre n_pre )
   **  (UIntArray.seg_shape c_pre 0 i )
   **  (UIntArray.undef_seg c_pre i n_pre )
@@ -1098,10 +858,8 @@ forall (n_pre: Z) (c_pre: Z) (b_pre: Z) (a_pre: Z) (i: Z) ,
 (*----- Function array_max -----*)
 
 Definition array_max_safety_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "max" ) )) # Int  |->_)
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "max" ) )) # Int  |->_)
   **  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -1111,10 +869,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_max_safety_wit_2 := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "max" ) )) # Int  |->_)
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "max" ) )) # Int  |->_)
   **  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -1125,10 +881,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_max_safety_wit_3 := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "max" ) )) # Int  |-> (-1))
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "max" ) )) # Int  |-> (-1))
   **  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -1139,32 +893,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_max_safety_wit_4 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
-  “ (x <= v) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
-  **  ((( &( "max" ) )) # Int  |-> v)
-  **  ((( &( "i" ) )) # Int  |-> i)
-  **  ((( &( "a" ) )) # Ptr  |-> a_pre)
-  **  ((( &( "n" ) )) # Int  |-> n_pre)
-|--
-  “ ((i + 1 ) <= INT_MAX) ” 
-  &&  “ ((INT_MIN) <= (i + 1 )) ”
-.
-
-Definition array_max_safety_wit_5 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (x_2: Z) ,
-  “ (x > v) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (x_2: Z) (PreH1 : (x > v)) (PreH2 : (i < n_pre)) (PreH3 : (0 <= i)) (PreH4 : (i <= n_pre)) (PreH5 : (0 <= n_pre)) (PreH6 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  ((( &( "max" ) )) # Int  |-> x_2)
   **  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -1174,11 +904,21 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (x_2: Z) ,
   &&  “ ((INT_MIN) <= (i + 1 )) ”
 .
 
+Definition array_max_safety_wit_5 := 
+forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (PreH1 : (x <= v)) (PreH2 : (i < n_pre)) (PreH3 : (0 <= i)) (PreH4 : (i <= n_pre)) (PreH5 : (0 <= n_pre)) (PreH6 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
+  **  ((( &( "max" ) )) # Int  |-> v)
+  **  ((( &( "i" ) )) # Int  |-> i)
+  **  ((( &( "a" ) )) # Ptr  |-> a_pre)
+  **  ((( &( "n" ) )) # Int  |-> n_pre)
+|--
+  “ ((i + 1 ) <= INT_MAX) ” 
+  &&  “ ((INT_MIN) <= (i + 1 )) ”
+.
+
 Definition array_max_entail_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   “ (0 <= 0) ” 
   &&  “ (0 <= n_pre) ” 
@@ -1188,14 +928,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_max_entail_wit_2_1 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
-  “ (x > v) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (PreH1 : (x > v)) (PreH2 : (i < n_pre)) (PreH3 : (0 <= i)) (PreH4 : (i <= n_pre)) (PreH5 : (0 <= n_pre)) (PreH6 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   “ (0 <= (i + 1 )) ” 
   &&  “ ((i + 1 ) <= n_pre) ” 
@@ -1205,14 +939,8 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
 .
 
 Definition array_max_entail_wit_2_2 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
-  “ (x <= v) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (PreH1 : (x <= v)) (PreH2 : (i < n_pre)) (PreH3 : (0 <= i)) (PreH4 : (i <= n_pre)) (PreH5 : (0 <= n_pre)) (PreH6 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   “ (0 <= (i + 1 )) ” 
   &&  “ ((i + 1 ) <= n_pre) ” 
@@ -1222,25 +950,15 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
 .
 
 Definition array_max_return_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   (IntArray.full_shape a_pre n_pre )
 .
 
 Definition array_max_partial_solve_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   EX (x: Z) ,
   “ (i < n_pre) ” 
@@ -1253,14 +971,8 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition array_max_partial_solve_wit_2 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
-  “ (x > v) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) (PreH1 : (x > v)) (PreH2 : (i < n_pre)) (PreH3 : (0 <= i)) (PreH4 : (i <= n_pre)) (PreH5 : (0 <= n_pre)) (PreH6 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   EX (x_2: Z) ,
   “ (x > v) ” 
@@ -1276,10 +988,8 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) (v: Z) (x: Z) ,
 (*----- Function memset -----*)
 
 Definition memset_safety_wit_1 := 
-forall (value_pre: Z) (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (value_pre: Z) (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "value" ) )) # Int  |-> value_pre)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -1290,13 +1000,8 @@ forall (value_pre: Z) (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition memset_safety_wit_2 := 
-forall (value_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape a_pre 0 (i + 1 ) )
+forall (value_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape a_pre 0 (i + 1 ) )
   **  (IntArray.undef_seg a_pre (i + 1 ) n_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -1308,10 +1013,8 @@ forall (value_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition memset_entail_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.undef_full a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (IntArray.undef_full a_pre n_pre )
 |--
   “ (0 <= 0) ” 
   &&  “ (0 <= n_pre) ” 
@@ -1322,13 +1025,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition memset_entail_wit_2 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape a_pre 0 (i + 1 ) )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape a_pre 0 (i + 1 ) )
   **  (IntArray.undef_seg a_pre (i + 1 ) n_pre )
 |--
   “ (0 <= (i + 1 )) ” 
@@ -1340,26 +1038,16 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition memset_return_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape a_pre 0 i )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape a_pre 0 i )
   **  (IntArray.undef_seg a_pre i n_pre )
 |--
   (IntArray.full_shape a_pre n_pre )
 .
 
 Definition memset_partial_solve_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.seg_shape a_pre 0 i )
+forall (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (IntArray.seg_shape a_pre 0 i )
   **  (IntArray.undef_seg a_pre i n_pre )
 |--
   “ (i < n_pre) ” 
@@ -1375,10 +1063,8 @@ forall (n_pre: Z) (a_pre: Z) (i: Z) ,
 (*----- Function array_to_list -----*)
 
 Definition array_to_list_safety_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "head" ) )) # Ptr  |->_)
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "head" ) )) # Ptr  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  (IntArray.full_shape a_pre n_pre )
@@ -1388,12 +1074,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_to_list_safety_wit_2 := 
-forall (n_pre: Z) (a_pre: Z) (retval_next: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (n_pre: Z) (a_pre: Z) (retval_next: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (0 <= n_pre)) (PreH4 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "tail" ) )) # Ptr  |-> retval)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
@@ -1407,17 +1089,8 @@ forall (n_pre: Z) (a_pre: Z) (retval_next: Z) (retval: Z) ,
 .
 
 Definition array_to_list_safety_wit_3 := 
-forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (retval_next: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (head <> 0) ” 
-  &&  “ (tail <> 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x)
+forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (retval_next: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (i < n_pre)) (PreH4 : (0 <= i)) (PreH5 : (i <= n_pre)) (PreH6 : (head <> 0)) (PreH7 : (tail <> 0)) (PreH8 : (0 <= n_pre)) (PreH9 : (n_pre < INT_MAX)) ,
+  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x)
   **  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
   **  (IntArray.full_shape a_pre n_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -1434,12 +1107,8 @@ forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (retval_ne
 .
 
 Definition array_to_list_entail_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) (retval_next: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> 0)
+forall (n_pre: Z) (a_pre: Z) (retval_next: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (0 <= n_pre)) (PreH4 : (n_pre < INT_MAX)) ,
+  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
   **  (IntArray.full_shape a_pre n_pre )
 |--
@@ -1457,17 +1126,8 @@ forall (n_pre: Z) (a_pre: Z) (retval_next: Z) (retval: Z) ,
 .
 
 Definition array_to_list_entail_wit_2 := 
-forall (n_pre: Z) (a_pre: Z) (v_2: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (retval_next: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (head <> 0) ” 
-  &&  “ (tail <> 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x)
+forall (n_pre: Z) (a_pre: Z) (v_2: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (retval_next: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (i < n_pre)) (PreH4 : (0 <= i)) (PreH5 : (i <= n_pre)) (PreH6 : (head <> 0)) (PreH7 : (tail <> 0)) (PreH8 : (0 <= n_pre)) (PreH9 : (n_pre < INT_MAX)) ,
+  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x)
   **  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
   **  (IntArray.full_shape a_pre n_pre )
   **  ((&((tail)  # "list" ->ₛ "data")) # Int  |-> v_2)
@@ -1488,15 +1148,8 @@ forall (n_pre: Z) (a_pre: Z) (v_2: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (retval_
 .
 
 Definition array_to_list_return_wit_1 := 
-forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (head <> 0) ” 
-  &&  “ (tail <> 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((&((tail)  # "list" ->ₛ "data")) # Int  |-> v)
+forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (head <> 0)) (PreH5 : (tail <> 0)) (PreH6 : (0 <= n_pre)) (PreH7 : (n_pre < INT_MAX)) ,
+  ((&((tail)  # "list" ->ₛ "data")) # Int  |-> v)
   **  ((&((tail)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  (lseg head tail )
   **  (IntArray.full_shape a_pre n_pre )
@@ -1506,10 +1159,8 @@ forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) ,
 .
 
 Definition array_to_list_partial_solve_wit_1_pure := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "head" ) )) # Ptr  |->_)
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "head" ) )) # Ptr  |->_)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
   **  (IntArray.full_shape a_pre n_pre )
@@ -1518,10 +1169,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition array_to_list_partial_solve_wit_1_aux := 
-forall (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
 |--
   “ (0 = 0) ” 
   &&  “ (0 <= n_pre) ” 
@@ -1532,15 +1181,8 @@ forall (n_pre: Z) (a_pre: Z) ,
 Definition array_to_list_partial_solve_wit_1 := array_to_list_partial_solve_wit_1_pure -> array_to_list_partial_solve_wit_1_aux.
 
 Definition array_to_list_partial_solve_wit_2 := 
-forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (head <> 0) ” 
-  &&  “ (tail <> 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((&((tail)  # "list" ->ₛ "data")) # Int  |-> v)
+forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (head <> 0)) (PreH5 : (tail <> 0)) (PreH6 : (0 <= n_pre)) (PreH7 : (n_pre < INT_MAX)) ,
+  ((&((tail)  # "list" ->ₛ "data")) # Int  |-> v)
   **  ((&((tail)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  (lseg head tail )
   **  (IntArray.full_shape a_pre n_pre )
@@ -1561,15 +1203,8 @@ forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) ,
 .
 
 Definition array_to_list_partial_solve_wit_3_pure := 
-forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (head <> 0) ” 
-  &&  “ (tail <> 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (head <> 0)) (PreH5 : (tail <> 0)) (PreH6 : (0 <= n_pre)) (PreH7 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  ((( &( "node" ) )) # Ptr  |->_)
   **  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "head" ) )) # Ptr  |-> head)
@@ -1584,15 +1219,8 @@ forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) ,
 .
 
 Definition array_to_list_partial_solve_wit_3_aux := 
-forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (head <> 0) ” 
-  &&  “ (tail <> 0) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (IntArray.full_shape a_pre n_pre )
+forall (n_pre: Z) (a_pre: Z) (v: Z) (tail: Z) (head: Z) (i: Z) (x: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (head <> 0)) (PreH5 : (tail <> 0)) (PreH6 : (0 <= n_pre)) (PreH7 : (n_pre < INT_MAX)) ,
+  (IntArray.full_shape a_pre n_pre )
   **  ((&((tail)  # "list" ->ₛ "data")) # Int  |-> v)
   **  ((&((tail)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  (lseg head tail )

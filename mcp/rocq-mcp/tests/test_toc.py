@@ -15,7 +15,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from rocq_mcp.server import _format_toc_elements, run_toc
+from rocq_mcp.interactive import _format_toc_elements, run_toc
+from tests.conftest import make_lifespan_state
 
 # ---------------------------------------------------------------------------
 # Helpers to build mock TocElement-like objects
@@ -165,7 +166,7 @@ class TestTocPathTraversal:
 
     def test_absolute_path_rejected(self, tmp_path):
         """An absolute file path outside workspace is rejected."""
-        lifespan_state = {"pet_timeout": 10}
+        lifespan_state = make_lifespan_state(pet_timeout=10)
         result = asyncio.run(
             run_toc(
                 file="/etc/passwd",
@@ -178,7 +179,7 @@ class TestTocPathTraversal:
 
     def test_dotdot_traversal_rejected(self, tmp_path):
         """A ../ traversal outside workspace is rejected."""
-        lifespan_state = {"pet_timeout": 10}
+        lifespan_state = make_lifespan_state(pet_timeout=10)
         result = asyncio.run(
             run_toc(
                 file="../../etc/passwd",
@@ -188,3 +189,37 @@ class TestTocPathTraversal:
         )
         assert result["success"] is False
         assert "workspace" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# MCP wrapper tests for the ``timeout=`` clamp.
+# ---------------------------------------------------------------------------
+
+
+class TestRocqTocTimeout:
+    """timeout on the rocq_toc MCP wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_above_cap_clamped_with_signal(self, monkeypatch, tmp_path):
+        from rocq_mcp.server import rocq_toc
+        from tests.conftest import _MockContext
+        import rocq_mcp.server as _server
+
+        captured: dict = {}
+
+        async def mock_run_toc(**kwargs):
+            captured.update(kwargs)
+            return {"success": True, "output": "mock"}
+
+        monkeypatch.setattr(_server, "run_toc", mock_run_toc)
+        monkeypatch.setattr(_server, "_validate_workspace", lambda ws: None)
+
+        result = await rocq_toc(
+            file="proof.v",
+            workspace=str(tmp_path),
+            timeout=5000,
+            ctx=_MockContext({"pet_client": None}),
+        )
+
+        assert result["clamped_timeout"] == _server.ROCQ_QUERY_TIMEOUT_CAP
+        assert captured["timeout"] == float(_server.ROCQ_QUERY_TIMEOUT_CAP)

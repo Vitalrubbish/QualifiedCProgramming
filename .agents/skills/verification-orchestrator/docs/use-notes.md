@@ -12,6 +12,7 @@
   - 只允许 `vc-proving-subagent` 通过 `vc-proving` 脚本创建 worker-local manual / `worker_helper_scratch_lib` 后使用。
   - `vc-proving` 默认走脚本化并发 worker pipeline；若已记录 Codex CLI / transport / backend / worker 会话不可恢复，则允许保持 `vc-proving-subagent` 为 owner，回退到 proving scratch 上的串行 fallback。
 - symexec、正式文件的 coqc、`Admitted` / 额外 `Axiom` review 仍由主 agent 独占。`vc-proving` worker / subagent 可以在自己的 worker-local manual、组内 `worker_helper_scratch_lib`、proving scratch 和 `task_local_scratch_lib` 上运行生成的 `coqc` 命令作为证明反馈与验证 gate；如果 `rocq-mcp` 启动或调用失败但 `coqc` 可用，应记录 MCP 失败并继续用 `coqc` 推进证明，而不是把它当作 proof blocker。
+- `QCP_examples/LLM_bench` case 若复用 `QCP_demos_LLM` 公共头文件，源码统一写裸 include（例如 `#include "verification_stdlib.h"` / `#include "verification_list.h"` / `#include "int_array_def.h"`）。正式 symexec 和 annotation scratch 上的 `qcp-mcp` 都必须在 C include search path 中加入 `QCP_examples/QCP_demos_LLM/`；symexec 命令还必须同时保留 `-slp QCP_examples/QCP_demos_LLM/ SimpleC.EE.QCP_demos_LLM`，因为 `-I` 只负责 C 头文件查找，`-slp` 负责 strategy / generated Coq logical path。
 - `final-check` phase 也由主 agent 直接执行，不再创建 subagent。
 - 当前仓库只承认 3 个固定命名的 phase subagent：
   - `annotation-subagent`
@@ -44,6 +45,7 @@
 - 每次 symexec 刷新出新的正式 `*_proof_manual.v` 后，旧 proving scratch 必须删除并重建。
 - 所有 domain skill 都必须把 phase 切换、stale 标记和最终去向交回 orchestrator 统一记录。
 - Timing 记录必须同时覆盖命令和非命令 wall-clock activity。主 agent 需要为人工分析、等待 subagent、正式文件回填/合并、annotation/proof 修改、helper lemma / 冗余 lemma 清理、Makefile/依赖维护、final review/cleanup 开闭计时；subagent report 也要提供自己内部的分析/编辑/等待/fallback activity 耗时。最终报告要区分 `total_command_seconds`、`total_human_activity_seconds`、`total_subagent_wait_seconds` 和 timing gaps。
+- 所有非命令 activity 都必须采用 start/end ledger，而不是事后估算。主 agent 启动 subagent 时记录 `subagent-launch-requested` / `subagent-spawn-returned`，subagent 第一条记录必须是 `subagent-start`，返回后主 agent 再记录 `subagent-finished-observed` 和 close 开销。vc-proving 的每个 witness/helper 必须进一步拆成 proof-state reduction、空间证明生成、pure 证明生成、helper 设计/证明、proof script edit、coqc run、coqc feedback analysis 等事件。
 
 编排层默认遵守三句话：
 

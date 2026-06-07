@@ -1,4 +1,4 @@
-#include "string_def.h"
+#include "string.h"
 
 char *memcpy(char *dest, char *src, int n)
 /*@ With bytes

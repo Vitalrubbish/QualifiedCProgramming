@@ -1,8 +1,4 @@
-#include "string_def.h"
-
-/*@ Import Coq Require Import SimpleC.EE.LLM_bench.Engineering.string.strcpy_lib */
-
-/*@ Extern Coq (strncpy_content : list Z -> Z -> list Z -> Prop) */
+#include "string.h"
 
 char *strcpy(char *dest, char *src)
 /*@ With src_str

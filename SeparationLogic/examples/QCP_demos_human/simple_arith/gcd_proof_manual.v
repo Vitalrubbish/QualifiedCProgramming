@@ -20,8 +20,7 @@ Local Open Scope sac.
 
 Lemma proof_of_gcd_return_wit_2 : gcd_return_wit_2.
 Proof.
-  unfold gcd_return_wit_2.
-  intros.
+  pre_process.
   entailer!.
   subst.
   rewrite Z.gcd_0_r.
@@ -30,8 +29,7 @@ Qed.
 
 Lemma proof_of_gcd_return_wit_1 : gcd_return_wit_1.
 Proof.
-  unfold gcd_return_wit_1.
-  intros.
+  pre_process.
   entailer!.
   subst.
   pose proof Z.gcd_rem x_pre y_pre ltac:(lia).
@@ -44,8 +42,8 @@ Proof.
   pre_process.
   prop_apply (store_int_range  (&("y")) y_pre).
   Intros. 
-  change (Int.min_signed) with (-2147483648) in H3.
-  change (Int.max_signed) with (2147483647) in H3.
+  change (Int.min_signed) with (-2147483648) in H.
+  change (Int.max_signed) with (2147483647) in H.
   pose proof Z.rem_bound_pos_pos x_pre y_pre.
   pose proof Z.rem_bound_neg_pos x_pre y_pre.
   pose proof Z.rem_bound_pos_neg x_pre y_pre.

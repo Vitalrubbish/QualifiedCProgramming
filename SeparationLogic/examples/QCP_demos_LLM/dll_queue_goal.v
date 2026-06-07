@@ -24,9 +24,8 @@ From SimpleC.EE.QCP_demos_LLM Require Import dll_queue_strategy_proof.
 (*----- Function enqueue -----*)
 
 Definition enqueue_safety_wit_1 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
-  “ (retval <> 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) (PreH1 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
   **  ((( &( "p" ) )) # Ptr  |-> retval)
@@ -41,10 +40,8 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
 .
 
 Definition enqueue_safety_wit_2 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
-  “ (qhead = 0) ” 
-  &&  “ (retval <> 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) (PreH1 : (qhead = 0)) (PreH2 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
   **  ((( &( "p" ) )) # Ptr  |-> retval)
@@ -59,10 +56,8 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
 .
 
 Definition enqueue_safety_wit_3 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
-  “ (qhead = 0) ” 
-  &&  “ (retval <> 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) (PreH1 : (qhead = 0)) (PreH2 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
   **  ((( &( "p" ) )) # Ptr  |-> retval)
@@ -77,13 +72,8 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
 .
 
 Definition enqueue_safety_wit_4 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: Z) (qhead: Z) (qtailnext: Z) (qtailprev: Z) (p: Z) ,
-  “ (p <> 0) ” 
-  &&  “ (qtail <> 0) ” 
-  &&  “ (qhead <> 0) ” 
-  &&  “ (l = (app (l0) ((cons (qtailv) (nil))))) ” 
-  &&  “ (qtailnext = 0) ”
-  &&  ((( &( "x" ) )) # Int  |-> x_pre)
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: Z) (qhead: Z) (qtailnext: Z) (qtailprev: Z) (p: Z) (PreH1 : (p <> 0)) (PreH2 : (qtail <> 0)) (PreH3 : (qhead <> 0)) (PreH4 : (l = (app (l0) ((cons (qtailv) ((@nil Z))))))) (PreH5 : (qtailnext = 0)) ,
+  ((( &( "x" ) )) # Int  |-> x_pre)
   **  ((( &( "q" ) )) # Ptr  |-> q_pre)
   **  ((( &( "p" ) )) # Ptr  |-> p)
   **  (dllseg qhead qtail 0 qtailprev l0 )
@@ -101,6 +91,7 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: 
 .
 
 Definition enqueue_entail_wit_1 := 
+(
 forall (q_pre: Z) (l: (@list Z)) ,
   (store_queue q_pre l )
 |--
@@ -108,13 +99,21 @@ forall (q_pre: Z) (l: (@list Z)) ,
   (dllseg qhead 0 0 qtail l )
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
-.
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) ,
+  (store_queue q_pre l )
+|--
+  EX (qhead: Z)  (qtail: Z) ,
+  (dllseg qhead 0 0 qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
+).
 
 Definition enqueue_entail_wit_2 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead_2: Z) (qtail_2: Z) (retval: Z) ,
-  “ (qhead_2 <> 0) ” 
-  &&  “ (retval <> 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead_2: Z) (qtail_2: Z) (retval: Z) (PreH1 : (qhead_2 <> 0)) (PreH2 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
   **  (dllseg qhead_2 0 0 qtail_2 l )
@@ -125,7 +124,7 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead_2: Z) (qtail_2: Z) (retval: Z
   “ (retval <> 0) ” 
   &&  “ (qtail <> 0) ” 
   &&  “ (qhead <> 0) ” 
-  &&  “ (l = (app (l0) ((cons (qtailv) (nil))))) ” 
+  &&  “ (l = (app (l0) ((cons (qtailv) ((@nil Z)))))) ” 
   &&  “ (qtailnext = 0) ”
   &&  (dllseg qhead qtail 0 qtailprev l0 )
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
@@ -136,30 +135,62 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead_2: Z) (qtail_2: Z) (retval: Z
   **  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
-.
+) \/
+(
+forall (l: (@list Z)) (qhead_2: Z) (qtail_2: Z) (retval: Z) (PreH1 : (qhead_2 <> 0)) (PreH2 : (retval <> 0)) ,
+  (dllseg qhead_2 0 0 qtail_2 l )
+|--
+  EX (qtailprev: Z)  (l0: (@list Z))  (qtailv: Z) ,
+  “ (retval <> 0) ” 
+  &&  “ (qtail_2 <> 0) ” 
+  &&  “ (qhead_2 <> 0) ” 
+  &&  “ (l = (app (l0) ((cons (qtailv) ((@nil Z)))))) ”
+  &&  (dllseg qhead_2 qtail_2 0 qtailprev l0 )
+  **  ((&((qtail_2)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+  **  ((&((qtail_2)  # "list" ->ₛ "prev")) # Ptr  |-> qtailprev)
+  **  ((&((qtail_2)  # "list" ->ₛ "data")) # Int  |-> qtailv)
+).
 
 Definition enqueue_return_wit_1 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) ,
-  “ (qhead = 0) ” 
-  &&  “ (retval <> 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) (PreH1 : (qhead = 0)) (PreH2 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
   **  (dllseg qhead 0 0 qtail l )
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> retval)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval)
 |--
-  (store_queue q_pre (app (l) ((cons (x_pre) (nil)))) )
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+) \/
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (x_pre >= INT_MIN)) (PreH3 : (qhead = 0)) (PreH4 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+  **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
+  **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+  **  (dllseg qhead 0 0 qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> retval)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval)
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+).
+
+Definition enqueue_return_wit_1_split_goal_spatial := 
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (retval: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (x_pre >= INT_MIN)) (PreH3 : (qhead = 0)) (PreH4 : (retval <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+  **  ((&((retval)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
+  **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+  **  (dllseg qhead 0 0 qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> retval)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval)
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
 .
 
 Definition enqueue_return_wit_2 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: Z) (qhead: Z) (qtailnext: Z) (qtailprev: Z) (p: Z) ,
-  “ (p <> 0) ” 
-  &&  “ (qtail <> 0) ” 
-  &&  “ (qhead <> 0) ” 
-  &&  “ (l = (app (l0) ((cons (qtailv) (nil))))) ” 
-  &&  “ (qtailnext = 0) ”
-  &&  (dllseg qhead qtail 0 qtailprev l0 )
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: Z) (qhead: Z) (qtailnext: Z) (qtailprev: Z) (p: Z) (PreH1 : (p <> 0)) (PreH2 : (qtail <> 0)) (PreH3 : (qhead <> 0)) (PreH4 : (l = (app (l0) ((cons (qtailv) ((@nil Z))))))) (PreH5 : (qtailnext = 0)) ,
+  (dllseg qhead qtail 0 qtailprev l0 )
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> p)
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
   **  ((&((qtail)  # "list" ->ₛ "next")) # Ptr  |-> p)
@@ -169,7 +200,36 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: 
   **  ((&((p)  # "list" ->ₛ "prev")) # Ptr  |-> qtail)
   **  ((&((p)  # "list" ->ₛ "data")) # Int  |-> x_pre)
 |--
-  (store_queue q_pre (app (l) ((cons (x_pre) (nil)))) )
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+) \/
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: Z) (qhead: Z) (qtailnext: Z) (qtailprev: Z) (p: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (qtailv <= INT_MAX)) (PreH3 : (x_pre >= INT_MIN)) (PreH4 : (qtailv >= INT_MIN)) (PreH5 : (p <> 0)) (PreH6 : (qtail <> 0)) (PreH7 : (qhead <> 0)) (PreH8 : (l = (app (l0) ((cons (qtailv) ((@nil Z))))))) (PreH9 : (qtailnext = 0)) ,
+  (dllseg qhead qtail 0 qtailprev l0 )
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> p)
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
+  **  ((&((qtail)  # "list" ->ₛ "next")) # Ptr  |-> p)
+  **  ((&((qtail)  # "list" ->ₛ "prev")) # Ptr  |-> qtailprev)
+  **  ((&((qtail)  # "list" ->ₛ "data")) # Int  |-> qtailv)
+  **  ((&((p)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+  **  ((&((p)  # "list" ->ₛ "prev")) # Ptr  |-> qtail)
+  **  ((&((p)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+).
+
+Definition enqueue_return_wit_2_split_goal_spatial := 
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (l0: (@list Z)) (qtailv: Z) (qtail: Z) (qhead: Z) (qtailnext: Z) (qtailprev: Z) (p: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (qtailv <= INT_MAX)) (PreH3 : (x_pre >= INT_MIN)) (PreH4 : (qtailv >= INT_MIN)) (PreH5 : (p <> 0)) (PreH6 : (qtail <> 0)) (PreH7 : (qhead <> 0)) (PreH8 : (l = (app (l0) ((cons (qtailv) ((@nil Z))))))) (PreH9 : (qtailnext = 0)) ,
+  (dllseg qhead qtail 0 qtailprev l0 )
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> p)
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
+  **  ((&((qtail)  # "list" ->ₛ "next")) # Ptr  |-> p)
+  **  ((&((qtail)  # "list" ->ₛ "prev")) # Ptr  |-> qtailprev)
+  **  ((&((qtail)  # "list" ->ₛ "data")) # Int  |-> qtailv)
+  **  ((&((p)  # "list" ->ₛ "next")) # Ptr  |-> 0)
+  **  ((&((p)  # "list" ->ₛ "prev")) # Ptr  |-> qtail)
+  **  ((&((p)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
 .
 
 Definition enqueue_partial_solve_wit_1 := 
@@ -186,14 +246,12 @@ forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) ,
 (*----- Function dequeue -----*)
 
 Definition dequeue_safety_wit_1 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qhead_prev: Z) (qhead_next: Z) ,
-  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev = 0) ”
-  &&  ((( &( "x0" ) )) # Int  |-> x)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qheadnext: Z) (PreH1 : (qhead <> 0)) ,
+  ((( &( "x0" ) )) # Int  |-> x)
   **  ((( &( "p" ) )) # Ptr  |-> qhead)
   **  ((( &( "q" ) )) # Ptr  |-> q_pre)
-  **  (dllseg qhead_next 0 qhead qtail l )
-  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next)
+  **  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
 |--
   “ (0 <= INT_MAX) ” 
@@ -201,15 +259,12 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qhead_prev: Z) (q
 .
 
 Definition dequeue_safety_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qhead_prev: Z) (qhead_next: Z) ,
-  “ (qhead_next = 0) ” 
-  &&  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev = 0) ”
-  &&  ((( &( "x0" ) )) # Int  |-> x)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qheadnext: Z) (PreH1 : (qheadnext = 0)) (PreH2 : (qhead <> 0)) ,
+  ((( &( "x0" ) )) # Int  |-> x)
   **  ((( &( "p" ) )) # Ptr  |-> qhead)
   **  ((( &( "q" ) )) # Ptr  |-> q_pre)
-  **  (dllseg qhead_next 0 qhead qtail l )
-  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next)
+  **  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
 |--
   “ (0 <= INT_MAX) ” 
@@ -217,17 +272,14 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qhead_prev: Z) (q
 .
 
 Definition dequeue_safety_wit_3 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (headv: Z) (l0: (@list Z)) (qhead_prev: Z) (p: Z) (qhead_next: Z) ,
-  “ (qhead <> 0) ” 
-  &&  “ (l = (cons (headv) (l0))) ” 
-  &&  “ (qhead_prev = p) ”
-  &&  ((( &( "q" ) )) # Ptr  |-> q_pre)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (headv: Z) (qheadnext: Z) (l0: (@list Z)) (p: Z) (PreH1 : (qhead <> 0)) (PreH2 : (l = (cons (headv) (l0)))) ,
+  ((( &( "q" ) )) # Ptr  |-> q_pre)
   **  ((( &( "x0" ) )) # Int  |-> x)
-  **  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> qhead_prev)
   **  ((( &( "p" ) )) # Ptr  |-> p)
+  **  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> p)
   **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> headv)
-  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next)
-  **  (dllseg qhead_next 0 qhead qtail l0 )
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l0 )
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
 |--
@@ -236,88 +288,143 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (headv: Z) (l0: (@
 .
 
 Definition dequeue_entail_wit_1 := 
+(
 forall (q_pre: Z) (l: (@list Z)) (x: Z) ,
   (store_queue q_pre (cons (x) (l)) )
 |--
-  EX (qhead_next: Z)  (qtail: Z)  (qhead_prev: Z)  (qhead: Z) ,
-  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev = 0) ”
-  &&  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> qhead_prev)
+  EX (qtail: Z)  (qheadnext: Z)  (qhead: Z) ,
+  “ (qhead <> 0) ”
+  &&  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> x)
-  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next)
-  **  (dllseg qhead_next 0 qhead qtail l )
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l )
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
-.
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) ,
+  (store_queue q_pre (cons (x) (l)) )
+|--
+  EX (qtail: Z)  (qheadnext: Z)  (qhead: Z) ,
+  “ (qhead <> 0) ”
+  &&  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
+  **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> x)
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
+).
 
 Definition dequeue_entail_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail_2: Z) (qhead_prev_2: Z) (qhead_next_2: Z) ,
-  “ (qhead_next_2 <> 0) ” 
-  &&  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev_2 = 0) ”
-  &&  (dllseg qhead_next_2 0 qhead qtail_2 l )
-  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next_2)
+(
+forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail_2: Z) (qheadnext_2: Z) (PreH1 : (qheadnext_2 <> 0)) (PreH2 : (qhead <> 0)) ,
+  (dllseg qheadnext_2 0 qhead qtail_2 l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext_2)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail_2)
 |--
-  EX (qhead_next: Z)  (qtail: Z)  (qhead_prev: Z)  (headv: Z)  (l0: (@list Z))  (qhead_2: Z) ,
+  EX (qtail: Z)  (qheadnext: Z)  (headv: Z)  (l0: (@list Z))  (qhead_2: Z) ,
   “ (qhead_2 <> 0) ” 
-  &&  “ (l = (cons (headv) (l0))) ” 
-  &&  “ (qhead_prev = qhead) ”
-  &&  ((&((qhead_2)  # "list" ->ₛ "prev")) # Ptr  |-> qhead_prev)
+  &&  “ (l = (cons (headv) (l0))) ”
+  &&  ((&((qhead_2)  # "list" ->ₛ "prev")) # Ptr  |-> qhead)
   **  ((&((qhead_2)  # "list" ->ₛ "data")) # Int  |-> headv)
-  **  ((&((qhead_2)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next)
-  **  (dllseg qhead_next 0 qhead_2 qtail l0 )
+  **  ((&((qhead_2)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead_2 qtail l0 )
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_2)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
-.
+) \/
+(
+forall (l: (@list Z)) (qhead: Z) (qtail_2: Z) (qheadnext_2: Z) (PreH1 : (qheadnext_2 <> 0)) (PreH2 : (qhead <> 0)) ,
+  (dllseg qheadnext_2 0 qhead qtail_2 l )
+|--
+  EX (qheadnext: Z)  (headv: Z)  (l0: (@list Z)) ,
+  “ (qheadnext_2 <> 0) ” 
+  &&  “ (l = (cons (headv) (l0))) ”
+  &&  ((&((qheadnext_2)  # "list" ->ₛ "prev")) # Ptr  |-> qhead)
+  **  ((&((qheadnext_2)  # "list" ->ₛ "data")) # Int  |-> headv)
+  **  ((&((qheadnext_2)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qheadnext_2 qtail_2 l0 )
+).
 
 Definition dequeue_return_wit_1 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qhead_prev: Z) (qhead_next: Z) ,
-  “ (qhead_next = 0) ” 
-  &&  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev = 0) ”
-  &&  (dllseg qhead_next 0 qhead qtail l )
-  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next)
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qheadnext: Z) (PreH1 : (qheadnext = 0)) (PreH2 : (qhead <> 0)) ,
+  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> 0)
 |--
   “ (x = x) ”
   &&  (store_queue q_pre l )
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (qheadnext: Z) (PreH1 : (qheadnext = 0)) (PreH2 : (qhead <> 0)) ,
+  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> 0)
+|--
+  (store_queue q_pre l )
+).
+
+Definition dequeue_return_wit_1_split_goal_spatial := 
+forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (qheadnext: Z) (PreH1 : (qheadnext = 0)) (PreH2 : (qhead <> 0)) ,
+  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> 0)
+|--
+  (store_queue q_pre l )
 .
 
 Definition dequeue_return_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (headv: Z) (l0: (@list Z)) (qhead_prev: Z) (p: Z) (qhead_next: Z) ,
-  “ (qhead <> 0) ” 
-  &&  “ (l = (cons (headv) (l0))) ” 
-  &&  “ (qhead_prev = p) ”
-  &&  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (headv: Z) (qheadnext: Z) (l0: (@list Z)) (PreH1 : (qhead <> 0)) (PreH2 : (l = (cons (headv) (l0)))) ,
+  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> headv)
-  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next)
-  **  (dllseg qhead_next 0 qhead qtail l0 )
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l0 )
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
 |--
   “ (x = x) ”
   &&  (store_queue q_pre l )
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (headv: Z) (qheadnext: Z) (l0: (@list Z)) (PreH1 : (headv <= INT_MAX)) (PreH2 : (headv >= INT_MIN)) (PreH3 : (qhead <> 0)) (PreH4 : (l = (cons (headv) (l0)))) ,
+  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
+  **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> headv)
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l0 )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
+|--
+  (store_queue q_pre l )
+).
+
+Definition dequeue_return_wit_2_split_goal_spatial := 
+forall (q_pre: Z) (l: (@list Z)) (qhead: Z) (qtail: Z) (headv: Z) (qheadnext: Z) (l0: (@list Z)) (PreH1 : (headv <= INT_MAX)) (PreH2 : (headv >= INT_MIN)) (PreH3 : (qhead <> 0)) (PreH4 : (l = (cons (headv) (l0)))) ,
+  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
+  **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> headv)
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l0 )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
+|--
+  (store_queue q_pre l )
 .
 
 Definition dequeue_partial_solve_wit_1 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qhead_prev: Z) (qhead_next: Z) ,
-  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev = 0) ”
-  &&  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> qhead_prev)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (qhead: Z) (qtail: Z) (qheadnext: Z) (PreH1 : (qhead <> 0)) ,
+  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> x)
-  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next)
-  **  (dllseg qhead_next 0 qhead qtail l )
-  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next)
+  **  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
 |--
-  “ (qhead <> 0) ” 
-  &&  “ (qhead_prev = 0) ”
-  &&  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next)
-  **  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> qhead_prev)
+  “ (qhead <> 0) ”
+  &&  ((&((qhead)  # "list" ->ₛ "next")) # Ptr  |-> qheadnext)
+  **  ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0)
   **  ((&((qhead)  # "list" ->ₛ "data")) # Int  |-> x)
-  **  (dllseg qhead_next 0 qhead qtail l )
-  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next)
+  **  (dllseg qheadnext 0 qhead qtail l )
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail)
 .
 

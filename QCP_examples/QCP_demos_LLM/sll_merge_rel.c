@@ -44,12 +44,14 @@ struct list *merge(struct list *x, struct list *y)
       break;
     }
     /*@ Assert
-      exists l1 l2 l3 l1_new l2_new,
+      exists l1 l2 l3 l1_new l2_new xdata ydata xnext ynext,
         safeExec(ATrue, merge_from_mid_rel(l1, l2, l3), X) &&
         x != 0 && y != 0 &&
-        l1 == cons(x->data, l1_new) &&
-        l2 == cons(y->data, l2_new) &&
-        sll(x->next, l1_new) * sll(y->next, l2_new) *
+        l1 == cons(xdata, l1_new) &&
+        l2 == cons(ydata, l2_new) &&
+        store(&(x->data), xdata) * store(&(y->data), ydata) *
+        store(&(x->next), xnext) * store(&(y->next), ynext) *
+        sll(xnext, l1_new) * sll(ynext, l2_new) *
         has_ptr_permission(t) * sllbseg(&ret, t, l3)
     */
     if (x->data < y->data) {
@@ -75,46 +77,54 @@ struct list *merge(struct list *x, struct list *y)
 
 void split_rec(struct list * x, struct list * * p, struct list * * q)
   /*@ high_level_spec <= low_level_spec
-      With l X
+      With l X pv qv
       Require safeExec(ATrue, split_rel(l), X) &&
-              sll(x, l) * sll(* p, nil) * sll(* q, nil)
-      Ensure exists s1 s2,
-              safeExec(ATrue, return(maketuple(s1, s2)), X) && 
-              sll(* p, s1) * sll(* q, s2)
+              store(p, pv) * store(q, qv) *
+              sll(x, l) * sll(pv, nil) * sll(qv, nil)
+      Ensure exists s1 s2 pv' qv',
+              safeExec(ATrue, return(maketuple(s1, s2)), X) &&
+              store(p, pv') * store(q, qv') * 
+              sll(pv', s1) * sll(qv', s2)
    */
 ;
 
 void split_rec(struct list * x, struct list * * p, struct list * * q)
   /*@ low_level_spec_aux <= low_level_spec
-      With {B} l l1 l2 (c : ((list Z) * (list Z)) -> program unit B) X
+      With {B} l l1 l2 (c : ((list Z) * (list Z)) -> program unit B) X pv qv
       Require safeExec(ATrue, bind(split_rec_rel(l, l1, l2), c), X) &&
-              sll(x, l) * sll(* p, l1) * sll(* q, l2)
-      Ensure exists s1 s2,
+              store(p, pv) * store(q, qv) *
+              sll(x, l) * sll(pv, l1) * sll(qv, l2)
+      Ensure exists s1 s2 pv' qv',
               safeExec(ATrue, applyf(c, maketuple(s1,s2)), X) &&
-              sll(* p, s1) * sll(* q, s2)
+              store(p, pv') * store(q, qv') *
+              sll(pv', s1) * sll(qv', s2)
    */
 ;
 
 void split_rec(struct list * x, struct list * * p, struct list * * q)
   /*@ low_level_spec
-      With l l1 l2 X
+      With l l1 l2 X pv qv
       Require safeExec(ATrue, split_rec_rel(l, l1, l2), X) &&
-              sll(x, l) * sll(* p, l1) * sll(* q, l2)
-      Ensure exists s1 s2,
+              store(p, pv) * store(q, qv) *
+              sll(x, l) * sll(pv, l1) * sll(qv, l2)
+      Ensure exists s1 s2 pv' qv',
               safeExec(ATrue, return(maketuple(s1, s2)), X) &&
-              sll(* p, s1) * sll(* q, s2)
+              store(p, pv') * store(q, qv') *
+              sll(pv', s1) * sll(qv', s2)
   */
 {
   if (x == (void *)0) {
     return;
   }
   /*@ Assert
-      exists l_new,
+      exists l_new x_data x_next,
         x == x@pre && p == p@pre && q == q@pre &&
         x != 0 &&
         safeExec(ATrue, split_rec_rel(l, l1, l2), X) &&
-        l == cons(x->data, l_new) &&
-        sll(x->next, l_new) * sll(* p, l1) * sll(* q, l2)
+        l == cons(x_data, l_new) &&
+        store(&(x->data), x_data) * store(&(x->next), x_next) *
+        store(p, pv) * store(q, qv) *
+        sll(x_next, l_new) * sll(pv, l1) * sll(qv, l2)
   */
   struct list * t;
   t = x -> next;
@@ -126,7 +136,8 @@ void split_rec(struct list * x, struct list * * p, struct list * * q)
         x != 0 &&
         safeExec(ATrue, bind(split_rec_rel(l_new, l2, cons(x_data, l1)), reversepair), X) &&
         l == cons(x_data, l_new) &&
-      sll(* p, cons(x_data, l1)) * sll(t, l_new) * sll(* q, l2)
+      store(p, x) * store(q, qv) *
+      sll(x, cons(x_data, l1)) * sll(t, l_new) * sll(qv, l2)
   */
   split_rec(t, q, p) /*@ where(low_level_spec_aux) l1 = l2, c = reversepair,  X = X; B = (list Z) * (list Z) */; 
 }
@@ -169,16 +180,26 @@ struct list * merge_sort(struct list * x)
   /*@ Assert
     x == x@pre && p == 0 && q == 0 && safeExec(ATrue, mergesortrec(l), X) && sll(p, nil) * sll(q, nil) * sll(x, l)
   */
-  /*@ safeExec(ATrue, bind(split_rel(l), mergesortrec_loc0), X) && emp */
+ /*@ Assert
+    x == x@pre && p == 0 && q == 0 && safeExec(ATrue, bind(split_rel(l), mergesortrec_loc0), X) && sll(p, nil) * sll(q, nil) * sll(x, l)
+  */
   split_rec(x, &p, &q) /*@ where(low_level_spec_aux) X = X, c = mergesortrec_loc0; B = (list Z) */;
   if (q == (void *)0) {
     return p;
   }
-  /*@ exists l1 l2, safeExec(ATrue, bind(mergesortrec(l1), mergesortrec_loc1(l2)), X) && sll(p, l1) * sll(q, l2)  */
+  /*@ Assert 
+    exists l1 l2, 
+    x == x@pre && q != 0 && 
+    safeExec(ATrue, bind(mergesortrec(l1), mergesortrec_loc1(l2)), X) && sll(p, l1) * sll(q, l2)  */
   p = merge_sort(p) /*@ where(low_level_spec_aux) X = X; B = (list Z) */;
-  /*@ exists l1 l2, safeExec(ATrue, bind(mergesortrec(l2), mergesortrec_loc2(l1)), X) && sll(p, l1) * sll(q, l2)  */
+  /*@ Assert 
+      exists l1 l2, 
+      x == x@pre && q != 0 && 
+      safeExec(ATrue, bind(mergesortrec(l2), mergesortrec_loc2(l1)), X) && sll(p, l1) * sll(q, l2)  */
   q = merge_sort(q) /*@ where(low_level_spec_aux) X = X; B = (list Z) */;
-  /*@ exists l1 l2, safeExec(ATrue, merge_rel(l1, l2), X) && sll(p, l1) * sll(q, l2) */
+  /*@ Assert 
+      exists l1 l2, x == x@pre && 
+      safeExec(ATrue, merge_rel(l1, l2), X) && sll(p, l1) * sll(q, l2) */
   return merge(p, q) /*@ where X = X */;
 }
 
@@ -262,20 +283,31 @@ struct list * merge_sort3(struct list * x)
     return insertion_sort(x);
   }
   p = (void *)0;
-    /*@ p == 0 && emp
-      which implies
-      sll(p, nil) */
+  /*@ Assert 
+    x == x@pre && p == 0 && has_ptr_permission(&q) && 8 < Zlength(l) && Zlength(l) <= INT_MAX &&
+    safeExec(ATrue, gmergesortrec(l), X) && sll(p, nil) * sll(x, l)
+  */
   q = (void *)0;
-    /*@ q == 0 && emp
-      which implies
-      sll(q, nil) */
-  /*@ safeExec(ATrue, bind(split_rel(l), gmergesortrec_loc0), X) && emp */
+  /*@ Assert
+    x == x@pre && p == 0 && q == 0 && 8 < Zlength(l) && Zlength(l) <= INT_MAX &&
+    safeExec(ATrue, gmergesortrec(l), X) && sll(p, nil) * sll(q, nil) * sll(x, l)
+  */
+  /*@ Assert 
+    x == x@pre && p == 0 && q == 0 && 8 < Zlength(l) && Zlength(l) <= INT_MAX &&
+      safeExec(ATrue, bind(split_rel(l), gmergesortrec_loc0), X) && sll(p, nil) * sll(q, nil) * sll(x, l)
+  */
   split_rec(x, &p, &q) /*@ where(low_level_spec_aux) X = X, c = gmergesortrec_loc0; B = (list Z) */;
-  /*@ exists l1 l2, safeExec(ATrue, bind(gmergesortrec(l1), gmergesortrec_loc1(l2)), X) && sll(p, l1) * sll(q, l2) */
+  /*@ Assert
+    exists l1 l2, x == x@pre && 
+    safeExec(ATrue, bind(gmergesortrec(l1), gmergesortrec_loc1(l2)), X) && sll(p, l1) * sll(q, l2)  */
   p = merge_sort2(p) /*@ where(low_level_spec_aux) X = X; B = (list Z) */;
-  /*@ exists l1 l2, safeExec(ATrue, bind(gmergesortrec(l2), mergesortrec_loc2(l1)), X) && sll(p, l1) * sll(q, l2) */
+  /*@ Assert 
+      exists l1 l2, x == x@pre && 
+      safeExec(ATrue, bind(gmergesortrec(l2), mergesortrec_loc2(l1)), X) && sll(p, l1) * sll(q, l2)
+  */
   q = merge_sort2(q) /*@ where(low_level_spec_aux) X = X; B = (list Z) */;
-  /*@ exists l1 l2, safeExec(ATrue, merge_rel(l1, l2), X) && sll(p, l1) * sll(q, l2) */
+  /*@ Assert 
+       exists l1 l2, x == x@pre && 
+       safeExec(ATrue, merge_rel(l1, l2), X) && sll(p, l1) * sll(q, l2)  */
   return merge(p, q) /*@ where X = X */;
 }
-

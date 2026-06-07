@@ -28,10 +28,8 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function OsSortLinkGetTargetExpireTime -----*)
 
 Definition OsSortLinkGetTargetExpireTime_safety_wit_1 := 
-forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  “ (currTime_pre >= t) ” 
-  &&  “ (currTime_pre >= 0) ”
-  &&  ((( &( "targetSortList" ) )) # Ptr  |-> targetSortList_pre)
+forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (PreH1 : (currTime_pre >= t)) (PreH2 : (currTime_pre >= 0)) ,
+  ((( &( "targetSortList" ) )) # Ptr  |-> targetSortList_pre)
   **  (storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((targetSortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
   **  ((( &( "currTime" ) )) # UInt64  |-> currTime_pre)
@@ -41,10 +39,8 @@ forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA
 .
 
 Definition OsSortLinkGetTargetExpireTime_return_wit_1 := 
-forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  “ (currTime_pre < t) ” 
-  &&  “ (currTime_pre >= 0) ”
-  &&  (storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (PreH1 : (currTime_pre < t)) (PreH2 : (currTime_pre >= 0)) ,
+  (storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((targetSortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
 |--
   (“ (currTime_pre < t) ” 
@@ -57,10 +53,8 @@ forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA
 .
 
 Definition OsSortLinkGetTargetExpireTime_return_wit_2 := 
-forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  “ (currTime_pre >= t) ” 
-  &&  “ (currTime_pre >= 0) ”
-  &&  (storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (PreH1 : (currTime_pre >= t)) (PreH2 : (currTime_pre >= 0)) ,
+  (storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((targetSortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
 |--
   (“ (currTime_pre < t) ” 
@@ -73,15 +67,30 @@ forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA
 .
 
 Definition OsSortLinkGetTargetExpireTime_partial_solve_wit_1 := 
-forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  “ (currTime_pre >= 0) ”
-  &&  (storesortedLinkNode storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+forall (A: Type) (targetSortList_pre: Z) (currTime_pre: Z) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (PreH1 : (currTime_pre >= 0)) ,
+  (storesortedLinkNode storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 |--
   “ (currTime_pre >= 0) ”
   &&  (storesortedLinkNode storeA &((targetSortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 .
 
 Definition OsSortLinkGetTargetExpireTime_which_implies_wit_1 := 
+(
+forall (A: Type) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (targetSortList: Z) ,
+  (storesortedLinkNode storeA &((targetSortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((targetSortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((targetSortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+) \/
+(
+forall (A: Type) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (targetSortList: Z) ,
+  (storesortedLinkNode storeA &((targetSortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((targetSortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((targetSortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+).
+
+Definition OsSortLinkGetTargetExpireTime_which_implies_wit_1_split_goal_spatial := 
 forall (A: Type) (t: Z) (a: A) (storeA: (Z -> (A -> Assertion))) (targetSortList: Z) ,
   (storesortedLinkNode storeA &((targetSortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 |--

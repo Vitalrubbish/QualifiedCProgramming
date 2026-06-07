@@ -1,6 +1,6 @@
-#include "../../../QCP_demos_LLM/verification_stdlib.h"
-#include "../../../QCP_demos_LLM/verification_list.h"
-#include "../../../QCP_demos_LLM/int_array_def.h"
+#include "verification_stdlib.h"
+#include "verification_list.h"
+#include "int_array_def.h"
 
 /*@ Extern Coq
       (KnapsackPlanValue : list Z -> list Z -> list Z -> Z -> Prop)

@@ -81,12 +81,8 @@ Proof.
   split_pure_spatial.
   - entailer!.
   - split_pures; dump_pre_spatial; auto; try lia.
-    match goal with
-    | Hsearch : UpperBoundSearch _ _ _ _ _,
-      Hgt : Znth mid tails_cur_2 0 > x |- _ =>
-        eapply UpperBoundSearch_left_preserve; eauto; try lia;
-        rewrite Znth_sublist0; auto; lia
-    end.
+    eapply UpperBoundSearch_right_preserve; eauto; try lia.
+    rewrite Znth_sublist0; auto; lia.
 Qed. 
 
 Lemma proof_of_lengthOfLNDS_entail_wit_5_2 : lengthOfLNDS_entail_wit_5_2.
@@ -96,12 +92,8 @@ Proof.
   split_pure_spatial.
   - entailer!.
   - split_pures; dump_pre_spatial; auto; try lia.
-    match goal with
-    | Hsearch : UpperBoundSearch _ _ _ _ _,
-      Hle : Znth mid tails_cur_2 0 <= x |- _ =>
-        eapply UpperBoundSearch_right_preserve; eauto; try lia;
-        rewrite Znth_sublist0; auto; lia
-    end.
+    eapply UpperBoundSearch_left_preserve; eauto; try lia.
+    rewrite Znth_sublist0; auto; lia.
 Qed. 
 
 Lemma proof_of_lengthOfLNDS_entail_wit_6 : lengthOfLNDS_entail_wit_6.
@@ -124,7 +116,7 @@ Proof.
       (sublist 0 left tails_cur ++ x :: sublist (left + 1) numsSize_pre tails_cur).
     + entailer!.
     + rewrite replace_Znth_sublist; auto; try lia.
-      rewrite H2. reflexivity.
+      rewrite PreH4. reflexivity.
   - split_pures; dump_pre_spatial; auto; try lia.
 Qed. 
 
@@ -137,9 +129,8 @@ Proof.
   - split_pures; dump_pre_spatial; auto; try lia.
     + rewrite Zlength_app, Zlength_sublist0, Zlength_cons, Zlength_sublist by lia.
       lia.
-    + replace left with len in * by lia.
-      rewrite sublist_update_append_prefix by lia.
-      eapply LNDTailsState_append; eauto; lia.
+    + rewrite sublist_update_replace_prefix by lia.
+      eapply LNDTailsState_replace; eauto; lia.
 Qed. 
 
 Lemma proof_of_lengthOfLNDS_entail_wit_8_2 : lengthOfLNDS_entail_wit_8_2.
@@ -151,8 +142,9 @@ Proof.
   - split_pures; dump_pre_spatial; auto; try lia.
     + rewrite Zlength_app, Zlength_sublist0, Zlength_cons, Zlength_sublist by lia.
       lia.
-    + rewrite sublist_update_replace_prefix by lia.
-      eapply LNDTailsState_replace; eauto; lia.
+    + replace left with len in * by lia.
+      rewrite sublist_update_append_prefix by lia.
+      eapply LNDTailsState_append; eauto; lia.
 Qed. 
 
 Lemma proof_of_lengthOfLNDS_entail_wit_10 : lengthOfLNDS_entail_wit_10.

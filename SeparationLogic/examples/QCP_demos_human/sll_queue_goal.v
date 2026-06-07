@@ -27,12 +27,9 @@ From SimpleC.EE.QCP_demos_human Require Import sll_queue_strategy_proof.
 (*----- Function enqueue -----*)
 
 Definition enqueue_return_wit_1 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_head: Z) (q_tail: Z) (retval_data: Z) (retval_next: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (retval_data = 0) ” 
-  &&  “ (q_tail <> 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_head: Z) (q_tail: Z) (retval_data: Z) (retval_next: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (retval_data = 0)) (PreH4 : (q_tail <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> retval_data)
   **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval)
   **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> x_pre)
@@ -40,7 +37,32 @@ forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_head: Z) (q_tail: Z) (retval_data
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
   **  (sllseg q_head q_tail l )
 |--
-  (store_queue q_pre (app (l) ((cons (x_pre) (nil)))) )
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+) \/
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_head: Z) (q_tail: Z) (retval_data: Z) (retval_next: Z) (retval: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (retval_data <= INT_MAX)) (PreH3 : (x_pre >= INT_MIN)) (PreH4 : (retval_data >= INT_MIN)) (PreH5 : (retval <> 0)) (PreH6 : (retval_next = 0)) (PreH7 : (retval_data = 0)) (PreH8 : (q_tail <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
+  **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> retval_data)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval)
+  **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+  **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> retval)
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
+  **  (sllseg q_head q_tail l )
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+).
+
+Definition enqueue_return_wit_1_split_goal_spatial := 
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_head: Z) (q_tail: Z) (retval_data: Z) (retval_next: Z) (retval: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (retval_data <= INT_MAX)) (PreH3 : (x_pre >= INT_MIN)) (PreH4 : (retval_data >= INT_MIN)) (PreH5 : (retval <> 0)) (PreH6 : (retval_next = 0)) (PreH7 : (retval_data = 0)) (PreH8 : (q_tail <> 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
+  **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> retval_data)
+  **  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval)
+  **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+  **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> retval)
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
+  **  (sllseg q_head q_tail l )
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
 .
 
 Definition enqueue_partial_solve_wit_1 := 
@@ -51,9 +73,8 @@ forall (q_pre: Z) (l: (@list Z)) ,
 .
 
 Definition enqueue_partial_solve_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (q_head: Z) (v: Z) (u: Z) (q_tail: Z) ,
-  “ (q_tail <> 0) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+forall (q_pre: Z) (l: (@list Z)) (q_head: Z) (v: Z) (u: Z) (q_tail: Z) (PreH1 : (q_tail <> 0)) ,
+  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
   **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
   **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
@@ -68,6 +89,7 @@ forall (q_pre: Z) (l: (@list Z)) (q_head: Z) (v: Z) (u: Z) (q_tail: Z) ,
 .
 
 Definition enqueue_which_implies_wit_1 := 
+(
 forall (l: (@list Z)) (q: Z) ,
   (store_queue q l )
 |--
@@ -78,14 +100,26 @@ forall (l: (@list Z)) (q: Z) ,
   **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
   **  ((&((q)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
   **  (sllseg q_head q_tail l )
-.
+) \/
+(
+forall (l: (@list Z)) (q: Z) ,
+  (store_queue q l )
+|--
+  EX (q_head: Z)  (v: Z)  (u: Z)  (q_tail: Z) ,
+  “ (q_tail <> 0) ”
+  &&  ((&((q)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+  **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
+  **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
+  **  ((&((q)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
+  **  (sllseg q_head q_tail l )
+).
 
 (*----- Function dequeue -----*)
 
 Definition dequeue_return_wit_1 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_head_next: Z) (v: Z) (u: Z) (q_tail: Z) ,
-  “ (q_tail <> 0) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_head_next: Z) (v: Z) (u: Z) (q_tail: Z) (PreH1 : (q_tail <> 0)) ,
+  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
   **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
   **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head_next)
@@ -93,6 +127,27 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_head_next: Z) (v: Z) (u: Z) (q_tail: 
 |--
   “ (x = x) ”
   &&  (store_queue q_pre l )
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (q_head_next: Z) (v: Z) (u: Z) (q_tail: Z) (PreH1 : (u <= INT_MAX)) (PreH2 : (u >= INT_MIN)) (PreH3 : (q_tail <> 0)) ,
+  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+  **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
+  **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head_next)
+  **  (sllseg q_head_next q_tail l )
+|--
+  (store_queue q_pre l )
+).
+
+Definition dequeue_return_wit_1_split_goal_spatial := 
+forall (q_pre: Z) (l: (@list Z)) (q_head_next: Z) (v: Z) (u: Z) (q_tail: Z) (PreH1 : (u <= INT_MAX)) (PreH2 : (u >= INT_MIN)) (PreH3 : (q_tail <> 0)) ,
+  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+  **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
+  **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
+  **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head_next)
+  **  (sllseg q_head_next q_tail l )
+|--
+  (store_queue q_pre l )
 .
 
 Definition dequeue_partial_solve_wit_1 := 
@@ -103,9 +158,8 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) ,
 .
 
 Definition dequeue_partial_solve_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_head_next: Z) (q_head: Z) (v: Z) (u: Z) (q_tail: Z) ,
-  “ (q_tail <> 0) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_head_next: Z) (q_head: Z) (v: Z) (u: Z) (q_tail: Z) (PreH1 : (q_tail <> 0)) ,
+  ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
   **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
   **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
   **  ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> q_head_next)
@@ -124,6 +178,7 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_head_next: Z) (q_head: Z) (v: Z) (u: 
 .
 
 Definition dequeue_which_implies_wit_1 := 
+(
 forall (l: (@list Z)) (x: Z) (q: Z) ,
   (store_queue q (cons (x) (l)) )
 |--
@@ -136,24 +191,52 @@ forall (l: (@list Z)) (x: Z) (q: Z) ,
   **  ((&((q_head)  # "list" ->ₛ "data")) # Int  |-> x)
   **  ((&((q_head)  # "list" ->ₛ "next")) # Ptr  |-> q_head_next)
   **  (sllseg q_head_next q_tail l )
-.
+) \/
+(
+forall (l: (@list Z)) (x: Z) (q: Z) ,
+  (store_queue q (cons (x) (l)) )
+|--
+  EX (q_head_next: Z)  (q_head: Z)  (v: Z)  (u: Z)  (q_tail: Z) ,
+  “ (q_tail <> 0) ”
+  &&  ((&((q)  # "queue" ->ₛ "tail")) # Ptr  |-> q_tail)
+  **  ((&((q_tail)  # "list" ->ₛ "data")) # Int  |-> u)
+  **  ((&((q_tail)  # "list" ->ₛ "next")) # Ptr  |-> v)
+  **  ((&((q)  # "queue" ->ₛ "head")) # Ptr  |-> q_head)
+  **  ((&((q_head)  # "list" ->ₛ "data")) # Int  |-> x)
+  **  ((&((q_head)  # "list" ->ₛ "next")) # Ptr  |-> q_head_next)
+  **  (sllseg q_head_next q_tail l )
+).
 
 (*----- Function init_empty_queue -----*)
 
 Definition init_empty_queue_return_wit_1 := 
-forall (retval_tail: Z) (retval_head: Z) (retval: Z) (retval_data: Z) (retval_next: Z) (retval_2: Z) ,
-  “ (retval_2 <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (retval_data = 0) ” 
-  &&  “ (retval <> 0) ” 
-  &&  “ (retval_head = 0) ” 
-  &&  “ (retval_tail = 0) ”
-  &&  ((&((retval_2)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
+(
+forall (retval_tail: Z) (retval_head: Z) (retval: Z) (retval_data: Z) (retval_next: Z) (retval_2: Z) (PreH1 : (retval_2 <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (retval_data = 0)) (PreH4 : (retval <> 0)) (PreH5 : (retval_head = 0)) (PreH6 : (retval_tail = 0)) ,
+  ((&((retval_2)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
   **  ((&((retval_2)  # "list" ->ₛ "data")) # Int  |-> retval_data)
   **  ((&((retval)  # "queue" ->ₛ "head")) # Ptr  |-> retval_2)
   **  ((&((retval)  # "queue" ->ₛ "tail")) # Ptr  |-> retval_2)
 |--
-  (store_queue retval nil )
+  (store_queue retval (@nil Z) )
+) \/
+(
+forall (retval_tail: Z) (retval_head: Z) (retval: Z) (retval_data: Z) (retval_next: Z) (retval_2: Z) (PreH1 : (retval_data <= INT_MAX)) (PreH2 : (retval_data >= INT_MIN)) (PreH3 : (retval_2 <> 0)) (PreH4 : (retval_next = 0)) (PreH5 : (retval_data = 0)) (PreH6 : (retval <> 0)) (PreH7 : (retval_head = 0)) (PreH8 : (retval_tail = 0)) ,
+  ((&((retval_2)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
+  **  ((&((retval_2)  # "list" ->ₛ "data")) # Int  |-> retval_data)
+  **  ((&((retval)  # "queue" ->ₛ "head")) # Ptr  |-> retval_2)
+  **  ((&((retval)  # "queue" ->ₛ "tail")) # Ptr  |-> retval_2)
+|--
+  (store_queue retval (@nil Z) )
+).
+
+Definition init_empty_queue_return_wit_1_split_goal_spatial := 
+forall (retval_tail: Z) (retval_head: Z) (retval: Z) (retval_data: Z) (retval_next: Z) (retval_2: Z) (PreH1 : (retval_data <= INT_MAX)) (PreH2 : (retval_data >= INT_MIN)) (PreH3 : (retval_2 <> 0)) (PreH4 : (retval_next = 0)) (PreH5 : (retval_data = 0)) (PreH6 : (retval <> 0)) (PreH7 : (retval_head = 0)) (PreH8 : (retval_tail = 0)) ,
+  ((&((retval_2)  # "list" ->ₛ "next")) # Ptr  |-> retval_next)
+  **  ((&((retval_2)  # "list" ->ₛ "data")) # Int  |-> retval_data)
+  **  ((&((retval)  # "queue" ->ₛ "head")) # Ptr  |-> retval_2)
+  **  ((&((retval)  # "queue" ->ₛ "tail")) # Ptr  |-> retval_2)
+|--
+  (store_queue retval (@nil Z) )
 .
 
 Definition init_empty_queue_partial_solve_wit_1 := 
@@ -163,11 +246,8 @@ Definition init_empty_queue_partial_solve_wit_1 :=
 .
 
 Definition init_empty_queue_partial_solve_wit_2 := 
-forall (retval_tail: Z) (retval_head: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_head = 0) ” 
-  &&  “ (retval_tail = 0) ”
-  &&  ((&((retval)  # "queue" ->ₛ "head")) # Ptr  |-> retval_head)
+forall (retval_tail: Z) (retval_head: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_head = 0)) (PreH3 : (retval_tail = 0)) ,
+  ((&((retval)  # "queue" ->ₛ "head")) # Ptr  |-> retval_head)
   **  ((&((retval)  # "queue" ->ₛ "tail")) # Ptr  |-> retval_tail)
 |--
   “ (retval <> 0) ” 

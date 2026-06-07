@@ -16,14 +16,80 @@ import subprocess
 import sys
 from pathlib import Path
 
+WORKER_MODE_ROCQ_MCP = "rocq_mcp"
+WORKER_MODE_COQC_ONLY = "coqc_only"
+WORKER_EXECUTION_MODES = {WORKER_MODE_ROCQ_MCP, WORKER_MODE_COQC_ONLY}
+LEGACY_FALSE_VALUES = {"0", "false", "no", "off", "coqc_only"}
+
+
+def normalize_worker_execution_mode(
+    worker_execution_mode: str | None = None,
+    *,
+    use_rocq_mcp: object | None = None,
+) -> str:
+    """Return the canonical worker execution mode.
+
+    ``worker_execution_mode`` is the authoritative field written to manifests.
+    ``use_rocq_mcp`` is accepted only for backwards compatibility with older
+    manifests and tests.
+    """
+    if worker_execution_mode is not None:
+        mode = str(worker_execution_mode).strip()
+        if mode not in WORKER_EXECUTION_MODES:
+            raise ValueError(
+                "unknown worker_execution_mode "
+                f"{worker_execution_mode!r}; expected one of "
+                + ", ".join(sorted(WORKER_EXECUTION_MODES))
+            )
+        return mode
+    return (
+        WORKER_MODE_ROCQ_MCP
+        if legacy_use_rocq_mcp_enabled(use_rocq_mcp)
+        else WORKER_MODE_COQC_ONLY
+    )
+
+
+def legacy_use_rocq_mcp_enabled(use_rocq_mcp: object | None) -> bool:
+    if use_rocq_mcp is None:
+        return True
+    if isinstance(use_rocq_mcp, bool):
+        return use_rocq_mcp
+    return str(use_rocq_mcp).strip().lower() not in LEGACY_FALSE_VALUES
+
+
+def worker_mode_uses_rocq_mcp(worker_execution_mode: str) -> bool:
+    return normalize_worker_execution_mode(worker_execution_mode) == WORKER_MODE_ROCQ_MCP
+
+
+def suppress_worker_rocq_mcp_config(work_dir: Path) -> Path | None:
+    """Remove generated rocq-mcp config for a coqc-only worker run.
+
+    Codex may read ``.codex/config.toml`` from the worker directory in addition
+    to explicit CLI overrides.  When the manifest says the worker is coqc-only,
+    leaving a generated rocq-mcp config in place makes the prompt/runtime mode
+    drift.  The worker dir is scratch, so rename the generated config out of
+    the active path and return the disabled path for diagnostics.
+    """
+    config_path = work_dir / ".codex" / "config.toml"
+    if not config_path.is_file():
+        return None
+    disabled = config_path.with_name("config.toml.disabled-by-coqc-only")
+    if disabled.exists():
+        disabled.unlink()
+    config_path.rename(disabled)
+    return disabled
+
 
 def build_group_prompt(
     goal_files: list[str],
     worker_manual: str | None = None,
     worker_helper_scratch_lib: str | None = None,
     proof_group_id: str | None = None,
+    use_rocq_mcp: bool = True,
 ) -> str:
     """The prompt sent to every concurrent Codex worker."""
+    if os.name == "nt":
+        use_rocq_mcp = False
     goal_list = "\n".join(f"  - {f}" for f in goal_files)
     manual_line = (
         f"Put witness-proof edits in the worker-local proof manual `{worker_manual}`.\n"
@@ -57,6 +123,7 @@ def build_group_prompt(
         f"{goal_list}\n\n"
         f"{manual_line}"
         f"{helper_line}"
+        f"{tooling_line}"
         f"Do not copy or modify common_case_formal_lib or goal files; use them only as compile-only dependencies.\n"
         f"Follow the Proof Group Notes and all file-boundary rules in AGENTS.md.\n"
         f"Write your results to proof_report.json and proof_strategy_report.json as instructed."
@@ -122,6 +189,8 @@ def _load_worker_rocq_mcp_config(work_dir: Path) -> dict[str, str] | None:
 
 def _rocq_mcp_config_overrides(work_dir: Path, *, use_rocq_mcp: bool) -> list[str]:
     """Translate worker-local .codex/config.toml into explicit codex -c overrides."""
+    if os.name == "nt":
+        return []
     if not use_rocq_mcp:
         return []
     config = _load_worker_rocq_mcp_config(work_dir)
@@ -153,6 +222,7 @@ def run_codex_agent(
     *,
     codex: str | None = None,
     use_rocq_mcp: bool = True,
+    worker_execution_mode: str | None = None,
 ) -> int:
     """Spawn one sandboxed Codex agent in *work_dir*.
 
@@ -161,6 +231,13 @@ def run_codex_agent(
     """
     if codex is None:
         codex = check_codex()
+    worker_execution_mode = normalize_worker_execution_mode(
+        worker_execution_mode,
+        use_rocq_mcp=use_rocq_mcp,
+    )
+    use_rocq_mcp = worker_mode_uses_rocq_mcp(worker_execution_mode)
+    if not worker_mode_uses_rocq_mcp(worker_execution_mode):
+        suppress_worker_rocq_mcp_config(work_dir)
     cmd = [
         codex, "exec",
         "-C", str(work_dir),

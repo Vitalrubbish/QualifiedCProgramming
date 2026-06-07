@@ -21,10 +21,8 @@ Local Open Scope sac.
 (*----- Function chars_initialize -----*)
 
 Definition chars_initialize_safety_wit_1 := 
-forall (m_pre: Z) (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "m" ) )) # Char  |-> m_pre)
   **  ((( &( "n" ) )) # Int  |-> n_pre)
   **  ((( &( "a" ) )) # Ptr  |-> a_pre)
@@ -35,13 +33,8 @@ forall (m_pre: Z) (n_pre: Z) (a_pre: Z) ,
 .
 
 Definition chars_initialize_safety_wit_2 := 
-forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (CharArray.full a_pre (i + 1 ) (app ((repeat_Z (m_pre) (i))) ((cons (m_pre) (nil)))) )
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (CharArray.full a_pre (i + 1 ) (app ((repeat_Z (m_pre) (i))) ((cons (m_pre) ((@nil Z))))) )
   **  (CharArray.undef_seg a_pre (i + 1 ) n_pre )
   **  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "m" ) )) # Char  |-> m_pre)
@@ -53,10 +46,9 @@ forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
 .
 
 Definition chars_initialize_entail_wit_1 := 
-forall (m_pre: Z) (n_pre: Z) (a_pre: Z) ,
-  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (CharArray.undef_full a_pre n_pre )
+(
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  (CharArray.undef_full a_pre n_pre )
 |--
   “ (0 <= 0) ” 
   &&  “ (0 <= n_pre) ” 
@@ -64,16 +56,26 @@ forall (m_pre: Z) (n_pre: Z) (a_pre: Z) ,
   &&  “ (n_pre < INT_MAX) ”
   &&  (CharArray.full a_pre 0 (repeat_Z (m_pre) (0)) )
   **  (CharArray.undef_seg a_pre 0 n_pre )
+) \/
+(
+forall (m_pre: Z) (n_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  TT && emp 
+|--
+  “ ((repeat_Z (m_pre) (0)) = (@nil Z)) ”
+  &&  emp
+).
+
+Definition chars_initialize_entail_wit_1_split_goal_1 := 
+forall (m_pre: Z) (n_pre: Z) (PreH1 : (0 <= n_pre)) (PreH2 : (n_pre < INT_MAX)) ,
+  TT && emp 
+|--
+  “ ((repeat_Z (m_pre) (0)) = (@nil Z)) ”
 .
 
 Definition chars_initialize_entail_wit_2 := 
-forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (CharArray.full a_pre (i + 1 ) (app ((repeat_Z (m_pre) (i))) ((cons (m_pre) (nil)))) )
+(
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (CharArray.full a_pre (i + 1 ) (app ((repeat_Z (m_pre) (i))) ((cons (m_pre) ((@nil Z))))) )
   **  (CharArray.undef_seg a_pre (i + 1 ) n_pre )
 |--
   “ (0 <= (i + 1 )) ” 
@@ -82,29 +84,47 @@ forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
   &&  “ (n_pre < INT_MAX) ”
   &&  (CharArray.full a_pre (i + 1 ) (repeat_Z (m_pre) ((i + 1 ))) )
   **  (CharArray.undef_seg a_pre (i + 1 ) n_pre )
+) \/
+(
+forall (m_pre: Z) (n_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  TT && emp 
+|--
+  “ ((app ((repeat_Z (m_pre) (i))) ((cons (m_pre) ((@nil Z))))) = (repeat_Z (m_pre) ((i + 1 )))) ”
+  &&  emp
+).
+
+Definition chars_initialize_entail_wit_2_split_goal_1 := 
+forall (m_pre: Z) (n_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  TT && emp 
+|--
+  “ ((app ((repeat_Z (m_pre) (i))) ((cons (m_pre) ((@nil Z))))) = (repeat_Z (m_pre) ((i + 1 )))) ”
 .
 
 Definition chars_initialize_return_wit_1 := 
-forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i >= n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (CharArray.full a_pre i (repeat_Z (m_pre) (i)) )
+(
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (CharArray.full a_pre i (repeat_Z (m_pre) (i)) )
   **  (CharArray.undef_seg a_pre i n_pre )
+|--
+  (CharArray.full a_pre n_pre (repeat_Z (m_pre) (n_pre)) )
+) \/
+(
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (CharArray.full a_pre i (repeat_Z (m_pre) (i)) )
+|--
+  (CharArray.full a_pre n_pre (repeat_Z (m_pre) (n_pre)) )
+).
+
+Definition chars_initialize_return_wit_1_split_goal_spatial := 
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i >= n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (CharArray.full a_pre i (repeat_Z (m_pre) (i)) )
 |--
   (CharArray.full a_pre n_pre (repeat_Z (m_pre) (n_pre)) )
 .
 
 Definition chars_initialize_partial_solve_wit_1 := 
-forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) ,
-  “ (i < n_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= n_pre) ” 
-  &&  “ (0 <= n_pre) ” 
-  &&  “ (n_pre < INT_MAX) ”
-  &&  (CharArray.full a_pre i (repeat_Z (m_pre) (i)) )
+forall (m_pre: Z) (n_pre: Z) (a_pre: Z) (i: Z) (PreH1 : (i < n_pre)) (PreH2 : (0 <= i)) (PreH3 : (i <= n_pre)) (PreH4 : (0 <= n_pre)) (PreH5 : (n_pre < INT_MAX)) ,
+  (CharArray.full a_pre i (repeat_Z (m_pre) (i)) )
   **  (CharArray.undef_seg a_pre i n_pre )
 |--
   “ (i < n_pre) ” 

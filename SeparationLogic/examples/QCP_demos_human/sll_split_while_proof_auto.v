@@ -33,7 +33,7 @@ Proof. Admitted.
 Lemma proof_of_split_while_entail_wit_1 : split_while_entail_wit_1.
 Proof. Admitted. 
 
-Lemma proof_of_split_while_entail_wit_2_2 : split_while_entail_wit_2_2.
+Lemma proof_of_split_while_entail_wit_2_1 : split_while_entail_wit_2_1.
 Proof. Admitted. 
 
 Lemma proof_of_split_while_partial_solve_wit_1_pure : split_while_partial_solve_wit_1_pure.

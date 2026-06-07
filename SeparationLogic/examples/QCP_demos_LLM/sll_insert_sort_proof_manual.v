@@ -69,19 +69,19 @@ Proof.
   - split_pures; try (dump_pre_spatial; apply upperbound_app; try assumption; lia).
     dump_pre_spatial ; auto.
     dump_pre_spatial.
-    rewrite H3.
-    rewrite H0.
+    rewrite PreH5.
+    rewrite PreH2.
     rewrite <- app_assoc.
     reflexivity.
 Qed.
 
-Lemma proof_of_insertion_entail_wit_3_1 : insertion_entail_wit_3_1.
+Lemma proof_of_insertion_entail_wit_3_2 : insertion_entail_wit_3_2.
 Proof.
   pre_process.
   subst p2_v.
   sep_apply (sll_zero 0 l2); [ | reflexivity ].
   Intros_p Hl2.
-  Right.
+  Left.
   Exists l1_3.
   split_pure_spatial.
   - cancel ((&((node_pre) # "list" ->ₛ "data")) # Int |-> a).
@@ -90,18 +90,18 @@ Proof.
     cancel ((&((node_pre) # "list" ->ₛ "next")) # Ptr |->_).
   - split_pures.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
     + dump_pre_spatial.
-      rewrite Hl2 in H1.
-      exact H1.
+      rewrite Hl2 in PreH3.
+      exact PreH3.
     + dump_pre_spatial.
-      exact H2.
+      exact PreH4.
 Qed.
 
-Lemma proof_of_insertion_entail_wit_4_1 : insertion_entail_wit_4_1.
+Lemma proof_of_insertion_entail_wit_4_2 : insertion_entail_wit_4_2.
 Proof.
   pre_process.
-  Right.
+  Left.
   sep_apply (sllbseg_2_sllseg (&( "res" )) p2 node_pre l1_3).
   Intros resv_2.
   Exists resv_2.
@@ -113,17 +113,17 @@ Proof.
     cancel ((&((node_pre) # "list" ->ₛ "next")) # Ptr |-> 0).
   - split_pures.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
     + dump_pre_spatial.
-      exact H1.
+      exact PreH3.
 Qed.
 
-Lemma proof_of_insertion_entail_wit_4_2 : insertion_entail_wit_4_2.
+Lemma proof_of_insertion_entail_wit_4_1 : insertion_entail_wit_4_1.
 Proof.
   pre_process.
-  Left.
+  Right.
   sep_apply (sllbseg_2_sllseg (&( "res" )) p2 node_pre l1_3).
   Intros resv.
   Exists unext_2.
@@ -142,15 +142,31 @@ Proof.
     cancel (sll unext_2 l0_2).
   - split_pures.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
     + dump_pre_spatial.
-      exact H1.
+      exact PreH3.
     + dump_pre_spatial.
-      exact H2.
+      exact PreH4.
     + dump_pre_spatial.
-      exact H3.
+      exact PreH5.
+Qed.
+
+Lemma proof_of_insertion_return_wit_1 : insertion_return_wit_1.
+Proof.
+  pre_process.
+  Exists ((l1 ++ a :: nil)%list).
+  split_pure_spatial.
+  - sep_apply (sllseg_len1 node_pre a 0); [ | tauto ].
+    sep_apply (sllseg_sll resv node_pre l1 (a :: nil)%list).
+    cancel (sll resv (l1 ++ a :: nil)%list).
+  - dump_pre_spatial.
+    rewrite PreH2.
+    rewrite app_nil_r.
+    symmetry.
+    apply upperbound_insert_nil.
+    exact PreH3.
 Qed.
 
 Lemma proof_of_insertion_return_wit_2 : insertion_return_wit_2.
@@ -169,29 +185,13 @@ Proof.
       cancel ((&((u) # "list" ->ₛ "next")) # Ptr |-> unext).
       cancel (sll unext l0_2).
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
   - dump_pre_spatial.
-    rewrite H2.
+    rewrite PreH4.
     assert (a <= x) by lia.
-    rewrite (upperbound_insert_cons a l1 l0_2 x H3 H4).
+    rewrite (upperbound_insert_cons a l1 l0_2 x PreH5 H).
     rewrite <- app_assoc.
     reflexivity.
-Qed.
-
-Lemma proof_of_insertion_return_wit_1 : insertion_return_wit_1.
-Proof.
-  pre_process.
-  Exists ((l1 ++ a :: nil)%list).
-  split_pure_spatial.
-  - sep_apply (sllseg_len1 node_pre a 0); [ | tauto ].
-    sep_apply (sllseg_sll resv node_pre l1 (a :: nil)%list).
-    cancel (sll resv (l1 ++ a :: nil)%list).
-  - dump_pre_spatial.
-    rewrite H0.
-    rewrite app_nil_r.
-    symmetry.
-    apply upperbound_insert_nil.
-    exact H1.
 Qed.
 
 Lemma proof_of_insertion_sort_entail_wit_1 : insertion_sort_entail_wit_1.
@@ -226,39 +226,39 @@ Proof.
     cancel (((&( "q" ))) # Ptr |->_).
   - split_pures.
     + dump_pre_spatial.
-      rewrite H2.
-      rewrite H0.
+      rewrite PreH4.
+      rewrite PreH2.
       rewrite <- app_assoc.
       reflexivity.
     + dump_pre_spatial.
-      rewrite H.
+      rewrite PreH1.
       rewrite <- perm_insert.
-      rewrite H3.
+      rewrite PreH5.
       reflexivity.
     + dump_pre_spatial.
-      rewrite H.
+      rewrite PreH1.
       apply increasing_insert.
-      exact H4.
+      exact PreH6.
 Qed.
 
 Lemma proof_of_insertion_sort_return_wit_1 : insertion_sort_return_wit_1.
 Proof.
   pre_process.
-  rewrite H.
+  rewrite PreH1.
   sep_apply (sll_zero 0 l2); [ | reflexivity ].
   Intros_p Hl2.
   Exists l0_2.
   split_pure_spatial.
-  - rewrite Hl2 in H0.
-    rewrite app_nil_r in H0.
+  - rewrite Hl2 in PreH2.
+    rewrite app_nil_r in PreH2.
     subst l.
     cancel (sll res l0_2).
   - split_pures.
     + dump_pre_spatial.
-      rewrite Hl2 in H0.
-      rewrite app_nil_r in H0.
+      rewrite Hl2 in PreH2.
+      rewrite app_nil_r in PreH2.
       subst l.
-      exact H1.
+      exact PreH3.
     + dump_pre_spatial.
-      exact H2.
+      exact PreH4.
 Qed.

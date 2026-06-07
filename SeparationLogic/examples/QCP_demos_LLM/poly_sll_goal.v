@@ -39,28 +39,39 @@ forall (A: Type) (p_pre: Z) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) ,
 |--
   “ (0 = 0) ” 
   &&  “ (p_pre = p_pre) ”
-  &&  (sll storeA 0 nil )
+  &&  (sll storeA 0 (@nil A) )
   **  (sll storeA p_pre l )
 .
 
 Definition reverse_entail_wit_2 := 
-forall (A: Type) (p_pre: Z) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (w: Z) (v: Z) ,
-  “ (w = 0) ” 
-  &&  “ (v = p_pre) ”
-  &&  (sll storeA w nil )
+(
+forall (A: Type) (p_pre: Z) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (w: Z) (v: Z) (PreH1 : (w = 0)) (PreH2 : (v = p_pre)) ,
+  (sll storeA w (@nil A) )
   **  (sll storeA v l )
 |--
   EX (l1: (@list A))  (l2: (@list A)) ,
   “ (l = (app ((rev (l1))) (l2))) ”
   &&  (sll storeA w l1 )
   **  (sll storeA v l2 )
+) \/
+(
+forall (A: Type) (p_pre: Z) (l: (@list A)) (w: Z) (v: Z) (PreH1 : (w = 0)) (PreH2 : (v = p_pre)) ,
+  TT && emp 
+|--
+  “ (l = (app ((rev ((@nil A)))) (l))) ”
+  &&  emp
+).
+
+Definition reverse_entail_wit_2_split_goal_1 := 
+forall (A: Type) (p_pre: Z) (l: (@list A)) (w: Z) (v: Z) (PreH1 : (w = 0)) (PreH2 : (v = p_pre)) ,
+  TT && emp 
+|--
+  “ (l = (app ((rev ((@nil A)))) (l))) ”
 .
 
 Definition reverse_entail_wit_3 := 
-forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (w: Z) (l1_2: (@list A)) (l2_2: (@list A)) ,
-  “ (l = (app ((rev (l1_2))) (l2_2))) ” 
-  &&  “ (v <> 0) ”
-  &&  (sll storeA w l1_2 )
+forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (w: Z) (l1_2: (@list A)) (l2_2: (@list A)) (PreH1 : (l = (app ((rev (l1_2))) (l2_2)))) (PreH2 : (v <> 0)) ,
+  (sll storeA w l1_2 )
   **  (sll storeA v l2_2 )
 |--
   EX (vnext: Z)  (vdata: Z)  (x: A)  (xs: (@list A))  (l1: (@list A))  (l2: (@list A)) ,
@@ -75,11 +86,9 @@ forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (w: Z) 
 .
 
 Definition reverse_entail_wit_4 := 
-forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (l1_2: (@list A)) (l2_2: (@list A)) (x: A) (xs: (@list A)) (vnext: Z) (vdata: Z) (v: Z) (w: Z) ,
-  “ (l = (app ((rev (l1_2))) (l2_2))) ” 
-  &&  “ (v <> 0) ” 
-  &&  “ (l2_2 = (cons (x) (xs))) ”
-  &&  (sll storeA w l1_2 )
+(
+forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (l1_2: (@list A)) (l2_2: (@list A)) (x: A) (xs: (@list A)) (vnext: Z) (vdata: Z) (v: Z) (w: Z) (PreH1 : (l = (app ((rev (l1_2))) (l2_2)))) (PreH2 : (v <> 0)) (PreH3 : (l2_2 = (cons (x) (xs)))) ,
+  (sll storeA w l1_2 )
   **  ((&((v)  # "list" ->ₛ "data")) # Ptr  |-> vdata)
   **  (storeA vdata x )
   **  ((&((v)  # "list" ->ₛ "next")) # Ptr  |-> w)
@@ -89,16 +98,43 @@ forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (l1_2: (@list 
   “ (l = (app ((rev (l1))) (l2))) ”
   &&  (sll storeA v l1 )
   **  (sll storeA vnext l2 )
+) \/
+(
+forall (A: Type) (l: (@list A)) (l1_2: (@list A)) (l2_2: (@list A)) (x: A) (xs: (@list A)) (v: Z) (PreH1 : (l = (app ((rev (l1_2))) (l2_2)))) (PreH2 : (v <> 0)) (PreH3 : (l2_2 = (cons (x) (xs)))) ,
+  TT && emp 
+|--
+  “ (l = (app ((rev ((cons (x) (l1_2))))) (xs))) ”
+  &&  emp
+).
+
+Definition reverse_entail_wit_4_split_goal_1 := 
+forall (A: Type) (l: (@list A)) (l1_2: (@list A)) (l2_2: (@list A)) (x: A) (xs: (@list A)) (v: Z) (PreH1 : (l = (app ((rev (l1_2))) (l2_2)))) (PreH2 : (v <> 0)) (PreH3 : (l2_2 = (cons (x) (xs)))) ,
+  TT && emp 
+|--
+  “ (l = (app ((rev ((cons (x) (l1_2))))) (xs))) ”
 .
 
 Definition reverse_return_wit_1 := 
-forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (w: Z) (l1: (@list A)) (l2: (@list A)) ,
-  “ (l = (app ((rev (l1))) (l2))) ” 
-  &&  “ (v = 0) ”
-  &&  (sll storeA w l1 )
+(
+forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (w: Z) (l1: (@list A)) (l2: (@list A)) (PreH1 : (l = (app ((rev (l1))) (l2)))) (PreH2 : (v = 0)) ,
+  (sll storeA w l1 )
   **  (sll storeA v l2 )
 |--
   (sll storeA w (rev (l)) )
+) \/
+(
+forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (l1: (@list A)) (l2: (@list A)) (PreH1 : (l = (app ((rev (l1))) (l2)))) (PreH2 : (v = 0)) ,
+  (sll storeA v l2 )
+|--
+  “ (l1 = (rev (l))) ”
+  &&  emp
+).
+
+Definition reverse_return_wit_1_split_goal_1 := 
+forall (A: Type) (l: (@list A)) (storeA: (Z -> (A -> Assertion))) (v: Z) (l1: (@list A)) (l2: (@list A)) (PreH1 : (l = (app ((rev (l1))) (l2)))) (PreH2 : (v = 0)) ,
+  (sll storeA v l2 )
+|--
+  “ (l1 = (rev (l))) ”
 .
 
 Module Type VC_Correct.

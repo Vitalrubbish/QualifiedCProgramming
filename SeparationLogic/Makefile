@@ -1,17 +1,57 @@
 CURRENT_DIR=.
-COQBIN=
+COQBIN ?=
+SUF ?=
+empty :=
+space := $(empty) $(empty)
+comma := ,
+powershell_list = $(subst $(space),$(comma) ,$(strip $(foreach item,$(1),'$(item)')))
 
 -include CONFIGURE
 
 # Platform-specific settings
-ifeq ($(shell uname),Darwin)
-	DATE = gdate
-else
-	DATE = date
-endif
+ifeq ($(OS),Windows_NT)
+	timeit = @echo $(1) && $(2)
 
-# Timing utility
-timeit = @printf "%-70s" $(1); t0=$$($(DATE) +%s%3N); $(2); t1=$$($(DATE) +%s%3N); echo "$$((t1 - t0)) ms"
+define MOVE_FILE
+powershell -NoProfile -Command "Move-Item -Force '$(1)' '$(2)'"
+endef
+
+define CONCAT_FILES
+powershell -NoProfile -Command "Get-Content -LiteralPath $(call powershell_list,$(1)) | Set-Content -Encoding ASCII '$(2)'"
+endef
+
+define REMOVE_FILES
+powershell -NoProfile -Command "Remove-Item -Force -LiteralPath $(call powershell_list,$(1)) -ErrorAction SilentlyContinue; exit 0"
+endef
+
+define REMOVE_TREE_OUTPUTS
+powershell -NoProfile -Command "Get-ChildItem -Path $(call powershell_list,$(1)) -Recurse -Force -Include *.vo,*.glob,*.vos,*.vok,.*.aux -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; exit 0"
+endef
+else
+	PYTHON_FOR_TIME := $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null)
+
+	ifneq ($(strip $(PYTHON_FOR_TIME)),)
+		timeit = @printf "%-70s" "$(1)"; t0=`"$(PYTHON_FOR_TIME)" -c 'import time; print(int(time.time() * 1000))'`; $(2); t1=`"$(PYTHON_FOR_TIME)" -c 'import time; print(int(time.time() * 1000))'`; echo "$$((t1 - t0)) ms"
+	else
+		timeit = @printf "%-70s" "$(1)"; $(2)
+	endif
+
+define MOVE_FILE
+mv -f $(1) $(2)
+endef
+
+define CONCAT_FILES
+cat $(1) > $(2)
+endef
+
+define REMOVE_FILES
+rm -f $(1)
+endef
+
+define REMOVE_TREE_OUTPUTS
+find $(1) -type f \( -name '*.vo' -o -name '*.glob' -o -name '*.vos' -o -name '*.vok' -o -name '.*.aux' \) -delete
+endef
+endif
 
 COQC=$(COQBIN)coqc$(SUF)
 COQDEP=$(COQBIN)coqdep$(SUF)
@@ -19,9 +59,9 @@ COQDEP=$(COQBIN)coqdep$(SUF)
 DIRS = \
 	Common auxlibs compcert_lib SeparationLogic sets unifysl StrategyLib fixedpoints MonadLib examples MaxMinLib GraphLib listlib
  
-COQ_FLAG = -R SeparationLogic SimpleC.SL -R unifysl Logic -R sets SetsClass -R compcert_lib compcert.lib -R auxlibs AUXLib -R examples SimpleC.EE -R StrategyLib SimpleC.StrategyLib -R Common SimpleC.Common -R fixedpoints FP -R MonadLib MonadLib -R listlib ListLib -R MaxMinLib MaxMinLib -R GraphLib GraphLib 
+COQ_FLAG = -R SeparationLogic SimpleC.SL -R unifysl Logic -R sets SetsClass -R compcert_lib compcert.lib -R auxlibs AUXLib -R examples SimpleC.EE -R stdlib SimpleC.StdLib -R StrategyLib SimpleC.StrategyLib -R Common SimpleC.Common -R fixedpoints FP -R MonadLib MonadLib -R listlib ListLib -R MaxMinLib MaxMinLib -R GraphLib GraphLib -R SumLib SumLib 
 
-DEP_FLAG = -R SeparationLogic SimpleC.SL -R unifysl Logic -R sets SetsClass -R compcert_lib compcert.lib -R auxlibs AUXLib -R examples SimpleC.EE -R StrategyLib SimpleC.StrategyLib -R Common SimpleC.Common -R fixedpoints FP -R MonadLib MonadLib -R listlib ListLib -R MaxMinLib MaxMinLib -R GraphLib GraphLib 
+DEP_FLAG = -R SeparationLogic SimpleC.SL -R unifysl Logic -R sets SetsClass -R compcert_lib compcert.lib -R auxlibs AUXLib -R examples SimpleC.EE -R stdlib SimpleC.StdLib -R StrategyLib SimpleC.StrategyLib -R Common SimpleC.Common -R fixedpoints FP -R MonadLib MonadLib -R listlib ListLib -R MaxMinLib MaxMinLib -R GraphLib GraphLib -R SumLib SumLib 
 
 Common_FILES = \
   CTypes.v COps.v Notations.v
@@ -60,6 +100,20 @@ GraphLib_FILES = \
  	$(GraphLib_UNDIRECTED_FILES) \
  	$(GraphLib_EXAMPLES_FILES)
 
+SumLib_FILES = \
+	Sum.v \
+	ZRange.v \
+	ZRect.v \
+	ListMember.v \
+	GraphSum.v \
+	SumLib.v
+
+StdLib_FILES = \
+  string_lib.v \
+  string_strategy_goal.v \
+  string_strategy_proof.v \
+  string_strategy_goal_check.v
+
 Auxlibs_FILES = \
   int_auto.v Idents.v Feq.v Axioms.v VMap.v relations.v ListLib.v \
   OrdersDecFact.v BinaryTree.v EqDec.v Bool.v Tactics.v Vec.v
@@ -89,7 +143,7 @@ MonadErr_Files = \
 	MonadErrBasic.v MonadErrLoop.v MonadErrHoare.v MonadErrHoarePartial.v monadesafe_lib.v StateRelMonadErr.v
 
 MonadExample_FILES = \
-	kmp.v mergesort.v 
+	kmp.v mergesort.v union_find_err.v 
   
 MONAD_FILES = \
 	MonadLib/MonadLib.v \
@@ -116,10 +170,25 @@ QCP_DEMO_Example_Lib_FILES = \
 LLM_FRIENDLY_CASES_Lib_FILES = \
 	poly_sll_lib.v sll_lib.v sll_insert_sort_lib.v functional_queue_lib.v dll_queue_lib.v sll_queue_lib.v simple_arith/Apos_lib.v simple_arith/PDiv_lib.v bst_lib.v bst_fp_lib.v swap_lib.v eval_lib.v avl_shape.v sll_shape_lib.v dll_shape_lib.v \
 	sll_merge_rel_lib.v kmp_lib.v kmp_rel_lib.v int_array_merge_rel_lib.v \
-	majorityElement_lib.v sortArray_lib.v zephyr_slist_lib.v \
+	majorityElement_lib.v sortArray_lib.v zephyr_slist_lib.v union_find_err_rel_lib.v \
 
 LLM_BENCH_Lib_FILES = \
+	Algorithms/coin_change/coin_change_lib.v \
+	Algorithms/dual_loop_quicksort/dual_loop_quicksort_lib.v \
+	Algorithms/house_robber/house_robber_lib.v \
+	Algorithms/longest_increasing_subsequence/longest_increasing_subsequence_lib.v \
+	Algorithms/longest_nondecreasing_subsequence/longest_nondecreasing_subsequence_lib.v \
+	Algorithms/maximum_subarray/maximum_subarray_lib.v \
+	Algorithms/multiple_knapsack/multiple_knapsack_lib.v \
+	Algorithms/quicksort/int_array_quicksort_lib.v \
+	Algorithms/rmq/rmq_lib.v \
+	Algorithms/sliding_window_maximum/sliding_window_maximum_lib.v \
+	Algorithms/sort_point/sort_point_lib.v \
 	Algorithms/split_array_largest_sum/split_array_largest_sum_lib.v \
+	Algorithms/super_piano/super_piano_lib.v \
+	Algorithms/zero_one_knapsack/zero_one_knapsack_lib.v \
+	Data_structures/priority_queue/priority_queue_lib.v \
+	Algorithms/manacher/manacher_lib.v \
 	Engineering/string/string_lib.v \
 	Engineering/string/memchr_lib.v \
 	Engineering/string/search_lib.v \
@@ -129,7 +198,7 @@ LLM_BENCH_Lib_FILES = \
 
 APPLICATION_Lib_FILES = \
 	fme/algorithm.v fme/implement.v fme/implement_lemma.v fme/fme_lib.v typeinfer/repr_subst_prop.v typeinfer/sol_prop.v typeinfer/sound_pv.v typeinfer/type_infer_lib.v typeinfer/typeinfer_lib.v \
-	minigmp/GmpAux.v minigmp/GmpNumber.v minigmp/GmpMulAux.v cnf_trans/cnf_trans_lib.v cnf_trans/smt_lang_lib.v alpha_equiv/ast_lib.v \
+	minigmp/GmpAux.v minigmp/GmpNumber.v minigmp/GmpMulAux.v minigmp_sumlib/GmpAux.v minigmp_sumlib/GmpNumber.v minigmp_sumlib/GmpMulAux.v cnf_trans/cnf_trans_lib.v cnf_trans/smt_lang_lib.v alpha_equiv/ast_lib.v \
 	malloc.v super_poly_sll2.v mergeablelist/sll_project_lib.v
 
 QCP_DEMO_EXAMPLE_FILE_NAME = \
@@ -140,16 +209,32 @@ QCP_DEMO_EXAMPLE_FILE_NAME = \
 LLM_FRIENDLY_CASES_EXAMPLE_FILE_NAME = \
 	poly_sll sll sll_insert_sort functional_queue dll_queue sll_queue simple_arith/abs simple_arith/add simple_arith/max3 simple_arith/gcd simple_arith/Always_pos simple_arith/div_test simple_arith/exgcd \
 	sum bst_insert bst_insert_rec bst_fp_insert bst_fp_delete swap eval bst_delete_rec bst_delete_rec2 avl_insert sll_auto dll_auto array_auto chars \
-	kmp_rel int_array_merge_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases
+	kmp_rel int_array_merge_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases union_find_err_rel
 
 LLM_BENCH_EXAMPLE_FILE_NAME = \
+	Algorithms/coin_change/coin_change \
+	Algorithms/dual_loop_quicksort/dual_loop_quicksort \
+	Algorithms/house_robber/house_robber \
+	Algorithms/longest_increasing_subsequence/longest_increasing_subsequence \
+	Algorithms/longest_nondecreasing_subsequence/longest_nondecreasing_subsequence \
+	Algorithms/maximum_subarray/maximum_subarray \
+	Algorithms/multiple_knapsack/multiple_knapsack \
+	Algorithms/quicksort/int_array_quicksort \
+	Algorithms/rmq/rmq \
+	Algorithms/sliding_window_maximum/sliding_window_maximum \
+	Algorithms/sort_point/sort_point \
 	Algorithms/split_array_largest_sum/split_array_largest_sum \
+	Algorithms/super_piano/super_piano \
+	Algorithms/zero_one_knapsack/zero_one_knapsack \
+	Data_structures/priority_queue/priority_queue \
+	Algorithms/manacher/manacher \
 	Engineering/string/memchr \
 	Engineering/string/memory \
 	Engineering/string/search \
 	Engineering/string/strcat \
 	Engineering/string/strcmp \
-	Engineering/string/strcpy
+	Engineering/string/strcpy \
+	Engineering/string/strlen
 
 LLM_BENCH_STRATEGY_FILE_NAME = \
 	Engineering/string/string
@@ -158,7 +243,7 @@ APPLICATION_FILE_NAME = \
 	LiteOS/Get_Set_Value LiteOS/GetSortLinkNextExpireTime LiteOS/List_Add LiteOS/LOS_ListDelete LiteOS/LOS_ListDelInit LiteOS/LOS_ListEmpty LiteOS/LOS_ListInit LiteOS/OsAdd2SortLink LiteOS/OsDeleteNodeSortLink \
 	LiteOS/OsDeleteSortLink LiteOS/OsGetNextExpireTime LiteOS/OsGetSortLinkAttribute LiteOS/OsSortLinkGetNextExpireTime LiteOS/OsSortLinkGetRemainTime LiteOS/OsSortLinkGetTargetExpireTime \
 	LiteOS/OsSortLinkInit LiteOS/OsSortLinkResponseTimeConvertFreq \
-	typeinfer/typeinfer alpha_equiv/alpha_equiv alpha_equiv/subst alpha_equiv/thm_apply cnf_trans/cnf_trans fme/fme minigmp/gmp mergeablelist/sll_project
+	typeinfer/typeinfer alpha_equiv/alpha_equiv alpha_equiv/subst alpha_equiv/thm_apply cnf_trans/cnf_trans fme/fme minigmp/gmp minigmp_sumlib/gmp mergeablelist/sll_project
 
 APPLICATION_PROOF_SPLIT_FILES = \
 	minigmp/gmp_proof_manual_part1.v \
@@ -167,6 +252,12 @@ APPLICATION_PROOF_SPLIT_FILES = \
 	minigmp/gmp_proof_manual_part4.v \
 	minigmp/gmp_proof_manual_part5.v \
 	minigmp/gmp_proof_manual_part6.v \
+	minigmp_sumlib/gmp_proof_manual_part1.v \
+	minigmp_sumlib/gmp_proof_manual_part2.v \
+	minigmp_sumlib/gmp_proof_manual_part3.v \
+	minigmp_sumlib/gmp_proof_manual_part4.v \
+	minigmp_sumlib/gmp_proof_manual_part5.v \
+	minigmp_sumlib/gmp_proof_manual_part6.v \
 	cnf_trans/cnf_trans_proof_manual1.v \
 	cnf_trans/cnf_trans_proof_manual2.v \
 	cnf_trans/cnf_trans_proof_manual3.v
@@ -196,6 +287,7 @@ LLM_FRIENDLY_CASES_Examples_FILES = \
 LLM_BENCH_Examples_FILES = \
 	$(LLM_BENCH_Lib_FILES:%=LLM_bench/%) \
 	$(addsuffix _strategy_goal.v, $(LLM_BENCH_STRATEGY_FILE_NAME:%=LLM_bench/%)) \
+	$(addsuffix _strategy_goal_check.v, $(LLM_BENCH_STRATEGY_FILE_NAME:%=LLM_bench/%)) \
 	$(addsuffix _strategy_proof.v, $(LLM_BENCH_STRATEGY_FILE_NAME:%=LLM_bench/%)) \
 	$(addsuffix _goal.v, $(LLM_BENCH_EXAMPLE_FILE_NAME:%=LLM_bench/%)) \
 	$(addsuffix _proof_auto.v, $(LLM_BENCH_EXAMPLE_FILE_NAME:%=LLM_bench/%)) \
@@ -274,6 +366,8 @@ EXAMPLE = \
 	$(ListLib_FILES:%.v=listlib/%.v) \
 	$(MaxMinLib_FILES:%.v=MaxMinLib/%.v) \
 	$(GraphLib_FILES:%.v=GraphLib/%.v) \
+	$(SumLib_FILES:%.v=SumLib/%.v) \
+	$(StdLib_FILES:%.v=stdlib/%.v) \
 	$(Sets_FILES:%.v=sets/%.v) \
 	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/%.v) \
 	$(Examples_FILES:%.v=examples/%.v) \
@@ -290,6 +384,8 @@ CORE_EXAMPLE = \
 	$(ListLib_FILES:%.v=listlib/%.v) \
 	$(MaxMinLib_FILES:%.v=MaxMinLib/%.v) \
 	$(GraphLib_FILES:%.v=GraphLib/%.v) \
+	$(SumLib_FILES:%.v=SumLib/%.v) \
+	$(StdLib_FILES:%.v=stdlib/%.v) \
 	$(Sets_FILES:%.v=sets/%.v) \
 	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/%.v) \
 	$(Compcertlib_FILES:%.v=compcert_lib/%.v) \
@@ -306,6 +402,13 @@ CORE_OUTPUTS = \
 	$(CORE_EXAMPLE:%.v=%.vo) \
 	$(CORE_EXAMPLE:%.v=%.vok) \
 	$(CORE_EXAMPLE:%.v=%.vos) \
+
+UNIFY_OUTPUTS = \
+	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/%.glob) \
+	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/%.vo) \
+	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/%.vok) \
+	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/%.vos) \
+	$(Unify_FILES:%.v=unifysl/LogicGenerator/demo932/.*.aux) \
 
 APPLICATION_OUTPUTS = \
 	$(APPLICATION_EXAMPLE_ONLY:%.v=%.glob) \
@@ -374,59 +477,52 @@ _CoqProject:
 	@echo $(COQ_FLAG) > _CoqProject
 
 depend:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(CORE_EXAMPLE) > .depend.core.tmp; \
-	mv .depend.core.tmp .depend.core; \
-	$(COQDEP) $(DEP_FLAG) $(APPLICATION_EXAMPLE_ONLY) > .depend.examples.applications.tmp; \
-	mv .depend.examples.applications.tmp .depend.examples.applications; \
-	$(COQDEP) $(DEP_FLAG) $(QCP_DEMO_EXAMPLE_ONLY) > .depend.examples.qcp_democases.tmp; \
-	mv .depend.examples.qcp_democases.tmp .depend.examples.qcp_democases; \
-	$(COQDEP) $(DEP_FLAG) $(LLM_FRIENDLY_CASES_EXAMPLE_ONLY) > .depend.examples.llm_friendly_cases.tmp; \
-	mv .depend.examples.llm_friendly_cases.tmp .depend.examples.llm_friendly_cases; \
-	$(COQDEP) $(DEP_FLAG) $(LLM_BENCH_EXAMPLE_ONLY) > .depend.examples.llm_bench.tmp; \
-	mv .depend.examples.llm_bench.tmp .depend.examples.llm_bench; \
-	cat .depend.examples.applications .depend.examples.qcp_democases .depend.examples.llm_friendly_cases .depend.examples.llm_bench > .depend.examples.tmp; \
-	mv .depend.examples.tmp .depend.examples; \
-	cat .depend.core .depend.examples > .depend.tmp; \
-	mv .depend.tmp .depend
+	@$(COQDEP) $(DEP_FLAG) $(CORE_EXAMPLE) > .depend.core.tmp
+	@$(call MOVE_FILE,.depend.core.tmp,.depend.core)
+	@$(COQDEP) $(DEP_FLAG) $(APPLICATION_EXAMPLE_ONLY) > .depend.examples.applications.tmp
+	@$(call MOVE_FILE,.depend.examples.applications.tmp,.depend.examples.applications)
+	@$(COQDEP) $(DEP_FLAG) $(QCP_DEMO_EXAMPLE_ONLY) > .depend.examples.qcp_democases.tmp
+	@$(call MOVE_FILE,.depend.examples.qcp_democases.tmp,.depend.examples.qcp_democases)
+	@$(COQDEP) $(DEP_FLAG) $(LLM_FRIENDLY_CASES_EXAMPLE_ONLY) > .depend.examples.llm_friendly_cases.tmp
+	@$(call MOVE_FILE,.depend.examples.llm_friendly_cases.tmp,.depend.examples.llm_friendly_cases)
+	@$(COQDEP) $(DEP_FLAG) $(LLM_BENCH_EXAMPLE_ONLY) > .depend.examples.llm_bench.tmp
+	@$(call MOVE_FILE,.depend.examples.llm_bench.tmp,.depend.examples.llm_bench)
+	@$(call CONCAT_FILES,.depend.examples.applications .depend.examples.qcp_democases .depend.examples.llm_friendly_cases .depend.examples.llm_bench,.depend.examples.tmp)
+	@$(call MOVE_FILE,.depend.examples.tmp,.depend.examples)
+	@$(call CONCAT_FILES,.depend.core .depend.examples,.depend.tmp)
+	@$(call MOVE_FILE,.depend.tmp,.depend)
 
 depend-core:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(CORE_EXAMPLE) > .depend.core.tmp; \
-	mv .depend.core.tmp .depend.core
+	@$(COQDEP) $(DEP_FLAG) $(CORE_EXAMPLE) > .depend.core.tmp
+	@$(call MOVE_FILE,.depend.core.tmp,.depend.core)
 
 depend-examples:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(APPLICATION_EXAMPLE_ONLY) > .depend.examples.applications.tmp; \
-	mv .depend.examples.applications.tmp .depend.examples.applications; \
-	$(COQDEP) $(DEP_FLAG) $(QCP_DEMO_EXAMPLE_ONLY) > .depend.examples.qcp_democases.tmp; \
-	mv .depend.examples.qcp_democases.tmp .depend.examples.qcp_democases; \
-	$(COQDEP) $(DEP_FLAG) $(LLM_FRIENDLY_CASES_EXAMPLE_ONLY) > .depend.examples.llm_friendly_cases.tmp; \
-	mv .depend.examples.llm_friendly_cases.tmp .depend.examples.llm_friendly_cases; \
-	$(COQDEP) $(DEP_FLAG) $(LLM_BENCH_EXAMPLE_ONLY) > .depend.examples.llm_bench.tmp; \
-	mv .depend.examples.llm_bench.tmp .depend.examples.llm_bench; \
-	cat .depend.examples.applications .depend.examples.qcp_democases .depend.examples.llm_friendly_cases .depend.examples.llm_bench > .depend.examples.tmp; \
-	mv .depend.examples.tmp .depend.examples
+	@$(COQDEP) $(DEP_FLAG) $(APPLICATION_EXAMPLE_ONLY) > .depend.examples.applications.tmp
+	@$(call MOVE_FILE,.depend.examples.applications.tmp,.depend.examples.applications)
+	@$(COQDEP) $(DEP_FLAG) $(QCP_DEMO_EXAMPLE_ONLY) > .depend.examples.qcp_democases.tmp
+	@$(call MOVE_FILE,.depend.examples.qcp_democases.tmp,.depend.examples.qcp_democases)
+	@$(COQDEP) $(DEP_FLAG) $(LLM_FRIENDLY_CASES_EXAMPLE_ONLY) > .depend.examples.llm_friendly_cases.tmp
+	@$(call MOVE_FILE,.depend.examples.llm_friendly_cases.tmp,.depend.examples.llm_friendly_cases)
+	@$(COQDEP) $(DEP_FLAG) $(LLM_BENCH_EXAMPLE_ONLY) > .depend.examples.llm_bench.tmp
+	@$(call MOVE_FILE,.depend.examples.llm_bench.tmp,.depend.examples.llm_bench)
+	@$(call CONCAT_FILES,.depend.examples.applications .depend.examples.qcp_democases .depend.examples.llm_friendly_cases .depend.examples.llm_bench,.depend.examples.tmp)
+	@$(call MOVE_FILE,.depend.examples.tmp,.depend.examples)
 
 depend-examples-applications:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(APPLICATION_EXAMPLE_ONLY) > .depend.examples.applications.tmp; \
-	mv .depend.examples.applications.tmp .depend.examples.applications
+	@$(COQDEP) $(DEP_FLAG) $(APPLICATION_EXAMPLE_ONLY) > .depend.examples.applications.tmp
+	@$(call MOVE_FILE,.depend.examples.applications.tmp,.depend.examples.applications)
 
 depend-examples-qcp-democases:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(QCP_DEMO_EXAMPLE_ONLY) > .depend.examples.qcp_democases.tmp; \
-	mv .depend.examples.qcp_democases.tmp .depend.examples.qcp_democases
+	@$(COQDEP) $(DEP_FLAG) $(QCP_DEMO_EXAMPLE_ONLY) > .depend.examples.qcp_democases.tmp
+	@$(call MOVE_FILE,.depend.examples.qcp_democases.tmp,.depend.examples.qcp_democases)
 
 depend-examples-llm-friendly-cases:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(LLM_FRIENDLY_CASES_EXAMPLE_ONLY) > .depend.examples.llm_friendly_cases.tmp; \
-	mv .depend.examples.llm_friendly_cases.tmp .depend.examples.llm_friendly_cases
+	@$(COQDEP) $(DEP_FLAG) $(LLM_FRIENDLY_CASES_EXAMPLE_ONLY) > .depend.examples.llm_friendly_cases.tmp
+	@$(call MOVE_FILE,.depend.examples.llm_friendly_cases.tmp,.depend.examples.llm_friendly_cases)
 
 depend-examples-llm-bench:
-	@set -e; \
-	$(COQDEP) $(DEP_FLAG) $(LLM_BENCH_EXAMPLE_ONLY) > .depend.examples.llm_bench.tmp; \
-	mv .depend.examples.llm_bench.tmp .depend.examples.llm_bench
+	@$(COQDEP) $(DEP_FLAG) $(LLM_BENCH_EXAMPLE_ONLY) > .depend.examples.llm_bench.tmp
+	@$(call MOVE_FILE,.depend.examples.llm_bench.tmp,.depend.examples.llm_bench)
 
 .depend:
 	@$(MAKE) depend
@@ -437,65 +533,32 @@ clean:
 	@$(MAKE) clean-deps
 
 clean-core:
-	@rm -f $(CORE_OUTPUTS)
-	@rm -f **/.*.aux
-	@rm -f .depend.core .depend.core.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_TREE_OUTPUTS,Common auxlibs compcert_lib SeparationLogic sets StrategyLib fixedpoints MonadLib MaxMinLib GraphLib SumLib listlib)
+	@$(call REMOVE_FILES,$(UNIFY_OUTPUTS))
+	@$(call REMOVE_FILES,.depend.core .depend.core.tmp .depend.tmp .depend)
 
 clean-examples:
-	@rm -f $(EXAMPLE_OUTPUTS)
-	@rm -f **/.*.aux
-	@rm -f examples/**/.*.aux examples/LiteOS/lib/.*.aux
-	@rm -f .depend.examples.applications .depend.examples.applications.tmp
-	@rm -f .depend.examples.qcp_democases .depend.examples.qcp_democases.tmp
-	@rm -f .depend.examples.llm_friendly_cases .depend.examples.llm_friendly_cases.tmp
-	@rm -f .depend.examples.llm_bench .depend.examples.llm_bench.tmp
-	@rm -f .depend.examples .depend.examples.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_TREE_OUTPUTS,examples)
+	@$(call REMOVE_FILES,.depend.examples.applications .depend.examples.applications.tmp .depend.examples.qcp_democases .depend.examples.qcp_democases.tmp .depend.examples.llm_friendly_cases .depend.examples.llm_friendly_cases.tmp .depend.examples.llm_bench .depend.examples.llm_bench.tmp .depend.examples .depend.examples.tmp .depend.tmp .depend)
 
 clean-examples-applications:
-	@rm -f $(APPLICATION_OUTPUTS)
-	@rm -f examples/**/.*.aux examples/LiteOS/lib/.*.aux
-	@rm -f .depend.examples.applications .depend.examples.applications.tmp
-	@rm -f .depend.examples .depend.examples.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_TREE_OUTPUTS,examples/Applications_human)
+	@$(call REMOVE_FILES,.depend.examples.applications .depend.examples.applications.tmp .depend.examples .depend.examples.tmp .depend.tmp .depend)
 
 clean-examples-qcp-democases:
-	@rm -f $(QCP_DEMO_OUTPUTS)
-	@rm -f examples/**/.*.aux examples/LiteOS/lib/.*.aux
-	@rm -f .depend.examples.qcp_democases .depend.examples.qcp_democases.tmp
-	@rm -f .depend.examples .depend.examples.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_TREE_OUTPUTS,examples/QCP_demos_human)
+	@$(call REMOVE_FILES,.depend.examples.qcp_democases .depend.examples.qcp_democases.tmp .depend.examples .depend.examples.tmp .depend.tmp .depend)
 
 clean-examples-llm-friendly-cases:
-	@rm -f $(LLM_FRIENDLY_CASES_OUTPUTS)
-	@rm -f examples/**/.*.aux examples/LiteOS/lib/.*.aux
-	@rm -f .depend.examples.llm_friendly_cases .depend.examples.llm_friendly_cases.tmp
-	@rm -f .depend.examples .depend.examples.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_TREE_OUTPUTS,examples/QCP_demos_LLM)
+	@$(call REMOVE_FILES,.depend.examples.llm_friendly_cases .depend.examples.llm_friendly_cases.tmp .depend.examples .depend.examples.tmp .depend.tmp .depend)
 
 clean-examples-llm-bench:
-	@rm -f $(LLM_BENCH_OUTPUTS)
-	@rm -f examples/**/.*.aux examples/LiteOS/lib/.*.aux
-	@rm -f .depend.examples.llm_bench .depend.examples.llm_bench.tmp
-	@rm -f .depend.examples .depend.examples.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_TREE_OUTPUTS,examples/LLM_bench)
+	@$(call REMOVE_FILES,.depend.examples.llm_bench .depend.examples.llm_bench.tmp .depend.examples .depend.examples.tmp .depend.tmp .depend)
 
 clean-deps:
-	@rm -f .depend.core .depend.core.tmp
-	@rm -f .depend.examples.applications .depend.examples.applications.tmp
-	@rm -f .depend.examples.qcp_democases .depend.examples.qcp_democases.tmp
-	@rm -f .depend.examples.llm_friendly_cases .depend.examples.llm_friendly_cases.tmp
-	@rm -f .depend.examples.llm_bench .depend.examples.llm_bench.tmp
-	@rm -f .depend.examples .depend.examples.tmp
-	@rm -f .depend.tmp
-	@rm -f .depend
+	@$(call REMOVE_FILES,.depend.core .depend.core.tmp .depend.examples.applications .depend.examples.applications.tmp .depend.examples.qcp_democases .depend.examples.qcp_democases.tmp .depend.examples.llm_friendly_cases .depend.examples.llm_friendly_cases.tmp .depend.examples.llm_bench .depend.examples.llm_bench.tmp .depend.examples .depend.examples.tmp .depend.tmp .depend)
 
 .PHONY: clean clean-core clean-examples clean-examples-applications clean-examples-qcp-democases clean-examples-llm-friendly-cases clean-examples-llm-bench clean-deps depend depend-core depend-examples depend-examples-applications depend-examples-qcp-democases depend-examples-llm-friendly-cases depend-examples-llm-bench core examples-applications examples-qcp-democases examples-llm-friendly-cases examples-llm-bench
 .DEFAULT_GOAL := all

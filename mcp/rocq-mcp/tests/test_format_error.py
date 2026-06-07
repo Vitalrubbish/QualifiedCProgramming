@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rocq_mcp.server import _format_error
+from rocq_mcp.compile import _format_error, _parse_coqc_error_positions
 
 
 class TestFormatError:
@@ -188,7 +188,7 @@ class TestFormatError:
 
     def test_excess_unique_warnings_capped(self):
         """At most _MAX_FORMAT_WARNINGS unique warnings are included."""
-        from rocq_mcp.server import _MAX_FORMAT_WARNINGS
+        from rocq_mcp.compile import _MAX_FORMAT_WARNINGS
 
         proof = "\n".join(f"line {i}" for i in range(20))
         # Generate more unique warnings than the cap
@@ -208,7 +208,7 @@ class TestFormatError:
 
     def test_structured_output_bounded(self):
         """Structured diagnostics output must be bounded to _MAX_ERROR_LENGTH."""
-        from rocq_mcp.server import _MAX_ERROR_LENGTH
+        from rocq_mcp.compile import _MAX_ERROR_LENGTH
 
         proof = "\n".join(f"line {i}" for i in range(200))
         # Even with warnings within the count cap, a huge error body
@@ -220,8 +220,50 @@ class TestFormatError:
 
     def test_no_diagnostics_output_capped(self):
         """Unstructured stderr must be capped to avoid drowning LLM context."""
-        from rocq_mcp.server import _MAX_ERROR_LENGTH
+        from rocq_mcp.compile import _MAX_ERROR_LENGTH
 
         huge = "x" * (_MAX_ERROR_LENGTH * 3)
         result = _format_error(huge, "proof")
         assert len(result) <= _MAX_ERROR_LENGTH
+
+    def test_include_warnings_false_unstructured_strips_warning_lines(self):
+        """Unstructured fallback path must drop ``Warning:`` lines too."""
+        # No ``File "..."`` markers — exercises the unstructured branch.
+        stderr = (
+            "Warning: deprecated-from-Coq, mathcomp, deprecated\n"
+            "Some other context line\n"
+        )
+        result = _format_error(stderr, "proof", include_warnings=False)
+        assert "Warning:" not in result
+        assert "deprecated" not in result
+        # Non-warning context survives.
+        assert "Some other context line" in result
+
+    def test_include_warnings_false_unstructured_keeps_real_errors(self):
+        """A non-located coqc error (e.g. missing binary) still surfaces."""
+        stderr = "/usr/local/bin/coqc: command not found\n"
+        result = _format_error(stderr, "proof", include_warnings=False)
+        assert "command not found" in result
+
+
+class TestParseCoqcErrorPositions:
+    """Test _parse_coqc_error_positions warning filtering."""
+
+    STDERR = (
+        'File "/tmp/tmp.v", line 1, characters 0-5:\n'
+        "Warning: This is a deprecation.\n"
+        'File "/tmp/tmp.v", line 2, characters 0-5:\n'
+        "Error: Real error.\n"
+    )
+
+    def test_default_includes_warnings(self):
+        positions = _parse_coqc_error_positions(self.STDERR)
+        assert len(positions) == 2
+        kinds = [p["message"].split(":", 1)[0] for p in positions]
+        assert "Warning" in kinds
+        assert "Error" in kinds
+
+    def test_include_warnings_false_filters_warnings(self):
+        positions = _parse_coqc_error_positions(self.STDERR, include_warnings=False)
+        assert len(positions) == 1
+        assert positions[0]["message"].startswith("Error:")

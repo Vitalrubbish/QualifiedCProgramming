@@ -31,11 +31,11 @@ Proof.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H.
+	    exact PreH1.
 	  + dump_pre_spatial.
-	    exact H.
+	    exact PreH1.
 	  + dump_pre_spatial.
-	    exact H0.
+	    exact PreH2.
 	  + dump_pre_spatial.
 	    lia.
 Qed.
@@ -53,9 +53,9 @@ Proof.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H2.
+	    exact PreH4.
 	  + dump_pre_spatial.
-	    exact H3.
+	    exact PreH5.
 	- lia.
 Qed.
 
@@ -68,4 +68,3 @@ Proof.
 	rewrite sepcon_emp_equiv.
 	cancel (CharArray.full a_pre n_pre (repeat_Z m_pre n_pre)).
 Qed.
-

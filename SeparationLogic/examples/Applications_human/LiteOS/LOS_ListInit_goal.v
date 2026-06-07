@@ -28,11 +28,27 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function LOS_ListInit -----*)
 
 Definition LOS_ListInit_return_wit_1 := 
+(
 forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
 |--
-  (store_dll storeA list_pre nil )
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
+) \/
+(
+forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
+  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
+|--
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
+).
+
+Definition LOS_ListInit_return_wit_1_split_goal_spatial := 
+forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
+  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
+|--
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
 .
 
 Module Type VC_Correct.

@@ -35,45 +35,41 @@ Qed.
 Lemma proof_of_subst_var_return_wit_6 : subst_var_return_wit_6.
 Proof.    
     pre_process.
-    unfold list_Z_cmp in H.
-    rewrite H10 in H.
+    unfold list_Z_cmp in PreH1.
+    rewrite PreH12 in PreH1.
     destruct (list_Z_eqb qvar src_str) eqn:Heq; [ | discriminate ].
     unfold term_subst_v.
-    rewrite H1, Heq.
-    unfold store_term at 2.
+    rewrite PreH3, Heq.
+    unfold store_term.
     simpl.
-    fold store_term.
-    Exists y z. 
+    Exists y z.
     entailer!.
 Qed.  
 
 Lemma proof_of_subst_var_return_wit_5 : subst_var_return_wit_5.
 Proof. 
     pre_process.
-    unfold list_Z_cmp in H0.
-    destruct (list_Z_eqb qvar src_str) eqn:Heq; [ contradiction | ].
+    unfold list_Z_cmp in PreH2.
+    destruct (list_Z_eqb qvar src_str) eqn:Heq; [ rewrite PreH2 in PreH13; contradiction | ].
     unfold term_subst_v.
-    rewrite H2, Heq.
-    fold term_subst_v.
-    unfold store_term at 2.
+    rewrite PreH4, Heq.
+    unfold store_term.
     simpl.
-    fold store_term.
+    rewrite PreH1 in *.
     Exists y z.
-    rewrite H.
     entailer!.
 Qed.
 
 Lemma proof_of_subst_var_return_wit_4 : subst_var_return_wit_4.
 Proof. 
     pre_process.
-    unfold term_subst_v at 3.
-    rewrite H2.
-    fold term_subst_v.
-    unfold store_term at 3.
+    unfold term_subst_v.
+    rewrite PreH4.
+    unfold store_term.
     simpl.
-    fold store_term.
+    rewrite PreH1 in *.
+    rewrite PreH2 in *.
     Exists y z.
-    rewrite H, H0.
     entailer!.
 Qed. 
 
@@ -81,19 +77,23 @@ Lemma proof_of_subst_var_return_wit_3 : subst_var_return_wit_3.
 Proof.
     pre_process.
     unfold term_subst_v.
-    rewrite H0.
+    rewrite PreH2.
     unfold store_term.
+    simpl.
     entailer!.
 Qed. 
 
 Lemma proof_of_subst_var_return_wit_2 : subst_var_return_wit_2.
 Proof. 
     pre_process.
-    unfold list_Z_cmp in H0.
-    destruct (list_Z_eqb var src_str) eqn:Heq; [ contradiction | ].
+    unfold list_Z_cmp in PreH2.
+    destruct (list_Z_eqb var src_str) eqn:Heq; [ rewrite PreH2 in PreH1; contradiction | ].
     unfold term_subst_v.
-    rewrite H2, Heq.
+    rewrite PreH4, Heq.
     unfold store_term.
+    simpl.
+    fold term_subst_v.
+    fold store_term.
     Exists y.
     entailer!.
 Qed.
@@ -101,12 +101,14 @@ Qed.
 Lemma proof_of_subst_var_return_wit_1 : subst_var_return_wit_1.
 Proof.
     pre_process.
-    unfold list_Z_cmp in H1.
-    rewrite H0 in H1.
+    unfold list_Z_cmp in PreH3.
+    rewrite PreH2 in PreH3.
     destruct (list_Z_eqb var src_str) eqn:Heq; [ | discriminate ].
     unfold term_subst_v.
-    rewrite H3, Heq.
+    rewrite PreH5, Heq.
     unfold store_term.
+    simpl.
+    fold store_term.
     Exists retval_2.
     entailer!.
 Qed.
@@ -199,27 +201,26 @@ Qed.
 Lemma proof_of_subst_term_return_wit_6 : subst_term_return_wit_6.
 Proof. 
     pre_process.
-    unfold list_Z_cmp in H.
-    rewrite H10 in H.
+    unfold list_Z_cmp in PreH1.
+    rewrite PreH12 in PreH1.
     destruct (list_Z_eqb qvar src_str) eqn:Heq; [ | discriminate ].
     unfold term_subst_t.
-    rewrite H1, Heq.
-    unfold store_term at 3.
-    fold store_term.
-    Exists y z. 
+    rewrite PreH3, Heq.
+    unfold store_term.
+    simpl.
+    Exists y z.
     entailer!.
 Qed.
 
 Lemma proof_of_subst_term_return_wit_5 : subst_term_return_wit_5.
 Proof.  
     pre_process.
-    unfold list_Z_cmp in H.
-    destruct (list_Z_eqb qvar src_str) eqn:Heq; [ contradiction | ].
+    unfold list_Z_cmp in PreH1.
+    destruct (list_Z_eqb qvar src_str) eqn:Heq; [ rewrite PreH1 in PreH12; contradiction | ].
     unfold term_subst_t.
-    rewrite H1, Heq.
-    fold term_subst_t.
-    unfold store_term at 3.
-    fold store_term.
+    rewrite PreH3, Heq.
+    unfold store_term.
+    simpl.
     Exists y retval_2.
     entailer!.
 Qed.
@@ -227,11 +228,10 @@ Qed.
 Lemma proof_of_subst_term_return_wit_4 : subst_term_return_wit_4.
 Proof. 
     pre_process.
-    unfold term_subst_t at 3.
-    rewrite H0.
-    fold term_subst_t.
-    unfold store_term at 4.
-    fold store_term.
+    unfold term_subst_t.
+    rewrite PreH2.
+    unfold store_term.
+    simpl.
     Exists retval retval_2.
     entailer!.
 Qed.
@@ -240,19 +240,23 @@ Lemma proof_of_subst_term_return_wit_3 : subst_term_return_wit_3.
 Proof.  
     pre_process.
     unfold term_subst_t.
-    rewrite H0.
-    unfold store_term at 2.
+    rewrite PreH2.
+    unfold store_term.
+    simpl.
     entailer!.
 Qed.
 
 Lemma proof_of_subst_term_return_wit_2 : subst_term_return_wit_2.
 Proof. 
     pre_process.
-    unfold list_Z_cmp in H0.
-    destruct (list_Z_eqb var src_str) eqn:Heq; [ contradiction | ].
+    unfold list_Z_cmp in PreH2.
+    destruct (list_Z_eqb var src_str) eqn:Heq; [ rewrite PreH2 in PreH1; contradiction | ].
     unfold term_subst_t.
-    rewrite H2, Heq.
-    unfold store_term at 2.
+    rewrite PreH4, Heq.
+    unfold store_term.
+    simpl.
+    fold term_subst_t.
+    fold store_term.
     Exists y.
     entailer!.
 Qed.
@@ -260,11 +264,14 @@ Qed.
 Lemma proof_of_subst_term_return_wit_1 : subst_term_return_wit_1.
 Proof. 
     pre_process.
-    unfold list_Z_cmp in H1.
-    rewrite H0 in H1.
+    unfold list_Z_cmp in PreH3.
+    rewrite PreH2 in PreH3.
     destruct (list_Z_eqb var src_str) eqn:Heq; [ | discriminate ].
     unfold term_subst_t.
-    rewrite H3, Heq.
+    rewrite PreH5, Heq.
+    unfold store_term.
+    simpl.
+    fold store_term.
     entailer!.
 Qed.
 
@@ -314,7 +321,7 @@ Qed.
 Lemma proof_of_subst_term_which_implies_wit_3 : subst_term_which_implies_wit_3.
 Proof. 
     pre_process.
-    rewrite H0.
+    rewrite PreH2.
     unfold store_term.
     Exists y.
     entailer!.

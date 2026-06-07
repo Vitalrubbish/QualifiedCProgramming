@@ -16,7 +16,7 @@ Local Open Scope sets.
 Local Open Scope string.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.strcpy_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 
 Lemma proof_of_strcpy_entail_wit_1 : strcpy_entail_wit_1.
@@ -39,9 +39,9 @@ Proof.
       unfold string_lib.c_string, string_lib.string_length in *.
       destruct (Z_lt_ge_dec i (Zlength src_str)) as [Hlt | Hge]; [lia |].
       assert (i = Zlength src_str) as -> by lia.
-      rewrite app_Znth2 in H0 by lia.
-      replace (Zlength src_str - Zlength src_str) with 0 in H0 by lia.
-      rewrite Znth0_cons in H0.
+      rewrite app_Znth2 in PreH2 by lia.
+      replace (Zlength src_str - Zlength src_str) with 0 in PreH2 by lia.
+      rewrite Znth0_cons in PreH2.
       contradiction.
     }
     replace (sublist 0 (i + 1) src_str)
@@ -64,9 +64,9 @@ Proof.
       unfold string_lib.c_string, string_lib.string_length in *.
       destruct (Z_lt_ge_dec i (Zlength src_str)) as [Hlt | Hge]; [lia |].
       assert (i = Zlength src_str) as -> by lia.
-      rewrite app_Znth2 in H0 by lia.
-      replace (Zlength src_str - Zlength src_str) with 0 in H0 by lia.
-      rewrite Znth0_cons in H0.
+      rewrite app_Znth2 in PreH2 by lia.
+      replace (Zlength src_str - Zlength src_str) with 0 in PreH2 by lia.
+      rewrite Znth0_cons in PreH2.
       contradiction.
     }
     lia.
@@ -77,11 +77,11 @@ Proof.
   pre_process.
   assert (Hi : i = string_lib.string_length src_str).
   {
-    unfold string_lib.valid_string in H1.
-    destruct H1 as [_ Hno].
+    unfold string_lib.valid_string in PreH3.
+    destruct PreH3 as [_ Hno].
     unfold string_lib.c_string, string_lib.string_length in *.
     destruct (Z_lt_ge_dec i (Zlength src_str)) as [Hlt | Hge].
-    - rewrite app_Znth1 in H0 by lia.
+    - rewrite app_Znth1 in PreH2 by lia.
       exfalso.
       apply (Hno i); [lia | assumption].
     - lia.
@@ -112,11 +112,11 @@ Lemma proof_of_strncpy_entail_wit_2 : strncpy_entail_wit_2.
 Proof.
   pre_process.
   split_pure_spatial.
-  - rewrite (strncpy_sublist_succ src_str i H0 H5 H7).
+  - rewrite (strncpy_sublist_succ src_str i PreH2 PreH7 PreH9).
     unfold string_lib.store_string.
     entailer!.
   - entailer!.
-    pose proof (strncpy_c_string_nonzero_lt src_str i H0 H5 H7).
+    pose proof (strncpy_c_string_nonzero_lt src_str i PreH2 PreH7 PreH9).
     lia.
 Qed.
 
@@ -128,11 +128,9 @@ Proof.
   - unfold string_lib.store_string.
     entailer!.
   - entailer!.
-    + intros _.
-      eapply strncpy_c_string_zero_ge_length; eauto.
-    + unfold strncpy_content.
-      split; [lia |].
-      left; split; [assumption | reflexivity].
+    unfold strncpy_content.
+    split; [lia |].
+    left; split; [lia | reflexivity].
 Qed.
 
 Lemma proof_of_strncpy_entail_wit_3_2 : strncpy_entail_wit_3_2.
@@ -147,7 +145,9 @@ Proof.
     unfold strncpy_content.
     split; [lia|].
     left.
-    split; auto.
+    split; [lia | reflexivity].
+    intros _.
+    eapply strncpy_c_string_zero_ge_length; eauto.
 Qed. 
 
 Lemma proof_of_strncpy_entail_wit_4 : strncpy_entail_wit_4.

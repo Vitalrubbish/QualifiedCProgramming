@@ -49,23 +49,23 @@ Proof.
   split_pure_spatial.
   - repeat cancel.
   - entailer!.
-    + unfold SWMQueueState in H16.
-      destruct H16 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+    + unfold SWMQueueState in PreH18.
+      destruct PreH18 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
         HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover & Hfront).
       intros p r Hp. apply Hdec. lia.
-    + unfold SWMQueueState in H16.
-      destruct H16 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+    + unfold SWMQueueState in PreH18.
+      destruct PreH18 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
         HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover & Hfront).
       intros p r Hp. apply Hinc. lia.
-    + unfold SWMQueueState in H16.
-      destruct H16 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+    + unfold SWMQueueState in PreH18.
+      destruct PreH18 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
         HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover & Hfront).
       intros pos Hpos.
       unfold SWMQueueEntriesValid in Hvalid.
       specialize (Hvalid pos Hpos) as (? & ? & ?). lia.
-    + unfold SWMQueueState in H16.
+    + unfold SWMQueueState in PreH18.
       unfold SWMQueueDropLoopState.
-      destruct H16 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+      destruct PreH18 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
         HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover & Hfront).
       repeat split; try lia; try assumption.
       * unfold SWMQueueEntriesValid in Hvalid.
@@ -89,12 +89,12 @@ Proof.
   split_pure_spatial.
   - repeat cancel.
   - entailer!.
-    + intros p r Hp. apply H20. lia.
-    + intros p r Hp. apply H19. lia.
-    + intros pos Hpos. apply H18. lia.
-    + intros pos Hpos. apply H17. lia.
+    + intros p r Hp. apply PreH22. lia.
+    + intros p r Hp. apply PreH21. lia.
+    + intros pos Hpos. apply PreH20. lia.
+    + intros pos Hpos. apply PreH19. lia.
     + unfold SWMQueueDropLoopState in *.
-      destruct H16 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+      destruct PreH18 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
         HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover).
       repeat split; try lia.
       * unfold SWMQueueEntriesValid in Hvalid.
@@ -124,10 +124,68 @@ Proof.
   split_pure_spatial.
   - repeat cancel.
   - entailer!.
-    unfold SWMQueueAfterDrop, SWMQueueDropLoopState in *.
-    destruct H15 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+    unfold SWMQueueDropLoopState in PreH18.
+    destruct PreH18 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
       HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover).
+    assert (HvalidAfter :
+      SWMQueueEntriesValidAfterDrop l q_l_2 head tail i k_pre).
+    {
+      unfold SWMQueueEntriesValidAfterDrop.
+      intros pos Hpos.
+      unfold SWMQueueEntriesValid in Hvalid.
+      specialize (Hvalid pos Hpos) as (Hpos0 & HposLen & HposLeft & HposI).
+      repeat split; try lia.
+      destruct (Z.eq_dec pos head) as [-> | Hneq].
+      * lia.
+      * unfold SWMQueueIndexIncreasing in Hinc.
+        specialize (Hinc head pos ltac:(lia)). lia.
+    }
+    assert (Hdrop : SWMQueueAfterDrop l q_l_2 head tail i k_pre).
+    {
+      unfold SWMQueueAfterDrop.
+      exact (conj HK1 (conj HK2 (conj HI0 (conj HIle (conj HH0
+        (conj HHtail (conj HtailLen (conj HtailI (conj HvalidAfter
+        (conj Hinc (conj Hdec Hcover))))))))))).
+    }
+    assert (Hdroploop : SWMQueueDropLoopState l q_l_2 head tail i k_pre).
+    {
+      unfold SWMQueueDropLoopState.
+      exact (conj HK1 (conj HK2 (conj HI0 (conj HIle (conj HH0
+        (conj HHtail (conj HtailLen (conj HtailI (conj Hvalid
+        (conj Hinc (conj Hdec Hcover))))))))))).
+    }
+    unfold SWMQueueAfterDrop, SWMQueueDropLoopState.
     repeat split; try lia; try assumption.
+    + unfold SWMQueueEntriesValidAfterDrop in HvalidAfter.
+      assert (HposRange : head <= pos_2 < tail) by lia.
+      specialize (HvalidAfter pos_2 HposRange) as (_ & _ & ? & _). lia.
+    + unfold SWMQueueEntriesValidAfterDrop in HvalidAfter.
+      assert (HposRange : head <= pos_2 < tail) by lia.
+      specialize (HvalidAfter pos_2 HposRange) as (_ & _ & _ & ?). lia.
+    + intro.
+      specialize (PreH19 (tail - 1) ltac:(lia)) as (? & ?).
+      lia.
+    + unfold SWMQueueAfterDrop, SWMQueueDropLoopState in *.
+      destruct PreH18 as (HK1' & HK2' & HI0' & HIle' & HH0' & HHtail' &
+        HtailLen' & HtailI' & Hvalid' & Hinc' & Hdec' & Hcover').
+      assert (HvalidAfter' :
+        SWMQueueEntriesValidAfterDrop l q_l_2 head tail i k_pre).
+      {
+        unfold SWMQueueEntriesValidAfterDrop.
+        intros pos Hpos.
+        unfold SWMQueueEntriesValid in Hvalid'.
+        specialize (Hvalid' pos Hpos) as (Hpos0 & HposLen & HposLeft & HposI).
+        repeat split; try lia.
+        destruct (Z.eq_dec pos head) as [-> | Hneq].
+        - lia.
+        - unfold SWMQueueIndexIncreasing in Hinc'.
+          specialize (Hinc' head pos ltac:(lia)). lia.
+      }
+      exact (conj HK1' (conj HK2' (conj HI0' (conj HIle' (conj HH0'
+        (conj HHtail' (conj HtailLen' (conj HtailI' (conj HvalidAfter'
+        (conj Hinc' (conj Hdec' Hcover'))))))))))).
+    Unshelve.
+    all: try lia.
 Qed.
 
 Lemma proof_of_maxSlidingWindow_entail_wit_4_2 : maxSlidingWindow_entail_wit_4_2.
@@ -137,28 +195,18 @@ Proof.
   split_pure_spatial.
   - repeat cancel.
   - entailer!.
-    + intros pos Hpos.
-      specialize (H18 pos Hpos) as Hrange.
-      assert (pos = head \/ head < pos) as [-> | Hgt] by lia.
-      * lia.
-      * specialize (H19 head pos ltac:(lia)) as Hinc. lia.
-    + intro Hnonempty.
-      assert (Hpos : head <= tail - 1 < tail) by lia.
-      specialize (H17 (tail - 1) Hpos) as Hlast. lia.
-    + unfold SWMQueueAfterDrop, SWMQueueDropLoopState in *.
-      destruct H16 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
-        HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover).
-      repeat split; try lia; try assumption.
-      * unfold SWMQueueEntriesValid in Hvalid.
-        specialize (Hvalid pos ltac:(lia)) as (? & ? & ?). lia.
-      * unfold SWMQueueEntriesValid in Hvalid.
-        specialize (Hvalid pos ltac:(lia)) as (? & ? & ?). lia.
-      * assert (pos = head \/ head < pos) as [-> | Hgt] by lia.
-        -- lia.
-        -- unfold SWMQueueIndexIncreasing in Hinc.
-           specialize (Hinc head pos ltac:(lia)) as HincHead. lia.
-      * unfold SWMQueueEntriesValid in Hvalid.
-        specialize (Hvalid pos ltac:(lia)) as (? & ? & ?). lia.
+    unfold SWMQueueAfterDrop, SWMQueueDropLoopState in *.
+    destruct PreH17 as (HK1 & HK2 & HI0 & HIle & HH0 & HHtail &
+      HtailLen & HtailI & Hvalid & Hinc & Hdec & Hcover).
+    assert (HvalidAfter :
+      SWMQueueEntriesValidAfterDrop l q_l_2 head tail i k_pre).
+    {
+      unfold SWMQueueEntriesValidAfterDrop.
+      intros pos Hpos. lia.
+    }
+    exact (conj HK1 (conj HK2 (conj HI0 (conj HIle (conj HH0
+      (conj HHtail (conj HtailLen (conj HtailI (conj HvalidAfter
+      (conj Hinc (conj Hdec Hcover))))))))))).
 Qed.
 
 Lemma proof_of_maxSlidingWindow_entail_wit_5 : maxSlidingWindow_entail_wit_5.
@@ -174,7 +222,7 @@ Proof.
       try solve [dump_pre_spatial; eauto; try lia
                 | dump_pre_spatial;
                   eapply SWMQueueAfterDrop_to_PendingState; eauto;
-                  rewrite H2; lia].
+                  rewrite PreH4; lia].
 Qed. 
 
 Lemma proof_of_maxSlidingWindow_entail_wit_6 : maxSlidingWindow_entail_wit_6.
@@ -191,11 +239,11 @@ Proof.
                 | dump_pre_spatial;
                   eapply SWMQueuePendingState_pop_back_dominated; eauto
                 | dump_pre_spatial; intros;
-                  specialize (H17 (tail - 1 - 1) ltac:(lia)); lia
-                | dump_pre_spatial; intros; eapply H17; lia
-                | dump_pre_spatial; intros; eapply H19; lia
-                | dump_pre_spatial; intros; eapply H20; lia
-                | dump_pre_spatial; intros; eapply H21; lia].
+                  specialize (PreH19 (tail - 1 - 1) ltac:(lia)); lia
+                | dump_pre_spatial; intros; eapply PreH19; lia
+                | dump_pre_spatial; intros; eapply PreH21; lia
+                | dump_pre_spatial; intros; eapply PreH22; lia
+                | dump_pre_spatial; intros; eapply PreH23; lia].
 Qed. 
 
 Lemma proof_of_maxSlidingWindow_entail_wit_7_1 : maxSlidingWindow_entail_wit_7_1.
@@ -238,8 +286,8 @@ Proof.
         SWMQueueState l (replace_Znth tail i q_l_2) head (tail + 1) (i + 1) k_pre).
     {
       eapply SWMQueuePendingState_push_current; eauto.
-      - rewrite H3, H2. reflexivity.
-      - rewrite H2. lia.
+      - rewrite PreH5, PreH4. reflexivity.
+      - rewrite PreH4. lia.
     }
     pose proof Hpush as Hpush_components.
     unfold SWMQueueState in Hpush_components.
@@ -250,7 +298,7 @@ Proof.
                 | dump_pre_spatial; rewrite Zlength_replace_Znth; eauto
                 | dump_pre_spatial; exact Hpush
                 | dump_pre_spatial; intros pos Hpos;
-                  specialize (Hnew_valid pos Hpos); rewrite H2 in Hnew_valid; lia].
+                  specialize (Hnew_valid pos Hpos); rewrite PreH4 in Hnew_valid; lia].
 Qed. 
 
 Lemma proof_of_maxSlidingWindow_entail_wit_9 : maxSlidingWindow_entail_wit_9.
@@ -261,9 +309,9 @@ Proof.
   - repeat cancel.
   - entailer!.
     + replace (i - k_pre + 1) with (i + 1 - k_pre) by lia.
-      eapply SWMQueueState_window_max; [exact H15 | exact H8 | lia].
-    + destruct (H16 head ltac:(lia)) as [_ Hq]; exact Hq.
-    + destruct (H16 head ltac:(lia)) as [Hq _]; exact Hq.
+      eapply SWMQueueState_window_max; [exact PreH17 | exact PreH10 | lia].
+    + destruct (PreH18 head ltac:(lia)) as [_ Hq]; exact Hq.
+    + destruct (PreH18 head ltac:(lia)) as [Hq _]; exact Hq.
 Qed.
 
 Lemma proof_of_maxSlidingWindow_entail_wit_10 : maxSlidingWindow_entail_wit_10.
@@ -273,10 +321,10 @@ Proof.
   split_pure_spatial.
   - repeat cancel.
   - entailer!.
-    apply SWMOutputPrefix_snoc; [exact H15 | lia |].
+    apply SWMOutputPrefix_snoc; [exact PreH17 | lia |].
     replace out_idx with (i - k_pre + 1) by lia.
     replace (i - k_pre + 1 + k_pre) with (i + 1) by lia.
-    exact H18.
+    exact PreH20.
 Qed.
 
 Lemma proof_of_maxSlidingWindow_entail_wit_13 : maxSlidingWindow_entail_wit_13.
@@ -285,7 +333,7 @@ Proof.
   Exists out_l_2. Exists q_l_2.
   split_pure_spatial.
   - assert (Hi : i = n_pre) by lia; subst i.
-    assert (Houtidx : out_idx = n_pre - k_pre + 1) by (apply H13; lia).
+    assert (Houtidx : out_idx = n_pre - k_pre + 1) by (apply PreH15; lia).
     rewrite Houtidx.
     repeat cancel.
     unfold IntArray.full, IntArray.seg, IntArray.undef_seg.
@@ -293,8 +341,8 @@ Proof.
     simpl; entailer!.
   - entailer!.
     apply SWMOutputPrefix_complete with (out_idx := out_idx).
-    + exact H15.
-    + rewrite H3.
+    + exact PreH17.
+    + rewrite PreH5.
       assert (Hi : i = n_pre) by lia; subst i.
-      apply H13; lia.
+      apply PreH15; lia.
 Qed.

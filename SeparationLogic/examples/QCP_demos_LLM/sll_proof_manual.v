@@ -24,17 +24,17 @@ Proof.
   pre_process.
   split_pures.
   - dump_pre_spatial.
-    pose proof H3 as Hlen.
-    rewrite H in Hlen.
-    rewrite H2 in Hlen.
+    pose proof PreH5 as Hlen.
+    rewrite PreH1 in Hlen.
+    rewrite PreH4 in Hlen.
     rewrite Zlength_app in Hlen.
     rewrite Zlength_cons in Hlen.
-    rewrite H0.
+    rewrite PreH2.
     pose proof Zlength_nonneg l1.
     pose proof Zlength_nonneg l3.
     lia.
   - dump_pre_spatial.
-    rewrite H0.
+    rewrite PreH2.
     pose proof Zlength_nonneg l1.
     lia.
 Qed.
@@ -54,7 +54,7 @@ Proof.
       simpl.
       reflexivity.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
       simpl.
       reflexivity.
@@ -73,11 +73,11 @@ Proof.
     + dump_pre_spatial.
       rewrite <- app_assoc.
       simpl.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
-      exact H3.
+      exact PreH5.
     + dump_pre_spatial.
-      rewrite H0.
+      rewrite PreH2.
       rewrite Zlength_app.
       rewrite Zlength_cons.
       rewrite Zlength_nil.
@@ -90,13 +90,13 @@ Proof.
   subst p.
   sep_apply (sll_zero 0 l2); [ | reflexivity ].
   Intros_p Hl2.
-  rewrite Hl2 in H.
-  rewrite app_nil_r in H.
+  rewrite Hl2 in PreH1.
+  rewrite app_nil_r in PreH1.
   subst l.
   split_pure_spatial.
   - apply sllseg_0_sll.
   - dump_pre_spatial.
-    rewrite H1.
+    rewrite PreH3.
     reflexivity.
 Qed.
 
@@ -126,13 +126,13 @@ Proof.
     split_pure_spatial.
     + cancel.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
   - dump_pre_spatial.
     subst l2_2.
     simpl.
     rewrite <- app_assoc.
     simpl.
-    exact H.
+    exact PreH1.
 Qed.
 
 Lemma proof_of_reverse_return_wit_1 : reverse_return_wit_1.
@@ -140,8 +140,8 @@ Proof.
   pre_process.
   sep_apply (sll_zero v l2); [ | tauto ].
   Intros_p Hl2.
-  rewrite Hl2 in H.
-  rewrite app_nil_r in H.
+  rewrite Hl2 in PreH1.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   cancel (sll w l1).
@@ -173,13 +173,13 @@ Proof.
     split_pure_spatial.
     + cancel.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
   - dump_pre_spatial.
     subst l2_2.
     simpl.
     rewrite <- app_assoc.
     simpl.
-    exact H.
+    exact PreH1.
 Qed.
 
 Lemma proof_of_reverse_alter_style1_return_wit_1 : reverse_alter_style1_return_wit_1.
@@ -187,8 +187,8 @@ Proof.
   pre_process.
   sep_apply (sll_zero v l2); [ | tauto ].
   Intros_p Hl2.
-  rewrite Hl2 in H.
-  rewrite app_nil_r in H.
+  rewrite Hl2 in PreH1.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   cancel (sll w l1).
@@ -220,13 +220,13 @@ Proof.
     split_pure_spatial.
     + cancel.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
   - dump_pre_spatial.
     subst l2_2.
     simpl.
     rewrite <- app_assoc.
     simpl.
-    exact H.
+    exact PreH1.
 Qed.
 
 Lemma proof_of_reverse_alter_style2_return_wit_1 : reverse_alter_style2_return_wit_1.
@@ -234,8 +234,8 @@ Proof.
   pre_process.
   sep_apply (sll_zero v_inv l2); [ | tauto ].
   Intros_p Hl2.
-  rewrite Hl2 in H.
-  rewrite app_nil_r in H.
+  rewrite Hl2 in PreH1.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   cancel (sll w_inv l1).
@@ -265,13 +265,13 @@ Proof.
     split_pure_spatial.
     + cancel.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
   - dump_pre_spatial.
     subst l2_2.
     simpl.
     rewrite <- app_assoc.
     simpl.
-    exact H.
+    exact PreH1.
 Qed.
 
 Lemma proof_of_reverse_alter_style3_return_wit_1 : reverse_alter_style3_return_wit_1.
@@ -279,8 +279,8 @@ Proof.
   pre_process.
   sep_apply (sll_zero v l2); [ | tauto ].
   Intros_p Hl2.
-  rewrite Hl2 in H.
-  rewrite app_nil_r in H.
+  rewrite Hl2 in PreH1.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   cancel (sll w l1).
@@ -307,11 +307,11 @@ Proof.
     + dump_pre_spatial.
       simpl.
       symmetry.
-      exact H0.
+      exact PreH2.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
       reflexivity.
 Qed.
@@ -332,11 +332,11 @@ Proof.
     + dump_pre_spatial.
       rewrite <- app_assoc.
       simpl.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
-      exact H3.
+      exact PreH5.
     + dump_pre_spatial.
-      exact H2.
+      exact PreH4.
     + dump_pre_spatial.
       reflexivity.
 Qed.
@@ -344,7 +344,7 @@ Qed.
 Lemma proof_of_append_return_wit_2 : append_return_wit_2.
 Proof.
   pre_process.
-  rewrite H.
+  rewrite PreH1.
   sep_apply (sll_zero 0 l1); [ | reflexivity ].
   Intros_p Hl1.
   rewrite Hl1 in *.
@@ -390,13 +390,13 @@ Proof.
     + dump_pre_spatial.
       simpl.
       symmetry.
-      exact H1.
+      exact PreH3.
     + dump_pre_spatial.
       reflexivity.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
 Qed.
 
 Lemma proof_of_append_long_entail_wit_4 : append_long_entail_wit_4.
@@ -415,19 +415,19 @@ Proof.
     + dump_pre_spatial.
       rewrite <- app_assoc.
       simpl.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
       reflexivity.
     + dump_pre_spatial.
-      exact H3.
+      exact PreH5.
     + dump_pre_spatial.
-      exact H2.
+      exact PreH4.
 Qed.
 
 Lemma proof_of_append_long_return_wit_3 : append_long_return_wit_3.
 Proof.
   pre_process.
-  rewrite H.
+  rewrite PreH1.
   sep_apply (sll_zero 0 l1); [ | reflexivity ].
   Intros_p Hl1.
   rewrite Hl1 in *.
@@ -439,7 +439,7 @@ Qed.
 Lemma proof_of_append_long_return_wit_2 : append_long_return_wit_2.
 Proof.
   pre_process.
-  rewrite H.
+  rewrite PreH1.
   sep_apply (sll_zero 0 l1b); [ | reflexivity ].
   Intros_p Hl1b.
   rewrite Hl1b in *.
@@ -496,17 +496,17 @@ Proof.
     subst l1b_2.
     rewrite <- app_assoc.
     simpl.
-    exact H.
+    exact PreH1.
 Qed.
 
 Lemma proof_of_append_2p_entail_wit_3 : append_2p_entail_wit_3.
 Proof.
   pre_process.
-  rewrite H0.
+  rewrite PreH2.
   sep_apply (sll_zero 0 l1b); [ | reflexivity ].
   Intros_p Hl1b.
-  rewrite Hl1b in H.
-  rewrite app_nil_r in H.
+  rewrite Hl1b in PreH1.
+  rewrite app_nil_r in PreH1.
   sep_apply sllbseg_2_sllseg.
   Intros pres_v.
   Exists pres_v.

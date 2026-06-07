@@ -3,6 +3,8 @@
 
 #include "sll_def.h"
 
+/*@ Extern Coq (sum : list Z -> Z) */
+
 unsigned int arr_sum(int n, unsigned int *a)
 /*@ With l
     Require 0 <= n && n < 100 && UIntArray::full(a, n, l) &&

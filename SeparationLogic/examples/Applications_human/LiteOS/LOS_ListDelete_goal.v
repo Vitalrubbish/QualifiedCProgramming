@@ -32,7 +32,7 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 Definition LOS_ListDelete_safety_wit_1 := 
 forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
   ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
-  **  (dllseg_shift storeA_low_level_spec node_pre node_pre nil )
+  **  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((( &( "node" ) )) # Ptr  |-> node_pre)
@@ -46,7 +46,7 @@ forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z)
 Definition LOS_ListDelete_safety_wit_2 := 
 forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
   ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
-  **  (dllseg_shift storeA_low_level_spec node_pre node_pre nil )
+  **  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((( &( "node" ) )) # Ptr  |-> node_pre)
@@ -58,9 +58,10 @@ forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z)
 .
 
 Definition LOS_ListDelete_return_wit_1 := 
+(
 forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
   ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
-  **  (dllseg_shift storeA_low_level_spec node_pre node_pre nil )
+  **  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> 0)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> 0)
@@ -71,16 +72,29 @@ forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
   **  ((&((next_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
+) \/
+(
+forall (A: Type) (node_pre: Z) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
+  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
+|--
+  TT && emp 
+).
+
+Definition LOS_ListDelete_return_wit_1_split_goal_emp := 
+forall (A: Type) (node_pre: Z) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
+  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
+|--
+  TT && emp 
 .
 
 Definition LOS_ListDelete_partial_solve_wit_1 := 
 forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
   ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
   **  ((&((next_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> node_pre)
-  **  (dllseg_shift storeA_low_level_spec prev_low_level_spec node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) (nil)) )
+  **  (dllseg_shift storeA_low_level_spec prev_low_level_spec node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) ((@nil (@DL_Node A)))) )
 |--
   ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
-  **  (dllseg_shift storeA_low_level_spec node_pre node_pre nil )
+  **  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
   **  ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> node_pre)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
@@ -89,12 +103,12 @@ forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z)
 
 Definition LOS_ListDelete_partial_solve_wit_2 := 
 forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
-  (dllseg_shift storeA_low_level_spec prev_low_level_spec node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) (nil)) )
+  (dllseg_shift storeA_low_level_spec prev_low_level_spec node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) ((@nil (@DL_Node A)))) )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
   **  ((&((next_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
 |--
   ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
-  **  (dllseg_shift storeA_low_level_spec node_pre node_pre nil )
+  **  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
   **  ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> node_pre)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
@@ -103,12 +117,12 @@ forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z)
 
 Definition LOS_ListDelete_partial_solve_wit_3 := 
 forall (A: Type) (node_pre: Z) (next_low_level_spec: Z) (prev_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
-  (dllseg_shift storeA_low_level_spec prev_low_level_spec node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) (nil)) )
+  (dllseg_shift storeA_low_level_spec prev_low_level_spec node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) ((@nil (@DL_Node A)))) )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)
   **  ((&((next_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
 |--
   ((&((prev_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |->_)
-  **  (dllseg_shift storeA_low_level_spec node_pre node_pre nil )
+  **  (dllseg_shift storeA_low_level_spec node_pre node_pre (@nil (@DL_Node A)) )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev_low_level_spec)
   **  (storeA_low_level_spec node_pre a_low_level_spec )
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next_low_level_spec)

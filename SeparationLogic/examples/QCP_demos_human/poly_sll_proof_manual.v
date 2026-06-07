@@ -47,7 +47,7 @@ Proof.
   sep_apply (sll_zero _ storeA v l2); [ | tauto].
   entailer!.
   subst l2.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   entailer!.

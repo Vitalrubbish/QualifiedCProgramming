@@ -27,11 +27,8 @@ From SimpleC.EE.QCP_demos_human Require Import functional_queue_strategy_proof.
 (*----- Function push -----*)
 
 Definition push_return_wit_1 := 
-forall (x_pre: Z) (p_pre: Z) (l: (@list Z)) (p_pre_v_2: Z) (retval_data: Z) (retval_next: Z) (retval: Z) ,
-  “ (retval <> 0) ” 
-  &&  “ (retval_next = 0) ” 
-  &&  “ (retval_data = 0) ”
-  &&  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> p_pre_v_2)
+forall (x_pre: Z) (p_pre: Z) (l: (@list Z)) (p_pre_v_2: Z) (retval_data: Z) (retval_next: Z) (retval: Z) (PreH1 : (retval <> 0)) (PreH2 : (retval_next = 0)) (PreH3 : (retval_data = 0)) ,
+  ((&((retval)  # "list" ->ₛ "next")) # Ptr  |-> p_pre_v_2)
   **  ((&((retval)  # "list" ->ₛ "data")) # Int  |-> x_pre)
   **  ((p_pre) # Ptr  |-> retval)
   **  (sll p_pre_v_2 l )
@@ -91,14 +88,37 @@ forall (p_pre: Z) (l: (@list Z)) (x: Z) (p_pre_v: Z) (y: Z) ,
 (*----- Function enqueue -----*)
 
 Definition enqueue_return_wit_1 := 
-forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) ,
-  “ (l = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> p_callee_v)
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (PreH1 : (l = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> p_callee_v)
   **  (sll p_callee_v (cons (x_pre) (l2)) )
   **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
 |--
-  (store_queue q_pre (app (l) ((cons (x_pre) (nil)))) )
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+) \/
+(
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (y: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (x_pre >= INT_MIN)) (PreH3 : (l = (app (l1) ((rev (l2)))))) ,
+  (sll y l2 )
+  **  ((&((p_callee_v)  # "list" ->ₛ "next")) # Ptr  |-> y)
+  **  ((&((p_callee_v)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> p_callee_v)
+  **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+  **  (sll q_l1 l1 )
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
+).
+
+Definition enqueue_return_wit_1_split_goal_spatial := 
+forall (x_pre: Z) (q_pre: Z) (l: (@list Z)) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (y: Z) (PreH1 : (x_pre <= INT_MAX)) (PreH2 : (x_pre >= INT_MIN)) (PreH3 : (l = (app (l1) ((rev (l2)))))) ,
+  (sll y l2 )
+  **  ((&((p_callee_v)  # "list" ->ₛ "next")) # Ptr  |-> y)
+  **  ((&((p_callee_v)  # "list" ->ₛ "data")) # Int  |-> x_pre)
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> p_callee_v)
+  **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+  **  (sll q_l1 l1 )
+|--
+  (store_queue q_pre (app (l) ((cons (x_pre) ((@nil Z))))) )
 .
 
 Definition enqueue_partial_solve_wit_1 := 
@@ -109,9 +129,8 @@ forall (q_pre: Z) (l: (@list Z)) ,
 .
 
 Definition enqueue_partial_solve_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) ,
-  “ (l = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+forall (q_pre: Z) (l: (@list Z)) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (PreH1 : (l = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
   **  (sll q_l2 l2 )
@@ -124,6 +143,7 @@ forall (q_pre: Z) (l: (@list Z)) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list
 .
 
 Definition enqueue_which_implies_wit_1 := 
+(
 forall (l: (@list Z)) (q: Z) ,
   (store_queue q l )
 |--
@@ -133,14 +153,24 @@ forall (l: (@list Z)) (q: Z) ,
   **  (sll q_l1 l1 )
   **  ((&((q)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
   **  (sll q_l2 l2 )
-.
+) \/
+(
+forall (l: (@list Z)) (q: Z) ,
+  (store_queue q l )
+|--
+  EX (q_l2: Z)  (q_l1: Z)  (l1: (@list Z))  (l2: (@list Z)) ,
+  “ (l = (app (l1) ((rev (l2))))) ”
+  &&  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+  **  (sll q_l1 l1 )
+  **  ((&((q)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
+).
 
 (*----- Function dequeue -----*)
 
 Definition dequeue_safety_wit_1 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) ,
-  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((( &( "q" ) )) # Ptr  |-> q_pre)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (PreH1 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((( &( "q" ) )) # Ptr  |-> q_pre)
   **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
@@ -151,10 +181,8 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2:
 .
 
 Definition dequeue_safety_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) ,
-  “ (q_l1 = 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  (sll retval (rev (l2)) )
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  (sll retval (rev (l2)) )
   **  ((( &( "q" ) )) # Ptr  |-> q_pre)
   **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
   **  (sll q_l1 l1 )
@@ -165,32 +193,76 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2:
 .
 
 Definition dequeue_return_wit_1 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (retval: Z) ,
-  “ (retval = x) ” 
-  &&  “ (q_l1 = 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = x)) (PreH2 : (q_l1 = 0)) (PreH3 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
   **  (sll p_callee_v l )
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
 |--
   “ (retval = x) ”
   &&  (store_queue q_pre l )
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = x)) (PreH2 : (q_l1 = 0)) (PreH3 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+  **  (sll p_callee_v l )
+  **  (sll q_l1 l1 )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
+|--
+  (store_queue q_pre l )
+).
+
+Definition dequeue_return_wit_1_split_goal_spatial := 
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = x)) (PreH2 : (q_l1 = 0)) (PreH3 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+  **  (sll p_callee_v l )
+  **  (sll q_l1 l1 )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
+|--
+  (store_queue q_pre l )
 .
 
 Definition dequeue_return_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) (p_callee_v: Z) (retval: Z) ,
-  “ (retval = z) ” 
-  &&  “ (l1 = (cons (z) (l1_tail))) ” 
-  &&  “ (q_l1 <> 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = z)) (PreH2 : (l1 = (cons (z) (l1_tail)))) (PreH3 : (q_l1 <> 0)) (PreH4 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
   **  (sll p_callee_v l1_tail )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
   **  (sll q_l2 l2 )
 |--
   “ (retval = x) ”
   &&  (store_queue q_pre l )
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = z)) (PreH2 : (l1 = (cons (z) (l1_tail)))) (PreH3 : (q_l1 <> 0)) (PreH4 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+  **  (sll p_callee_v l1_tail )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
+|--
+  “ (retval = x) ”
+  &&  (store_queue q_pre l )
+).
+
+Definition dequeue_return_wit_2_split_goal_1 := 
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = z)) (PreH2 : (l1 = (cons (z) (l1_tail)))) (PreH3 : (q_l1 <> 0)) (PreH4 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+  **  (sll p_callee_v l1_tail )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
+|--
+  “ (retval = x) ”
+.
+
+Definition dequeue_return_wit_2_split_goal_spatial := 
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) (p_callee_v: Z) (retval: Z) (PreH1 : (retval = z)) (PreH2 : (l1 = (cons (z) (l1_tail)))) (PreH3 : (q_l1 <> 0)) (PreH4 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> p_callee_v)
+  **  (sll p_callee_v l1_tail )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
+|--
+  (store_queue q_pre l )
 .
 
 Definition dequeue_partial_solve_wit_1 := 
@@ -201,10 +273,8 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) ,
 .
 
 Definition dequeue_partial_solve_wit_2 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) ,
-  “ (q_l1 = 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
   **  (sll q_l2 l2 )
@@ -218,10 +288,9 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2:
 .
 
 Definition dequeue_partial_solve_wit_3_pure := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) ,
-  “ (q_l1 = 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  (sll retval (rev (l2)) )
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  (sll retval (rev (l2)) )
   **  ((( &( "q" ) )) # Ptr  |-> q_pre)
   **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
   **  (sll q_l1 l1 )
@@ -229,13 +298,32 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)
 |--
   “ ((cons (x) (l)) = (cons (x) (l))) ” 
   &&  “ ((rev (l2)) = (cons (x) (l))) ”
+) \/
+(
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  (sll retval (rev (l2)) )
+  **  ((( &( "q" ) )) # Ptr  |-> q_pre)
+  **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
+  **  (sll q_l1 l1 )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
+|--
+  “ ((rev (l2)) = (cons (x) (l))) ”
+).
+
+Definition dequeue_partial_solve_wit_3_pure_split_goal_1 := 
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  (sll retval (rev (l2)) )
+  **  ((( &( "q" ) )) # Ptr  |-> q_pre)
+  **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
+  **  (sll q_l1 l1 )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
+|--
+  “ ((rev (l2)) = (cons (x) (l))) ”
 .
 
 Definition dequeue_partial_solve_wit_3_aux := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) ,
-  “ (q_l1 = 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  (sll retval (rev (l2)) )
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  (sll retval (rev (l2)) )
   **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
@@ -253,10 +341,8 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)
 Definition dequeue_partial_solve_wit_3 := dequeue_partial_solve_wit_3_pure -> dequeue_partial_solve_wit_3_aux.
 
 Definition dequeue_partial_solve_wit_4_pure := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) ,
-  “ (q_l1 <> 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((( &( "q" ) )) # Ptr  |-> q_pre)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (PreH1 : (q_l1 <> 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((( &( "q" ) )) # Ptr  |-> q_pre)
   **  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
@@ -266,10 +352,8 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2:
 .
 
 Definition dequeue_partial_solve_wit_4_aux := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) ,
-  “ (q_l1 <> 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (PreH1 : (q_l1 <> 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
   **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
   **  (sll q_l2 l2 )
@@ -286,42 +370,38 @@ forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2:
 Definition dequeue_partial_solve_wit_4 := dequeue_partial_solve_wit_4_pure -> dequeue_partial_solve_wit_4_aux.
 
 Definition dequeue_partial_solve_wit_5 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) ,
-  “ (l1 = (cons (z) (l1_tail))) ” 
-  &&  “ (q_l1 <> 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
-  **  (sll q_l1 (cons (z) (l1_tail)) )
-  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
-  **  (sll q_l2 l2 )
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) (PreH1 : (q_l1 = 0)) (PreH2 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
+  **  (sll retval (cons (x) (l)) )
+  **  (sll q_l1 l1 )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
 |--
-  “ (l1 = (cons (z) (l1_tail))) ” 
-  &&  “ (q_l1 <> 0) ” 
+  “ (q_l1 = 0) ” 
   &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
-  **  (sll q_l1 (cons (z) (l1_tail)) )
-  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
-  **  (sll q_l2 l2 )
+  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
+  **  (sll retval (cons (x) (l)) )
+  **  (sll q_l1 l1 )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
 .
 
 Definition dequeue_partial_solve_wit_6 := 
-forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (retval: Z) ,
-  “ (q_l1 = 0) ” 
-  &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
-  **  (sll retval (cons (x) (l)) )
-  **  (sll q_l1 l1 )
-  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
+forall (q_pre: Z) (l: (@list Z)) (x: Z) (q_l2: Z) (q_l1: Z) (l1: (@list Z)) (l2: (@list Z)) (z: Z) (l1_tail: (@list Z)) (PreH1 : (l1 = (cons (z) (l1_tail)))) (PreH2 : (q_l1 <> 0)) (PreH3 : ((cons (x) (l)) = (app (l1) ((rev (l2)))))) ,
+  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+  **  (sll q_l1 (cons (z) (l1_tail)) )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
 |--
-  “ (q_l1 = 0) ” 
+  “ (l1 = (cons (z) (l1_tail))) ” 
+  &&  “ (q_l1 <> 0) ” 
   &&  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
-  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> retval)
-  **  (sll retval (cons (x) (l)) )
-  **  (sll q_l1 l1 )
-  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> 0)
+  &&  ((&((q_pre)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+  **  (sll q_l1 (cons (z) (l1_tail)) )
+  **  ((&((q_pre)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
 .
 
 Definition dequeue_which_implies_wit_1 := 
+(
 forall (l: (@list Z)) (x: Z) (q: Z) ,
   (store_queue q (cons (x) (l)) )
 |--
@@ -331,12 +411,22 @@ forall (l: (@list Z)) (x: Z) (q: Z) ,
   **  (sll q_l1 l1 )
   **  ((&((q)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
   **  (sll q_l2 l2 )
-.
+) \/
+(
+forall (l: (@list Z)) (x: Z) (q: Z) ,
+  (store_queue q (cons (x) (l)) )
+|--
+  EX (q_l2: Z)  (q_l1: Z)  (l1: (@list Z))  (l2: (@list Z)) ,
+  “ ((cons (x) (l)) = (app (l1) ((rev (l2))))) ”
+  &&  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+  **  (sll q_l1 l1 )
+  **  ((&((q)  # "queue" ->ₛ "l2")) # Ptr  |-> q_l2)
+  **  (sll q_l2 l2 )
+).
 
 Definition dequeue_which_implies_wit_2 := 
-forall (l: (@list Z)) (x: Z) (rev_l2: (@list Z)) (q: Z) (q_l1: Z) ,
-  “ ((cons (x) (l)) = rev_l2) ”
-  &&  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+forall (l: (@list Z)) (x: Z) (rev_l2: (@list Z)) (q: Z) (q_l1: Z) (PreH1 : ((cons (x) (l)) = rev_l2)) ,
+  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 rev_l2 )
 |--
   ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
@@ -344,16 +434,25 @@ forall (l: (@list Z)) (x: Z) (rev_l2: (@list Z)) (q: Z) (q_l1: Z) ,
 .
 
 Definition dequeue_which_implies_wit_3 := 
-forall (l1: (@list Z)) (q: Z) (q_l1: Z) ,
-  “ (q_l1 <> 0) ”
-  &&  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
+(
+forall (l1: (@list Z)) (q: Z) (q_l1: Z) (PreH1 : (q_l1 <> 0)) ,
+  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 l1 )
 |--
   EX (z: Z)  (l1_tail: (@list Z)) ,
   “ (l1 = (cons (z) (l1_tail))) ”
   &&  ((&((q)  # "queue" ->ₛ "l1")) # Ptr  |-> q_l1)
   **  (sll q_l1 (cons (z) (l1_tail)) )
-.
+) \/
+(
+forall (l1: (@list Z)) (q_l1: Z) (PreH1 : (q_l1 <> 0)) ,
+  TT && emp 
+|--
+  EX (z: Z)  (l1_tail: (@list Z)) ,
+  “ (l1 = (cons (z) (l1_tail))) ” 
+  &&  “ (l1 = (cons (z) (l1_tail))) ”
+  &&  emp
+).
 
 Module Type VC_Correct.
 

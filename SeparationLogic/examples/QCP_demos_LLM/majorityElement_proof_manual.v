@@ -44,18 +44,18 @@ Proof.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H0.
+	    exact PreH2.
 	  + dump_pre_spatial.
-	    exact H1.
-	  + dump_pre_spatial.
-	    lia.
+	    exact PreH3.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H.
+	    lia.
+	  + dump_pre_spatial.
+	    exact PreH1.
 	  + dump_pre_spatial.
 	    apply majority_on_reduced_init.
-	    exact H.
+	    exact PreH1.
 Qed.
 
 Lemma proof_of_majorityElement_entail_wit_2_1 : majorityElement_entail_wit_2_1.
@@ -64,45 +64,48 @@ Proof.
 	prop_apply IntArray.full_Zlength.
 	Intros_p Hlen.
 	assert (Hlt : i < Zlength (l1_2 ++ l2_2)).
-	{ rewrite <- H2. rewrite Hlen. exact H1. }
-	destruct (app_Znth_suffix_cons l1_2 l2_2 i 0 H3 Hlt) as [a [rest [Hl2 Hz]]].
-	rewrite H2 in H.
-	rewrite Hz in H.
-	subst a.
-	unfold MajorityOnReduced in H11.
-	destruct H11 as [Hvote Hmajor].
+	{ rewrite <- PreH3. rewrite Hlen. exact PreH2. }
+	destruct (app_Znth_suffix_cons l1_2 l2_2 i 0 PreH4 Hlt) as [a [rest [Hl2 Hz]]].
+	assert (Hzl : Znth i l 0 = a).
+	{ rewrite PreH3. exact Hz. }
+	unfold MajorityOnReduced in PreH12.
+	destruct PreH12 as [Hvote Hmajor].
 	Exists x_2.
-	Exists ((l1_2 ++ candidate :: nil)%list).
+	Exists ((l1_2 ++ a :: nil)%list).
 	Exists rest.
 	split_pure_spatial.
 	- cancel (IntArray.full nums_pre numsSize_pre l).
 	- split_pures.
 	  + dump_pre_spatial.
-	    rewrite H2.
+	    rewrite PreH3.
 	    rewrite Hl2.
 	    rewrite <- app_assoc.
 	    reflexivity.
 	  + dump_pre_spatial.
 	    rewrite Zlength_app, Zlength_cons, Zlength_nil.
-	    rewrite H3.
+	    rewrite PreH4.
 	    lia.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H6.
+	    exact PreH7.
 	  + dump_pre_spatial.
-	    exact H7.
-	  + dump_pre_spatial.
-	    lia.
+	    exact PreH8.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H10.
+	    lia.
 	  + dump_pre_spatial.
+	    exact PreH11.
+	  + dump_pre_spatial.
+	    rewrite Hzl.
+	    rewrite PreH1.
 	    rewrite Hl2 in Hmajor.
-	    apply majority_on_reduced_same; [lia | exact Hmajor].
+	    rewrite PreH1 in Hmajor.
+	    apply (majority_on_reduced_reset x_2 candidate a rest).
+	    exact Hmajor.
 Qed.
 
 Lemma proof_of_majorityElement_entail_wit_2_2 : majorityElement_entail_wit_2_2.
@@ -111,12 +114,12 @@ Proof.
 	prop_apply IntArray.full_Zlength.
 	Intros_p Hlen.
 	assert (Hlt : i < Zlength (l1_2 ++ l2_2)).
-	{ rewrite <- H2. rewrite Hlen. exact H1. }
-	destruct (app_Znth_suffix_cons l1_2 l2_2 i 0 H3 Hlt) as [a [rest [Hl2 Hz]]].
-	rewrite H2 in H.
-	rewrite Hz in H.
-	unfold MajorityOnReduced in H11.
-	destruct H11 as [Hvote Hmajor].
+	{ rewrite <- PreH4. rewrite Hlen. exact PreH3. }
+	destruct (app_Znth_suffix_cons l1_2 l2_2 i 0 PreH5 Hlt) as [a [rest [Hl2 Hz]]].
+	rewrite PreH4 in PreH1.
+	rewrite Hz in PreH1.
+	unfold MajorityOnReduced in PreH13.
+	destruct PreH13 as [Hvote Hmajor].
 	assert (0 < vote) by lia.
 	Exists x_2.
 	Exists ((l1_2 ++ a :: nil)%list).
@@ -125,31 +128,32 @@ Proof.
 	- cancel (IntArray.full nums_pre numsSize_pre l).
 	- split_pures.
 	  + dump_pre_spatial.
-	    rewrite H2.
+	    rewrite PreH4.
 	    rewrite Hl2.
 	    rewrite <- app_assoc.
 	    reflexivity.
 	  + dump_pre_spatial.
 	    rewrite Zlength_app, Zlength_cons, Zlength_nil.
-	    rewrite H3.
+	    rewrite PreH5.
 	    lia.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H6.
+	    exact PreH8.
 	  + dump_pre_spatial.
-	    exact H7.
-	  + dump_pre_spatial.
-	    lia.
+	    exact PreH9.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H10.
+	    lia.
+	  + dump_pre_spatial.
+	    exact PreH12.
 	  + dump_pre_spatial.
 	    rewrite Hl2 in Hmajor.
-	    apply majority_on_reduced_cancel with (a := a); [lia | exact H | exact Hmajor].
+	    rewrite PreH1 in Hmajor.
+	    apply majority_on_reduced_same; [lia | exact Hmajor].
 Qed.
 
 Lemma proof_of_majorityElement_entail_wit_2_3 : majorityElement_entail_wit_2_3.
@@ -158,12 +162,12 @@ Proof.
 	prop_apply IntArray.full_Zlength.
 	Intros_p Hlen.
 	assert (Hlt : i < Zlength (l1_2 ++ l2_2)).
-	{ rewrite <- H1. rewrite Hlen. exact H0. }
-	destruct (app_Znth_suffix_cons l1_2 l2_2 i 0 H2 Hlt) as [a [rest [Hl2 Hz]]].
+	{ rewrite <- PreH4. rewrite Hlen. exact PreH3. }
+	destruct (app_Znth_suffix_cons l1_2 l2_2 i 0 PreH5 Hlt) as [a [rest [Hl2 Hz]]].
 	assert (Hzl : Znth i l 0 = a).
-	{ rewrite H1. exact Hz. }
-	unfold MajorityOnReduced in H10.
-	destruct H10 as [Hvote Hmajor].
+	{ rewrite PreH4. exact Hz. }
+	unfold MajorityOnReduced in PreH13.
+	destruct PreH13 as [Hvote Hmajor].
 	Exists x_2.
 	Exists ((l1_2 ++ a :: nil)%list).
 	Exists rest.
@@ -171,35 +175,32 @@ Proof.
 	- cancel (IntArray.full nums_pre numsSize_pre l).
 	- split_pures.
 	  + dump_pre_spatial.
-	    rewrite H1.
+	    rewrite PreH4.
 	    rewrite Hl2.
 	    rewrite <- app_assoc.
 	    reflexivity.
 	  + dump_pre_spatial.
 	    rewrite Zlength_app, Zlength_cons, Zlength_nil.
-	    rewrite H2.
+	    rewrite PreH5.
 	    lia.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H5.
+	    exact PreH8.
 	  + dump_pre_spatial.
-	    exact H6.
-	  + dump_pre_spatial.
-	    lia.
+	    exact PreH9.
 	  + dump_pre_spatial.
 	    lia.
 	  + dump_pre_spatial.
-	    exact H9.
+	    lia.
+	  + dump_pre_spatial.
+	    exact PreH12.
 	  + dump_pre_spatial.
 	    rewrite Hl2 in Hmajor.
-	    rewrite <- Hzl in Hmajor.
-	    rewrite H.
-	    rewrite H in Hmajor.
-	    apply (majority_on_reduced_reset x_2 candidate (Znth i l 0) rest).
-	    exact Hmajor.
+	    apply majority_on_reduced_cancel with (a := a);
+	      [lia | rewrite <- Hzl; exact PreH1 | exact Hmajor].
 Qed.
 
 Lemma proof_of_majorityElement_return_wit_1 : majorityElement_return_wit_1.
@@ -210,22 +211,21 @@ Proof.
 	split_pure_spatial.
 	- cancel (IntArray.full nums_pre numsSize_pre l).
 	- dump_pre_spatial.
-	  unfold MajorityOnReduced in H9.
-	  destruct H9 as [Hvote Hmajor].
+	  unfold MajorityOnReduced in PreH11.
+	  destruct PreH11 as [Hvote Hmajor].
 	  assert (Hi : i = numsSize_pre) by lia.
 	  assert (Hl1len : Zlength l1 = numsSize_pre) by lia.
 	  assert (Hl2len : Zlength l2 = 0).
-	  { rewrite H0 in Hlen.
+	  { rewrite PreH2 in Hlen.
 	    rewrite Zlength_app in Hlen.
 	    rewrite Hl1len in Hlen.
 	    lia. }
 	  apply Zlength_nil_inv in Hl2len.
 	  subst l2.
-	  rewrite app_nil_r in H0.
+	  rewrite app_nil_r in PreH2.
 	  subst l.
 	  rewrite app_nil_r in Hmajor.
 	  pose proof (majority_of_repeated_eq x candidate vote Hvote Hmajor) as Hxc.
 	  subst candidate.
-	  exact H8.
+	  exact PreH10.
 Qed.
-

@@ -43,11 +43,11 @@ Proof.
   prop_apply IntArray.full_Zlength.
   rewrite Zlength_app.
   replace (Zlength (0::nil)) with 1 by easy.
-  pose proof H as H'.
-  unfold inner_loop in H.
-  unfold_loop in H.
-  unfold inner_body at 1 in H.
-  safe_step H.
+  pose proof PreH1 as H'.
+  unfold inner_loop in PreH1.
+  unfold_loop in PreH1.
+  unfold inner_body at 1 in PreH1.
+  safe_step PreH1.
   split_pure_spatial.
   - Intros_p H4.
     Intros_p H5.
@@ -83,14 +83,14 @@ Proof.
   - split_pures.
     + dump_pre_spatial.
       unfold inner_loop in *.
-      unfold_loop in H3.
-      unfold inner_body at 1 in H3.
-      safe_step H3.
-      rewrite app_Znth1 in H0 by auto.
-      safe_choice_r H3.
-      safe_choice_r H3; auto.
-      unfold continue in H3.
-      prog_nf in H3. auto.
+      unfold_loop in PreH5.
+      unfold inner_body in PreH5.
+      safe_step PreH5.
+      rewrite app_Znth1 in PreH2 by auto.
+      safe_choice_r PreH5.
+      safe_choice_r PreH5; auto.
+      unfold continue in PreH5.
+      prog_nf in PreH5. auto.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
 Qed. 
@@ -102,14 +102,14 @@ Proof.
   - apply derivable1_refl.
   - split_pures.
     + dump_pre_spatial.
-      unfold inner_loop in H2.
-      unfold_loop in H2.
-      unfold inner_body at 1 in H2.
-      repeat (prog_nf in H2 ; safe_step H2).
-      rewrite app_Znth1 in H by lia.
-      safe_choice_l H2; auto.
-      unfold break in H2.
-      prog_nf in H2. auto.
+      unfold inner_loop in PreH4.
+      unfold_loop in PreH4.
+      unfold inner_body in PreH4.
+      repeat (prog_nf in PreH4 ; safe_step PreH4).
+      rewrite app_Znth1 in PreH1 by lia.
+      safe_choice_l PreH4; auto.
+      unfold break in PreH4.
+      prog_nf in PreH4. auto.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
 Qed. 
@@ -121,15 +121,15 @@ Proof.
   - apply derivable1_refl.
   - split_pures.
     + dump_pre_spatial.
-      unfold inner_loop in H3.
-      unfold_loop in H3.
-      unfold inner_body at 1 in H3.
-      safe_step H3.
-      rewrite app_Znth1 in H0 by lia.
-      safe_choice_r H3.
-      safe_choice_l H3.
-      unfold break in H3.
-      prog_nf in H3.
+      unfold inner_loop in PreH5.
+      unfold_loop in PreH5.
+      unfold inner_body at 1 in PreH5.
+      safe_step PreH5.
+      rewrite app_Znth1 in PreH2 by lia.
+      safe_choice_r PreH5.
+      safe_choice_l PreH5.
+      unfold break in PreH5.
+      prog_nf in PreH5.
       auto.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
@@ -140,9 +140,9 @@ Proof.
   pre_process; subst.
   Exists (sublist 1 n_low_level_spec l) (0::nil).
   kmp_solve.
-  prop_apply IntArray.full_Zlength; Intros.
+  prop_apply IntArray.full_Zlength; Intros_p Hlen.
   destruct l.
-  rewrite Zlength_nil in H; lia.
+  rewrite Zlength_nil in Hlen; lia.
   replace (z::l) with ((z::nil) ++ l) by easy.
   rewrite (replace_Znth_app_l 0 0); try lia.
   2:{ lazy; auto. }
@@ -154,20 +154,20 @@ Proof.
   rewrite sublist_self; eauto.
   replace ((0::nil) ++ l) with (0::l) by easy.
   replace ((z::nil) ++ l) with (z::l) by easy.
-  rewrite replace_Znth_length in H.
+  rewrite replace_Znth_length in Hlen.
   rewrite (sublist_cons2 1 n_low_level_spec); try lia.
   2:{
     rewrite Zlength_cons.
-    rewrite Zlength_cons in H. lia. 
+    rewrite Zlength_cons in Hlen. lia. 
   }
   rewrite (sublist_cons2 1 n_low_level_spec); try lia.
   cancel.
   dump_pre_spatial.
-  unfold constr_loop in H1.
-  cbn in H1.
+  unfold constr_loop in PreH2.
+  cbn in PreH2.
   unfold constr_loop_from.
   cbn.
-  exact H0.
+  exact PreH2.
   dump_pre_spatial.
   lia.
   dump_pre_spatial.
@@ -192,38 +192,38 @@ Proof.
   - Intros_p Hz.
     split_pures.
     + dump_pre_spatial.
-      exact H.
+      exact PreH1.
     + dump_pre_spatial.
-      exact H3.
+      exact PreH5.
     + dump_pre_spatial.
-      exact H4.
+      exact PreH6.
     + dump_pre_spatial.
-      exact H2.
+      exact PreH4.
     + dump_pre_spatial.
       reflexivity.
     + dump_pre_spatial.
       exact Hz.
     + dump_pre_spatial.
-      exact H0.
+      exact PreH2.
     + dump_pre_spatial.
-      exact H1.
+      exact PreH3.
 Qed. 
 
 Lemma proof_of_constr_entail_wit_3 : constr_entail_wit_3.
 Proof. 
   pre_process.
-  unfold constr_loop_from_after in H0.
+  unfold constr_loop_from_after in PreH1.
   destruct l0_2.
   - prop_apply (IntArray.full_Zlength vnext).
-    Intros.
-    rewrite H3 in H7.
-    rewrite replace_Znth_length in H7.
-    rewrite Zlength_app, Zlength_nil in H7.
+    Intros_p Hlen.
+    rewrite PreH5 in Hlen.
+    rewrite replace_Znth_length in Hlen.
+    rewrite Zlength_app, Zlength_nil in Hlen.
     lia.
   - subst l.
     Exists l0_2 (vnext0_2 ++ (j :: nil)).
-    rewrite (replace_Znth_app_r i j vnext0_2 (z :: l0_2)) by (rewrite H4; lia).
-    rewrite replace_Znth_nothing by (rewrite H4; lia).
+    rewrite (replace_Znth_app_r i j vnext0_2 (z :: l0_2)) by (rewrite PreH6; lia).
+    rewrite replace_Znth_nothing by (rewrite PreH6; lia).
     replace (i - Zlength vnext0_2) with 0 by lia.
     cbn.
     split_pure_spatial.
@@ -257,7 +257,7 @@ Proof.
       apply derivable1_refl.
     + split_pures.
       * dump_pre_spatial.
-        exact H.
+        exact PreH1.
       * dump_pre_spatial.
         lia.
       * dump_pre_spatial.
@@ -268,7 +268,7 @@ Lemma proof_of_constr_return_wit_1 : constr_return_wit_1.
 Proof. 
   pre_process.
   prop_apply (IntArray.full_length (vnext_2 + i * sizeof ( INT ))); Intros.
-  assert (i = n_low_level_spec) by lia; subst i; clear H3.
+  assert (i = n_low_level_spec) by lia; subst i.
   prop_apply CharArray.full_Zlength.
   Intros_p Hstr.
   Exists vnext0.
@@ -287,12 +287,12 @@ Proof.
             (str_low_level_spec ++ 0 :: nil))).
     apply derivable1_refl.
   - apply string_Zlength in Hstr.
-    unfold constr_loop_from in H0.
-    unfold_loop in H0.
-    prog_nf in H0.
-    safe_choice_r H0; try lia.
+    unfold constr_loop_from in PreH2.
+    unfold_loop in PreH2.
+    prog_nf in PreH2.
+    safe_choice_r PreH2; try lia.
     dump_pre_spatial.
-    exact H0.
+    exact PreH2.
 Qed. 
 
 Lemma proof_of_constr_partial_solve_wit_5_pure : constr_partial_solve_wit_5_pure.
@@ -305,24 +305,24 @@ Proof.
   apply string_Zlength in Hstr.
   split_pures.
   - dump_pre_spatial.
-    unfold constr_loop_from in H0.
-    rewrite Hstr in H0.
-    unfold_loop in H0.
-    prog_nf in H0.
-    safe_choice_l H0; try lia.
-    unfold constr_body at 1 in H0.
-    prog_nf in H0.
-    safe_step H0.
-    prog_nf in H0.
+    unfold constr_loop_from in PreH2.
+    rewrite Hstr in PreH2.
+    unfold_loop in PreH2.
+    prog_nf in PreH2.
+    safe_choice_l PreH2; try lia.
+    unfold constr_body at 1 in PreH2.
+    prog_nf in PreH2.
+    safe_step PreH2.
+    prog_nf in PreH2.
     unfold constr_loop_from_after.
     rewrite app_Znth1 by lia.
     unfold constr_loop_from.
     rewrite Hstr.
-    exact H0.
+    exact PreH2.
   - dump_pre_spatial.
     lia.
   - dump_pre_spatial.
-    exact H1.
+    exact PreH3.
   - dump_pre_spatial.
     rewrite app_Znth1 by lia.
     unfold constr_loop_from_after.
@@ -372,8 +372,10 @@ Proof.
     cancel (&( "patn_len") # Int |-> n_low_level_spec).
   - dump_pre_spatial.
     unfold match_loop_from.
-    unfold match_loop in H1.
-    exact H1.
+    match goal with
+    | H : safeExec ATrue (match_loop _ _ _ _) _ |- _ =>
+        unfold match_loop in H; exact H
+    end.
   - dump_pre_spatial.
     lia.
   - dump_pre_spatial.
@@ -397,9 +399,12 @@ Proof.
     cancel (IntArray.full vnext_pre n_low_level_spec vnext0_low_level_spec).
   - apply string_Zlength in Htext.
     dump_pre_spatial.
-    unfold match_loop_from_after, applyf in H0.
-    rewrite Htext in H0.
-    safe_choice_r H0; [auto | lia].
+    match goal with
+    | H : safeExec ATrue (applyf _ _) _ |- _ =>
+        unfold match_loop_from_after, applyf in H;
+        rewrite Htext in H;
+        safe_choice_r H; [auto | lia]
+    end.
   - dump_pre_spatial.
     lia.
   - dump_pre_spatial.
@@ -411,7 +416,10 @@ Qed.
 Lemma proof_of_match_return_wit_2 : match_return_wit_2.
 Proof.
   pre_process; subst.
-  unfold match_loop_from_after, applyf in H0.
+  match goal with
+  | H : safeExec ATrue (applyf _ _) _ |- _ =>
+      unfold match_loop_from_after, applyf in H
+  end.
   prop_apply CharArray.full_Zlength.
   Intros_p Hpatn.
   apply string_Zlength in Hpatn.
@@ -425,7 +433,10 @@ Proof.
     cancel (CharArray.full text_pre (m_low_level_spec + 1) (text0_low_level_spec ++ 0 :: nil)).
     cancel (IntArray.full vnext_pre n_low_level_spec vnext0_low_level_spec).
   - dump_pre_spatial.
-    safe_choice_l H0; auto.
+    match goal with
+    | H : safeExec ATrue _ _ |- _ =>
+        safe_choice_l H; auto
+    end.
   - dump_pre_spatial.
     reflexivity.
 Qed. 
@@ -442,13 +453,16 @@ Proof.
     cancel (IntArray.full vnext_pre n_low_level_spec vnext0_low_level_spec).
   - apply string_Zlength in Htext.
     dump_pre_spatial.
-    unfold match_loop_from in H0.
-    rewrite Htext in H0.
-    unfold_loop in H0.
-    prog_nf in H0.
-    safe_choice_r H0; try lia.
-    unfold continue in H0.
-    prog_nf in H0.
+    match goal with
+    | H : safeExec ATrue (match_loop_from _ _ _ _ _ _) _ |- _ =>
+        unfold match_loop_from in H;
+        rewrite Htext in H;
+        unfold_loop in H;
+        prog_nf in H;
+        safe_choice_r H; try lia;
+        unfold continue in H;
+        prog_nf in H
+    end.
     auto.
   - dump_pre_spatial.
     reflexivity.
@@ -463,7 +477,9 @@ Proof.
   split_pures.
   - dump_pre_spatial.
     eapply safeExec_proequiv.
-    2: exact H0.
+    2: match goal with
+       | H : safeExec ATrue (match_loop_from _ _ _ _ _ _) _ |- _ => exact H
+       end.
     rewrite app_Znth1 by lia.
     unfold match_loop_from_after.
     unfold match_loop_from.
@@ -529,7 +545,7 @@ Proof.
     destruct H8 as [σ H8]; subst prog.
     specialize (Hpost ret tt σ I H8).
     destruct ret; simpl in H9.
-    + Left; Exists z.
+    + Right; Exists z.
       split_pure_spatial.
       * cancel (CharArray.full patn_pre (n_high_level_spec + 1) (patn0_high_level_spec ++ 0 :: nil)).
         cancel (CharArray.full text_pre (m_high_level_spec + 1) (text0_high_level_spec ++ 0 :: nil)).
@@ -537,7 +553,7 @@ Proof.
       * split_pures.
         -- dump_pre_spatial. apply first_occur_nonneg in Hpost; auto.
         -- dump_pre_spatial. exact Hpost.
-    + Right; Exists (-1).
+    + Left; Exists (-1).
       split_pure_spatial.
       * cancel (CharArray.full patn_pre (n_high_level_spec + 1) (patn0_high_level_spec ++ 0 :: nil)).
         cancel (CharArray.full text_pre (m_high_level_spec + 1) (text0_high_level_spec ++ 0 :: nil)).

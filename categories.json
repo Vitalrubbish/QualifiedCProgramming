@@ -54,5 +54,15 @@
   "int_array_merge_rel.c": "Typical algorithms",
   "kmp_rel.c": "Typical algorithms",
   "sll_merge_rel.c": "Typical algorithms",
-  "sll_split_while.c": "Typical algorithms"
+  "sll_split_while.c": "Typical algorithms",
+  "Applications_human/Project/hashtable/hashtbl.c": "Typical data structure",
+  "Applications_human/Project/hashtable1/hashtbl.c": "Typical data structure",
+  "Applications_human/Project/mergeablelist/sll_project_lib.c": "Typical data structure",
+  "Applications_human/Project/minigmp1/mini_gmp.c": "Real algorithms",
+  "Applications_human/Project/minigmp2/mini-gmp.c": "Real algorithms",
+  "Applications_human/Project/minigmp3/mini-gmp.c": "Real algorithms",
+  "QCP_demos_LLM/majorityElement.c": "Typical algorithms",
+  "QCP_demos_LLM/sortArray.c": "Typical algorithms",
+  "QCP_demos_human/majorityElement.c": "Typical algorithms",
+  "QCP_demos_human/sortArray.c": "Typical algorithms"
 }

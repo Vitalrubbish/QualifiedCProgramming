@@ -148,9 +148,8 @@ Proof.
     Exists sortList_pre.
     simpl.
     entailer!.
-    apply increasing_split in H1.
-    apply H1.
+    apply increasing_split in PreH3.
+    apply PreH3.
 Qed.
-
 
 

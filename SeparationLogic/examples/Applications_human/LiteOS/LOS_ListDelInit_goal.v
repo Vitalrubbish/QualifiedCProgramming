@@ -28,27 +28,41 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function LOS_ListDelInit -----*)
 
 Definition LOS_ListDelInit_return_wit_1 := 
+(
 forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  (store_dll storeA list_pre nil )
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
   **  ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
-  **  (dllseg_shift storeA list_pre list_pre nil )
+  **  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
   **  (storeA list_pre a )
   **  ((&((next)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
 |--
-  (store_dll storeA list_pre nil )
+  (store_dll storeA list_pre (@nil (@DL_Node A)) )
   **  (storeA list_pre a )
   **  ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
   **  ((&((next)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
+) \/
+(
+forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
+  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
+|--
+  TT && emp 
+).
+
+Definition LOS_ListDelInit_return_wit_1_split_goal_emp := 
+forall (A: Type) (list_pre: Z) (storeA: (Z -> (A -> Assertion))) ,
+  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
+|--
+  TT && emp 
 .
 
 Definition LOS_ListDelInit_partial_solve_wit_1 := 
 forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
   **  ((&((next)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
-  **  (dllseg_shift storeA prev list_pre (cons ((Build_DL_Node (a) (list_pre))) (nil)) )
+  **  (dllseg_shift storeA prev list_pre (cons ((Build_DL_Node (a) (list_pre))) ((@nil (@DL_Node A)))) )
 |--
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
-  **  (dllseg_shift storeA list_pre list_pre nil )
+  **  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
   **  ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
   **  (storeA list_pre a )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
@@ -57,12 +71,12 @@ forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> A
 
 Definition LOS_ListDelInit_partial_solve_wit_2 := 
 forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  (dllseg_shift storeA prev list_pre (cons ((Build_DL_Node (a) (list_pre))) (nil)) )
+  (dllseg_shift storeA prev list_pre (cons ((Build_DL_Node (a) (list_pre))) ((@nil (@DL_Node A)))) )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
   **  ((&((next)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
 |--
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
-  **  (dllseg_shift storeA list_pre list_pre nil )
+  **  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
   **  ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
   **  (storeA list_pre a )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
@@ -71,12 +85,12 @@ forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> A
 
 Definition LOS_ListDelInit_partial_solve_wit_3 := 
 forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
-  (dllseg_shift storeA prev list_pre (cons ((Build_DL_Node (a) (list_pre))) (nil)) )
+  (dllseg_shift storeA prev list_pre (cons ((Build_DL_Node (a) (list_pre))) ((@nil (@DL_Node A)))) )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
   **  ((&((next)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
 |--
   ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |->_)
-  **  (dllseg_shift storeA list_pre list_pre nil )
+  **  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
   **  (storeA list_pre a )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
@@ -86,7 +100,7 @@ forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> A
 Definition LOS_ListDelInit_partial_solve_wit_4 := 
 forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> Assertion))) ,
   ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
-  **  (dllseg_shift storeA list_pre list_pre nil )
+  **  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
   **  (storeA list_pre a )
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
@@ -95,7 +109,7 @@ forall (A: Type) (list_pre: Z) (next: Z) (prev: Z) (a: A) (storeA: (Z -> (A -> A
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |->_)
   **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |->_)
   **  ((&((prev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> next)
-  **  (dllseg_shift storeA list_pre list_pre nil )
+  **  (dllseg_shift storeA list_pre list_pre (@nil (@DL_Node A)) )
   **  (storeA list_pre a )
   **  ((&((next)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> prev)
 .

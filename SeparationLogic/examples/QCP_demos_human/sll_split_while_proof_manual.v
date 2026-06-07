@@ -21,7 +21,7 @@ From SimpleC.EE.QCP_demos_human Require Import sll_merge_rel_lib.
 Local Open Scope monad.
 Local Open Scope sac.
 
-Lemma proof_of_split_while_entail_wit_2_1 : split_while_entail_wit_2_1.
+Lemma proof_of_split_while_entail_wit_2_2 : split_while_entail_wit_2_2.
 Proof. 
   pre_process.
   sepcon_lift  (sll x_next l1_new ).
@@ -36,8 +36,8 @@ Proof.
   unfold split_rec_rel in *.
   rewrite (program_para_equiv (split_rec_rel_unfold)) in *.
   unfold split_rec_rel_f in *.
-  rewrite bind_ret_left in H0.
-  exact H0.
+  rewrite bind_ret_left in PreH2.
+  exact PreH2.
 Qed.
 
 Lemma proof_of_split_while_partial_solve_wit_2_pure : split_while_partial_solve_wit_2_pure.
@@ -59,7 +59,7 @@ Proof.
   sep_apply sll_zero;[ | auto ].
   entailer!.
   subst.
-  unfold split_rec_rel in H0.
+  unfold split_rec_rel in PreH2.
   unfold maketuple.
   eapply highstependret_derive with (P':= fun _ => ATrue);eauto.
   apply split_rec_rel_eval_xnil.
@@ -86,12 +86,11 @@ Proof.
   simpl ( (_ :: _) ++ _).
   reflexivity.
   subst l.
-  unfold split_rec_rel in H.
-  rewrite (program_para_equiv (split_rec_rel_unfold)) in H.
-  unfold split_rec_rel_f in H. 
-  rewrite bind_assoc in H.
-  rewrite bind_2_reversepair_equiv_Id in H.
-  rewrite bind_ret_right in H.
+  unfold split_rec_rel in PreH1.
+  rewrite (program_para_equiv (split_rec_rel_unfold)) in PreH1.
+  unfold split_rec_rel_f in PreH1. 
+  rewrite bind_assoc in PreH1.
+  rewrite bind_2_reversepair_equiv_Id in PreH1.
+  rewrite bind_ret_right in PreH1.
   auto.
 Qed.
-

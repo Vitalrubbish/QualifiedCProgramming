@@ -145,9 +145,9 @@ Lemma proof_of_sortArray_entail_wit_2 : sortArray_entail_wit_2.
 Proof.
 	pre_process.
 	destruct l2_2 as [ | z l2_2 ].
-	- pose proof (Permutation_length H7) as Hperm.
+	- pose proof (Permutation_length PreH9) as Hperm.
 	  repeat rewrite Zlength_correct in *.
-	  rewrite H2 in Hperm.
+	  rewrite PreH4 in Hperm.
 	  rewrite length_app in Hperm.
 	  simpl in Hperm.
 	  lia.
@@ -158,13 +158,13 @@ Proof.
 	  + split_pures.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
-	    * dump_pre_spatial. rewrite H2. simpl. reflexivity.
+	    * dump_pre_spatial. rewrite PreH4. simpl. reflexivity.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial.
-	      rewrite H4.
+	      rewrite PreH6.
 	      rewrite Zlength_app.
 	      rewrite Zlength_cons.
 	      rewrite Zlength_nil.
@@ -172,32 +172,32 @@ Proof.
 	      lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
-	    * dump_pre_spatial. exact H7.
-	    * dump_pre_spatial. exact H8.
-	    * dump_pre_spatial. exact H9.
+	    * dump_pre_spatial. exact PreH9.
+	    * dump_pre_spatial. exact PreH10.
+	    * dump_pre_spatial. exact PreH11.
 Qed.
 
 Lemma proof_of_sortArray_entail_wit_3_1 : sortArray_entail_wit_3_1.
 Proof.
 	pre_process.
 	destruct l4_2 as [ | z l4_2 ].
-	- rewrite Zlength_correct in H4.
-	  erewrite Permutation_length in H4 by exact H11.
-	  rewrite H3 in H4.
-	  repeat rewrite <- Zlength_correct in H4.
-	  rewrite app_nil_r in H4.
-	  rewrite <- H8 in H4.
+	- rewrite Zlength_correct in PreH6.
+	  erewrite Permutation_length in PreH6 by exact PreH13.
+	  rewrite PreH5 in PreH6.
+	  repeat rewrite <- Zlength_correct in PreH6.
+	  rewrite app_nil_r in PreH6.
+	  rewrite <- PreH10 in PreH6.
 	  lia.
 	- assert (Hi : Znth i l3_2 0 = key_2).
-	  { rewrite H5.
-	    rewrite H3.
+	  { rewrite PreH7.
+	    rewrite PreH5.
 	    rewrite app_Znth2 by lia.
 	    replace (Zlength l1_2 - Zlength l1_2) with 0 by lia.
 	    simpl.
 	    reflexivity. }
 	  assert (Hjz : Znth j l3_2 0 = z).
-	  { rewrite H8.
-	    rewrite H3.
+	  { rewrite PreH10.
+	    rewrite PreH5.
 	    assert (Hshape : l1_2 ++ (key_2 :: l2_2) ++ z :: l4_2 =
 	                     (l1_2 ++ key_2 :: l2_2) ++ z :: l4_2).
 	    { rewrite <- app_assoc. reflexivity. }
@@ -206,12 +206,12 @@ Proof.
 	    replace (Zlength (l1_2 ++ key_2 :: l2_2) - Zlength (l1_2 ++ key_2 :: l2_2)) with 0 by lia.
 	    simpl.
 	    reflexivity. }
-	  assert (Hz : z < key_2) by (rewrite Hjz, Hi in H; exact H).
+	  assert (Hz : z < key_2) by (rewrite Hjz, Hi in PreH1; exact PreH1).
 	  assert (Hzlb : lowerbound z l2_2).
-	  { apply (lowerbound_trans z key_2 l2_2); [lia | exact H14]. }
+	  { apply (lowerbound_trans z key_2 l2_2); [lia | exact PreH16]. }
 	  assert (Hps : prefix_suffix_sorted l1_2 (z :: l2_2 ++ key_2 :: l4_2)).
 	  { eapply prefix_suffix_sorted_perm_local.
-	    - exact H13.
+	    - exact PreH15.
 	    - simpl. apply (perm_swap_with_prefix nil l2_2 l4_2 key_2 z). }
 	  Exists l1_2 z (l2_2 ++ [key_2]) l4_2 (replace_Znth j key_2 (replace_Znth i z l3_2)).
 	  rewrite Hi.
@@ -219,9 +219,9 @@ Proof.
 	  assert (Harray :
 	    replace_Znth j key_2 (replace_Znth i z l3_2) =
 	    l1_2 ++ z :: l2_2 ++ key_2 :: l4_2).
-	  { rewrite H3.
-	    rewrite H5.
-	    rewrite H8.
+	  { rewrite PreH5.
+	    rewrite PreH7.
+	    rewrite PreH10.
 	    assert (Hfirst :
 	      replace_Znth (Zlength l1_2) z (l1_2 ++ (key_2 :: l2_2) ++ z :: l4_2) =
 	      l1_2 ++ z :: l2_2 ++ z :: l4_2).
@@ -262,7 +262,7 @@ Proof.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial.
 	      assert (Hj_len : j = Zlength l1_2 + Zlength l2_2 + 1).
-	      { rewrite H8. rewrite Zlength_app. rewrite Zlength_cons. simpl. lia. }
+	      { rewrite PreH10. rewrite Zlength_app. rewrite Zlength_cons. simpl. lia. }
 	      assert (Hrhs_len : Zlength (l1_2 ++ z :: l2_2 ++ [key_2]) = Zlength l1_2 + Zlength l2_2 + 2).
 	      {
 	        replace (l1_2 ++ z :: l2_2 ++ [key_2]) with ((l1_2 ++ z :: l2_2) ++ [key_2]) by (rewrite <- app_assoc; reflexivity).
@@ -277,12 +277,12 @@ Proof.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial.
-	      rewrite H3 in H11.
+	      rewrite PreH5 in PreH13.
 	      rewrite Harray.
 	      eapply Permutation_trans with (l' := l1_2 ++ key_2 :: l2_2 ++ z :: l4_2).
-	      { exact H11. }
+	      { exact PreH13. }
 	      { simpl. apply (perm_swap_with_prefix l1_2 l2_2 l4_2 key_2 z). }
-	    * dump_pre_spatial. exact H12.
+	    * dump_pre_spatial. exact PreH14.
 	    * dump_pre_spatial.
 	      replace ((z :: l2_2 ++ [key_2]) ++ l4_2) with (z :: l2_2 ++ key_2 :: l4_2) by (simpl; rewrite <- app_assoc; reflexivity).
 	      exact Hps.
@@ -294,24 +294,24 @@ Lemma proof_of_sortArray_entail_wit_3_2 : sortArray_entail_wit_3_2.
 Proof.
 	pre_process.
 	destruct l4_2 as [ | z l4_2 ].
-	- rewrite Zlength_correct in H4.
-	  erewrite Permutation_length in H4 by exact H11.
-	  rewrite H3 in H4.
-	  repeat rewrite <- Zlength_correct in H4.
-	  rewrite app_nil_r in H4.
-	  rewrite <- H8 in H4.
+	- rewrite Zlength_correct in PreH6.
+	  erewrite Permutation_length in PreH6 by exact PreH13.
+	  rewrite PreH5 in PreH6.
+	  repeat rewrite <- Zlength_correct in PreH6.
+	  rewrite app_nil_r in PreH6.
+	  rewrite <- PreH10 in PreH6.
 	  lia.
 	- assert (Hz : key_2 <= z).
 	  { assert (Hi : Znth i l3_2 0 = key_2).
-	    { rewrite H5.
-	      rewrite H3.
+	    { rewrite PreH7.
+	      rewrite PreH5.
 	      rewrite app_Znth2 by lia.
 	      replace (Zlength l1_2 - Zlength l1_2) with 0 by lia.
 	      simpl.
 	      reflexivity. }
 	    assert (Hjz : Znth j l3_2 0 = z).
-	    { rewrite H8.
-	      rewrite H3.
+	    { rewrite PreH10.
+	      rewrite PreH5.
 	      assert (Hshape : l1_2 ++ (key_2 :: l2_2) ++ z :: l4_2 =
 	                       (l1_2 ++ key_2 :: l2_2) ++ z :: l4_2).
 	      { rewrite <- app_assoc. reflexivity. }
@@ -320,7 +320,7 @@ Proof.
 	      replace (Zlength (l1_2 ++ key_2 :: l2_2) - Zlength (l1_2 ++ key_2 :: l2_2)) with 0 by lia.
 	      simpl.
 	      reflexivity. }
-	    rewrite Hjz, Hi in H.
+	    rewrite Hjz, Hi in PreH1.
 	    lia. }
 	  Exists l1_2 key_2 (l2_2 ++ [z]) l4_2 l3_2.
 	  split_pure_spatial.
@@ -330,7 +330,7 @@ Proof.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial.
-	      rewrite H3.
+	      rewrite PreH5.
 	      simpl.
 	      rewrite <- app_assoc.
 	      reflexivity.
@@ -339,7 +339,7 @@ Proof.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial.
-	      rewrite H8.
+	      rewrite PreH10.
 	      replace (l1_2 ++ key_2 :: l2_2 ++ [z]) with ((l1_2 ++ key_2 :: l2_2) ++ [z]) by (rewrite <- app_assoc; reflexivity).
 	      assert (Hlen_snoc : Zlength ((l1_2 ++ key_2 :: l2_2) ++ [z]) = Zlength (l1_2 ++ key_2 :: l2_2) + 1).
 	      { rewrite Zlength_app. rewrite Zlength_cons. simpl. lia. }
@@ -347,13 +347,13 @@ Proof.
 	      lia.
 	    * dump_pre_spatial. lia.
 	    * dump_pre_spatial. lia.
-	    * dump_pre_spatial. exact H11.
-	    * dump_pre_spatial. exact H12.
+	    * dump_pre_spatial. exact PreH13.
+	    * dump_pre_spatial. exact PreH14.
 	    * dump_pre_spatial.
 	      replace ((key_2 :: l2_2 ++ [z]) ++ l4_2) with ((key_2 :: l2_2) ++ z :: l4_2) by (simpl; rewrite <- app_assoc; reflexivity).
-	      exact H13.
+	      exact PreH15.
 	    * dump_pre_spatial.
-	      apply lowerbound_app_cons; [exact H14 | exact Hz].
+	      apply lowerbound_app_cons; [exact PreH16 | exact Hz].
 Qed.
 
 Lemma proof_of_sortArray_entail_wit_4 : sortArray_entail_wit_4.
@@ -362,30 +362,30 @@ Proof.
 	assert (Hj_eq : j = numsSize_pre) by lia.
 	set (prefix := l1_2 ++ key :: l2_2).
 	assert (Hprefix : Zlength prefix = numsSize_pre).
-	{ unfold prefix. rewrite <- H7. lia. }
+	{ unfold prefix. rewrite <- PreH9. lia. }
 	assert (Hsplit : l3_2 = prefix ++ l4).
-	{ unfold prefix. rewrite <- app_assoc. exact H2. }
-	pose proof (Permutation_length H10) as Hperm.
+	{ unfold prefix. rewrite <- app_assoc. exact PreH4. }
+	pose proof (Permutation_length PreH12) as Hperm.
 	apply f_equal with (f := Z.of_nat) in Hperm.
 	repeat rewrite <- Zlength_correct in Hperm.
 	rewrite Hsplit in Hperm.
 	rewrite Zlength_app in Hperm.
-	assert (Hl4 : Zlength l4 = 0) by (rewrite <- H3 in Hperm; rewrite Hprefix in Hperm; lia).
+	assert (Hl4 : Zlength l4 = 0) by (rewrite <- PreH5 in Hperm; rewrite Hprefix in Hperm; lia).
 	apply Zlength_nil_inv in Hl4.
 	subst l4.
 	assert (Hkey : match l1_2 with | nil => True | y :: l' => last_val_local y l' <= key end).
-	{ rewrite app_nil_r in H12.
+	{ rewrite app_nil_r in PreH14.
 	  apply (prefix_suffix_sorted_last_local l1_2 key l2_2).
-	  exact H12. }
+	  exact PreH14. }
 	assert (Hinc : increasing (l1_2 ++ [key])).
 	{ apply increasing_snoc_local.
-	  - exact H11.
+	  - exact PreH13.
 	  - exact Hkey. }
 	assert (Hps : prefix_suffix_sorted (l1_2 ++ [key]) l2_2).
-	{ rewrite app_nil_r in H12.
+	{ rewrite app_nil_r in PreH14.
 	  apply prefix_suffix_sorted_snoc_local.
-	  - exact H12.
-	  - exact H13. }
+	  - exact PreH14.
+	  - exact PreH15. }
 	Exists (l1_2 ++ [key]) l2_2 l3_2.
 	split_pure_spatial.
 	- cancel ((returnSize_pre) # Int |-> numsSize_pre).
@@ -393,8 +393,8 @@ Proof.
 	- split_pures.
 	  + dump_pre_spatial. lia.
 	  + dump_pre_spatial. lia.
-	  + dump_pre_spatial. rewrite H2. rewrite app_nil_r. rewrite <- app_assoc. reflexivity.
-	  + dump_pre_spatial. exact H3.
+	  + dump_pre_spatial. rewrite PreH4. rewrite app_nil_r. rewrite <- app_assoc. reflexivity.
+	  + dump_pre_spatial. exact PreH5.
 	  + dump_pre_spatial.
 	    rewrite Zlength_app.
 	    rewrite Zlength_cons.
@@ -402,7 +402,7 @@ Proof.
 	    lia.
 	  + dump_pre_spatial. lia.
 	  + dump_pre_spatial. lia.
-	  + dump_pre_spatial. exact H10.
+	  + dump_pre_spatial. exact PreH12.
 	  + dump_pre_spatial. exact Hinc.
 	  + dump_pre_spatial. exact Hps.
 Qed.
@@ -413,24 +413,23 @@ Proof.
 	assert (Hlen1 : Zlength l1_2 = numsSize_pre) by lia.
 	assert (Hi : i = numsSize_pre) by lia.
 	subst i.
-	pose proof (Permutation_length H7) as Hperm.
+	pose proof (Permutation_length PreH9) as Hperm.
 	apply f_equal with (f := Z.of_nat) in Hperm.
 	repeat rewrite <- Zlength_correct in Hperm.
-	rewrite H2 in Hperm.
+	rewrite PreH4 in Hperm.
 	rewrite Zlength_app in Hperm.
-	assert (Hl2 : Zlength l2 = 0) by (rewrite <- H3 in Hperm; rewrite Hlen1 in Hperm; lia).
+	assert (Hl2 : Zlength l2 = 0) by (rewrite <- PreH5 in Hperm; rewrite Hlen1 in Hperm; lia).
 	apply Zlength_nil_inv in Hl2.
 	subst l2.
 	subst l3.
-	rewrite app_nil_r in H7.
+	rewrite app_nil_r in PreH9.
 	rewrite app_nil_r.
 	Exists l1_2.
 	split_pure_spatial.
 	- cancel (IntArray.full nums_pre numsSize_pre l1_2).
 	  cancel ((returnSize_pre) # Int |-> numsSize_pre).
 	- split_pures.
-	  + dump_pre_spatial. exact H7.
-	  + dump_pre_spatial. exact H8.
+	  + dump_pre_spatial. exact PreH9.
+	  + dump_pre_spatial. exact PreH10.
 	  + dump_pre_spatial. exact Hlen1.
 Qed.
-

@@ -1,62 +1,183 @@
-# qcp-mcp 安装（linux）
+# qcp-mcp
 
-## 1. 安装 Python 依赖
+`qcp-mcp` is the MCP wrapper for the repository's QCP binary. It starts the
+underlying `mcp` executable, keeps a session alive, and exposes tools such as
+`load_target_file`, `check`, `step`, `symbolic`, `proof`, and `close`.
 
-进入目录：
+## Prerequisites
 
-```bash
-cd qcp-mcp
+- Python 3.12+
+- The repository `mcp` binary
+  - Linux / WSL: `linux-binary/mcp`
+  - Windows: `win-binary/mcp.exe`
+
+## Configuration
+
+`qcp-mcp` resolves the backend binary in this order:
+
+1. `QCP_MCP_BIN`
+2. `QCP_MCP_CONFIG`
+3. local `CONFIGURE`
+
+The config file may contain either:
+
+```ini
+QCP_MCP_BIN=/absolute/path/to/qcp-binary-democases/linux-binary/mcp
 ```
 
-使用uv配置环境, uv安装方式: 
-  - `curl -LsSf https://astral.sh/uv/install.sh | sh`
-  - `nano ~/.bashrc`
-  - 在文件末尾添加`export PATH="$HOME/.local/bin:$PATH"`，随后ctrl+O,ctrl+X保存并退出
-  - `source ~/.bashrc`
+or:
 
-  - 通过`uv --version`检查是否成功安装
+```ini
+QCP_MCP_BIN=D:/absolute/path/to/qcp-binary-democases/win-binary/mcp.exe
+```
+
+If `QCP_MCP_BIN` is already set in the environment, you do not need to modify
+`CONFIGURE`.
+
+## Linux / WSL Setup
 
 ```bash
+cd mcp/qcp-mcp
 uv venv .venv
 uv sync
 ```
 
-## 2. 配置 `CONFIGURE` 文件（推荐）
-
-在 `qcp-mcp/CONFIGURE` 中配置：
+Optional `CONFIGURE`:
 
 ```ini
-# mcp binary 路径
-QCP_MCP_BIN=/absolute/path/to/sac_c_parser/build/release/mcp
+QCP_MCP_BIN=/absolute/path/to/qcp-binary-democases/linux-binary/mcp
 ```
 
-说明：
-- 不同用户只需要修改自己的 `CONFIGURE` 文件，也可以继续使用环境变量覆盖 `QCP_MCP_BIN`。
+## Windows / PowerShell Setup
 
-## 3. 配置client
+```powershell
+Set-Location mcp\qcp-mcp
+py -3 -m venv .venv-win
+.\.venv-win\Scripts\python.exe -m pip install -e .
+Set-Location ..\..
+. .\scripts\setup-windows-mcp-env.ps1
+```
 
-### 在vscode copilot中配置：
+The PowerShell setup script exports:
 
-在当前根目录的 `.vscode/mcp.json` 中配置：
+- `QCP_MCP_BIN`
+- `QCP_MCP_PYTHON`
+- `QCP_MCP_CONFIG`
+- `COQC_EXE`
+- `COQTOP_EXE`
+
+Recommended Windows usage:
+
+- Keep `qcp-mcp/CONFIGURE` available for Linux / WSL if needed.
+- Use `QCP_MCP_BIN` from `setup-windows-mcp-env.ps1` for PowerShell.
+
+## Smoke Test
+
+Linux / WSL:
+
+```bash
+PYTHONPATH=$PWD/src QCP_MCP_BIN=/absolute/path/to/qcp-binary-democases/linux-binary/mcp \
+  .venv/bin/python -m qcp_mcp.server
+```
+
+Windows:
+
+```powershell
+$env:QCP_MCP_BIN = 'D:\absolute\path\to\qcp-binary-democases\win-binary\mcp.exe'
+.\.venv-win\Scripts\python.exe -m qcp_mcp.server
+```
+
+To test actual tool behavior on Windows:
+
+```powershell
+@'
+import asyncio, json
+from qcp_mcp.server import initialize, check, symbolic, close
+
+TARGET = r"D:\absolute\path\to\qcp-binary-democases\QCP_examples\QCP_demos_LLM\simple_arith\add.c"
+
+async def main():
+    await initialize(TARGET)
+    chk = json.loads(await check(10))
+    sym = json.loads(await symbolic(57))
+    print("check:", chk["result"], chk["functionName"])
+    print("symbolic:", sym["result"], sym["functionName"])
+    print(await close())
+
+asyncio.run(main())
+'@ | .\mcp\qcp-mcp\.venv-win\Scripts\python.exe -
+```
+
+## MCP Client Configuration
+
+### VS Code Copilot
+
+Linux / WSL:
 
 ```json
 {
   "servers": {
     "qcp": {
       "type": "stdio",
-      "command": "/absolute/path/to/sac_c_parser/qcp-mcp/.venv/bin/python",
+      "command": "/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/.venv/bin/python",
       "args": [
-        "/absolute/path/to/sac_c_parser/qcp-mcp/server.py"
-      ]
+        "-m",
+        "qcp_mcp.server"
+      ],
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/src",
+        "QCP_MCP_BIN": "/absolute/path/to/qcp-binary-democases/linux-binary/mcp"
+      }
     }
   }
 }
 ```
-配置完后需要在设置的MCP: list server中开启QCP server；或者在mcp.json中会有一个启动按钮，点击启动server。
 
-### 在claude code中配置：
+Windows:
 
-命令行指令: 
+```json
+{
+  "servers": {
+    "qcp": {
+      "type": "stdio",
+      "command": "D:/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/.venv-win/Scripts/python.exe",
+      "args": [
+        "-m",
+        "qcp_mcp.server"
+      ],
+      "env": {
+        "PYTHONPATH": "D:/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/src",
+        "QCP_MCP_BIN": "D:/absolute/path/to/qcp-binary-democases/win-binary/mcp.exe"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+Linux / WSL:
+
 ```bash
-claude mcp add -s project qcp -- /absolute/path/to/sac_c_parser/qcp-mcp/.venv/bin/python /absolute/path/to/sac_c_parser/qcp-mcp/server.py
+claude mcp add -s project qcp --env QCP_MCP_BIN=/absolute/path/to/qcp-binary-democases/linux-binary/mcp -- /absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/.venv/bin/python -m qcp_mcp.server
+```
+
+Windows:
+
+```powershell
+claude mcp add -s project qcp --env QCP_MCP_BIN=D:/absolute/path/to/qcp-binary-democases/win-binary/mcp.exe -- D:/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/.venv-win/Scripts/python.exe -m qcp_mcp.server
+```
+
+### Codex
+
+Linux / WSL:
+
+```bash
+codex mcp add qcp --env PYTHONPATH=/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/src --env QCP_MCP_BIN=/absolute/path/to/qcp-binary-democases/linux-binary/mcp -- /absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/.venv/bin/python -m qcp_mcp.server
+```
+
+Windows:
+
+```powershell
+codex mcp add qcp --env PYTHONPATH=D:/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/src --env QCP_MCP_BIN=D:/absolute/path/to/qcp-binary-democases/win-binary/mcp.exe -- D:/absolute/path/to/qcp-binary-democases/mcp/qcp-mcp/.venv-win/Scripts/python.exe -m qcp_mcp.server
 ```

@@ -1,4 +1,4 @@
-Require Import Coq.ZArith.ZArith.
+﻿Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Coq.Lists.List.
@@ -19,90 +19,30 @@ Import naive_C_Rules.
 From SimpleC.EE.QCP_demos_LLM.simple_arith Require Import PDiv_lib.
 Local Open Scope sac.
 
-Lemma proof_of_div_test_return_wit_1 : div_test_return_wit_1.
+Lemma proof_of_div_test_return_wit_3 : div_test_return_wit_3.
 Proof.
-	intros c_pre b_pre a_pre.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hq.
-		Intros_p Hc.
-		Intros_p Ha1.
-		Intros_p Ha2.
-		Intros_p Hb1.
-		Intros_p Hb2.
-		Intros_p Hc1.
-		Intros_p Hc2.
-		cancel.
-	- Intros_p Hq.
-		Intros_p Hc.
-		Intros_p Ha1.
-		Intros_p Ha2.
-		Intros_p Hb1.
-		Intros_p Hb2.
-		Intros_p Hc1.
-		Intros_p Hc2.
-		dump_pre_spatial.
-		unfold Pos_Div.
-		destruct (Z.eq_dec c_pre 0) as [Heq|Hneq].
-		+ contradiction.
-		+ destruct (Z_lt_ge_dec ((a_pre * b_pre) ÷ c_pre) 0) as [Hlt|Hge].
-		  * lia.
-		  * reflexivity.
+  pre_process.
+  entailer!.
+  unfold Pos_Div.
+  subst c_pre. simpl. lia.
 Qed.
 
 Lemma proof_of_div_test_return_wit_2 : div_test_return_wit_2.
 Proof.
-	intros c_pre b_pre a_pre.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hq.
-		Intros_p Hc.
-		Intros_p Ha1.
-		Intros_p Ha2.
-		Intros_p Hb1.
-		Intros_p Hb2.
-		Intros_p Hc1.
-		Intros_p Hc2.
-		cancel.
-	- Intros_p Hq.
-		Intros_p Hc.
-		Intros_p Ha1.
-		Intros_p Ha2.
-		Intros_p Hb1.
-		Intros_p Hb2.
-		Intros_p Hc1.
-		Intros_p Hc2.
-		dump_pre_spatial.
-		unfold Pos_Div.
-		destruct (Z.eq_dec c_pre 0) as [Heq|Hneq].
-		+ contradiction.
-		+ destruct (Z_lt_ge_dec ((a_pre * b_pre) ÷ c_pre) 0) as [Hlt|Hge].
-		  * reflexivity.
-		  * lia.
-Qed.
+  pre_process.
+  entailer!.
+  unfold Pos_Div.
+  destruct (Z.eq_dec c_pre 0) ; try lia.
+  destruct (Z_lt_ge_dec (a_pre * b_pre ÷ c_pre) 0) ; try lia.
+Qed. 
 
-Lemma proof_of_div_test_return_wit_3 : div_test_return_wit_3.
+Lemma proof_of_div_test_return_wit_1 : div_test_return_wit_1.
 Proof.
-	intros c_pre b_pre a_pre.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hc.
-		Intros_p Ha1.
-		Intros_p Ha2.
-		Intros_p Hb1.
-		Intros_p Hb2.
-		Intros_p Hc1.
-		Intros_p Hc2.
-		cancel.
-	- Intros_p Hc.
-		Intros_p Ha1.
-		Intros_p Ha2.
-		Intros_p Hb1.
-		Intros_p Hb2.
-		Intros_p Hc1.
-		Intros_p Hc2.
-		dump_pre_spatial.
-		unfold Pos_Div.
-		destruct (Z.eq_dec c_pre 0) as [Heq|Hneq].
-		+ reflexivity.
-		+ contradiction.
+  pre_process.
+  entailer!.
+  unfold Pos_Div.
+  destruct (Z.eq_dec c_pre 0) ; try lia.
+  destruct (Z_lt_ge_dec (a_pre * b_pre ÷ c_pre) 0) ; try lia.
 Qed.
 
 Lemma proof_of_div_test_safety_wit_3 : div_test_safety_wit_3.

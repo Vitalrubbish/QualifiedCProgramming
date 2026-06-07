@@ -28,49 +28,32 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function OsGetSortLinkAttribute -----*)
 
 Definition OsGetSortLinkAttribute_safety_wit_1 := 
-forall (type_pre: Z) (u: Z) ,
-  “ (( &( "g_taskSortLink" ) ) <> 0) ” 
-  &&  “ (( &( "g_swtmrSortLink" ) ) <> 0) ” 
-  &&  “ (type_pre = u) ”
-  &&  ((( &( "type" ) )) # Int  |-> type_pre)
+forall (type_pre: Z) (u: Z) (PreH1 : (( &( "g_taskSortLink" ) ) <> 0)) (PreH2 : (( &( "g_swtmrSortLink" ) ) <> 0)) (PreH3 : (type_pre = u)) ,
+  ((( &( "type" ) )) # Int  |-> type_pre)
 |--
   “ (1 <= INT_MAX) ” 
   &&  “ ((INT_MIN) <= 1) ”
 .
 
 Definition OsGetSortLinkAttribute_safety_wit_2 := 
-forall (type_pre: Z) (u: Z) ,
-  “ (type_pre <> 1) ” 
-  &&  “ (( &( "g_taskSortLink" ) ) <> 0) ” 
-  &&  “ (( &( "g_swtmrSortLink" ) ) <> 0) ” 
-  &&  “ (type_pre = u) ”
-  &&  ((( &( "type" ) )) # Int  |-> type_pre)
+forall (type_pre: Z) (u: Z) (PreH1 : (type_pre <> 1)) (PreH2 : (( &( "g_taskSortLink" ) ) <> 0)) (PreH3 : (( &( "g_swtmrSortLink" ) ) <> 0)) (PreH4 : (type_pre = u)) ,
+  ((( &( "type" ) )) # Int  |-> type_pre)
 |--
   “ (2 <= INT_MAX) ” 
   &&  “ ((INT_MIN) <= 2) ”
 .
 
 Definition OsGetSortLinkAttribute_safety_wit_3 := 
-forall (type_pre: Z) (u: Z) ,
-  “ (type_pre <> 2) ” 
-  &&  “ (type_pre <> 1) ” 
-  &&  “ (( &( "g_taskSortLink" ) ) <> 0) ” 
-  &&  “ (( &( "g_swtmrSortLink" ) ) <> 0) ” 
-  &&  “ (type_pre = u) ”
-  &&  ((( &( "type" ) )) # Int  |-> type_pre)
+forall (type_pre: Z) (u: Z) (PreH1 : (type_pre <> 2)) (PreH2 : (type_pre <> 1)) (PreH3 : (( &( "g_taskSortLink" ) ) <> 0)) (PreH4 : (( &( "g_swtmrSortLink" ) ) <> 0)) (PreH5 : (type_pre = u)) ,
+  ((( &( "type" ) )) # Int  |-> type_pre)
 |--
   “ (0 <= INT_MAX) ” 
   &&  “ ((INT_MIN) <= 0) ”
 .
 
 Definition OsGetSortLinkAttribute_return_wit_1 := 
-forall (type_pre: Z) (u: Z) ,
-  “ (type_pre <> 2) ” 
-  &&  “ (type_pre <> 1) ” 
-  &&  “ (( &( "g_taskSortLink" ) ) <> 0) ” 
-  &&  “ (( &( "g_swtmrSortLink" ) ) <> 0) ” 
-  &&  “ (type_pre = u) ”
-  &&  emp
+forall (type_pre: Z) (u: Z) (PreH1 : (type_pre <> 2)) (PreH2 : (type_pre <> 1)) (PreH3 : (( &( "g_taskSortLink" ) ) <> 0)) (PreH4 : (( &( "g_swtmrSortLink" ) ) <> 0)) (PreH5 : (type_pre = u)) ,
+  TT && emp 
 |--
   (“ (u <> 1) ” 
   &&  “ (u <> 2) ” 
@@ -90,13 +73,8 @@ forall (type_pre: Z) (u: Z) ,
 .
 
 Definition OsGetSortLinkAttribute_return_wit_2 := 
-forall (type_pre: Z) (u: Z) ,
-  “ (type_pre = 2) ” 
-  &&  “ (type_pre <> 1) ” 
-  &&  “ (( &( "g_taskSortLink" ) ) <> 0) ” 
-  &&  “ (( &( "g_swtmrSortLink" ) ) <> 0) ” 
-  &&  “ (type_pre = u) ”
-  &&  emp
+forall (type_pre: Z) (u: Z) (PreH1 : (type_pre = 2)) (PreH2 : (type_pre <> 1)) (PreH3 : (( &( "g_taskSortLink" ) ) <> 0)) (PreH4 : (( &( "g_swtmrSortLink" ) ) <> 0)) (PreH5 : (type_pre = u)) ,
+  TT && emp 
 |--
   (“ (u <> 1) ” 
   &&  “ (u <> 2) ” 
@@ -116,12 +94,8 @@ forall (type_pre: Z) (u: Z) ,
 .
 
 Definition OsGetSortLinkAttribute_return_wit_3 := 
-forall (type_pre: Z) (u: Z) ,
-  “ (type_pre = 1) ” 
-  &&  “ (( &( "g_taskSortLink" ) ) <> 0) ” 
-  &&  “ (( &( "g_swtmrSortLink" ) ) <> 0) ” 
-  &&  “ (type_pre = u) ”
-  &&  emp
+forall (type_pre: Z) (u: Z) (PreH1 : (type_pre = 1)) (PreH2 : (( &( "g_taskSortLink" ) ) <> 0)) (PreH3 : (( &( "g_swtmrSortLink" ) ) <> 0)) (PreH4 : (type_pre = u)) ,
+  TT && emp 
 |--
   (“ (u <> 1) ” 
   &&  “ (u <> 2) ” 

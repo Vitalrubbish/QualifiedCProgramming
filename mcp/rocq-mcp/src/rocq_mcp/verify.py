@@ -7,6 +7,42 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 # ---------------------------------------------------------------------------
+# Shared constants and helpers
+# ---------------------------------------------------------------------------
+
+_ROCQ_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_']*")
+_ROCQ_QUALIFIED_NAME_RE = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_']*(\.[A-Za-z_][A-Za-z0-9_']*)*"
+)
+
+
+def _validate_rocq_identifier(name: str, label: str = "problem_name") -> None:
+    """Raise ValueError if *name* is not a valid Rocq identifier."""
+    if not _ROCQ_IDENT_RE.fullmatch(name):
+        raise ValueError(f"{label} must be a valid Rocq identifier. Got: {name!r}")
+
+
+def is_rocq_qualified_name(name: str) -> bool:
+    """Return True if *name* is a valid Rocq qualified identifier.
+
+    Accepts either a bare identifier (``add_comm``) or a dotted
+    qualified name (``Nat.add_comm``, ``Coq.Init.Logic.eq``).  Used
+    by tools that take a theorem reference as input.
+    """
+    return bool(_ROCQ_QUALIFIED_NAME_RE.fullmatch(name))
+
+
+# Block to reset printing flags after Module M, ensuring Print Assumptions
+# output matches our parser's expected format.
+_PRINT_RESET_BLOCK = (
+    "Unset Printing All.\n"
+    "Unset Printing Universes.\n"
+    "Set Printing Width 120.\n"
+    "Set Printing Depth 1000000.\n"
+)
+
+
+# ---------------------------------------------------------------------------
 # Definition categories and problem structure
 # ---------------------------------------------------------------------------
 
@@ -14,7 +50,6 @@ from enum import Enum, auto
 class DefCategory(Enum):
     """Classification of Rocq vernacular commands for template placement."""
 
-    PREAMBLE = auto()  # Require, Import, Open Scope
     SHARED_DEF = auto()  # Inductive, Record, Definition, Fixpoint, etc.
     THEOREM = auto()  # Theorem, Lemma, Proposition, etc.
     NOTATION = auto()  # Notation, Infix
@@ -95,6 +130,94 @@ _DEF_KEYWORDS_RE_STR = "|".join(
 )
 
 
+def _iter_rocq_chars(text: str):
+    """Shared per-character Rocq lexer driving :func:`_rocq_scan` and
+    :func:`_neutralize_for_regex`.
+
+    Yields ``(index, char, in_comment, in_string, consume)`` tuples
+    tracking ``(* ... *)`` comment nesting (arbitrary depth) and
+    ``"..."`` string literals (with ``""`` escape).  String literals
+    inside comments are tracked so ``*)`` within a quoted string within
+    a comment does NOT close the comment, matching Rocq's lexer.
+
+    ``consume`` is ``2`` when the event represents a two-character
+    token (``(*``, ``*)``, or a ``""`` string escape) and the second
+    character is at ``index + 1``; otherwise ``1``.  Callers that need
+    per-character output (e.g. position-preserving neutralization) use
+    ``consume`` to fan a single yield out to both positions; callers
+    that want one event per logical token (e.g. sentence-boundary
+    detection) can ignore it.
+    """
+    depth = 0
+    in_str = False
+    i = 0
+    length = len(text)
+    while i < length:
+        ch = text[i]
+        if in_str:
+            if ch == '"':
+                if i + 1 < length and text[i + 1] == '"':
+                    yield i, ch, depth > 0, True, 2
+                    i += 2
+                    continue
+                in_str = False
+            yield i, ch, depth > 0, True, 1
+        elif depth > 0:
+            if ch == '"':
+                in_str = True
+                yield i, ch, True, True, 1
+            elif ch == "*" and i + 1 < length and text[i + 1] == ")":
+                depth -= 1
+                yield i, ch, True, False, 2
+                i += 2
+                continue
+            elif ch == "(" and i + 1 < length and text[i + 1] == "*":
+                depth += 1
+                yield i, ch, True, False, 2
+                i += 2
+                continue
+            else:
+                yield i, ch, True, False, 1
+        else:
+            if ch == '"':
+                in_str = True
+                yield i, ch, False, True, 1
+            elif ch == "(" and i + 1 < length and text[i + 1] == "*":
+                depth += 1
+                yield i, ch, True, False, 2
+                i += 2
+                continue
+            else:
+                yield i, ch, False, False, 1
+        i += 1
+
+
+def _neutralize_for_regex(text: str) -> str:
+    """Replace comment and string interiors with spaces, preserving text length.
+
+    Comment delimiters ``(* ... *)`` and their contents become spaces.
+    String interiors (between ``"..."``) become spaces but the quote
+    delimiters are preserved outside comments.  This lets regex patterns
+    match on the neutralized text with spans that map 1:1 back to the
+    original.
+    """
+    result = list(text)
+    for idx, ch, in_comment, in_str, consume in _iter_rocq_chars(text):
+        if in_comment:
+            result[idx] = " "
+            if consume == 2:
+                result[idx + 1] = " "
+        elif in_str:
+            if consume == 2:
+                # "" escape inside a string — blank both characters
+                result[idx] = " "
+                result[idx + 1] = " "
+            elif ch != '"':
+                # String interior — blank; the lone " delimiter is preserved
+                result[idx] = " "
+    return "".join(result)
+
+
 def _strip_shared_defs(proof: str, shared_names: set[str]) -> str:
     """Remove definition blocks from proof whose names match shared_names.
 
@@ -107,10 +230,20 @@ def _strip_shared_defs(proof: str, shared_names: set[str]) -> str:
     string, matching Rocq's lexical convention.  Dots inside qualified
     names (e.g., ``Nat.add``) are not followed by whitespace and are
     correctly skipped.
+
+    Comments and strings are neutralized (replaced with spaces) before
+    regex matching so that definition keywords and dots inside them
+    do not confuse the sentence boundary detection.  Match spans are
+    mapped back to the original text, preserving comments in the output.
     """
     if not shared_names:
         return proof
-    result = proof
+    # Neutralize comments and strings for safe regex matching.
+    # The neutralized text has the same length as the original,
+    # so match spans map directly back.
+    neutralized = _neutralize_for_regex(proof)
+    # Collect all spans to remove (from ALL names).
+    spans: list[tuple[int, int]] = []
     for name in sorted(shared_names):  # sorted for determinism
         if not name:
             continue
@@ -122,10 +255,25 @@ def _strip_shared_defs(proof: str, shared_names: set[str]) -> str:
             rf"(?ms)^[ \t]*(?:{_DEF_KEYWORDS_RE_STR})\s+{re.escape(name)}\b"
             rf".*?\.(?=\s|$)[ \t]*\n?"
         )
-        # Strip ALL occurrences (count=0), not just the first. Using count=1
-        # would allow an adversary to hide a decoy definition (e.g. in a
-        # comment-like context) to protect their real redefinition from stripping.
-        result = re.sub(pattern, "", result, count=0)
+        # Find ALL occurrences (not just first). Using only the first match
+        # would allow an adversary to hide a decoy definition to protect
+        # their real redefinition from stripping.
+        for m in re.finditer(pattern, neutralized):
+            spans.append((m.start(), m.end()))
+    # Merge overlapping/contained spans to avoid corruption when a
+    # definition body textually contains another definition pattern.
+    spans.sort()
+    merged: list[tuple[int, int]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            # Overlapping or contained — extend the previous span.
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    # Apply in reverse order so removals don't shift earlier offsets.
+    result = proof
+    for start, end in reversed(merged):
+        result = result[:start] + result[end:]
     return result
 
 
@@ -147,11 +295,11 @@ _FORBIDDEN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "Forbidden command 'Drop' (escapes to OCaml toplevel)",
     ),
     (
-        re.compile(r"\bSeparate Extraction\b"),
+        re.compile(r"\bSeparate\s+Extraction\b"),
         "Forbidden command 'Separate Extraction' (writes .ml/.mli files)",
     ),
     (
-        re.compile(r"\bRecursive Extraction\b"),
+        re.compile(r"\bRecursive\s+Extraction\b"),
         "Forbidden command 'Recursive Extraction' (writes .ml files)",
     ),
     (
@@ -167,7 +315,7 @@ _FORBIDDEN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "Forbidden command 'Extraction Library' (writes .ml files)",
     ),
     (
-        re.compile(r"\bDeclare ML Module\b"),
+        re.compile(r"\bDeclare\s+ML\s+Module\b"),
         "Forbidden command 'Declare ML Module' (loads arbitrary OCaml plugins)",
     ),
     (
@@ -210,6 +358,18 @@ _FORBIDDEN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"\bAdd\s+ML\s+Path\b"),
         "Forbidden command 'Add ML Path' (extends OCaml plugin search path)",
     ),
+    (
+        re.compile(r'\bPrint\s+(?:Sorted\s+)?Universes\s+"'),
+        "Forbidden: 'Print [Sorted] Universes \"...\"' writes files",
+    ),
+    (
+        re.compile(r"\bExtraction\s+TestCompile\b"),
+        "Forbidden: 'Extraction TestCompile' invokes external compiler",
+    ),
+    (
+        re.compile(r"\bExtraction\s+Output\s+Directory\b"),
+        "Forbidden: 'Extraction Output Directory' directs extraction writes to arbitrary paths",
+    ),
 ]
 
 
@@ -224,81 +384,26 @@ def _rocq_scan(text: str):
 
     Two-character tokens (``(*``, ``*)``, ``""``) are yielded as one event at
     the position of their first character; the second character is skipped.
+
+    Thin wrapper over :func:`_iter_rocq_chars` — the underlying lexer state
+    machine is shared with :func:`_neutralize_for_regex`.
     """
-    depth = 0
-    in_str = False
-    i = 0
-    length = len(text)
-    while i < length:
-        ch = text[i]
-        if in_str:
-            if ch == '"':
-                if i + 1 < length and text[i + 1] == '"':
-                    yield i, ch, depth > 0, True
-                    i += 2
-                    continue
-                in_str = False
-            yield i, ch, depth > 0, True
-        elif depth > 0:
-            if ch == '"':
-                in_str = True
-                yield i, ch, True, True
-            elif ch == "*" and i + 1 < length and text[i + 1] == ")":
-                depth -= 1
-                yield i, ch, True, False  # closing *) – still part of comment
-                i += 2
-                continue
-            elif ch == "(" and i + 1 < length and text[i + 1] == "*":
-                depth += 1
-                yield i, ch, True, False
-                i += 2
-                continue
-            else:
-                yield i, ch, True, False
-        else:
-            if ch == '"':
-                in_str = True
-                yield i, ch, False, True
-            elif ch == "(" and i + 1 < length and text[i + 1] == "*":
-                depth += 1
-                yield i, ch, True, False
-                i += 2
-                continue
-            else:
-                yield i, ch, False, False
-        i += 1
-
-
-def _strip_rocq_comments(text: str) -> str:
-    """Remove ``(* ... *)`` comments from *text*, replacing each with a space.
-
-    Uses :func:`_rocq_scan` to ensure comment/string tracking exactly matches
-    Rocq's lexer (including string literals inside comments).
-    """
-    result: list[str] = []
-    was_in_comment = False
-    for _idx, ch, in_comment, _in_str in _rocq_scan(text):
-        if not in_comment:
-            if was_in_comment:
-                result.append(" ")  # replace closing comment with space
-            result.append(ch)
-        elif not was_in_comment:
-            result.append(" ")  # replace opening comment with space
-        was_in_comment = in_comment
-    return "".join(result)
+    for idx, ch, in_comment, in_str, _consume in _iter_rocq_chars(text):
+        yield idx, ch, in_comment, in_str
 
 
 def _check_forbidden_commands(source: str) -> str | None:
     """Check for dangerous Rocq commands in the source text.
 
-    Comments are stripped before scanning so that forbidden keywords
-    inside ``(* ... *)`` do not trigger false positives, and attackers
-    cannot hide commands inside comment-like constructs.
+    Uses :func:`_neutralize_for_regex` to blank comment and string
+    interiors in a single pass, avoiding desync issues that can occur
+    with separate strip-comments / strip-strings passes (e.g. ``""``
+    escape sequences shifting quote boundaries between passes).
 
     Returns an error message string if a forbidden command is found,
     or None if the source is clean.
     """
-    stripped = _strip_rocq_comments(source)
+    stripped = _neutralize_for_regex(source)
     for pattern, message in _FORBIDDEN_PATTERNS:
         if re.search(pattern, stripped):
             return message
@@ -338,17 +443,15 @@ def build_verification_source(
     if forbidden:
         raise ValueError(forbidden)
 
+    _validate_rocq_identifier(problem_name)
+
     clean_statement = _clean_problem_statement(problem_statement)
 
     return (
         f"Module M.\n"
         f"{proof}\n"
         f"End M.\n\n"
-        # Reset printing flags that Module M may have changed, to ensure
-        # Print Assumptions output matches our parser's expected format.
-        f"Unset Printing All.\n"
-        f"Unset Printing Universes.\n"
-        f"Set Printing Width 120.\n\n"
+        f"{_PRINT_RESET_BLOCK}\n"
         f"{clean_statement}\n"
         f"Proof.\n"
         f"exact M.{problem_name} || apply M.{problem_name} || eapply M.{problem_name}.\n"
@@ -369,7 +472,7 @@ def _clean_problem_statement(problem_statement: str) -> str:
         "",
         problem_statement,
     )
-    result = re.sub(r"\s*Proof\s*\.\s*$", "", result)
+    result = re.sub(r"\s*Proof\s*(?:(?:using|with)\b.*)?\.\s*$", "", result)
     return result.strip()
 
 
@@ -412,6 +515,8 @@ def build_shared_defs_verification_source(
     if forbidden:
         raise ValueError(forbidden)
 
+    _validate_rocq_identifier(problem_name)
+
     clean_theorem = _clean_problem_statement(structure.theorem_source)
 
     # Collect shared definition source texts
@@ -448,11 +553,7 @@ def build_shared_defs_verification_source(
     parts.append("End M.")
     parts.append("")
 
-    # Reset printing flags that Module M may have changed, to ensure
-    # Print Assumptions output matches our parser's expected format.
-    parts.append("Unset Printing All.")
-    parts.append("Unset Printing Universes.")
-    parts.append("Set Printing Width 120.")
+    parts.extend(_PRINT_RESET_BLOCK.splitlines())
     parts.append("")
 
     # 4. Theorem re-statement and apply
@@ -534,14 +635,69 @@ _KNOWN_SAFE_AXIOMS: set[str] = {
     "sig_not_dec",  # forall P : Prop, {~ ~ P} + {~ P}
     # --- Sets (Ensembles) ---
     "Extensionality_Ensembles",  # forall U (A B : Ensemble U), Same_set U A B -> A = B
+    # --- Primitive 63-bit integers (PrimInt63 / Uint63Axioms) ---
+    "int",  # Set (primitive type)
+    "add",  # int -> int -> int
+    "sub",  # int -> int -> int
+    "mul",  # int -> int -> int
+    "div",  # int -> int -> int
+    "mod",  # int -> int -> int
+    "eqb",  # int -> int -> bool (also float -> float -> bool)
+    "ltb",  # int -> int -> bool (also float -> float -> bool)
+    "leb",  # int -> int -> bool (also float -> float -> bool)
+    "land",  # int -> int -> int
+    "lor",  # int -> int -> int
+    "lxor",  # int -> int -> int
+    "lsl",  # int -> int -> int
+    "lsr",  # int -> int -> int
+    "asr",  # int -> int -> int
+    "head0",  # int -> int
+    "tail0",  # int -> int
+    "compare",  # int -> int -> comparison (also string -> string -> comparison)
+    "add_spec",  # forall x y, φ(x+y) = ((φx + φy) mod wB)%Z
+    "sub_spec",  # forall x y, φ(x-y) = ((φx - φy) mod wB)%Z
+    "mul_spec",  # forall x y, φ(x*y) = ((φx * φy) mod wB)%Z
+    "div_spec",  # forall x y, φ(x/y) = (φx / φy)%Z
+    "mod_spec",  # forall x y, φ(x mod y) = (φx mod φy)%Z
+    "eqb_correct",  # forall i j, (i =? j) = true -> i = j
+    "eqb_refl",  # forall x, (x =? x) = true
+    "of_to_Z",  # forall x, of_Z (φ x) = x
+    # --- Primitive floats (PrimFloat) ---
+    "float",  # Set (primitive type)
+    "sqrt",  # float -> float
+    "abs",  # float -> float
+    "classify",  # float -> float_class
+    "normfr_mantissa",  # float -> int
+    "frshiftexp",  # float -> float * int
+    "ldshiftexp",  # float -> int -> float
+    "next_up",  # float -> float
+    "next_down",  # float -> float
+    "opp",  # float -> float
+    # --- Primitive arrays (PrimArray) ---
+    "array",  # Type -> Type
+    "get",  # forall A, array A -> int -> A
+    "set",  # forall A, array A -> int -> A -> array A
+    "make",  # forall A, int -> A -> array A
+    "length",  # forall A, array A -> int (also string -> int)
+    "copy",  # forall A, array A -> array A
+    # --- Primitive strings (PrimString) ---
+    "string",  # Set (primitive type)
+    "cat",  # string -> string -> string
+    # --- mathcomp.classical-specific short names ---
+    # mathcomp re-exports most standard axioms (functional_extensionality_dep,
+    # propositional_extensionality, etc.) under their stdlib short names,
+    # which are already covered above.  These three are mathcomp-specific.
+    "EM",  # excluded middle (boolp)
+    "pselect",  # forall P, {P} + {~P}                       (boolp)
+    "cid",  # constructive indefinite description           (boolp)
 }
 
 # Standard library module prefixes. Axioms qualified with these are safe.
-_STDLIB_PREFIXES: tuple[str, ...] = ("Coq.", "Rocq.", "Stdlib.")
+_STDLIB_PREFIXES: tuple[str, ...] = ("Coq.", "Rocq.", "Stdlib.", "Corelib.")
 
 # Known stdlib module names that Print Assumptions outputs WITHOUT the full
-# Stdlib./Coq. prefix. E.g., "ClassicalDedekindReals.sig_forall_dec" instead
-# of "Stdlib.Reals.ClassicalDedekindReals.sig_forall_dec".
+# Stdlib./Coq./Corelib. prefix. E.g., "ClassicalDedekindReals.sig_forall_dec"
+# instead of "Stdlib.Reals.ClassicalDedekindReals.sig_forall_dec".
 _STDLIB_MODULE_PREFIXES: tuple[str, ...] = (
     "ClassicalDedekindReals.",  # Dedekind reals axioms
     "FunctionalExtensionality.",  # functional extensionality
@@ -555,6 +711,26 @@ _STDLIB_MODULE_PREFIXES: tuple[str, ...] = (
     "PropExtensionality.",  # propositional_extensionality
     "Raxioms.",  # R, Rplus, Rmult, etc.
     "Ensembles.",  # Extensionality_Ensembles
+    # Primitive types and operations (kernel-level axioms)
+    "PrimInt63.",  # int, add, sub, mul, div, mod, eqb, ltb, leb, ...
+    "Uint63Axioms.",  # add_spec, sub_spec, ..., eqb_correct, eqb_refl, of_to_Z
+    "PrimFloat.",  # float, add, sub, mul, div, sqrt, eqb, ltb, leb, ...
+    "PrimArray.",  # array, get, set, make, length, copy
+    "PrimString.",  # string, cat, length, compare
+    "FloatOps.",  # float operation specs
+    "FloatAxioms.",  # float axiom specs
+    # mathcomp.classical (commonly used by analysis/finmap proofs;
+    # re-exports stdlib axioms under their stdlib short names plus a
+    # few mathcomp-specific short names: EM, pselect, cid).
+    "mathcomp.classical.boolp.",
+    "mathcomp.classical.classical_sets.",
+    # NOTE: bare ``boolp.`` / ``classical_sets.`` are intentionally NOT
+    # in this list.  Together with the 2-char short name ``EM`` in the
+    # whitelist, a workspace-supplied ``boolp.v`` containing
+    # ``Axiom EM : False.`` would have been auto-trusted by rocq_verify
+    # Phase 3 (no Module M wrapping; the proof-source ``\bAxiom\b``
+    # block does not see what ``Require Import`` pulls in).  Require the
+    # full ``mathcomp.classical.boolp.`` qualifier instead.
 )
 
 
@@ -569,11 +745,7 @@ def _is_standard_axiom(name: str) -> bool:
     For qualified names (containing dots): the prefix must be from a known
     stdlib module AND the short name must be in the whitelist.
 
-    For unqualified names: must be in the whitelist directly.
-
-    This prevents spoofing: a user-defined 'M.classic : False' has prefix 'M.'
-    which is NOT a stdlib prefix, so it is rejected even though short name
-    'classic' is in the whitelist.
+    For unqualified names: accepted if the short name is in the whitelist.
 
     Print Assumptions outputs axiom names in various forms:
       - "classic" (unqualified)
@@ -585,7 +757,6 @@ def _is_standard_axiom(name: str) -> bool:
     if short not in _KNOWN_SAFE_AXIOMS:
         return False
     if "." not in name:
-        # Unqualified: trust the whitelist
         return True
     # Qualified: must come from stdlib (full prefix or known module name)
     if any(name.startswith(prefix) for prefix in _STDLIB_PREFIXES):
@@ -598,37 +769,130 @@ def _is_standard_axiom(name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def parse_and_classify_assumptions(stdout: str) -> tuple[str, dict]:
+def parse_and_classify_assumptions(
+    stdout: str,
+    admitted_names: set[str] | None = None,
+) -> tuple[str, dict]:
     """Parse Print Assumptions output and classify axioms.
 
+    The primary output is the three categorized name lists (``admitted``,
+    ``classical_axioms``, ``user_axioms``) returned in ``details``.  Together
+    they partition the assumptions: every parsed name appears in exactly one
+    of the three lists.
+
+    Args:
+        stdout: Raw ``Print Assumptions`` output to parse.
+        admitted_names: Optional set of names that the caller knows correspond
+            to ``Admitted`` lemmas (or proofs ending in ``admit.``/``Admit.``).
+            ``Print Assumptions`` does not distinguish ``Admitted`` from
+            ``Axiom`` in its output — both appear under the ``Axioms:``
+            header — so callers with extra context (e.g., access to the
+            source file) can pass this set to surface admits separately
+            from user-declared axioms.  Names in ``admitted_names`` that are
+            *not* present in the parsed assumptions are silently ignored.
+
     Returns:
-        ("closed", {})  -- no assumptions
-        ("standard_only", {"standard": [...]})  -- only known safe axioms
-        ("suspicious", {"suspicious": [...], "suspicious_names": [...], "standard": [...]})
+        ``(verdict, details)`` where ``details`` always contains the three
+        categorized lists:
+
+            * ``"admitted"`` (list[str]) — names the caller has externally
+              identified as ``Admitted``/``admit`` (passed via
+              ``admitted_names``).  **Currently always ``[]`` in the standard
+              ``rocq_assumptions`` flow** because ``Print Assumptions`` does
+              not distinguish ``Admitted`` from ``Axiom``/``Parameter``/
+              ``Conjecture``.  Future enrichment may populate this from a
+              source-file scan.  **Do not treat empty ``admitted`` as
+              evidence of an admit-free proof.**
+            * ``"classical_axioms"`` (list[str]) — axiom names matched
+              against :data:`_KNOWN_SAFE_AXIOMS`, a static whitelist of
+              classical-logic axioms (``Excluded_middle``,
+              ``FunctionalExtensionality``, ``ProofIrrelevance``, primitive
+              ints/floats/arrays/strings, …).  Match is by **exact qualified
+              name**; user-defined axioms with whitelisted names (e.g. a
+              custom ``classic`` outside ``Coq.Logic.Classical_Prop``) would
+              currently be auto-trusted.
+            * ``"user_axioms"`` (list[str]) — non-classical axiom names
+              *not* known to be admits.  Anything user-declared
+              (``Axiom``, ``Parameter``, ``Conjecture``) outside the
+              whitelist lands here, and so do ``Admitted`` lemmas (until
+              ``admitted`` is populated by a future phase).
+
+        **Trusted closed proof**: ``not user_axioms and not admitted``
+        (with ``classical_axioms`` allowed if you accept classical logic).
+
+        Notes:
+            ``verdict`` is **DEPRECATED**; prefer the structured lists above.
+            For back-compat, it is one of:
+
+                - ``"closed"``        ≡ ``not admitted and not classical_axioms
+                                          and not user_axioms``
+                - ``"standard_only"`` ≡ has ``classical_axioms`` only
+                - ``"suspicious"``    ≡ has ``admitted`` or ``user_axioms``
+
+            The ``verdict`` field is retained for back-compat; it will be
+            removed in a future major version when the legacy callers have
+            migrated.
+
+            Legacy keys also preserved on ``details`` for back-compat:
+                * ``"closed"``         -> ``{}`` (plus the new lists)
+                * ``"standard_only"``  -> ``{"standard": [...]}``
+                * ``"suspicious"``     -> ``{"standard": [...],
+                                              "suspicious": [...],
+                                              "suspicious_names": [...]}``
     """
     assumptions = _parse_assumptions_raw(stdout)
-    if not assumptions:
-        return "closed", {}
+    admitted_set = set(admitted_names) if admitted_names else set()
+
+    admitted: list[str] = []
+    classical_axioms: list[str] = []
+    user_axioms: list[str] = []
 
     standard: list[str] = []
     suspicious: list[str] = []
     suspicious_names: list[str] = []
 
     for name, ty in assumptions:
-        if _is_standard_axiom(name):
+        is_classical = _is_standard_axiom(name)
+        # Admitted classification takes precedence over classical: a lemma
+        # the caller flagged as admitted is admitted, full stop.
+        if name in admitted_set:
+            admitted.append(name)
+        elif is_classical:
+            classical_axioms.append(name)
+        else:
+            user_axioms.append(name)
+        # Legacy classification (for back-compat keys).
+        if is_classical:
             standard.append(f"{name} : {ty}")
         else:
             suspicious.append(f"{name} : {ty}")
             suspicious_names.append(name)
 
-    if not suspicious:
-        return "standard_only", {"standard": standard}
-    else:
+    new_lists = {
+        "admitted": admitted,
+        "classical_axioms": classical_axioms,
+        "user_axioms": user_axioms,
+    }
+
+    if not assumptions:
+        return "closed", {**new_lists}
+    # An admit overrides classical-only classification: the legacy verdict
+    # must be consistent with the new ``admitted`` list.
+    if admitted:
         return "suspicious", {
             "standard": standard,
             "suspicious": suspicious,
             "suspicious_names": suspicious_names,
+            **new_lists,
         }
+    if not suspicious:
+        return "standard_only", {"standard": standard, **new_lists}
+    return "suspicious", {
+        "standard": standard,
+        "suspicious": suspicious,
+        "suspicious_names": suspicious_names,
+        **new_lists,
+    }
 
 
 def _parse_assumptions_raw(stdout: str) -> list[tuple[str, str]]:
@@ -646,8 +910,35 @@ def _parse_assumptions_raw(stdout: str) -> list[tuple[str, str]]:
 
     Or:
         Closed under the global context
+
+    IMPORTANT: parses from the LAST ``Print Assumptions`` output block
+    in stdout.  This prevents a proof inside Module M from injecting
+    ``Print Assumptions clean_lemma.`` whose output (``Closed under the
+    global context``) would otherwise shadow the template's real output.
+    The template's ``Print Assumptions`` is always the last one because
+    it appears after ``End M.``
     """
     lines = stdout.split("\n")
+
+    # --- Find the LAST Print Assumptions output marker ---
+    # Markers are "Closed under the global context" or "Axioms:".
+    # We parse from the last marker to ignore any injected output from
+    # commands inside Module M.
+    last_marker_idx = None
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s == "Closed under the global context":
+            last_marker_idx = i
+        elif s == "Axioms:" or s.startswith("Axioms:"):
+            last_marker_idx = i
+
+    if last_marker_idx is not None:
+        # Check if the last marker is "Closed under the global context"
+        if lines[last_marker_idx].strip() == "Closed under the global context":
+            return []
+        # Otherwise it's "Axioms:" — parse from there
+        lines = lines[last_marker_idx:]
+
     assumptions: list[tuple[str, str]] = []
     current_name: str | None = None
     current_type_parts: list[str] = []
@@ -699,6 +990,184 @@ def _parse_assumptions_raw(stdout: str) -> list[tuple[str, str]]:
         assumptions.append((current_name, " ".join(current_type_parts)))
 
     return assumptions
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Direct verification helpers
+# ---------------------------------------------------------------------------
+
+
+def build_direct_verification_source(proof: str, problem_name: str) -> str:
+    """Build source for Phase 3: proof + Check + Print Assumptions.
+
+    Appends ``Check @<name>.`` (with ``Set Printing All``) and
+    ``Print Assumptions <name>.`` to the proof.  The caller compiles
+    this source and parses both outputs from stdout.
+
+    Raises ValueError if the proof contains forbidden commands,
+    incomplete proof markers (Admitted/admit/give_up), or if
+    the problem_name is invalid.
+    """
+    forbidden = _check_forbidden_commands(proof)
+    if forbidden:
+        raise ValueError(forbidden)
+
+    _validate_rocq_identifier(problem_name)
+
+    # A complete proof should never contain Admitted, admit, or give_up.
+    neutralized = _neutralize_for_regex(proof)
+    if re.search(r"\bAdmitted\b", neutralized):
+        raise ValueError(
+            "Proof contains 'Admitted' which is not allowed in direct verification. "
+            "Provide a complete proof without Admitted."
+        )
+    if re.search(r"\badmit\b", neutralized):
+        raise ValueError(
+            "Proof contains 'admit' tactic which is not allowed in direct "
+            "verification. Provide a complete proof without admit."
+        )
+    if re.search(r"\bgive_up\b", neutralized):
+        raise ValueError(
+            "Proof contains 'give_up' tactic which is not allowed in direct "
+            "verification. Provide a complete proof without give_up."
+        )
+
+    # Block axiom-introducing commands.  In Phase 1/2 these are harmless
+    # (Module M wrapping makes them visible to Print Assumptions), but in
+    # Phase 3 (direct compilation) a user-declared ``Axiom classic : False``
+    # would be whitelisted by _is_standard_axiom because "classic" is in
+    # _KNOWN_SAFE_AXIOMS.
+    #
+    # Note: Variable/Hypothesis are NOT blocked — they are section-local
+    # and become parameters after ``End Section``.  They don't persist as
+    # global axioms and are safe in Phase 3.
+    for kw in ("Axiom", "Parameter", "Conjecture"):
+        if re.search(rf"\b{kw}\b", neutralized):
+            raise ValueError(
+                f"Proof contains '{kw}' which is not allowed in direct verification. "
+                f"A complete proof must not introduce axioms or unproven assumptions."
+            )
+
+    return (
+        f"{proof}\n\n"
+        f"Set Printing Width 120.\n"
+        f"Set Printing Depth 1000000.\n"
+        f"Unset Printing Universes.\n"
+        f"Set Printing All.\n"
+        f"Check @{problem_name}.\n\n"
+        f"{_PRINT_RESET_BLOCK}"
+        f"Print Assumptions {problem_name}.\n"
+    )
+
+
+def build_direct_type_check_source(problem_statement: str, problem_name: str) -> str:
+    """Build source for Phase 3 type extraction from the problem statement.
+
+    Compiles the problem statement as-is (it should already contain
+    ``Admitted.`` or similar) and appends ``Check @<name>.`` with
+    ``Set Printing All`` to extract the expected type signature.
+
+    Raises ValueError if the problem statement contains forbidden commands
+    or if the problem_name is invalid.
+    """
+    forbidden = _check_forbidden_commands(problem_statement)
+    if forbidden:
+        raise ValueError(forbidden)
+
+    _validate_rocq_identifier(problem_name)
+
+    return (
+        f"{problem_statement}\n\n"
+        # Reset printing flags to prevent truncation from problem statement settings.
+        f"Set Printing Width 120.\n"
+        f"Set Printing Depth 1000000.\n"
+        f"Unset Printing Universes.\n"
+        f"Set Printing All.\n"
+        f"Check @{problem_name}.\n"
+    )
+
+
+def parse_check_type(stdout: str, name: str) -> str | None:
+    """Extract type string from ``Check @<name>.`` output.
+
+    Rocq outputs::
+
+        @name
+             : <type>
+
+    or for short types::
+
+        @name : <type>
+
+    IMPORTANT: parses from the LAST matching ``@name`` occurrence in stdout.
+    This prevents a proof from injecting its own ``Check @name.`` whose output
+    would otherwise shadow the template's real output.  The template's
+    ``Check`` is always the last one because it appears after the proof.
+
+    Returns the raw type string (whitespace-normalized), or None if
+    the Check output cannot be found/parsed.
+    """
+    lines = stdout.split("\n")
+    # Find the LAST line containing the name from Check output.
+    # Use exact matching: "@name" followed by whitespace, colon, or end of line.
+    # This prevents prefix collisions (e.g., "@foobar" matching "@foo").
+    at_name = f"@{name}"
+    start_idx = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if (
+            stripped == at_name
+            or stripped.startswith(f"{at_name} ")
+            or stripped.startswith(f"{at_name}\t")
+        ):
+            start_idx = i
+        elif stripped == name:
+            start_idx = i
+
+    if start_idx is None:
+        return None
+
+    # Check if type is on the same line: "@name : type"
+    first_line = lines[start_idx].strip()
+    if " : " in first_line:
+        _, _, type_part = first_line.partition(" : ")
+        type_parts = [type_part.strip()]
+    else:
+        type_parts = []
+
+    # Collect continuation lines (indented or starting with ":")
+    for j in range(start_idx + 1, len(lines)):
+        line = lines[j]
+        stripped = line.strip()
+        if not stripped:
+            break
+        if line.startswith((" ", "\t")):
+            # Indented continuation
+            if stripped.startswith(": "):
+                type_parts.append(stripped[2:].strip())
+            else:
+                type_parts.append(stripped)
+        else:
+            break
+
+    if not type_parts:
+        return None
+
+    return " ".join(type_parts)
+
+
+def normalize_type_for_comparison(type_str: str) -> str:
+    """Normalize a type string for comparison.
+
+    - Collapses all whitespace (spaces, tabs, newlines) to single spaces
+    - Strips universe annotations ``@{...}``
+    - Strips leading/trailing whitespace
+    """
+    # Strip universe annotations @{...}
+    result = re.sub(r"@\{[^}]*\}", "", type_str)
+    # Collapse whitespace
+    result = re.sub(r"\s+", " ", result)
+    return result.strip()
 
 
 # ---------------------------------------------------------------------------

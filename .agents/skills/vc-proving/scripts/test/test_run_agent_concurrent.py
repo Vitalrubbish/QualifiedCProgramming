@@ -14,7 +14,12 @@ from prepare_agent_concurrent import (
     load_groups_manifest,
     prepare_groups,
 )
-from agent_runner import build_group_prompt as _build_group_prompt, run_codex_agent
+from agent_runner import (
+    WORKER_MODE_COQC_ONLY,
+    build_group_prompt as _build_group_prompt,
+    normalize_worker_execution_mode,
+    run_codex_agent,
+)
 from run_agent_concurrent import (
     _find_report_entry,
     _load_proof_report,
@@ -22,10 +27,13 @@ from run_agent_concurrent import (
     _merge_proof_reports,
     _merge_strategy_reports,
     _quick_status,
+    _scheduled_group_indices,
+    apply_reuse_prepass,
     finalize,
     run_agents,
     run_concurrent,
 )
+from proof_reuse_index import build_index
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +142,26 @@ class TestBuildGroupPrompt:
         assert "coqc/coqtop" in prompt
 
 
+class TestWorkerExecutionMode:
+    def test_legacy_string_false_maps_to_coqc_only(self):
+        assert normalize_worker_execution_mode(use_rocq_mcp="false") == WORKER_MODE_COQC_ONLY
+
+
+class TestScheduling:
+    def test_harder_groups_run_first(self):
+        group_manifests = [
+            {"goals": [{"name": "easy"}], "estimated_difficulty_score": 1.0},
+            {"goals": [{"name": "hard"}], "estimated_difficulty_score": 10.0},
+            {"goals": [{"name": "medium"}], "estimated_difficulty_score": 5.0},
+        ]
+        assert _scheduled_group_indices(group_manifests, [0, 1, 2]) == [1, 2, 0]
+
+    @patch("run_agent_concurrent.check_codex")
+    def test_no_groups_skips_codex_lookup(self, mock_check):
+        assert run_agents([], max_parallel=2, timeout=60) == {}
+        assert mock_check.call_count == 0
+
+
 class _DummyProcess:
     pid = 12345
     returncode = 0
@@ -193,6 +221,34 @@ class TestRunCodexAgentCommand:
         assert result == 0
         cmd = mock_popen.call_args[0][0]
         assert not any("mcp_servers.rocq-mcp" in part for part in cmd)
+        assert not (config_dir / "config.toml").exists()
+        assert (config_dir / "config.toml.disabled-by-coqc-only").exists()
+
+    @patch("agent_runner.subprocess.Popen", return_value=_DummyProcess())
+    def test_worker_execution_mode_overrides_legacy_use_rocq_mcp(self, mock_popen, tmp_path):
+        config_dir = tmp_path / ".codex"
+        config_dir.mkdir()
+        (config_dir / "config.toml").write_text(
+            '[mcp_servers.rocq-mcp]\n'
+            'command = "/usr/local/bin/rocq-mcp"\n'
+            f'cwd = "{tmp_path}"\n',
+            encoding="utf-8",
+        )
+
+        result = run_codex_agent(
+            tmp_path,
+            "prompt",
+            60,
+            codex="/usr/bin/codex",
+            use_rocq_mcp=True,
+            worker_execution_mode=WORKER_MODE_COQC_ONLY,
+        )
+
+        assert result == 0
+        cmd = mock_popen.call_args[0][0]
+        assert not any("mcp_servers.rocq-mcp" in part for part in cmd)
+        assert not (config_dir / "config.toml").exists()
+        assert (config_dir / "config.toml.disabled-by-coqc-only").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +536,78 @@ class TestRunConcurrentMultipleGroups:
         assert mock_run.call_count == 2
 
 
+class TestProofReusePrepass:
+    def test_reuse_index_without_compile_check_does_not_remove_worker_scope(self, workspace):
+        solved_manual = workspace["tmp_path"] / "solved_manual.v"
+        first = workspace["names"][0]
+        solved_manual.write_text(
+            "Require Import MyLib.\n\n"
+            f"Lemma {first} : True.\n"
+            "Proof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        index = build_index(
+            solved_manual,
+            lib_file=str(workspace["lib"]),
+            frozen_prefix_end_line=None,
+        )
+        index_path = workspace["work_dir"] / "reuse_index.json"
+        index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+
+        report = apply_reuse_prepass(
+            manifest_path=workspace["manifest_path"],
+            lib_file=workspace["lib"],
+            reuse_index_path=index_path,
+            compile_check=False,
+        )
+
+        assert report is not None
+        assert report["reused_goal_names"] == []
+        assert report["status"] == "direct_reuse_disabled_without_compile_check"
+        manifest = json.loads(workspace["manifest_path"].read_text(encoding="utf-8"))
+        assert manifest["source_file"] == str(workspace["src"])
+        assert [entry["name"] for entry in manifest["lemmas"]] == workspace["names"]
+
+        summary = finalize([], workspace["work_dir"], manifest_path=workspace["manifest_path"])
+        assert summary["status_counts"]["no_report"] == len(workspace["names"])
+
+    @patch("proof_reuse_index.check_rocq_file_with_deps", return_value=None)
+    def test_reused_goals_are_removed_from_worker_scope_after_compile_gate(self, _mock_check, workspace):
+        solved_manual = workspace["tmp_path"] / "solved_manual.v"
+        first = workspace["names"][0]
+        solved_manual.write_text(
+            "Require Import MyLib.\n\n"
+            f"Lemma {first} : True.\n"
+            "Proof. exact I. Qed.\n",
+            encoding="utf-8",
+        )
+        index = build_index(
+            solved_manual,
+            lib_file=str(workspace["lib"]),
+            frozen_prefix_end_line=None,
+        )
+        index_path = workspace["work_dir"] / "reuse_index.json"
+        index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+
+        report = apply_reuse_prepass(
+            manifest_path=workspace["manifest_path"],
+            lib_file=workspace["lib"],
+            reuse_index_path=index_path,
+            compile_check=True,
+        )
+
+        assert report is not None
+        assert report["reused_goal_names"] == workspace["names"]
+        manifest = json.loads(workspace["manifest_path"].read_text(encoding="utf-8"))
+        assert manifest["source_file"].endswith("proof_reuse_candidate_proof_manual.v")
+        assert manifest["lemmas"] == []
+        candidate = Path(manifest["source_file"]).read_text(encoding="utf-8")
+        assert f"Lemma {first} : True.\nProof. exact I. Qed." in candidate
+
+        summary = finalize([], workspace["work_dir"], manifest_path=workspace["manifest_path"])
+        assert summary["status_counts"]["solved"] == len(workspace["names"])
+
+
 class TestTimeoutPerGoal:
     @patch("run_agent_concurrent.check_codex", return_value="/usr/bin/codex")
     @patch("run_agent_concurrent.run_codex_agent", side_effect=_fake_codex_that_solves)
@@ -547,6 +675,31 @@ class TestPhaseSeparation:
         assert len(data) >= 1
         assert "work_dir" in data[0]
         assert "goals" in data[0]
+
+        preflight = json.loads(
+            (workspace["work_dir"] / "vc_proving_preflight.json").read_text(encoding="utf-8")
+        )
+        assert preflight["status"] == "passed"
+        assert preflight["goal_count"] == 3
+        assert preflight["group_plan_covered_goal_count"] == 3
+
+    def test_prepare_groups_respects_manifest_worker_execution_mode(self, workspace):
+        manifest = json.loads(workspace["manifest_path"].read_text(encoding="utf-8"))
+        manifest["worker_execution_mode"] = WORKER_MODE_COQC_ONLY
+        manifest["use_rocq_mcp"] = True
+        workspace["manifest_path"].write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+        gms = prepare_groups(
+            manifest_path=workspace["manifest_path"],
+            lib_file=workspace["lib"],
+            chunk_size=5,
+        )
+
+        assert gms[0]["worker_execution_mode"] == WORKER_MODE_COQC_ONLY
+        assert gms[0]["use_rocq_mcp"] is False
+        manifest = json.loads(workspace["manifest_path"].read_text(encoding="utf-8"))
+        assert manifest["worker_execution_mode"] == WORKER_MODE_COQC_ONLY
+        assert manifest["use_rocq_mcp"] is False
 
     def test_prepare_groups_uses_explicit_group_plan_file(self, workspace):
         group_plan = workspace["work_dir"] / "vc_checking_groups.json"
@@ -659,6 +812,35 @@ class TestPhaseSeparation:
         prompt = mock_run.call_args[0][1]
         assert "rocq-mcp is disabled" in prompt
         assert mock_run.call_args.kwargs["use_rocq_mcp"] is False
+
+    @patch("run_agent_concurrent.check_codex", return_value="/usr/bin/codex")
+    @patch("run_agent_concurrent.run_codex_agent", side_effect=_fake_codex_that_solves)
+    def test_run_agents_worker_execution_mode_is_authoritative(self, mock_run, mock_check, workspace):
+        gms = prepare_groups(
+            manifest_path=workspace["manifest_path"],
+            lib_file=workspace["lib"],
+            chunk_size=5,
+            use_rocq_mcp=True,
+        )
+        work_dir = Path(gms[0]["work_dir"])
+        config_dir = work_dir / ".codex"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.toml").write_text(
+            '[mcp_servers.rocq-mcp]\n'
+            'command = "/usr/local/bin/rocq-mcp"\n'
+            f'cwd = "{work_dir}"\n',
+            encoding="utf-8",
+        )
+        gms[0]["worker_execution_mode"] = WORKER_MODE_COQC_ONLY
+        gms[0]["use_rocq_mcp"] = True
+
+        run_agents(group_manifests=gms, max_parallel=2, timeout=60)
+
+        prompt = mock_run.call_args[0][1]
+        assert "rocq-mcp is disabled" in prompt
+        assert mock_run.call_args.kwargs["use_rocq_mcp"] is False
+        assert not (config_dir / "config.toml").exists()
+        assert (config_dir / "config.toml.disabled-by-coqc-only").exists()
 
     @patch("run_agent_concurrent.check_codex", return_value="/usr/bin/codex")
     @patch("run_agent_concurrent.run_codex_agent", side_effect=_fake_codex_that_solves)

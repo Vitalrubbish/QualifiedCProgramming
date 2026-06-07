@@ -19,7 +19,7 @@ Import naive_C_Rules.
 Require Import SimpleC.EE.LLM_bench.Algorithms.maximum_subarray.maximum_subarray_lib.
 Local Open Scope sac.
 
-Lemma proof_of_max_return_wit_1 : max_return_wit_1.
+Lemma proof_of_max_return_wit_2 : max_return_wit_2.
 Proof.
   pre_process.
   split_pure_spatial.
@@ -31,7 +31,7 @@ Proof.
     reflexivity.
 Qed. 
 
-Lemma proof_of_max_return_wit_2 : max_return_wit_2.
+Lemma proof_of_max_return_wit_1 : max_return_wit_1.
 Proof.
   pre_process.
   split_pure_spatial.

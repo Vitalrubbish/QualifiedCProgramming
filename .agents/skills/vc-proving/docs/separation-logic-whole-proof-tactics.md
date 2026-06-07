@@ -4,13 +4,13 @@
 - 在证明结论 `P |-- Q` 中，P 称为**前条件**，Q 称为**后条件**
 - **前提**指 Coq 中的 Hypothesis
 
-## 1. `pre_process`
+## 1. `pre_process` / `aggressive_pre_process`
 
 **功能**：展开定义、引入变量、提取前条件中的纯命题。
 
 **用途**：每个证明开头必用。
+- 新的` symexec` 输出可能会将`VC`定义打印为 `原始 VC \/ 策略应用后的 VC`,通常为 `proof_of_<vc_name> : <vc_name>`。在这种情况下`pre_process`会自动选取左边的分支并展开定义，`aggressive_pre_process`会选取右边的分支并展开定义。
 
-**注意**：一般而言，每个证明会帮你做好 `pre_process` 这一步，你无需自己调用，只需顺着它继续推进证明。
 
 ## 2. `Intros x` / `Intros x y ...`
 

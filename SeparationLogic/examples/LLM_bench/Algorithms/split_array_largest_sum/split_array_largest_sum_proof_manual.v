@@ -44,9 +44,9 @@ Proof.
   - cancel (IntArray.full arr_pre n_pre l).
   - split_pures.
     all: dump_pre_spatial; try lia; eauto using prefix_split_state_extend_no_split.
-    + pose proof (H9 i ltac:(lia)); lia.
+    + pose proof (PreH11 i ltac:(lia)); lia.
     + eapply PrefixSplitState_extend; try eassumption; try lia.
-      pose proof (H9 i ltac:(lia)); lia.
+      pose proof (PreH11 i ltac:(lia)); lia.
 Qed.
 
 Lemma proof_of_check_return_wit_1 : check_return_wit_1.
@@ -63,7 +63,7 @@ Proof.
       intros cnt' cur' Hstate.
       assert (Hi_len : i = Zlength l) by lia.
       subst i.
-      pose proof (PrefixSplitState_unique _ _ _ _ _ _ _ H15 Hstate) as [Hcnt _].
+      pose proof (PrefixSplitState_unique _ _ _ _ _ _ _ PreH17 Hstate) as [Hcnt _].
       lia.
 Qed.
 
@@ -78,7 +78,7 @@ Proof.
     + dump_pre_spatial.
       intros _. unfold CanSplit.
       exists cnt, cur.
-      split; [replace (Zlength l) with i by lia; exact H15 | lia].
+      split; [replace (Zlength l) with i by lia; exact PreH17 | lia].
     + dump_pre_spatial; intros Hcontra; lia.
 Qed.
 
@@ -139,21 +139,21 @@ Proof.
   split_pure_spatial.
   - cancel.
   - entailer!.
-    + assert (Hcannot_mid :
-        CannotSplit l m_pre (left + (right - left) ÷ 2)) by
-        (apply H2; exact H16).
-      pose proof (minmax_cannot_upper_bound
+    + assert (Hcan_mid :
+        CanSplit l m_pre (left + (right - left) ÷ 2)) by
+        (apply PreH3; lia).
+      pose proof (minmax_can_lower_bound
         l m_pre res_2 (left + (right - left) ÷ 2)) as Hcannot_bound.
-      specialize (Hcannot_bound ltac:(
-        assert (0 <= (right - left) ÷ 2) by (apply Z.quot_pos; lia);
-        lia)).
-      specialize (Hcannot_bound ltac:(intros k Hk; pose proof (H9 k ltac:(lia)); lia)).
-      specialize (Hcannot_bound H15 Hcannot_mid).
+      specialize (Hcannot_bound ltac:(rewrite PreH10; lia)).
+      specialize (Hcannot_bound ltac:(intros k Hk; pose proof (PreH11 k ltac:(lia)); lia)).
+      specialize (Hcannot_bound PreH17 Hcan_mid).
       lia.
-    + pose proof (Z.quot_lt (right - left) 2 ltac:(lia) ltac:(lia)).
-      lia.
-    + pose proof (Z.quot_pos (right - left) 2 ltac:(lia) ltac:(lia)).
-      lia.
+    + assert (Hq_nonneg : 0 <= (right - left) ÷ 2) by (apply Z.quot_pos; lia).
+      pose proof (Zplus_le_compat_l _ _ left Hq_nonneg) as Hleft_mid.
+      replace (left + 0) with left in Hleft_mid by ring.
+      exact Hleft_mid.
+    + destruct (mid_quot_bounds left right PreH12 PreH5 PreH13) as [_ Hmid_upper].
+      exact Hmid_upper.
 Qed. 
 
 Lemma proof_of_splitArrayLargestSum_entail_wit_2_2 : splitArrayLargestSum_entail_wit_2_2.
@@ -163,19 +163,22 @@ Proof.
   split_pure_spatial.
   - cancel.
   - entailer!.
-    + assert (Hret1 : retval = 1) by lia.
-      assert (Hcan_mid : CanSplit l m_pre (left + (right - left) ÷ 2)) by
-        (apply H1; exact Hret1).
-      pose proof (minmax_can_lower_bound
+    + assert (Hcannot_mid :
+        CannotSplit l m_pre (left + (right - left) ÷ 2)) by
+        (apply PreH4; exact PreH18).
+      pose proof (minmax_cannot_upper_bound
         l m_pre res_2 (left + (right - left) ÷ 2)) as Hcan_bound.
-      specialize (Hcan_bound ltac:(lia)).
-      specialize (Hcan_bound ltac:(intros k Hk; pose proof (H9 k ltac:(lia)); lia)).
-      specialize (Hcan_bound H15 Hcan_mid).
+      specialize (Hcan_bound ltac:(
+        assert (0 <= (right - left) ÷ 2) by (apply Z.quot_pos; lia);
+        lia)).
+      specialize (Hcan_bound ltac:(intros k Hk; pose proof (PreH11 k ltac:(lia)); lia)).
+      specialize (Hcan_bound PreH17 Hcannot_mid).
       lia.
-    + pose proof (Z.quot_pos (right - left) 2 ltac:(lia) ltac:(lia)).
+    + assert (Hq_lt : (right - left) ÷ 2 < right - left) by
+        (apply Z.quot_lt; lia).
       lia.
-    + destruct (mid_quot_bounds left right H10 H3 H11) as [_ Hmid_upper].
-      exact Hmid_upper.
+    + destruct (mid_quot_bounds left right PreH12 PreH5 PreH13) as [Hmid_nonneg _].
+      lia.
 Qed. 
 
 Lemma proof_of_splitArrayLargestSum_partial_solve_wit_1_pure : splitArrayLargestSum_partial_solve_wit_1_pure.

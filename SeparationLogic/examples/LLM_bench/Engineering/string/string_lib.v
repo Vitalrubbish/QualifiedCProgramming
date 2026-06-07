@@ -1,20 +1,13 @@
 Require Import Coq.ZArith.ZArith.
-Require Import Coq.Bool.Bool.
 Require Import Coq.Lists.List.
-Require Import Coq.Classes.RelationClasses.
-Require Import Coq.Classes.Morphisms.
-Require Import Coq.micromega.Psatz.
-From AUXLib Require Import int_auto Axioms Feq Idents ListLib VMap.
-Require Import SetsClass.SetsClass. Import SetsNotation.
+From AUXLib Require Import ListLib.
 From SimpleC.SL Require Import Mem SeparationLogic.
 Require Import Logic.LogicGenerator.demo932.Interface.
+Require Export SimpleC.StdLib.string_lib.
 
 Local Open Scope Z_scope.
-Local Open Scope sets.
 Import ListNotations.
-Local Open Scope list.
 Import naive_C_Rules.
-Local Open Scope sac.
 
 Definition all_ascii (s: list Z): Prop :=
   forall i, 0 <= i < Zlength s -> 0 <= Znth i s 0 <= 127.

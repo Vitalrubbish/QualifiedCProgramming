@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from .session_manager import manager
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -28,6 +29,24 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP("qcp")
 
+
+def _extract_latest_json_blob(raw: str) -> str:
+    decoder = json.JSONDecoder()
+    latest = None
+    latest_end = -1
+    for idx, ch in enumerate(raw):
+        if ch != "{":
+            continue
+        try:
+            _, end = decoder.raw_decode(raw[idx:])
+        except json.JSONDecodeError:
+            continue
+        absolute_end = idx + end
+        if absolute_end >= latest_end:
+            latest = raw[idx:absolute_end]
+            latest_end = absolute_end
+    return latest or raw
+
 @mcp.tool(
     name = "load_target_file",
 )
@@ -52,6 +71,13 @@ async def initialize(file: str = "") -> str:
     manager.set_args(args)
     try:
         sess = await asyncio.to_thread(manager.restart)
+        if os.name == "nt" and not sess.initial_output:
+            # Warm up the Windows PTY-backed session so the first real tool
+            # call does not get stuck behind the startup banner.
+            try:
+                await asyncio.to_thread(sess.send, "<check>1</check>", 10.0)
+            except Exception:
+                logger.debug("windows qcp warm-up command failed", exc_info=True)
         output = sess.initial_output
         logger.debug("load_target_file collected output chars=%d", len(output))
         return output
@@ -67,7 +93,8 @@ async def step(steps: int = 1) -> str:
         steps: 可选参数，指定连续执行的步数，默认为1。
     """
     sess = await asyncio.to_thread(manager.current)
-    return await asyncio.to_thread(sess.send, "<step>%d</step>" % steps)
+    raw = await asyncio.to_thread(sess.send, "<step>%d</step>" % steps)
+    return _extract_latest_json_blob(raw)
 
 @mcp.tool()
 async def check(line: int) -> str:
@@ -77,7 +104,8 @@ async def check(line: int) -> str:
         line: 需要检查的行号，整数类型。
     """
     sess = await asyncio.to_thread(manager.current)
-    return await asyncio.to_thread(sess.send, "<check>%d</check>" % line)
+    raw = await asyncio.to_thread(sess.send, "<check>%d</check>" % line)
+    return _extract_latest_json_blob(raw)
 
 @mcp.tool()
 async def symbolic(line: int) -> str:
@@ -87,7 +115,8 @@ async def symbolic(line: int) -> str:
         line: 需要检查的行号，整数类型。通常为目标文件的最后一行，用于检查整个文件的符号执行结果。
     """
     sess = await asyncio.to_thread(manager.current)
-    return await asyncio.to_thread(sess.send, "<symbolic>%d</symbolic>" % line)
+    raw = await asyncio.to_thread(sess.send, "<symbolic>%d</symbolic>" % line)
+    return _extract_latest_json_blob(raw)
 
 @mcp.tool()
 async def proof(function_name: str, witness_type: int, number: int) -> str:
@@ -99,10 +128,11 @@ async def proof(function_name: str, witness_type: int, number: int) -> str:
         number: witness 序号（从1开始）。
     """
     sess = await asyncio.to_thread(manager.current)
-    return await asyncio.to_thread(
+    raw = await asyncio.to_thread(
         sess.send,
         "<proof> %s %d %d </proof>" % (function_name, witness_type, number),
     )
+    return _extract_latest_json_blob(raw)
 
 @mcp.tool()
 async def close() -> str:

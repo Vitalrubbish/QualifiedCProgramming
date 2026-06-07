@@ -20,16 +20,10 @@ Local Open Scope sac.
 
 Lemma proof_of_abs_return_wit_1 : abs_return_wit_1.
 Proof.
-  unfold abs_return_wit_1.
-  intros.
-  Intros.
-  entailer!.
+  pre_process.
 Qed.
 
 Lemma proof_of_abs_return_wit_2 : abs_return_wit_2.
 Proof.
-  unfold abs_return_wit_2.
-  intros.
-  Intros.
-  entailer!.
+  pre_process.
 Qed.

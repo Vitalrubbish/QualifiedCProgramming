@@ -1,7 +1,7 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Lists.List.
 From AUXLib Require Import ListLib.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
+Require Import SimpleC.StdLib.string_lib.
 
 Local Open Scope Z_scope.
 

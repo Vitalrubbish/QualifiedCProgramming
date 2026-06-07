@@ -47,21 +47,9 @@ Proof.
     
     Exists targetSortList_pre.
     entailer!.
-    pose proof (unsigned_last_nbits_eq (t - currTime_pre) 64).
-    assert (0 <= t - currTime_pre).
-    apply Z.lt_le_incl.
-    lia. (* need more lemma *)
-    assert ( t - currTime_pre < 2 ^ 64).
-    assert (Hmax: t <= 2^64 - 1) by apply H1.
-    assert (Ht_range : t < 2 ^ 64).
-    apply Z.le_lt_trans with (2 ^ 64 - 1).
-    apply Hmax.
-    compute. 
-    reflexivity.
-    assert (Hdiff_leq_t : t - currTime_pre <= t).
-    apply Z.le_sub_nonneg.
-    lia.
-    lia.
+    apply unsigned_last_nbits_eq.
+    unfold Int64.max_unsigned, Int64.modulus, Int64.wordsize in H.
+    simpl in H.
     lia.
 Qed. 
 
@@ -78,4 +66,3 @@ Proof.
   rewrite H.
   entailer!.
 Qed.
-

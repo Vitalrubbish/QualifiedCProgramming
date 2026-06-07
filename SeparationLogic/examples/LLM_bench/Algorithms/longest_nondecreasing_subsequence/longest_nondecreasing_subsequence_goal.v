@@ -30,12 +30,8 @@ From SimpleC.EE.QCP_demos_LLM Require Import array_shape_strategy_proof.
 (*----- Function lengthOfLNDS -----*)
 
 Definition lengthOfLNDS_safety_wit_1 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_l)) = numsSize_pre) ”
-  &&  ((( &( "len" ) )) # Int  |->_)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_l)) = numsSize_pre)) ,
+  ((( &( "len" ) )) # Int  |->_)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
@@ -47,12 +43,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (
 .
 
 Definition lengthOfLNDS_safety_wit_2 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_l)) = numsSize_pre) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_l)) = numsSize_pre)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "len" ) )) # Int  |-> 0)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -65,18 +57,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (
 .
 
 Definition lengthOfLNDS_safety_wit_3 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ”
-  &&  ((( &( "left" ) )) # Int  |->_)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) ,
+  ((( &( "left" ) )) # Int  |->_)
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -91,23 +73,9 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
 .
 
 Definition lengthOfLNDS_safety_wit_4 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) ,
-  “ (left < right) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  ((( &( "mid" ) )) # Int  |->_)
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -121,26 +89,62 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) 
 |--
   “ ((left + ((right - left ) ÷ 2 ) ) <= INT_MAX) ” 
   &&  “ ((INT_MIN) <= (left + ((right - left ) ÷ 2 ) )) ”
+) \/
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
+  **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
+  **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
+  **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
+  **  ((( &( "i" ) )) # Int  |-> i)
+  **  ((( &( "len" ) )) # Int  |-> len)
+  **  ((( &( "x" ) )) # Int  |-> x)
+  **  ((( &( "left" ) )) # Int  |-> left)
+  **  ((( &( "right" ) )) # Int  |-> right)
+  **  (IntArray.full nums_pre numsSize_pre l )
+  **  (IntArray.full tails_pre numsSize_pre tails_cur )
+|--
+  “ ((left + ((right - left ) ÷ 2 ) ) <= INT_MAX) ” 
+  &&  “ ((INT_MIN) <= (left + ((right - left ) ÷ 2 ) )) ”
+).
+
+Definition lengthOfLNDS_safety_wit_4_split_goal_1 := 
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
+  **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
+  **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
+  **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
+  **  ((( &( "i" ) )) # Int  |-> i)
+  **  ((( &( "len" ) )) # Int  |-> len)
+  **  ((( &( "x" ) )) # Int  |-> x)
+  **  ((( &( "left" ) )) # Int  |-> left)
+  **  ((( &( "right" ) )) # Int  |-> right)
+  **  (IntArray.full nums_pre numsSize_pre l )
+  **  (IntArray.full tails_pre numsSize_pre tails_cur )
+|--
+  “ ((left + ((right - left ) ÷ 2 ) ) <= INT_MAX) ”
+.
+
+Definition lengthOfLNDS_safety_wit_4_split_goal_2 := 
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
+  **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
+  **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
+  **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
+  **  ((( &( "i" ) )) # Int  |-> i)
+  **  ((( &( "len" ) )) # Int  |-> len)
+  **  ((( &( "x" ) )) # Int  |-> x)
+  **  ((( &( "left" ) )) # Int  |-> left)
+  **  ((( &( "right" ) )) # Int  |-> right)
+  **  (IntArray.full nums_pre numsSize_pre l )
+  **  (IntArray.full tails_pre numsSize_pre tails_cur )
+|--
+  “ ((INT_MIN) <= (left + ((right - left ) ÷ 2 ) )) ”
 .
 
 Definition lengthOfLNDS_safety_wit_5 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) ,
-  “ (left < right) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  ((( &( "mid" ) )) # Int  |->_)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -157,23 +161,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) 
 .
 
 Definition lengthOfLNDS_safety_wit_6 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) ,
-  “ (left < right) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  ((( &( "mid" ) )) # Int  |->_)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -190,23 +179,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) 
 .
 
 Definition lengthOfLNDS_safety_wit_7 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) ,
-  “ (left < right) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  ((( &( "mid" ) )) # Int  |->_)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  ((( &( "mid" ) )) # Int  |->_)
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -223,25 +197,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) 
 .
 
 Definition lengthOfLNDS_safety_wit_8 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) ,
-  “ ((Znth mid tails_cur 0) <= x) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left < right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (left <= mid) ” 
-  &&  “ (mid < right) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  (IntArray.full tails_pre numsSize_pre tails_cur )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur 0) <= x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  (IntArray.full tails_pre numsSize_pre tails_cur )
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -258,25 +215,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
 .
 
 Definition lengthOfLNDS_safety_wit_9 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) ,
-  “ ((Znth mid tails_cur 0) <= x) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left < right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (left <= mid) ” 
-  &&  “ (mid < right) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  (IntArray.full tails_pre numsSize_pre tails_cur )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur 0) <= x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  (IntArray.full tails_pre numsSize_pre tails_cur )
   **  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
@@ -293,23 +233,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
 .
 
 Definition lengthOfLNDS_safety_wit_10 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (left = len) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_old)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_old)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left ) ”
-  &&  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left = len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -325,23 +250,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old:
 .
 
 Definition lengthOfLNDS_safety_wit_11 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (left = len) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_old)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_old)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left ) ”
-  &&  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left = len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -357,21 +267,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old:
 .
 
 Definition lengthOfLNDS_safety_wit_12 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= (i + 1 )) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l (i + 1 ) (sublist (0) (len) (tails_cur)) len ) ”
-  &&  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= (i + 1 ))) (PreH9 : (x = (Znth i l 0))) (PreH10 : (0 <= left)) (PreH11 : (left <= len)) (PreH12 : (right = left)) (PreH13 : (LNDTailsState l (i + 1 ) (sublist (0) (len) (tails_cur)) len )) ,
+  ((( &( "nums" ) )) # Ptr  |-> nums_pre)
   **  ((( &( "tails" ) )) # Ptr  |-> tails_pre)
   **  ((( &( "numsSize" ) )) # Int  |-> numsSize_pre)
   **  ((( &( "i" ) )) # Int  |-> i)
@@ -384,12 +281,9 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
 .
 
 Definition lengthOfLNDS_entail_wit_1 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_l)) = numsSize_pre) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_l)) = numsSize_pre)) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_l )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -404,21 +298,25 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (tails_l: (@list Z)) (l: (
   &&  “ (LNDTailsState l 0 (sublist (0) (0) (tails_cur)) 0 ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_l)) = numsSize_pre)) ,
+  TT && emp 
+|--
+  “ (LNDTailsState l 0 (sublist (0) (0) (tails_l)) 0 ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_1_split_goal_1 := 
+forall (numsSize_pre: Z) (tails_l: (@list Z)) (l: (@list Z)) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_l)) = numsSize_pre)) ,
+  TT && emp 
+|--
+  “ (LNDTailsState l 0 (sublist (0) (0) (tails_l)) 0 ) ”
 .
 
 Definition lengthOfLNDS_entail_wit_2 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur_2: (@list Z)) ,
-  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (i < numsSize_pre)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i <= numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -437,18 +335,9 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i
 .
 
 Definition lengthOfLNDS_entail_wit_3 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -468,26 +357,26 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_
   &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x 0 len ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x 0 len ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_3_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x 0 len ) ”
 .
 
 Definition lengthOfLNDS_entail_wit_4 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) ,
-  “ (left < right) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -509,69 +398,34 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) 
   &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ ((left + ((right - left ) ÷ 2 ) ) < right) ” 
+  &&  “ (left <= (left + ((right - left ) ÷ 2 ) )) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_4_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ ((left + ((right - left ) ÷ 2 ) ) < right) ”
+.
+
+Definition lengthOfLNDS_entail_wit_4_split_goal_2 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left < right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (left <= (left + ((right - left ) ÷ 2 ) )) ”
 .
 
 Definition lengthOfLNDS_entail_wit_5_1 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) ,
-  “ ((Znth mid tails_cur_2 0) > x) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left < right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (left <= mid) ” 
-  &&  “ (mid < right) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right ) ”
-  &&  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
-  **  (IntArray.full nums_pre numsSize_pre l )
-|--
-  EX (tails_cur: (@list Z)) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= mid) ” 
-  &&  “ (mid <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left mid ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
-  **  (IntArray.full tails_pre numsSize_pre tails_cur )
-.
-
-Definition lengthOfLNDS_entail_wit_5_2 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) ,
-  “ ((Znth mid tails_cur_2 0) <= x) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left < right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (left <= mid) ” 
-  &&  “ (mid < right) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right ) ”
-  &&  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur_2 0) <= x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
   **  (IntArray.full nums_pre numsSize_pre l )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -591,26 +445,65 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_
   &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x (mid + 1 ) right ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur_2 0) <= x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x (mid + 1 ) right ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_5_1_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur_2 0) <= x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x (mid + 1 ) right ) ”
 .
 
-Definition lengthOfLNDS_entail_wit_6 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) ,
-  “ (left >= right) ” 
-  &&  “ (0 <= numsSize_pre) ” 
+Definition lengthOfLNDS_entail_wit_5_2 := 
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur_2 0) > x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
+  **  (IntArray.full nums_pre numsSize_pre l )
+|--
+  EX (tails_cur: (@list Z)) ,
+  “ (0 <= numsSize_pre) ” 
   &&  “ (numsSize_pre <= 100000) ” 
   &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
+  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
   &&  “ (0 <= i) ” 
   &&  “ (i < numsSize_pre) ” 
   &&  “ (0 <= len) ” 
   &&  “ (len <= i) ” 
   &&  “ (x = (Znth i l 0)) ” 
   &&  “ (0 <= left) ” 
-  &&  “ (left <= right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right ) ”
+  &&  “ (left <= mid) ” 
+  &&  “ (mid <= len) ” 
+  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
+  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left mid ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
+  **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur_2 0) > x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left mid ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_5_2_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : ((Znth mid tails_cur_2 0) > x)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left < right)) (PreH13 : (right <= len)) (PreH14 : (left <= mid)) (PreH15 : (mid < right)) (PreH16 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH17 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left mid ) ”
+.
+
+Definition lengthOfLNDS_entail_wit_6 := 
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left >= right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -630,25 +523,26 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (right: Z) 
   &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left left ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left >= right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left left ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_6_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (right: Z) (left: Z) (x: Z) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (left >= right)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= right)) (PreH13 : (right <= len)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left right )) ,
+  TT && emp 
+|--
+  “ (UpperBoundSearch (sublist (0) (len) (tails_cur_2)) len x left left ) ”
 .
 
 Definition lengthOfLNDS_entail_wit_7 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left left ) ”
-  &&  (IntArray.full tails_pre numsSize_pre (replace_Znth (left) (x) (tails_cur)) )
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (0 <= left)) (PreH11 : (left <= len)) (PreH12 : (right = left)) (PreH13 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH14 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left left )) ,
+  (IntArray.full tails_pre numsSize_pre (replace_Znth (left) (x) (tails_cur)) )
   **  (IntArray.full nums_pre numsSize_pre l )
 |--
   EX (tails_old: (@list Z)) ,
@@ -668,11 +562,13 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
   &&  “ (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre (app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))) )
-.
-
-Definition lengthOfLNDS_entail_wit_8_1 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (left = len) ” 
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (0 <= left)) (PreH11 : (left <= len)) (PreH12 : (right = left)) (PreH13 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH14 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left left )) ,
+  TT && emp 
+|--
+  EX (tails_old: (@list Z)) ,
+  “ ((replace_Znth (left) (x) (tails_cur)) = (app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old))))))) ” 
   &&  “ (0 <= numsSize_pre) ” 
   &&  “ (numsSize_pre <= 100000) ” 
   &&  “ ((Zlength (l)) = numsSize_pre) ” 
@@ -687,7 +583,59 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old:
   &&  “ (right = left) ” 
   &&  “ (LNDTailsState l i (sublist (0) (len) (tails_old)) len ) ” 
   &&  “ (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_8_1 := 
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left <> len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  (IntArray.full nums_pre numsSize_pre l )
+  **  (IntArray.full tails_pre numsSize_pre (app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))) )
+|--
+  EX (tails_cur: (@list Z)) ,
+  “ (0 <= numsSize_pre) ” 
+  &&  “ (numsSize_pre <= 100000) ” 
+  &&  “ ((Zlength (l)) = numsSize_pre) ” 
+  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
+  &&  “ (0 <= i) ” 
+  &&  “ (i < numsSize_pre) ” 
+  &&  “ (0 <= len) ” 
+  &&  “ (len <= (i + 1 )) ” 
+  &&  “ (x = (Znth i l 0)) ” 
+  &&  “ (0 <= left) ” 
+  &&  “ (left <= len) ” 
+  &&  “ (right = left) ” 
+  &&  “ (LNDTailsState l (i + 1 ) (sublist (0) (len) (tails_cur)) len ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
+  **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left <> len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  TT && emp 
+|--
+  “ (LNDTailsState l (i + 1 ) (sublist (0) (len) ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) len ) ” 
+  &&  “ ((Zlength ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) = numsSize_pre) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_8_1_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left <> len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  TT && emp 
+|--
+  “ (LNDTailsState l (i + 1 ) (sublist (0) (len) ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) len ) ”
+.
+
+Definition lengthOfLNDS_entail_wit_8_1_split_goal_2 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left <> len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  TT && emp 
+|--
+  “ ((Zlength ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) = numsSize_pre) ”
+.
+
+Definition lengthOfLNDS_entail_wit_8_2 := 
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left = len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre (app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))) )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -706,62 +654,33 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old:
   &&  “ (LNDTailsState l (i + 1 ) (sublist (0) ((len + 1 )) (tails_cur)) (len + 1 ) ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left = len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  TT && emp 
+|--
+  “ (LNDTailsState l (i + 1 ) (sublist (0) ((len + 1 )) ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) (len + 1 ) ) ” 
+  &&  “ ((Zlength ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) = numsSize_pre) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_8_2_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left = len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  TT && emp 
+|--
+  “ (LNDTailsState l (i + 1 ) (sublist (0) ((len + 1 )) ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) (len + 1 ) ) ”
 .
 
-Definition lengthOfLNDS_entail_wit_8_2 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (left <> len) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_old)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_old)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
-  **  (IntArray.full tails_pre numsSize_pre (app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))) )
+Definition lengthOfLNDS_entail_wit_8_2_split_goal_2 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (tails_old: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (left = len)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_old)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i < numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (x = (Znth i l 0))) (PreH11 : (0 <= left)) (PreH12 : (left <= len)) (PreH13 : (right = left)) (PreH14 : (LNDTailsState l i (sublist (0) (len) (tails_old)) len )) (PreH15 : (UpperBoundSearch (sublist (0) (len) (tails_old)) len x left left )) ,
+  TT && emp 
 |--
-  EX (tails_cur: (@list Z)) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= (i + 1 )) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l (i + 1 ) (sublist (0) (len) (tails_cur)) len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
-  **  (IntArray.full tails_pre numsSize_pre tails_cur )
+  “ ((Zlength ((app ((sublist (0) (left) (tails_old))) ((cons (x) ((sublist ((left + 1 )) (numsSize_pre) (tails_old)))))))) = numsSize_pre) ”
 .
 
 Definition lengthOfLNDS_entail_wit_9 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= (i + 1 )) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l (i + 1 ) (sublist (0) (len) (tails_cur_2)) len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_2: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= (i + 1 ))) (PreH9 : (x = (Znth i l 0))) (PreH10 : (0 <= left)) (PreH11 : (left <= len)) (PreH12 : (right = left)) (PreH13 : (LNDTailsState l (i + 1 ) (sublist (0) (len) (tails_cur_2)) len )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -779,18 +698,9 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur_
 .
 
 Definition lengthOfLNDS_entail_wit_10 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur_2: (@list Z)) ,
-  “ (i >= numsSize_pre) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur_2)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+(
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (i >= numsSize_pre)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i <= numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur_2 )
 |--
   EX (tails_cur: (@list Z)) ,
@@ -803,18 +713,25 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i
   &&  “ (LNDSLength l len ) ”
   &&  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
+) \/
+(
+forall (numsSize_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (i >= numsSize_pre)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i <= numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  TT && emp 
+|--
+  “ (LNDSLength l len ) ”
+  &&  emp
+).
+
+Definition lengthOfLNDS_entail_wit_10_split_goal_1 := 
+forall (numsSize_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur_2: (@list Z)) (PreH1 : (i >= numsSize_pre)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur_2)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i <= numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur_2)) len )) ,
+  TT && emp 
+|--
+  “ (LNDSLength l len ) ”
 .
 
 Definition lengthOfLNDS_return_wit_1 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (len: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= numsSize_pre) ” 
-  &&  “ (LNDSLength l len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (len: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= len)) (PreH6 : (len <= numsSize_pre)) (PreH7 : (LNDSLength l len )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
 |--
   EX (tails_ret: (@list Z)) ,
@@ -827,18 +744,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
 .
 
 Definition lengthOfLNDS_partial_solve_wit_1 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur: (@list Z)) ,
-  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i: Z) (tails_cur: (@list Z)) (PreH1 : (i < numsSize_pre)) (PreH2 : (0 <= numsSize_pre)) (PreH3 : (numsSize_pre <= 100000)) (PreH4 : ((Zlength (l)) = numsSize_pre)) (PreH5 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH6 : (0 <= i)) (PreH7 : (i <= numsSize_pre)) (PreH8 : (0 <= len)) (PreH9 : (len <= i)) (PreH10 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
 |--
   “ (i < numsSize_pre) ” 
@@ -857,24 +764,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (len: Z) (i
 .
 
 Definition lengthOfLNDS_partial_solve_wit_2 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left < right) ” 
-  &&  “ (right <= len) ” 
-  &&  “ (left <= mid) ” 
-  &&  “ (mid < right) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (mid: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (0 <= left)) (PreH11 : (left < right)) (PreH12 : (right <= len)) (PreH13 : (left <= mid)) (PreH14 : (mid < right)) (PreH15 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH16 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left right )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
 |--
   “ (0 <= numsSize_pre) ” 
@@ -899,22 +790,8 @@ forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur:
 .
 
 Definition lengthOfLNDS_partial_solve_wit_3 := 
-forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) ,
-  “ (0 <= numsSize_pre) ” 
-  &&  “ (numsSize_pre <= 100000) ” 
-  &&  “ ((Zlength (l)) = numsSize_pre) ” 
-  &&  “ ((Zlength (tails_cur)) = numsSize_pre) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i < numsSize_pre) ” 
-  &&  “ (0 <= len) ” 
-  &&  “ (len <= i) ” 
-  &&  “ (x = (Znth i l 0)) ” 
-  &&  “ (0 <= left) ” 
-  &&  “ (left <= len) ” 
-  &&  “ (right = left) ” 
-  &&  “ (LNDTailsState l i (sublist (0) (len) (tails_cur)) len ) ” 
-  &&  “ (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left left ) ”
-  &&  (IntArray.full nums_pre numsSize_pre l )
+forall (tails_pre: Z) (numsSize_pre: Z) (nums_pre: Z) (l: (@list Z)) (tails_cur: (@list Z)) (i: Z) (len: Z) (x: Z) (left: Z) (right: Z) (PreH1 : (0 <= numsSize_pre)) (PreH2 : (numsSize_pre <= 100000)) (PreH3 : ((Zlength (l)) = numsSize_pre)) (PreH4 : ((Zlength (tails_cur)) = numsSize_pre)) (PreH5 : (0 <= i)) (PreH6 : (i < numsSize_pre)) (PreH7 : (0 <= len)) (PreH8 : (len <= i)) (PreH9 : (x = (Znth i l 0))) (PreH10 : (0 <= left)) (PreH11 : (left <= len)) (PreH12 : (right = left)) (PreH13 : (LNDTailsState l i (sublist (0) (len) (tails_cur)) len )) (PreH14 : (UpperBoundSearch (sublist (0) (len) (tails_cur)) len x left left )) ,
+  (IntArray.full nums_pre numsSize_pre l )
   **  (IntArray.full tails_pre numsSize_pre tails_cur )
 |--
   “ (0 <= numsSize_pre) ” 

@@ -29,14 +29,14 @@ Proof.
     pre_process.
     intros.
     entailer!.
-    rewrite H1 in H.
-    rewrite H0 in H.
+    rewrite PreH3 in PreH1.
+    rewrite PreH2 in PreH1.
     subst retval retval_2.
     unfold getminExpireTime.
     intros.
     remember (getFirstNodeExpireTime l1 startTime_pre tickPrecision_pre) as x.
     remember (getFirstNodeExpireTime l2 startTime_pre tickPrecision_pre) as y.
-    assert (H_ltb : (x <? y)%Z = true) by (apply Z.ltb_lt; exact H).
+    assert (H_ltb : (x <? y)%Z = true) by (apply Z.ltb_lt; exact PreH1).
     rewrite H_ltb.
     lia.
 Qed. 
@@ -46,14 +46,14 @@ Proof.
     pre_process.
     intros.
     entailer!.
-    rewrite H1 in H.
-    rewrite H0 in H.
+    rewrite PreH3 in PreH1.
+    rewrite PreH2 in PreH1.
     subst retval retval_2.
     unfold getminExpireTime.
     intros.
     remember (getFirstNodeExpireTime l1 startTime_pre tickPrecision_pre) as x.
     remember (getFirstNodeExpireTime l2 startTime_pre tickPrecision_pre) as y.
-    assert (H_le : y <= x) by (apply Z.ge_le; exact H).
+    assert (H_le : y <= x) by (apply Z.ge_le; exact PreH1).
     assert (H_ltb : (x <? y)%Z = false) by (apply Z.ltb_ge; exact H_le).
     rewrite H_ltb.
     lia.
@@ -112,4 +112,3 @@ Proof.
    csimpl.
    entailer!.
 Qed. 
-

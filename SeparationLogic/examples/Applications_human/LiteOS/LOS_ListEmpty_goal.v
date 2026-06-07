@@ -28,34 +28,32 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function LOS_ListEmpty -----*)
 
 Definition LOS_ListEmpty_return_wit_1 := 
-forall (A: Type) (node_pre: Z) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (h: Z) (pt: Z) ,
-  “ (h = node_pre) ”
-  &&  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> pt)
+forall (A: Type) (node_pre: Z) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (h: Z) (pt: Z) (PreH1 : (h <> node_pre)) ,
+  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> pt)
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> h)
   **  (dllseg storeA h node_pre node_pre pt l )
 |--
-  (“ (l <> nil) ” 
-  &&  “ (1 = 0) ”
+  (“ (l <> (@nil (@DL_Node A))) ” 
+  &&  “ (0 = 0) ”
   &&  (store_dll storeA node_pre l ))
   ||
-  (“ (l = nil) ” 
-  &&  “ (1 = 1) ”
+  (“ (l = (@nil (@DL_Node A))) ” 
+  &&  “ (0 = 1) ”
   &&  (store_dll storeA node_pre l ))
 .
 
 Definition LOS_ListEmpty_return_wit_2 := 
-forall (A: Type) (node_pre: Z) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (h: Z) (pt: Z) ,
-  “ (h <> node_pre) ”
-  &&  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> pt)
+forall (A: Type) (node_pre: Z) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (h: Z) (pt: Z) (PreH1 : (h = node_pre)) ,
+  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> pt)
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> h)
   **  (dllseg storeA h node_pre node_pre pt l )
 |--
-  (“ (l <> nil) ” 
-  &&  “ (0 = 0) ”
+  (“ (l <> (@nil (@DL_Node A))) ” 
+  &&  “ (1 = 0) ”
   &&  (store_dll storeA node_pre l ))
   ||
-  (“ (l = nil) ” 
-  &&  “ (0 = 1) ”
+  (“ (l = (@nil (@DL_Node A))) ” 
+  &&  “ (1 = 1) ”
   &&  (store_dll storeA node_pre l ))
 .
 
@@ -67,6 +65,7 @@ forall (A: Type) (node_pre: Z) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> As
 .
 
 Definition LOS_ListEmpty_which_implies_wit_1 := 
+(
 forall (A: Type) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (node: Z) ,
   (store_dll storeA node l )
 |--
@@ -74,7 +73,16 @@ forall (A: Type) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (no
   ((&((node)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> pt)
   **  ((&((node)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> h)
   **  (dllseg storeA h node node pt l )
-.
+) \/
+(
+forall (A: Type) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (node: Z) ,
+  (store_dll storeA node l )
+|--
+  EX (h: Z)  (pt: Z) ,
+  ((&((node)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> pt)
+  **  ((&((node)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> h)
+  **  (dllseg storeA h node node pt l )
+).
 
 Module Type VC_Correct.
 

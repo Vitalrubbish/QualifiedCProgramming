@@ -36,7 +36,7 @@ Proof.
 	      reflexivity.
 	    * dump_pre_spatial.
 	      reflexivity.
-	- repeat split_pures; dump_pre_spatial; try exact H; try exact H0; simpl; reflexivity.
+	- repeat split_pures; dump_pre_spatial; try exact PreH1; try exact PreH2; simpl; reflexivity.
 Qed.
 
 Lemma proof_of_insert_entail_wit_2 : insert_entail_wit_2.
@@ -70,14 +70,14 @@ Proof.
 	  cancel (&(b_v_2 # "tree" ->ₛ "right") # Ptr |-> pr).
 	  cancel (store_tree pr b_v_2 r0).
 	- dump_pre_spatial.
-	  exact H0.
+	  exact PreH2.
 	- dump_pre_spatial.
-	  exact H1.
+	  exact PreH3.
 	- dump_pre_spatial.
 	  exact H.
 	- dump_pre_spatial.
-	  rewrite H4 in H2.
-	  exact H2.
+	  rewrite H0 in PreH4.
+	  exact PreH4.
 	- dump_pre_spatial.
 	  lia.
 	- dump_pre_spatial.
@@ -85,7 +85,6 @@ Proof.
 	- dump_pre_spatial.
 	  reflexivity.
 	- dump_pre_spatial.
-	  rewrite <- H4.
 	  reflexivity.
 Qed.
 
@@ -102,15 +101,15 @@ Proof.
 	  cancel (b # Ptr |-> b_v).
 	  cancel (store_tree b_v fa (make_tree l0 b_v_key value_pre r0)).
 	- sep_apply store_ptb_store_tree.
-	rewrite H8 in H4.
-	simpl in H4.
+	rewrite PreH10 in PreH6.
+	simpl in PreH6.
 	simpl.
 	destruct (Key.dec x_pre b_v_key) as [[Hlt | Hgt] | Heq]; try Key.order.
 	Intros b_pre_v.
 	Exists b_pre_v.
 	rewrite Heq.
-	rewrite Heq in H4.
-	rewrite <- H4.
+	rewrite Heq in PreH6.
+	rewrite <- PreH6.
 	apply derivable1_refl.
 Qed.
 
@@ -120,23 +119,23 @@ Proof.
 	subst b_v.
 	sep_apply (store_tree_zero 0 fa tr0).
 	- Intros_p Hempty.
-	  rewrite Hempty in H3.
-	  simpl in H3.
+	  rewrite Hempty in PreH5.
+	  simpl in PreH5.
 	  sep_apply_l_atomic (store_tree_size_1 retval fa x_pre value_pre).
 	  + dump_pre_spatial.
-	    exact H.
+	    exact PreH1.
 	  + dump_pre_spatial.
 	    lia.
 	  + sep_apply (store_ptb_store_tree b_pre b retval fa 0 pt0
 	      (make_tree empty x_pre value_pre empty)).
 	    Intros b_pre_v.
 	    Exists b_pre_v.
-	    rewrite H3.
+	    rewrite PreH5.
 	    apply derivable1_refl.
 	- reflexivity.
 Qed.
 
-Lemma proof_of_insert_entail_wit_3_1 : insert_entail_wit_3_1.
+Lemma proof_of_insert_entail_wit_3_2 : insert_entail_wit_3_2.
 Proof.
 	pre_process.
 	subst b_v_father.
@@ -149,21 +148,21 @@ Proof.
 	      (RH b_v_key b_v_value l0 :: nil) pt0_2).
 	    simpl.
 	    apply derivable1_refl.
-	  + lia.
-	  + exact H3.
+	  + exact (conj PreH7 PreH8).
+	  + exact PreH5.
 	- dump_pre_spatial.
-	  exact H1.
+	  exact PreH3.
 	- dump_pre_spatial.
-	  exact H2.
+	  exact PreH4.
 	- dump_pre_spatial.
-	  rewrite H8 in H4.
-	  simpl in H4.
+	  rewrite PreH10 in PreH6.
+	  simpl in PreH6.
 	  simpl.
 	  destruct (Key.dec x_pre b_v_key) as [[Hlt | Hgt] | Heq]; try Key.order.
-	  exact H4.
+	  exact PreH6.
 Qed.
 
-Lemma proof_of_insert_entail_wit_3_2 : insert_entail_wit_3_2.
+Lemma proof_of_insert_entail_wit_3_1 : insert_entail_wit_3_1.
 Proof.
 	pre_process.
 	subst b_v_father.
@@ -176,18 +175,18 @@ Proof.
 	      (LH b_v_key b_v_value r0 :: nil) pt0_2).
 	    simpl.
 	    apply derivable1_refl.
-	  + lia.
-	  + exact H2.
+	  + exact (conj PreH6 PreH7).
+	  + exact PreH4.
 	- dump_pre_spatial.
-	  exact H0.
+	  exact PreH2.
 	- dump_pre_spatial.
-	  exact H1.
+	  exact PreH3.
 	- dump_pre_spatial.
-	  rewrite H7 in H3.
-	  simpl in H3.
+	  rewrite PreH9 in PreH5.
+	  simpl in PreH5.
 	  simpl.
 	  destruct (Key.dec x_pre b_v_key) as [[Hlt | Hgt] | Heq]; try Key.order.
-	  exact H3.
+	  exact PreH5.
 Qed.
 
 Lemma proof_of_insert_derive_high_level_spec_by_low_level_spec : insert_derive_high_level_spec_by_low_level_spec.
@@ -219,4 +218,3 @@ Proof.
 	  + dump_pre_spatial.
 	    exact H0.
 Qed.
-

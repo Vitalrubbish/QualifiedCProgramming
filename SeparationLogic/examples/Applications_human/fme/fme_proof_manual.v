@@ -24,8 +24,8 @@ Lemma proof_of_gcd_return_wit_2 : gcd_return_wit_2.
 Proof.
   pre_process.
   entailer!.
-  rewrite <- Z.gcd_comm in H.
-  rewrite Z.gcd_rem in H.
+  rewrite <- Z.gcd_comm in PreH1.
+  rewrite Z.gcd_rem in PreH1.
   - rewrite Z.gcd_comm. auto.
   - auto.
 Qed.
@@ -34,7 +34,7 @@ Lemma proof_of_gcd_return_wit_1 : gcd_return_wit_1.
 Proof.
   pre_process.
   entailer!.
-  rewrite H.
+  rewrite PreH1.
   rewrite Z.gcd_0_r_nonneg.
   - reflexivity.
   - lia.
@@ -53,13 +53,15 @@ Qed.
 Lemma proof_of_free_InequList_return_wit_1 : free_InequList_return_wit_1.
 Proof.
   pre_process. subst.
-  sep_apply inequlist_0_implies_nil. entailer!.
+  sep_apply inequlist_0_implies_nil.
+  entailer!.
 Qed.
 
-Lemma proof_of_free_InequList_return_wit_2 : free_InequList_return_wit_2.
+Lemma proof_of_free_InequList_return_wit_3 : free_InequList_return_wit_3.
 Proof.
   pre_process. subst.
-  sep_apply inequlist_0_implies_nil. entailer!.
+  sep_apply inequlist_0_implies_nil.
+  entailer!.
 Qed.
 
 Lemma proof_of_eliminate_entail_wit_2 : eliminate_entail_wit_2.
@@ -88,10 +90,11 @@ Proof.
     sep_apply store_ptr_undef_store_ptr.
     entailer!.
   - unfold form_BP. tauto.
-  - pose proof eliminate_xn_step_re l1_2 l1 up_2 lo_2 re_2 bp_2 num_pre x.
-    apply H16; try tauto.
+  - pose proof eliminate_xn_step_re l1_2 l1 up_2 lo_2 re_2 bp_2 num_pre x as Hstep.
+    apply Hstep; try tauto.
     lia.
-  - rewrite H3, H0.
+  - subst l.
+    subst l2_2.
     unfold l1.
     apply list_split_adjust.
 Qed.
@@ -111,9 +114,10 @@ Proof.
     sep_apply store_ptr_undef_store_ptr.
     entailer!.
   - unfold form_BP. tauto.
-  - pose proof eliminate_xn_step_lo l1_2 l1 up_2 lo_2 re_2 bp_2 num_pre x.
-    apply H17; try tauto; try lia.
-  - rewrite H4, H1.
+  - pose proof eliminate_xn_step_lo l1_2 l1 up_2 lo_2 re_2 bp_2 num_pre x as Hstep.
+    apply Hstep; try tauto; try lia.
+  - subst l.
+    subst l2_2.
     unfold l1.
     apply list_split_adjust.
 Qed.
@@ -132,9 +136,9 @@ Proof.
     sep_apply store_ptr_undef_store_ptr.
     entailer!.
   - unfold form_BP. tauto.
-  - pose proof eliminate_xn_step_up l1_2 l1 up_2 lo_2 re_2 bp_2 num_pre x.
-    apply H17; try tauto; try lia.
-  - rewrite H4, H1.
+  - pose proof eliminate_xn_step_up l1_2 l1 up_2 lo_2 re_2 bp_2 num_pre x as Helim_step.
+    apply Helim_step; try tauto; try lia.
+  - rewrite PreH6, PreH3.
     unfold l1.
     apply list_split_adjust. 
 Qed.
@@ -145,32 +149,32 @@ Proof.
   Exists remain lower upper.
   Exists up_2 lo_2 re_2 bp.
   Intros.
-  rewrite H.
-  sep_apply inequlist_0_implies_nil; clear H.
+  rewrite PreH1.
+  sep_apply inequlist_0_implies_nil.
   Intros.
-  rewrite H in H0; clear H.
-  rewrite app_nil_r in H0.
-  rewrite H0 in *; clear H0.
+  rewrite H in PreH2; clear H.
+  rewrite app_nil_r in PreH2.
+  rewrite PreH2 in *; clear PreH2.
   entailer!;
-  induction H1;
-  destruct H2 as [BP1 [BP2 BP3]];
+  induction PreH3;
+  destruct PreH4 as [BP1 [BP2 BP3]];
   rewrite <- BP1 in elim_upper;
   rewrite <- BP2 in elim_lower;
   rewrite <- BP3 in elim_remain;
   clear BP1 BP2 BP3.
   - unfold LP_abs_in_int_range in *.
     intros.
-    apply H12.
+    apply PreH14.
     specialize elim_remain with c.
     tauto.
   - unfold LP_abs_in_int_range in *.
     intros.
-    apply H12.
+    apply PreH14.
     specialize elim_lower with c.
     tauto.
   - unfold LP_abs_in_int_range in *.
     intros.
-    apply H12.
+    apply PreH14.
     specialize elim_upper with c.
     tauto.
   - unfold InequList_nth_neg.
@@ -179,9 +183,9 @@ Proof.
     destruct H.
     rewrite coef_Znth_nth; try lia.
     split; try lia.
-    unfold LP_abs_in_int_range in H12.
-    specialize H12 with c.
-    apply H12 in H.
+    unfold LP_abs_in_int_range in PreH14.
+    specialize PreH14 with c.
+    apply PreH14 in H.
     unfold abs_in_int_range in H.
     specialize H with num_pre.
     rewrite coef_Znth_nth in H; lia.
@@ -191,9 +195,9 @@ Proof.
     destruct H.
     rewrite coef_Znth_nth; try lia.
     split; try lia.
-    unfold LP_abs_in_int_range in H12.
-    specialize H12 with c.
-    apply H12 in H.
+    unfold LP_abs_in_int_range in PreH14.
+    specialize PreH14 with c.
+    apply PreH14 in H.
     unfold abs_in_int_range in H.
     specialize H with num_pre.
     rewrite coef_Znth_nth in H; lia.
@@ -203,10 +207,11 @@ Lemma proof_of_generate_new_constr_safety_wit_2 : generate_new_constr_safety_wit
 Proof.
   pre_process.
   entailer!.
-  assert (retval = 0 \/ retval <> 0) by lia.
-  destruct H9.
-  + rewrite H in H9.
-    apply Z.gcd_eq_0_l in H9.
+  assert (retval = 0 \/ retval <> 0) as Hretval_cases by lia.
+  destruct Hretval_cases as [Hretval0 | Hretval_nonzero].
+  + rewrite Hretval0 in PreH1.
+    symmetry in PreH1.
+    apply Z.gcd_eq_0_l in PreH1.
     lia.
   + lia.
 Qed.
@@ -215,10 +220,11 @@ Lemma proof_of_generate_new_constr_safety_wit_3 : generate_new_constr_safety_wit
 Proof.
   pre_process.
   entailer!.
-  assert (retval = 0 \/ retval <> 0) by lia.
-  destruct H9.
-  + rewrite H in H9.
-    apply Z.gcd_eq_0_l in H9.
+  assert (retval = 0 \/ retval <> 0) as Hretval_cases by lia.
+  destruct Hretval_cases as [Hretval0 | Hretval_nonzero].
+  + rewrite Hretval0 in PreH1.
+    symmetry in PreH1.
+    apply Z.gcd_eq_0_l in PreH1.
     lia.
   + lia.
 Qed.  
@@ -268,22 +274,22 @@ Qed.
 Lemma proof_of_generate_new_constr_safety_wit_24 : generate_new_constr_safety_wit_24.
 Proof.
   pre_process.
-  unfold in_int_range in H5.
+  unfold in_int_range in PreH7.
   entailer!.
-  + pose proof H5 i.
+  + pose proof PreH7 i.
     lia.
-  + pose proof H5 i.
+  + pose proof PreH7 i.
     lia.
 Qed.
 
 Lemma proof_of_generate_new_constr_safety_wit_25 : generate_new_constr_safety_wit_25.
 Proof.
   pre_process.
-  unfold in_int_range in H4.
+  unfold in_int_range in PreH6.
   entailer!.
-  + pose proof H4 i.
+  + pose proof PreH6 i.
     lia.
-  + pose proof H4 i.
+  + pose proof PreH6 i.
     lia.
 Qed. 
 
@@ -310,34 +316,34 @@ Proof.
   pre_process.
   entailer!.
   + unfold in_int_range.
-    unfold in_int_range in H13.
+    unfold in_int_range in PreH15.
     intros.
-    assert (i0 < i \/ i0 >= i) by lia.
-    destruct H27.
-    - apply H13.
+    assert (i0 < i \/ i0 >= i) as Hi_cases by lia.
+    destruct Hi_cases.
+    - apply PreH15.
       lia.
-    - assert (i0 = i) by lia.
-      rewrite H28.
+    - assert (i0 = i) as Hi_eq by lia.
+      rewrite Hi_eq.
       assert (m2v * lb2 <= m2v * coef_Znth i c2 0 <= m2v * ub2) by nia.
       assert (-INT_MAX <= m2v * lb2 /\ m2v * ub2 <= INT_MAX).
       * split.
-        ++ rewrite H11. apply Zquot.Z_mult_quot_ge. lia.
-        ++ rewrite H10. apply Zquot.Z_mult_quot_le. lia.
+        ++ rewrite PreH13. apply Zquot.Z_mult_quot_ge. lia.
+        ++ rewrite PreH12. apply Zquot.Z_mult_quot_le. lia.
       * lia.
   + unfold in_int_range.
-    unfold in_int_range in H12.
+    unfold in_int_range in PreH14.
     intros.
-    assert (i0 < i \/ i0 >= i) by lia.
-    destruct H27.
-    - apply H12.
+    assert (i0 < i \/ i0 >= i) as Hi_cases by lia.
+    destruct Hi_cases.
+    - apply PreH14.
       lia.
-    - assert (i0 = i) by lia.
-      rewrite H28.
+    - assert (i0 = i) as Hi_eq by lia.
+      rewrite Hi_eq.
       assert (m1v * lb1 <= m1v * coef_Znth i c1 0 <= m1v * ub1) by nia.
       assert (-INT_MAX <= m1v * lb1 /\ m1v * ub1 <= INT_MAX).
       * split.
-        ++ rewrite H9. apply Zquot.Z_mult_quot_ge. lia.
-        ++ rewrite H8. apply Zquot.Z_mult_quot_le. lia.
+        ++ rewrite PreH11. apply Zquot.Z_mult_quot_ge. lia.
+        ++ rewrite PreH10. apply Zquot.Z_mult_quot_le. lia.
       * lia.
 Qed.
 
@@ -368,12 +374,12 @@ Proof.
       }
       lia.
     - intros. lia.
-  + assert (i = num_pre + 1) by lia.
-    rewrite H28 in H11.
-    apply H11.
-  + assert (i = num_pre + 1) by lia.
-    rewrite H28 in H10.
-    apply H10.
+  + assert (i = num_pre + 1) as Hi by lia.
+    rewrite Hi in PreH13.
+    apply PreH13.
+  + assert (i = num_pre + 1) as Hi by lia.
+    rewrite Hi in PreH12.
+    apply PreH12.
   + unfold NULL ; lia. 
   + unfold NULL ; lia.
 Qed.
@@ -393,14 +399,14 @@ Proof.
     Right. entailer!.
     * unfold abs_in_int_range. intros.
       unfold coef_Znth, Constraint_list. simpl.
-      unfold abs_in_int_range, coef_Znth, Constraint_list in H12 ; simpl in H12.
-      unfold coef_Znth, Constraint_list in H2, H1 ; simpl in H2, H1.
+      unfold abs_in_int_range, coef_Znth, Constraint_list in PreH14 ; simpl in PreH14.
+      unfold coef_Znth, Constraint_list in PreH4, PreH3 ; simpl in PreH4, PreH3.
       destruct (Z.eq_dec i0 0).
       - subst. unfold Znth in *. simpl in *. lia.
-      - specialize (H12 i0 (ltac:(lia))).
-        unfold Znth in H12. unfold Znth.
+      - specialize (PreH14 i0 (ltac:(lia))).
+        unfold Znth in PreH14. unfold Znth.
         simpl. destruct (Zto_nat i0) eqn : En; try lia.
-        simpl in H12. lia.  
+        simpl in PreH14. lia.  
     * unfold generate_new_constraint_partial.
       split ; [ | split ; [ | split]] ; try auto.
       - assert (m1v * coef_Znth cur_num_pre c1 0 = m2v * (- coef_Znth cur_num_pre c2 0)).
@@ -422,50 +428,50 @@ Proof.
         lia.
       - intros. 
         assert (i0 = 0) by lia. subst.
-        unfold coef_Znth, Constraint_list in H2, H1 ; simpl in H2, H1.
+        unfold coef_Znth, Constraint_list in PreH4, PreH3 ; simpl in PreH4, PreH3.
         unfold coef_Znth, Constraint_list. simpl.
         unfold Znth in * ; simpl in * ; lia.
   }
   {
     Exists (coef_replace_Znth i_2 (m2v * coef_Znth i_2 c2 0 + m1v * coef_Znth i_2 c1 0) c3_2).
-    sep_apply coef_array_merge ; try (unfold NULL ; lia). clear H38 H39.
+    sep_apply coef_array_merge ; try (unfold NULL ; lia).
     prop_apply (coef_array_length res) ; try lia .
     entailer!.
     * unfold abs_in_int_range.
       intros.
-      assert (i0 = i_2 \/ i0 < i_2 \/ i0 > i_2) by lia.
-      destruct H42.
-      + rewrite H42.
+      assert (i0 = i_2 \/ i0 < i_2 \/ i0 > i_2) as Hcase by lia.
+      destruct Hcase as [Hi | Hcase].
+      + rewrite Hi.
         rewrite coef_replace_Znth_eq. lia.
-        rewrite H39. lia.
-      + destruct H42.
+        lia.
+      + destruct Hcase as [Hlt | Hgt].
         - rewrite coef_replace_Znth_le.
-          ++ unfold abs_in_int_range in H12.
-            pose proof H12 i0.
+          ++ unfold abs_in_int_range in PreH14.
+            pose proof PreH14 i0.
             lia.
           ++ lia.
         - rewrite coef_replace_Znth_ge.
-          ++ unfold abs_in_int_range in H12.
-            pose proof H12 i0.
+          ++ unfold abs_in_int_range in PreH14.
+            pose proof PreH14 i0.
             lia.
           ++ lia.
     * unfold generate_new_constraint_partial.
-      unfold generate_new_constraint_partial in H10.
-      destruct H10 as [? [? [?  ?]]].
+      unfold generate_new_constraint_partial in PreH12.
+      destruct PreH12 as [Hmul [Hrange [Hbase Hstep]]].
       split ; [ | split ; [ | split]] ; try auto.
       intros.
-      assert (i0 < i_2 \/ i0 >= i_2) by lia.
-      destruct H45.
-      + assert (coef_Znth i0 c3_2 0 = m1v * coef_Znth i0 c1 0 + m2v * coef_Znth i0 c2 0).
-        - apply H43. lia.
-        - rewrite <-H43. 
+      assert (i0 < i_2 \/ i0 >= i_2) as Hcase by lia.
+      destruct Hcase as [Hlt | Hge].
+      + assert (coef_Znth i0 c3_2 0 = m1v * coef_Znth i0 c1 0 + m2v * coef_Znth i0 c2 0) as Hcoef.
+        - apply Hstep. lia.
+        - rewrite <-Hcoef. 
           apply coef_replace_Znth_le.
-          lia. lia.
-      + assert (i0 = i_2) by lia.
-        rewrite H46.
+          lia.
+      + assert (i0 = i_2) as Hi by lia.
+        rewrite Hi.
         assert (m1v * coef_Znth i_2 c1 0 + m2v * coef_Znth i_2 c2 0 =
-                m2v * coef_Znth i_2 c2 0 + m1v * coef_Znth i_2 c1 0) by lia.
-        rewrite H47.
+                m2v * coef_Znth i_2 c2 0 + m1v * coef_Znth i_2 c1 0) as Hcomm by lia.
+        rewrite Hcomm.
         apply coef_replace_Znth_eq.
         lia.
   }
@@ -484,16 +490,19 @@ Proof.
   apply generate_new_constraint_complete ; try lia.
   exists (num_pre + 1), m1v, m2v.
   split ; [ lia | split ; [lia | split ; [lia | ]]].
-  assert (num_pre + 1 = i_2) by lia.
-  rewrite H40.
-  apply H6.
+  assert (num_pre + 1 = i_2) as Hi by lia.
+  rewrite Hi.
+  apply PreH8.
 Qed.
 
 Lemma proof_of_generate_new_constr_partial_solve_wit_11_pure : generate_new_constr_partial_solve_wit_11_pure.
 Proof.
   pre_process.
-  entailer! ; 
-  pose proof H4 i ; pose proof H5 i ; lia.
+  assert (Hi_range: 0 <= i /\ i < num_pre + 1) by lia.
+  unfold in_int_range in PreH6, PreH7.
+  pose proof (PreH6 i Hi_range) as [Hr1lo Hr1hi].
+  pose proof (PreH7 i Hi_range) as [Hr2lo Hr2hi].
+  entailer!; lia.
 Qed.
 
 Lemma proof_of_generate_new_constraint_list_entail_wit_1 : generate_new_constraint_list_entail_wit_1.
@@ -527,19 +536,20 @@ Proof.
         unfold In.
         tauto.
       * split.
-        ++ apply H8.
-        ++ intros.
-           destruct H20.
+        ++ apply PreH10.
+        ++ intros Hin.
+           intros Hin_nil; inversion Hin_nil.
     - exists l4, nil.
       split.
       * intros.
         split; try tauto.
         unfold In. tauto.
       * split.
-        ++ apply H8.
-        ++ intros.
-           destruct H20.
-  + rewrite <-H.
+        ++ apply PreH10.
+        ++ intros Hin.
+           intros Hin_nil; inversion Hin_nil.
+  + rewrite PreH9.
+    rewrite PreH1.
     auto.
 Qed. 
 
@@ -552,24 +562,32 @@ Proof.
   Exists (l21_2 ++ x_2 :: nil) l23.
   Exists l11_3 x1_2 l12_3.
   entailer!.
-  + rewrite H6.
+  + {
     entailer!.
-    sep_apply InequList_seg_append; [entailer! | easy | unfold NULL ; lia].
+    rewrite <- PreH8.
+    sep_apply (InequList_seg_append l21_2 x_2 n r2_pre p2 p2_next p2_coef).
+    2: { unfold NULL; lia. }
+    2: { unfold NULL; lia. }
+    entailer!.
+  }
   + unfold LP_abs_in_int_range.
-    intros.
-    destruct H39.
-    - rewrite <-H39.
-      rewrite H6.
+    intros c Hin.
+    destruct Hin as [Heq | Hin].
+    - rewrite <- Heq.
+      rewrite PreH8.
       auto.
-    - auto.
-  + rewrite H15.
-    apply app_comm_cons.
+    - unfold LP_abs_in_int_range in PreH18.
+      apply PreH18.
+      auto.
+  + rewrite PreH17.
+    simpl.
+    reflexivity.
   + apply generate_new_constraints_step.
     split.
-    - rewrite <-H3; auto.
-    - apply H1.
+    - rewrite <- PreH5; auto.
+    - apply PreH3.
   + rewrite <-list_split_adjust.
-    rewrite <-H3. auto.
+    rewrite <- PreH5. auto.
 Qed.
 
 Lemma proof_of_generate_new_constraint_list_entail_wit_4 : generate_new_constraint_list_entail_wit_4.
@@ -577,18 +595,18 @@ Proof.
   pre_process.
   Exists l3_3 l4_3.
   Exists (l11_3 ++ x1 :: nil) l12_3.
-  rewrite H.
+  rewrite PreH1.
   sep_apply (inequlist_0_implies_nil l22).
   entailer!.
   + sep_apply InequList_seg_append; try easy.
     entailer!.
     sep_apply InequList_seg_degeneration.
-    rewrite H6.
-    rewrite H33.
+    rewrite PreH8.
+    rewrite H.
     rewrite app_nil_r.
     entailer!.
   + apply generate_new_constraints_complete.
-    rewrite H6.
+    rewrite PreH8.
     subst l22.
     rewrite app_nil_r.
     auto.
@@ -600,7 +618,7 @@ Lemma proof_of_generate_new_constraint_list_return_wit_2 : generate_new_constrai
 Proof.
   pre_process.
   Left.
-  rewrite <-H4.
+  rewrite <- PreH6.
   entailer!.
   sep_apply (InequList_seg_append_list l11_2); try easy.
   sep_apply (InequList_seg_append_list l21); try easy.
@@ -612,9 +630,9 @@ Lemma proof_of_generate_new_constraint_list_return_wit_1 : generate_new_constrai
 Proof.
   pre_process.
   Right.
-  rewrite H.
-  sep_apply inequlist_0_implies_nil.
   Exists l3_2 l4_2.
+  rewrite PreH1.
+  sep_apply inequlist_0_implies_nil.
   entailer!.
   + sep_apply InequList_seg_degeneration.
     subst.
@@ -628,13 +646,11 @@ Qed.
 Lemma proof_of_generate_new_constraint_list_partial_solve_wit_3_pure : generate_new_constraint_list_partial_solve_wit_3_pure.
 Proof.
   pre_process.
-  unfold InequList_nth_pos in H20.
-  unfold InequList_nth_neg in H21.
+  unfold InequList_nth_pos in PreH22.
+  unfold InequList_nth_neg in PreH23.
   subst.
-  specialize (H33 x ltac:(apply in_elt) cur_num_pre).
-  specialize (H32 x1 ltac:(apply in_elt) cur_num_pre).
-  specialize (H31 x ltac:(apply in_elt)).
-  specialize (H30 x1 ltac:(apply in_elt)).
+  specialize (PreH23 x ltac:(apply in_elt)).
+  specialize (PreH22 x1 ltac:(apply in_elt)).
   entailer!.
 Qed.
 
@@ -656,21 +672,21 @@ Proof.
   entailer!.
   - repeat sep_apply store_ptr_undef_store_ptr.
     entailer!.
-  - pose proof (eliminate_keep_Zeros _ _ _ _ _ H7 H20 (ltac:(lia)) (ltac:(lia)) _ _ _ H8). 
-    pose proof (eliminate_add_Zeros _ _ _ _ _ H7 H20 H21 (ltac:(lia)) (ltac:(lia)) _ _ _ H8).
-    pose proof (generate_new_contraints_keep_Zeros _ _ _ _ _ _ H0 (proj1 H31) (proj1 (proj2 H31)) (ltac:(lia)) (ltac:(lia))).
-    pose proof (generate_new_contraints_add_Zeros _ _ _ _ (cnt + 1) (n_pre + 1) H0 (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia))).
+  - pose proof (eliminate_keep_Zeros _ _ _ _ _ PreH9 PreH22 (ltac:(lia)) (ltac:(lia)) _ _ _ PreH10) as Keep.
+    pose proof (eliminate_add_Zeros _ _ _ _ _ PreH9 PreH22 PreH23 (ltac:(lia)) (ltac:(lia)) _ _ _ PreH10) as Add.
+    pose proof (generate_new_contraints_keep_Zeros _ _ _ _ _ _ PreH2 (proj1 Keep) (proj1 (proj2 Keep)) (ltac:(lia)) (ltac:(lia))).
+    pose proof (generate_new_contraints_add_Zeros _ _ _ _ (cnt + 1) (n_pre + 1) PreH2 (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia))).
     replace (cnt - 1 + 1) with cnt in * by lia.
     apply InequList_Zeros_range_extend_left ; try auto.
     + subst l3. apply InequList_Zeros_app ; try tauto.
     + subst l3. apply InequList_nth_zero_app ; try tauto. 
   - apply LP_implies_trans with (lp2:=l2_2); try tauto.
     apply FME_step_sound with cnt.
-    rewrite H1.
-    unfold form_BP in H7.
-    destruct H8 as [BP1 [BP2 BP3]].
+    rewrite PreH3.
+    unfold form_BP in PreH10.
+    destruct PreH10 as [BP1 [BP2 BP3]].
     rewrite BP3.
-    rewrite BP1, BP2 in H0.
+    rewrite BP1, BP2 in PreH2.
     constructor; tauto.
 Qed. 
 
@@ -681,21 +697,21 @@ Proof.
   entailer!.
   - repeat sep_apply store_ptr_undef_store_ptr.
     entailer!.
-  - pose proof (eliminate_keep_Zeros _ _ _ _ _ H5 H18 (ltac:(lia)) (ltac:(lia)) _ _ _ H6). 
-    pose proof (eliminate_add_Zeros _ _ _ _ _ H5 H18 H19 (ltac:(lia)) (ltac:(lia)) _ _ _ H6).
-    pose proof (generate_new_contraints_keep_Zeros _ _ _ _ _ _ H0 (proj1 H29) (proj1 (proj2 H29)) (ltac:(lia)) (ltac:(lia))).
-    pose proof (generate_new_contraints_add_Zeros _ _ _ _ (cnt + 1) (n_pre + 1) H0 (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia))).
+  - pose proof (eliminate_keep_Zeros _ _ _ _ _ PreH7 PreH20 (ltac:(lia)) (ltac:(lia)) _ _ _ PreH8) as Keep.
+    pose proof (eliminate_add_Zeros _ _ _ _ _ PreH7 PreH20 PreH21 (ltac:(lia)) (ltac:(lia)) _ _ _ PreH8) as Add.
+    pose proof (generate_new_contraints_keep_Zeros _ _ _ _ _ _ PreH2 (proj1 Keep) (proj1 (proj2 Keep)) (ltac:(lia)) (ltac:(lia))).
+    pose proof (generate_new_contraints_add_Zeros _ _ _ _ (cnt + 1) (n_pre + 1) PreH2 (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia))).
     replace (cnt - 1 + 1) with cnt in * by lia.
     apply InequList_Zeros_range_extend_left ; try auto.
     + subst l3. apply InequList_Zeros_app ; try tauto.
     + subst l3. apply InequList_nth_zero_app ; try tauto.
   - apply LP_implies_trans with (lp2:=l2_2); try tauto.
     apply FME_step_sound with cnt.
-    rewrite H1.
-    unfold form_BP in H5.
-    destruct H6 as [BP1 [BP2 BP3]].
+    rewrite PreH3.
+    unfold form_BP in PreH8.
+    destruct PreH8 as [BP1 [BP2 BP3]].
     rewrite BP3.
-    rewrite BP1, BP2 in H0.
+    rewrite BP1, BP2 in PreH2.
     constructor; tauto.
 Qed.
 
@@ -709,11 +725,33 @@ Proof.
   auto.
 Qed.
 
+Lemma proof_of_real_shadow_return_wit_3 : real_shadow_return_wit_3.
+Proof.
+  pre_process.
+  Left.
+  rewrite PreH1.
+  sep_apply inequlist_0_implies_nil.
+  entailer!.
+  do 3 sep_apply (store_ptr_undef_store_ptr).
+  entailer!.
+Qed.
+
+Lemma proof_of_real_shadow_return_wit_5 : real_shadow_return_wit_5.
+Proof.
+  pre_process.
+  Left.
+  rewrite PreH1.
+  sep_apply inequlist_0_implies_nil.
+  entailer!.
+  do 3 sep_apply (store_ptr_undef_store_ptr).
+  entailer!.
+Qed.
+
 Lemma proof_of_real_shadow_return_wit_7 : real_shadow_return_wit_7.
 Proof. 
   pre_process.
   Right.
-  rewrite H, H0.
+  rewrite PreH1, PreH2.
   repeat sep_apply inequlist_0_implies_nil.
   Exists 0 nil.
   entailer!.
@@ -737,22 +775,6 @@ Proof.
 Qed.
 
 
-Lemma proof_of_real_shadow_return_wit_2 : real_shadow_return_wit_2.
-Proof.
-  pre_process.
-  Left. entailer!. do 3 sep_apply (store_ptr_undef_store_ptr).
-  entailer!. subst.
-  sep_apply inequlist_0_implies_nil. entailer!.
-Qed.
-
-Lemma proof_of_real_shadow_return_wit_4 : real_shadow_return_wit_4.
-Proof.
-  pre_process.
-  Left. entailer!. do 3 sep_apply (store_ptr_undef_store_ptr).
-  entailer!. subst.
-  sep_apply inequlist_0_implies_nil. entailer!.
-Qed.
-
 Lemma proof_of_lia_deduction_entail_wit_1 : lia_deduction_entail_wit_1.
 Proof.
   pre_process.
@@ -761,7 +783,7 @@ Proof.
   simpl. 
   entailer!.
   hnf. intros.
-  inversion H12.
+  inversion H.
 Qed.
   
 Lemma proof_of_lia_deduction_entail_wit_2 : lia_deduction_entail_wit_2.
@@ -771,13 +793,13 @@ Proof.
   entailer!.
   - sep_apply InequList_seg_append ; try (unfold NULL; lia).
     entailer!.
-  - hnf. intros.
-    apply in_app_or in H19.
-    destruct H19.
-    + apply H4 ; auto.
-    + destruct H19 ; try lia.
+  - hnf. intros c Hin.
+    apply in_app_or in Hin.
+    destruct Hin as [Hin | Hin].
+    + apply PreH6 ; auto.
+    + destruct Hin as [Heq | Hin]; try lia.
       subst. lia.
-      inversion H19.
+      inversion Hin.
   - rewrite <- app_assoc. simpl.
     subst. auto.
 Qed.
@@ -789,19 +811,23 @@ Proof.
   Exists BP0_4 p2_3.
   entailer!.
   eapply LP_Implies_UNSAT ; eauto.
-  hnf. unfold satisfy_LP, satisfy_constraint, assignment.
-  intros. intro.
-  assert (In x l2_2).
+  unfold UNSAT, satisfy_LP, satisfy_constraint, assignment.
+  intros s Sat.
+  assert (Hin : In x l2_2).
   {
     subst l2_2.
     apply in_app_iff.
     right. subst l22.
     left. auto.
   }
-  specialize (H20 _ H21).
-  specialize (H11 _ H21).
-  rewrite sum_prod_zeros in H20 ; try auto.
-  rewrite H. auto.
+  specialize (Sat _ Hin).
+  rewrite sum_prod_zeros in Sat.
+  - unfold coef_Znth, Constraint_list in PreH2.
+    rewrite Znth0_cons in PreH2.
+    lia.
+  - intros i Hi.
+    apply (PreH13 x Hin i).
+    lia.
 Qed.
   
 Lemma proof_of_lia_deduction_return_wit_1 : lia_deduction_return_wit_1.

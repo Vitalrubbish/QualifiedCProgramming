@@ -36,9 +36,9 @@ Proof.
   - sep_apply sllbseg_len1; try easy.
     rewrite derivable1_sepcon_comm.
     sep_apply sllbseg_sllbseg; easy.
-  - inversion H; subst.
+  - inversion PreH1; subst.
     apply upperbound_app; easy.
-  - inversion H; subst. 
+  - inversion PreH1; subst. 
     rewrite <- app_assoc. reflexivity.
 Qed.
 
@@ -93,7 +93,7 @@ Proof.
   entailer!; subst.
   - sep_apply store_ptr_undef_store_ptr. easy.
   - apply increasing_insert. easy.
-  - rewrite <- perm_insert. rewrite H3. reflexivity. 
+  - rewrite <- perm_insert. rewrite PreH5. reflexivity. 
   - rewrite <- app_assoc. easy. 
 Qed.
 

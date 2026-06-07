@@ -95,6 +95,7 @@ def group_entries_from_plan(lemmas: list[dict], plan: Any) -> list[dict]:
     """
     raw_groups = _extract_raw_groups(plan)
     by_name = {str(lemma["name"]): lemma for lemma in lemmas}
+    raw_aliases = _raw_witness_aliases(by_name)
     seen: set[str] = set()
     entries: list[dict] = []
 
@@ -103,13 +104,32 @@ def group_entries_from_plan(lemmas: list[dict], plan: Any) -> list[dict]:
         if not members:
             raise SystemExit(f"Witness group `{group_id}` has no members")
         goals: list[dict] = []
-        for name in members:
+        for raw_name in members:
+            name = _resolve_plan_witness_name(raw_name, by_name, raw_aliases, group_id)
             if name not in by_name:
                 raise SystemExit(f"Witness group `{group_id}` references unknown witness `{name}`")
             if name in seen:
                 raise SystemExit(f"Witness `{name}` appears in more than one proof group")
             seen.add(name)
             goals.append(by_name[name])
+        if "representative_witness" in meta:
+            representative = _resolve_plan_witness_name(
+                str(meta["representative_witness"]),
+                by_name,
+                raw_aliases,
+                group_id,
+            )
+            if representative not in by_name:
+                raise SystemExit(
+                    f"Witness group `{group_id}` references unknown representative "
+                    f"witness `{representative}`"
+                )
+            if representative not in {str(goal["name"]) for goal in goals}:
+                raise SystemExit(
+                    f"Witness group `{group_id}` representative `{representative}` "
+                    "is not a member of the group"
+                )
+            meta["representative_witness"] = representative
         entry = {
             "proof_group_id": group_id,
             "grouping_source": "vc-checking-group-plan",
@@ -176,6 +196,11 @@ def _parse_raw_group(raw_group: Any, index: int) -> tuple[str, list[str], dict]:
         "shared_helper_candidates",
         "proving_hints",
         "grouping_confidence",
+        "difficulty",
+        "estimated_difficulty",
+        "difficulty_score",
+        "estimated_seconds",
+        "expected_seconds",
     )
     meta = {key: raw_group[key] for key in meta_keys if key in raw_group}
     return group_id, [_member_name(member, group_id) for member in raw_members], meta
@@ -190,3 +215,44 @@ def _member_name(member: Any, group_id: str) -> str:
             if value is not None:
                 return str(value)
     raise SystemExit(f"Witness group `{group_id}` contains a member without a witness name")
+
+
+def _raw_witness_aliases(by_name: dict[str, dict]) -> dict[str, str | None]:
+    """Map raw vc-checking witness names to generated lemma names.
+
+    Symexec manual lemmas are named ``proof_of_<witness>`` while vc-checking
+    reports often use the raw witness name.  Keep exact lemma names authoritative
+    and only use this alias map when a plan member is not already an exact match.
+    ``None`` marks an ambiguous alias.
+    """
+    aliases: dict[str, str | None] = {}
+    for name in by_name:
+        if not name.startswith("proof_of_"):
+            continue
+        alias = name.removeprefix("proof_of_")
+        existing = aliases.get(alias)
+        if existing is None and alias in aliases:
+            continue
+        if existing is not None and existing != name:
+            aliases[alias] = None
+            continue
+        aliases[alias] = name
+    return aliases
+
+
+def _resolve_plan_witness_name(
+    raw_name: str,
+    by_name: dict[str, dict],
+    raw_aliases: dict[str, str | None],
+    group_id: str,
+) -> str:
+    if raw_name in by_name:
+        return raw_name
+    if raw_name in raw_aliases:
+        resolved = raw_aliases[raw_name]
+        if resolved is None:
+            raise SystemExit(
+                f"Witness group `{group_id}` references ambiguous raw witness `{raw_name}`"
+            )
+        return resolved
+    return raw_name

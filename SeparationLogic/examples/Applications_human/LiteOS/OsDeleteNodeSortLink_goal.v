@@ -28,11 +28,8 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function OsDeleteNodeSortLink -----*)
 
 Definition OsDeleteNodeSortLink_safety_wit_1 := 
-forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) ,
-  “ (node_callee_pstPrev = 0) ” 
-  &&  “ (node_callee_pstNext = 0) ” 
-  &&  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) ) ”
-  &&  ((( &( "sortList" ) )) # Ptr  |-> sortList_pre)
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) (PreH1 : (node_callee_pstPrev = 0)) (PreH2 : (node_callee_pstNext = 0)) (PreH3 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  ((( &( "sortList" ) )) # Ptr  |-> sortList_pre)
   **  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstPrev")) # Ptr  |-> node_callee_pstPrev)
@@ -43,11 +40,8 @@ forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) 
 .
 
 Definition OsDeleteNodeSortLink_safety_wit_2 := 
-forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) ,
-  “ (node_callee_pstPrev = 0) ” 
-  &&  “ (node_callee_pstNext = 0) ” 
-  &&  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) ) ”
-  &&  ((( &( "sortList" ) )) # Ptr  |-> sortList_pre)
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) (PreH1 : (node_callee_pstPrev = 0)) (PreH2 : (node_callee_pstNext = 0)) (PreH3 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  ((( &( "sortList" ) )) # Ptr  |-> sortList_pre)
   **  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstPrev")) # Ptr  |-> node_callee_pstPrev)
@@ -59,11 +53,9 @@ forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) 
 .
 
 Definition OsDeleteNodeSortLink_return_wit_1 := 
-forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) ,
-  “ (node_callee_pstPrev = 0) ” 
-  &&  “ (node_callee_pstNext = 0) ” 
-  &&  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) ) ”
-  &&  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+(
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) (PreH1 : (node_callee_pstPrev = 0)) (PreH2 : (node_callee_pstNext = 0)) (PreH3 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> (unsigned_last_nbits ((-1)) (64)))
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstPrev")) # Ptr  |-> node_callee_pstPrev)
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstNext")) # Ptr  |-> node_callee_pstNext)
@@ -76,6 +68,25 @@ forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) 
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstNext")) # Ptr  |-> v_2)
   **  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) ((unsigned_last_nbits ((-1)) (64)))) )
   **  (store_sorted_dll storeA x (app (l1) (l2)) )
+) \/
+(
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) (PreH1 : (node_callee_pstPrev = 0)) (PreH2 : (node_callee_pstNext = 0)) (PreH3 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> (unsigned_last_nbits ((-1)) (64)))
+  **  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((map (sortedLinkNodeMapping) (l2)))) )
+|--
+  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) ((unsigned_last_nbits ((-1)) (64)))) )
+  **  (store_sorted_dll storeA x (app (l1) (l2)) )
+).
+
+Definition OsDeleteNodeSortLink_return_wit_1_split_goal_spatial := 
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) (PreH1 : (node_callee_pstPrev = 0)) (PreH2 : (node_callee_pstNext = 0)) (PreH3 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> (unsigned_last_nbits ((-1)) (64)))
+  **  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((map (sortedLinkNodeMapping) (l2)))) )
+|--
+  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) ((unsigned_last_nbits ((-1)) (64)))) )
+  **  (store_sorted_dll storeA x (app (l1) (l2)) )
 .
 
 Definition OsDeleteNodeSortLink_partial_solve_wit_1 := 
@@ -86,20 +97,16 @@ forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) 
 .
 
 Definition OsDeleteNodeSortLink_partial_solve_wit_2 := 
-forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) ,
-  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) ) ”
-  &&  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode")))) ((map (sortedLinkNodeMapping) (l2)))))) )
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (PreH1 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode")))) ((map (sortedLinkNodeMapping) (l2)))))) )
 |--
   “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) ) ”
   &&  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode")))) ((map (sortedLinkNodeMapping) (l2)))))) )
 .
 
 Definition OsDeleteNodeSortLink_partial_solve_wit_3 := 
-forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) ,
-  “ (node_callee_pstPrev = 0) ” 
-  &&  “ (node_callee_pstNext = 0) ” 
-  &&  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) ) ”
-  &&  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstPrev")) # Ptr  |-> node_callee_pstPrev)
+forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (node_callee_pstNext: Z) (node_callee_pstPrev: Z) (PreH1 : (node_callee_pstPrev = 0)) (PreH2 : (node_callee_pstNext = 0)) (PreH3 : (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList_pre))) (l2)))) )) ,
+  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstPrev")) # Ptr  |-> node_callee_pstPrev)
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode" .ₛ "pstNext")) # Ptr  |-> node_callee_pstNext)
   **  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
   **  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((map (sortedLinkNodeMapping) (l2)))) )
@@ -114,14 +121,52 @@ forall (A: Type) (sortList_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode A)))) 
 .
 
 Definition OsDeleteNodeSortLink_which_implies_wit_1 := 
+(
 forall (A: Type) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (sortList: Z) ,
   (store_sorted_dll storeA x (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) )
 |--
   “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) ) ”
   &&  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (&((sortList)  # "SortLinkList" ->ₛ "sortLinkNode")))) ((map (sortedLinkNodeMapping) (l2)))))) )
+) \/
+(
+forall (A: Type) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (sortList: Z) ,
+  (store_sorted_dll storeA x (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) )
+|--
+  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) ) ”
+  &&  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (&((sortList)  # "SortLinkList" ->ₛ "sortLinkNode")))) ((map (sortedLinkNodeMapping) (l2)))))) )
+).
+
+Definition OsDeleteNodeSortLink_which_implies_wit_1_split_goal_1 := 
+forall (A: Type) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (sortList: Z) ,
+  (store_sorted_dll storeA x (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) )
+|--
+  “ (increasingSortedNode (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) ) ”
+.
+
+Definition OsDeleteNodeSortLink_which_implies_wit_1_split_goal_spatial := 
+forall (A: Type) (l2: (@list (@DL_Node (@sortedLinkNode A)))) (l1: (@list (@DL_Node (@sortedLinkNode A)))) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (x: Z) (sortList: Z) ,
+  (store_sorted_dll storeA x (app (l1) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (sortList))) (l2)))) )
+|--
+  (store_dll (storesortedLinkNode (storeA)) x (app ((map (sortedLinkNodeMapping) (l1))) ((cons ((Build_DL_Node ((mksortedLinkNode (a) (t))) (&((sortList)  # "SortLinkList" ->ₛ "sortLinkNode")))) ((map (sortedLinkNodeMapping) (l2)))))) )
 .
 
 Definition OsDeleteNodeSortLink_which_implies_wit_2 := 
+(
+forall (A: Type) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (sortList: Z) ,
+  (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+) \/
+(
+forall (A: Type) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (sortList: Z) ,
+  (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+).
+
+Definition OsDeleteNodeSortLink_which_implies_wit_2_split_goal_spatial := 
 forall (A: Type) (a: A) (storeA: (Z -> (A -> Assertion))) (t: Z) (sortList: Z) ,
   (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 |--

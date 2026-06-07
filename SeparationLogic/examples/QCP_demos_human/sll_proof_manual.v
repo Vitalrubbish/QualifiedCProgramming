@@ -37,11 +37,11 @@ Proof.
     sep_apply sllseg_sllseg.
     easy.
   - rewrite Zlength_app.
-    rewrite <- H1.
+    rewrite <- PreH3.
     rewrite Zlength_cons. rewrite Zlength_nil. lia.
-  - rewrite H0, H; clear H H0. 
+  - rewrite PreH2, PreH1 ; clear PreH2 PreH1. 
     rename l1_2 into l1.
-    revert l1 H1.
+    revert l1 PreH3.
     induction l3; intros; simpl.
     + rewrite app_nil_r. auto.
     + rewrite <- app_assoc. simpl. f_equal. 
@@ -50,11 +50,11 @@ Qed.
 Lemma proof_of_length_return_wit_1 : length_return_wit_1.
 Proof. 
   pre_process.
-  rewrite H. sep_apply sll_zero; auto.
+  rewrite PreH1. sep_apply sll_zero; auto.
   Intros.
   subst.  
   rewrite app_nil_r in *.
-  entailer!. clear H1 H3.
+  entailer!. clear PreH3.
   revert p_pre; induction l1; simpl; try easy.
   intros; Intros.
   Intros z; Exists z. entailer!.
@@ -66,9 +66,9 @@ Proof.
   entailer!.
   - pose proof Zlength_nonneg l1. lia.
   - pose proof Zlength_app l1 l2.
-    rewrite <- H0 in H4.
+    rewrite <- PreH2 in H.
     pose proof Zlength_cons p_data l3.
-    rewrite <- H in H5.
+    rewrite <- PreH1 in H0.
     pose proof Zlength_nonneg l3. lia.
 Qed.
 
@@ -100,7 +100,7 @@ Proof.
   sep_apply (sll_zero v l2); [ | tauto].
   entailer!.
   subst l2.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   entailer!.
@@ -134,7 +134,7 @@ Proof.
   sep_apply (sll_zero v l2); [ | tauto].
   entailer!.
   subst l2.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   entailer!.
@@ -189,7 +189,7 @@ Proof.
   sep_apply (sll_zero v l2); [ | tauto].
   entailer!.
   subst l2.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   entailer!.
@@ -201,7 +201,7 @@ Proof.
   sep_apply (sll_zero v_inv l2); [ | tauto].
   entailer!.
   subst l2.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l.
   rewrite rev_involutive.
   entailer!.
@@ -227,7 +227,7 @@ Proof.
     entailer!.
   + rewrite <- app_assoc.
     simpl.
-    apply H1.
+    apply PreH3.
 Qed.
 
 Lemma proof_of_append_return_wit_2 : append_return_wit_2.
@@ -273,7 +273,7 @@ Proof.
     entailer!.
   + rewrite <- app_assoc.
     simpl.
-    apply H1.
+    apply PreH3.
 Qed.
 
 Lemma proof_of_append_long_return_wit_3 : append_long_return_wit_3.
@@ -294,7 +294,7 @@ Proof.
   sep_apply (sll_zero 0); [ | tauto ].
   Intros.
   subst l1b.
-  rewrite <- H0.
+  rewrite <- PreH2.
   entailer!.
 Qed.
 
@@ -342,7 +342,7 @@ Proof.
   Intros.
   sep_apply sllseg_sll.
   subst l1b.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l1a.
   entailer!.
 Qed.

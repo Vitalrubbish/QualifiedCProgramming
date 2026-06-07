@@ -22,119 +22,84 @@ Local Open Scope sac.
 Lemma proof_of_eval_safety_wit_13 : eval_safety_wit_13.
 Proof.
   pre_process.
-  rewrite <- H7 in *; clear H7.
-  simpl in H6.
+  rewrite PreH8 in PreH9.
   assert (Hop: op = T_plus)
-    by (destruct op; simpl in H6; try discriminate; reflexivity).
-  rewrite Hop in *; clear Hop.
-  rewrite H5 in H3.
-  assert (H_bc: INT_MIN <= expr_eval e1 l + expr_eval e2 l <= INT_MAX).
-  { inversion H3 as [| | | ? ? ? ? _ _ Hbc]; subst.
-    unfold bin_safe_cond in Hbc; simpl in Hbc; exact Hbc. }
-  clear H3.
-  destruct H_bc as [H_lo H_hi].
-  split_pures.
-  - dump_pre_spatial. rewrite H0, H. exact H_hi.
-  - dump_pre_spatial. rewrite H0, H. exact H_lo.
+    by (destruct op; simpl in PreH9; try discriminate; reflexivity).
+  rewrite PreH7 in PreH5.
+  rewrite Hop in PreH5.
+  inversion PreH5 as [| | | ? ? ? ? _ _ Hbc]; subst.
+  unfold bin_safe_cond in Hbc; simpl in Hbc.
+  entailer!.
 Qed.
 
 Lemma proof_of_eval_safety_wit_15 : eval_safety_wit_15.
 Proof.
   pre_process.
-  rewrite <- H8 in *; clear H8.
-  simpl in H6.
+  rewrite PreH8 in PreH10.
   assert (Hop: op = T_minus)
-    by (destruct op; simpl in H6; try discriminate; reflexivity).
-  rewrite Hop in *; clear Hop.
-  rewrite H5 in H3.
-  assert (H_bc: INT_MIN <= expr_eval e1 l - expr_eval e2 l <= INT_MAX).
-  { inversion H3 as [| | | ? ? ? ? _ _ Hbc]; subst.
-    unfold bin_safe_cond in Hbc; simpl in Hbc; exact Hbc. }
-  clear H3.
-  destruct H_bc as [H_lo H_hi].
-  split_pures.
-  - dump_pre_spatial. rewrite H0, H. exact H_hi.
-  - dump_pre_spatial. rewrite H0, H. exact H_lo.
+    by (destruct op; simpl in PreH10; try discriminate; reflexivity).
+  rewrite PreH7 in PreH5.
+  rewrite Hop in PreH5.
+  inversion PreH5 as [| | | ? ? ? ? _ _ Hbc]; subst.
+  unfold bin_safe_cond in Hbc; simpl in Hbc.
+  entailer!.
 Qed.
 
 Lemma proof_of_eval_safety_wit_17 : eval_safety_wit_17.
 Proof.
   pre_process.
-  rewrite <- H9 in *; clear H9.
-  simpl in H6.
+  rewrite PreH8 in PreH11.
   assert (Hop: op = T_mul)
-    by (destruct op; simpl in H6; try discriminate; reflexivity).
-  rewrite Hop in *; clear Hop.
-  rewrite H5 in H3.
-  assert (H_bc: INT_MIN <= expr_eval e1 l * expr_eval e2 l <= INT_MAX).
-  { inversion H3 as [| | | ? ? ? ? _ _ Hbc]; subst.
-    unfold bin_safe_cond in Hbc; simpl in Hbc; exact Hbc. }
-  clear H3.
-  destruct H_bc as [H_lo H_hi].
-  split_pures.
-  - dump_pre_spatial. rewrite H0, H. exact H_hi.
-  - dump_pre_spatial. rewrite H0, H. exact H_lo.
+    by (destruct op; simpl in PreH11; try discriminate; reflexivity).
+  rewrite PreH7 in PreH5.
+  rewrite Hop in PreH5.
+  inversion PreH5 as [| | | ? ? ? ? _ _ Hbc]; subst.
+  unfold bin_safe_cond in Hbc; simpl in Hbc.
+  entailer!.
 Qed.
 
 Lemma proof_of_eval_safety_wit_19 : eval_safety_wit_19.
 Proof.
   pre_process.
-  rewrite <- H10 in *; clear H10.
-  simpl in H6.
+  rewrite PreH8 in PreH12.
   assert (Hop: op = T_div)
-    by (destruct op; simpl in H6; try discriminate; reflexivity).
-  rewrite Hop in *; clear Hop.
-  rewrite H5 in H3.
-  assert (H_bc: expr_eval e2 l <> 0 /\ (expr_eval e1 l <> INT_MIN \/ expr_eval e2 l <> -1)).
-  { inversion H3 as [| | | ? ? ? ? _ _ Hbc]; subst.
-    unfold bin_safe_cond in Hbc; simpl in Hbc; exact Hbc. }
-  clear H3.
-  destruct H_bc as [H_nz H_cond].
-  split_pures.
-  - dump_pre_spatial. rewrite H0, H. exact H_cond.
-  - dump_pre_spatial. rewrite H. exact H_nz.
+    by (destruct op; simpl in PreH12; try discriminate; reflexivity).
+  rewrite PreH7 in PreH5.
+  rewrite Hop in PreH5.
+  inversion PreH5 as [| | | ? ? ? ? _ _ Hbc]; subst.
+  unfold bin_safe_cond in Hbc; simpl in Hbc.
+  entailer!.
 Qed.
 
 Lemma proof_of_eval_safety_wit_21 : eval_safety_wit_21.
 Proof.
   pre_process.
-  rewrite <- H11 in *; clear H11.
-  simpl in H6.
+  rewrite PreH8 in PreH13.
   assert (Hop: op = T_mod)
-    by (destruct op; simpl in H6; try discriminate; reflexivity).
-  rewrite Hop in *; clear Hop.
-  rewrite H5 in H3.
-  assert (H_bc: expr_eval e2 l <> 0 /\ (expr_eval e1 l <> INT_MIN \/ expr_eval e2 l <> -1)).
-  { inversion H3 as [| | | ? ? ? ? _ _ Hbc]; subst.
-    unfold bin_safe_cond in Hbc; simpl in Hbc; exact Hbc. }
-  clear H3.
-  destruct H_bc as [H_nz H_cond].
-  split_pures.
-  - dump_pre_spatial. rewrite H0, H. exact H_cond.
-  - dump_pre_spatial. rewrite H. exact H_nz.
+    by (destruct op; simpl in PreH13; try discriminate; reflexivity).
+  rewrite PreH7 in PreH5.
+  rewrite Hop in PreH5.
+  inversion PreH5 as [| | | ? ? ? ? _ _ Hbc]; subst.
+  unfold bin_safe_cond in Hbc; simpl in Hbc.
+  entailer!.
 Qed.
 
 Lemma proof_of_eval_safety_wit_28 : eval_safety_wit_28.
 Proof.
   pre_process.
-  destruct op; simpl in H6; subst v;
-  match goal with
-  | H: ?x <> ?x |- _ => exfalso; apply H; reflexivity
-  end.
+  destruct op; simpl in PreH8; subst v; lia.
 Qed.
 
 Lemma proof_of_eval_safety_wit_31 : eval_safety_wit_31.
 Proof.
   pre_process.
   assert (Hop: op = T_uminus).
-  { destruct op; simpl in H4; try reflexivity.
-    exfalso; apply H0; rewrite <- H4; reflexivity. }
+  { destruct op; simpl in PreH6; subst v; try reflexivity; lia. }
   subst op.
-  rewrite H3 in H1; clear H3.
-  apply safe_eval_un_cond in H1.
-  unfold un_safe_cond in H1.
-  dump_pre_spatial.
-  rewrite H; exact H1.
+  rewrite PreH5 in PreH3.
+  apply safe_eval_un_cond in PreH3.
+  unfold un_safe_cond in PreH3.
+  entailer!.
 Qed.
 
 Lemma proof_of_eval_safety_wit_32 : eval_safety_wit_32.
@@ -170,7 +135,7 @@ Proof.
   destruct e0; simpl.
   - pre_process; lia.
   - Exists e_t_2 z.
-    inversion H; subst.
+    inversion PreH1; subst.
     pre_process.
     split_pure_spatial.
     + pre_process.
@@ -193,7 +158,6 @@ Proof.
   - pre_process; lia.
   - Intros p'. pre_process; lia.
   - Intros p1 p2.
-    clear H0 H1 H2.
     Exists p2 p1.
     Exists (BinOpID b) b e0_1 e0_2 2.
     pre_process.
@@ -207,7 +171,6 @@ Proof.
   - pre_process; lia.
   - pre_process; lia.
   - Intros p'.
-    clear H0 H1 H2 H3.
     Exists p' (UnOpID u) u e0 3.
     pre_process.
   - Intros p1 p2. pre_process; lia.
@@ -336,7 +299,7 @@ Proof.
   solve_eval_return.
   destruct (Z.eqb (expr_eval e1 l) 0) eqn:Heq.
   - apply Z.eqb_eq in Heq. lia.
-  - reflexivity.
+  - apply Z.eqb_neq in Heq. lia.
 Qed.
 Lemma proof_of_eval_return_wit_4 : eval_return_wit_4.
 Proof. solve_eval_binop_return e_pre var_value_pre l v_2 v_3. Qed.

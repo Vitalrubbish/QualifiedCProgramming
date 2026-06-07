@@ -28,12 +28,28 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function GET_SORTLIST_VALUE -----*)
 
 Definition GET_SORTLIST_VALUE_return_wit_1 := 
+(
 forall (A: Type) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) ,
   (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
 |--
   “ (t = t) ”
   &&  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+) \/
+(
+forall (A: Type) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+|--
+  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+).
+
+Definition GET_SORTLIST_VALUE_return_wit_1_split_goal_spatial := 
+forall (A: Type) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+|--
+  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 .
 
 Definition GET_SORTLIST_VALUE_partial_solve_wit_1 := 
@@ -44,6 +60,22 @@ forall (A: Type) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: 
 .
 
 Definition GET_SORTLIST_VALUE_which_implies_wit_1 := 
+(
+forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
+  (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+) \/
+(
+forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
+  (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+).
+
+Definition GET_SORTLIST_VALUE_which_implies_wit_1_split_goal_spatial := 
 forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
   (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 |--
@@ -54,6 +86,22 @@ forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
 (*----- Function SET_SORTLIST_VALUE -----*)
 
 Definition SET_SORTLIST_VALUE_return_wit_1 := 
+(
+forall (A: Type) (value_pre: Z) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (a: A) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> value_pre)
+|--
+  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (value_pre)) )
+) \/
+(
+forall (A: Type) (value_pre: Z) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (a: A) ,
+  (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> value_pre)
+|--
+  (storesortedLinkNode storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (value_pre)) )
+).
+
+Definition SET_SORTLIST_VALUE_return_wit_1_split_goal_spatial := 
 forall (A: Type) (value_pre: Z) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (a: A) ,
   (storeA &((sortList_pre)  # "SortLinkList" ->ₛ "sortLinkNode") a )
   **  ((&((sortList_pre)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> value_pre)
@@ -69,6 +117,22 @@ forall (A: Type) (sortList_pre: Z) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: 
 .
 
 Definition SET_SORTLIST_VALUE_which_implies_wit_1 := 
+(
+forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
+  (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+) \/
+(
+forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
+  (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
+|--
+  (storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") a )
+  **  ((&((sortList)  # "SortLinkList" ->ₛ "responseTime")) # UInt64  |-> t)
+).
+
+Definition SET_SORTLIST_VALUE_which_implies_wit_1_split_goal_spatial := 
 forall (A: Type) (storeA: (Z -> (A -> Assertion))) (t: Z) (a: A) (sortList: Z) ,
   (storesortedLinkNode storeA &((sortList)  # "SortLinkList" ->ₛ "sortLinkNode") (mksortedLinkNode (a) (t)) )
 |--

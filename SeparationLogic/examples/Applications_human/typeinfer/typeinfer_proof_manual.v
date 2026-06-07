@@ -23,25 +23,25 @@ Local Open Scope sac.
 Lemma proof_of_atype_unify_return_wit_5 : atype_unify_return_wit_5.
 Proof.
   pre_process.
-  Right.
-  Exists s_post_3.
-  entailer!.
-  subst.
-  unfold store_type.
-  entailer!.
-Qed.
-
-Lemma proof_of_atype_unify_return_wit_6 : atype_unify_return_wit_6.
-Proof.
-  pre_process.
   Left.
   Exists s_post_3.
   entailer!.
   subst.
   unfold store_type.
   entailer!.
+  rewrite PreH6.
+  exact PreH2.
+Qed.
+
+Lemma proof_of_atype_unify_return_wit_6 : atype_unify_return_wit_6.
+Proof.
+  pre_process.
+  Right.
+  Exists s_post_3.
+  entailer!.
   subst.
-  assumption.
+  unfold store_type.
+  entailer!.
 Qed.
 
 Lemma to_aux : forall t1 tr1,
@@ -144,20 +144,22 @@ Proof.
   Exists L.
   rename s_pre_verify into s.
   assert ((&( "res") + n * sizeof ( PTR )) # Ptr |-> tp **
-    (store_option_type tp (Some t)) |-- (store_type_addr s) &( "res") n tp). {
+    (store_option_type tp (Some t)) |-- (store_type_addr s) &( "res") n tp) as Haddr. {
     unfold store_type_addr.
-    rewrite H5.
-    entailer!.
+    match goal with
+    | Hsn : Some t = s n |- _ => rewrite <- Hsn
+    end.
+    entailer!; try lia.
   }
-  sep_apply H6.
+  sep_apply Haddr.
   rewrite (store_array_missing_i_merge_to_array _  (store_type_addr s) &( "res") n 100 tp L).
   2: auto.
-  assert (L = replace_Znth n tp L). {
+  assert (L = replace_Znth n tp L) as Hreplace. {
     subst.
     rewrite replace_Znth_Znth.
     tauto.
   }
-  rewrite H7 at 2.
+  rewrite Hreplace at 2.
   entailer!.
 Qed.
 
@@ -171,14 +173,16 @@ Proof.
   destruct tr_opt.
   1: unfold store_option_type; entailer!.
   assert ((&( "res") + n * sizeof ( PTR )) # Ptr |-> tp **
-    (store_option_type tp (None)) |-- (store_type_addr s) &( "res") n tp). {
+    (store_option_type tp (None)) |-- (store_type_addr s) &( "res") n tp) as Haddr. {
     unfold store_type_addr.
-    rewrite H7.
-    entailer!.
+    match goal with
+    | Hsn : None = s n |- _ => rewrite <- Hsn
+    end.
+    entailer!; try lia.
   }
   unfold store_solution.
   Exists L.
-  sep_apply H8.
+  sep_apply Haddr.
   sep_apply (store_array_missing_i_merge_to_array _  (store_type_addr s) &( "res") n 100 tp L).
   2: auto.
   entailer!.
@@ -186,25 +190,30 @@ Proof.
     (&( t1 # "atype" ->ₛ "t") # Int |-> t1_t **
     &( t1 # "atype" ->ₛ "d" .ₛ "VAR" .ₛ "name") # Int |-> n)
     |-- store_type t1 tr1_verify
-    ). {
+    ) as Htype. {
       subst.
       simpl store_type.
       entailer!.
     }
-    sep_apply H10.
+    sep_apply Htype.
     entailer!.
-    assert (L = replace_Znth n tp L). {
+    assert (L = replace_Znth n tp L) as Hreplace. {
       subst.
-      rewrite H6.
+      match goal with
+      | Hz : ?v = Znth n L 100 |- _ => rewrite Hz
+      | Hz : Znth n L 100 = ?v |- _ => rewrite <- Hz
+      end.
       rewrite replace_Znth_Znth.
       tauto.
     }
-    rewrite H11 at 2.
+    rewrite Hreplace at 2.
     entailer!.
   + assert(repr_rel_id s n (TVar n)). {
       eapply repr_rel_var; eauto.
     }
-    rewrite H3.
+    match goal with
+    | Heq : tr1_verify = TVar n |- _ => rewrite Heq
+    end.
     eapply repr_rel_node_var; eauto.
 Qed.
 
@@ -239,25 +248,25 @@ Qed.
 Lemma proof_of_atype_unify1_return_wit_5 : atype_unify1_return_wit_5.
 Proof.
   pre_process.
-  Right.
-  Exists s_post_3.
-  entailer!.
-  subst.
-  unfold store_type.
-  entailer!.
-Qed.
-
-Lemma proof_of_atype_unify1_return_wit_6 : atype_unify1_return_wit_6.
-Proof.
-  pre_process.
   Left.
   Exists s_post_3.
   entailer!.
   subst.
   unfold store_type.
   entailer!.
+  rewrite PreH6.
+  exact PreH2.
+Qed.
+
+Lemma proof_of_atype_unify1_return_wit_6 : atype_unify1_return_wit_6.
+Proof.
+  pre_process.
+  Right.
+  Exists s_post_3.
+  entailer!.
   subst.
-  assumption.
+  unfold store_type.
+  entailer!.
 Qed.
 
 Lemma proof_of_atype_unify1_which_implies_wit_1 : atype_unify1_which_implies_wit_1.
@@ -300,20 +309,22 @@ Proof.
   Exists L.
   rename s_pre into s.
   assert ((&( "res") + n * sizeof ( PTR )) # Ptr |-> tp **
-    (store_option_type tp (Some t)) |-- (store_type_addr s) &( "res") n tp). {
+    (store_option_type tp (Some t)) |-- (store_type_addr s) &( "res") n tp) as Haddr. {
     unfold store_type_addr.
-    rewrite H5.
-    entailer!.
+    match goal with
+    | Hsn : Some t = s n |- _ => rewrite <- Hsn
+    end.
+    entailer!; try lia.
   }
-  sep_apply H6.
+  sep_apply Haddr.
   rewrite (store_array_missing_i_merge_to_array _  (store_type_addr s) &( "res") n 100 tp L).
   2: auto.
-  assert (L = replace_Znth n tp L). {
+  assert (L = replace_Znth n tp L) as Hreplace. {
     subst.
     rewrite replace_Znth_Znth.
     tauto.
   }
-  rewrite H7 at 2.
+  rewrite Hreplace at 2.
   entailer!.
 Qed.
 
@@ -327,14 +338,16 @@ Proof.
   destruct tr_opt.
   1: unfold store_option_type; entailer!.
   assert ((&( "res") + n * sizeof ( PTR )) # Ptr |-> tp **
-    (store_option_type tp (None)) |-- (store_type_addr s) &( "res") n tp). {
+    (store_option_type tp (None)) |-- (store_type_addr s) &( "res") n tp) as Haddr. {
     unfold store_type_addr.
-    rewrite H7.
-    entailer!.
+    match goal with
+    | Hsn : None = s n |- _ => rewrite <- Hsn
+    end.
+    entailer!; try lia.
   }
   unfold store_solution.
   Exists L.
-  sep_apply H8.
+  sep_apply Haddr.
   sep_apply (store_array_missing_i_merge_to_array _  (store_type_addr s) &( "res") n 100 tp L).
   2: auto.
   entailer!.
@@ -342,25 +355,30 @@ Proof.
     (&( t2 # "atype" ->ₛ "t") # Int |-> t2_t **
     &( t2 # "atype" ->ₛ "d" .ₛ "VAR" .ₛ "name") # Int |-> n)
     |-- store_type t2 tr2
-    ). {
+    ) as Htype. {
       subst.
       simpl store_type.
       entailer!.
     }
-    sep_apply H10.
+    sep_apply Htype.
     entailer!.
-    assert (L = replace_Znth n tp L). {
+    assert (L = replace_Znth n tp L) as Hreplace. {
       subst.
-      rewrite H6.
+      match goal with
+      | Hz : ?v = Znth n L 100 |- _ => rewrite Hz
+      | Hz : Znth n L 100 = ?v |- _ => rewrite <- Hz
+      end.
       rewrite replace_Znth_Znth.
       tauto.
     }
-    rewrite H11 at 2.
+    rewrite Hreplace at 2.
     entailer!.
   + assert(repr_rel_id s n (TVar n)). {
       eapply repr_rel_var; eauto.
     }
-    rewrite H3.
+    match goal with
+    | Heq : tr2 = TVar n |- _ => rewrite Heq
+    end.
     eapply repr_rel_node_var; eauto.
 Qed.
 
@@ -452,19 +470,6 @@ Qed.
 Lemma proof_of_atype_unify2_return_wit_6 : atype_unify2_return_wit_6.
 Proof.
   pre_process.
-  Right.
-  Exists s_post_4.
-  entailer!.
-  subst.
-  simpl store_type.
-  Exists t1_from t1_to.
-  Exists t2_from t2_to.
-  entailer!.
-Qed.
-
-Lemma proof_of_atype_unify2_return_wit_7 : atype_unify2_return_wit_7.
-Proof.
-  pre_process.
   Left.
   Exists s_post_4.
   entailer!.
@@ -473,8 +478,24 @@ Proof.
   Exists t1_from t1_to.
   Exists t2_from t2_to.
   entailer!.
+  eapply unify_rel_arrow.
+  - rewrite <- PreH6. exact PreH13.
+  - rewrite <- PreH7. exact PreH14.
+  - exact PreH5.
+  - exact PreH2.
+Qed.
+
+Lemma proof_of_atype_unify2_return_wit_7 : atype_unify2_return_wit_7.
+Proof.
+  pre_process.
+  Right.
+  Exists s_post_4.
+  entailer!.
   subst.
-  eapply unify_rel_arrow; eauto.
+  simpl store_type.
+  Exists t1_from t1_to.
+  Exists t2_from t2_to.
+  entailer!.
 Qed.
 
 Lemma proof_of_atype_unify2_return_wit_5 : atype_unify2_return_wit_5.
@@ -493,19 +514,6 @@ Qed.
 Lemma proof_of_atype_unify2_return_wit_3 : atype_unify2_return_wit_3.
 Proof.
   pre_process.
-  Right.
-  Exists s_post_4.
-  entailer!.
-  subst.
-  simpl store_type.
-  Exists t1_tfn t1_rand.
-  Exists t2_tfn t2_rand.
-  entailer!.
-Qed.
-
-Lemma proof_of_atype_unify2_return_wit_4 : atype_unify2_return_wit_4.
-Proof.
-  pre_process.
   Left.
   Exists s_post_4.
   entailer!.
@@ -514,8 +522,24 @@ Proof.
   Exists t1_tfn t1_rand.
   Exists t2_tfn t2_rand.
   entailer!.
+  eapply unify_rel_apply.
+  - rewrite <- PreH6. exact PreH14.
+  - rewrite <- PreH7. exact PreH15.
+  - exact PreH5.
+  - exact PreH2.
+Qed.
+
+Lemma proof_of_atype_unify2_return_wit_4 : atype_unify2_return_wit_4.
+Proof.
+  pre_process.
+  Right.
+  Exists s_post_4.
+  entailer!.
   subst.
-  eapply unify_rel_apply; eauto.
+  simpl store_type.
+  Exists t1_tfn t1_rand.
+  Exists t2_tfn t2_rand.
+  entailer!.
 Qed.
 
 Lemma proof_of_atype_unify2_return_wit_2 : atype_unify2_return_wit_2.
@@ -719,17 +743,15 @@ Proof.
   pre_process_default.
   Split.
   - Intros s_post retval.
-    Left. Exists s_post retval.
-    entailer!.
-  - Intros s_post retval.
-    Right. 
     pose proof (unify_soundness tr1_final tr2_final s_pre s_post s_cpre H H1 H0 H3).
     destruct H4 as [s_cpost ?].
+    Left.
     Exists s_cpost retval.
     unfold store_compressed_solution.
     Exists s_post.
     entailer!.
+  - Intros s_post retval.
+    Right. 
+    Exists s_post retval.
+    entailer!.
 Qed.
-
-
-

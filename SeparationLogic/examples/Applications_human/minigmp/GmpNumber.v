@@ -9,7 +9,7 @@ Require Import String.
 From AUXLib Require Import int_auto Axioms Feq Idents ListLib VMap.
 Require Import SetsClass.SetsClass. Import SetsNotation.
 From SimpleC.SL Require Import CommonAssertion Mem SeparationLogic IntLib.
-Require Import GmpAux. Import Aux.
+From SimpleC.EE.Applications_human.minigmp Require Import GmpAux. Import Aux.
 Require Import Logic.LogicGenerator.demo932.Interface.
 Local Open Scope Z_scope.
 Local Open Scope sets.

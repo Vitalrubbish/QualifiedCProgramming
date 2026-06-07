@@ -20,38 +20,10 @@ Local Open Scope sac.
 
 Lemma proof_of_abs_return_wit_1 : abs_return_wit_1.
 Proof.
-	intros x_pre.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hge.
-		Intros_p Hmin.
-		Intros_p Hmax.
-		cancel.
-	-
-		Intros_p Hge.
-		Intros_p Hmin.
-		Intros_p Hmax.
-		dump_pre_spatial.
-		change (x_pre = Z.abs x_pre).
-		symmetry.
-		apply Z.abs_eq.
-		lia.
+	pre_process.
 Qed.
 
 Lemma proof_of_abs_return_wit_2 : abs_return_wit_2.
 Proof.
-	intros x_pre.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hlt.
-		Intros_p Hmin.
-		Intros_p Hmax.
-		cancel.
-	-
-		Intros_p Hlt.
-		Intros_p Hmin.
-		Intros_p Hmax.
-		dump_pre_spatial.
-		change (- x_pre = Z.abs x_pre).
-		symmetry.
-		apply Z.abs_neq.
-		lia.
+	pre_process.
 Qed.

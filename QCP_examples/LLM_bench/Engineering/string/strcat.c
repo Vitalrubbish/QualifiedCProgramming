@@ -1,8 +1,4 @@
-#include "string_def.h"
-
-/*@ Import Coq Require Import SimpleC.EE.LLM_bench.Engineering.string.strcat_lib */
-
-/*@ Extern Coq (strncat_result : list Z -> list Z -> Z -> list Z -> Prop) */
+#include "string.h"
 
 char *strcat(char *dest, char *src)
 /*@ With dst_str src_str

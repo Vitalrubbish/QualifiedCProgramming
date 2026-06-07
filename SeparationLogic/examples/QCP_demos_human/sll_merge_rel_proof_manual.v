@@ -29,7 +29,7 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_merge_entail_wit_2_2 : merge_entail_wit_2_2.
+Lemma proof_of_merge_entail_wit_2_1 : merge_entail_wit_2_1.
 Proof.
   pre_process.
   Exists l1_new (y_data :: l2_new) (l3_2 ++ (x_data :: nil))%list.
@@ -41,9 +41,9 @@ Proof.
     sep_apply store_ptr_undef_store_ptr.
     entailer!.
   + subst.
-    clear - H4 H.
+    clear - PreH6 PreH1.
     unfold merge_from_mid_rel in *.
-    rewrite (repeat_break_unfold _ _) in H4.
+    rewrite (repeat_break_unfold _ _) in PreH6.
     prove_by_one_abs_step (by_continue (l1_new, y_data :: l2_new, l3_2 ++ x_data :: nil)).
     unfold merge_body.
     abs_choice_left.
@@ -51,7 +51,7 @@ Proof.
     abs_ret_step.
 Qed.
 
-Lemma proof_of_merge_entail_wit_2_1 : merge_entail_wit_2_1.
+Lemma proof_of_merge_entail_wit_2_2 : merge_entail_wit_2_2.
 Proof.
   pre_process.
   Exists (x_data :: l1_new) l2_new (l3_2 ++ (y_data :: nil))%list.
@@ -63,9 +63,9 @@ Proof.
     sep_apply store_ptr_undef_store_ptr.
     entailer!.
   + subst.
-    clear - H4 H.
+    clear - PreH6 PreH1.
     unfold merge_from_mid_rel in *.
-    rewrite (repeat_break_unfold _ _) in H4.
+    rewrite (repeat_break_unfold _ _) in PreH6.
     prove_by_one_abs_step (by_continue (x_data :: l1_new, l2_new, l3_2 ++ y_data :: nil)).
     unfold merge_body.
     abs_choice_right.
@@ -73,34 +73,35 @@ Proof.
     abs_ret_step.
 Qed.
 
-Lemma proof_of_merge_return_wit_2 : merge_return_wit_2.
-Proof.
-  pre_process.
-  sep_apply (sll_zero y); [ | tauto].
-  sep_apply sllseg_sll.
-  Exists (l3 ++ l1).
-  entailer!.
-  subst; clear - H1.
-  unfold merge_from_mid_rel in H1.
-  rewrite (repeat_break_unfold _ _) in H1.
-  prove_by_one_abs_step (by_break (l3 ++ l1)).
-  unfold merge_body.
-  destruct l1; abs_ret_step.
-Qed.
-
 Lemma proof_of_merge_return_wit_1 : merge_return_wit_1.
 Proof.
   pre_process.
-  sep_apply (sll_zero x); [ | tauto].
+  sep_apply (sll_zero x); [ | exact PreH1].
   sep_apply sllseg_sll.
   Exists (l3 ++ l2).
   entailer!.
-  subst; clear - H0.
-  unfold merge_from_mid_rel in H0.
-  rewrite (repeat_break_unfold _ _) in H0.
+  subst.
+  clear - PreH2.
+  unfold merge_from_mid_rel in PreH2.
+  rewrite (repeat_break_unfold _ _) in PreH2.
   prove_by_one_abs_step (by_break (l3 ++ l2)).
   unfold merge_body.
-  abs_ret_step.
+  destruct l2; abs_ret_step.
+Qed.
+
+Lemma proof_of_merge_return_wit_2 : merge_return_wit_2.
+Proof.
+  pre_process.
+  sep_apply (sll_zero y); [ | exact PreH1].
+  sep_apply sllseg_sll.
+  Exists (l3 ++ l1).
+  entailer!.
+  subst; clear - PreH3.
+  unfold merge_from_mid_rel in PreH3.
+  rewrite (repeat_break_unfold _ _) in PreH3.
+  prove_by_one_abs_step (by_break (l3 ++ l1)).
+  unfold merge_body.
+  destruct l1; abs_ret_step.
 Qed.
 
 Lemma proof_of_merge_which_implies_wit_3 : merge_which_implies_wit_3.
@@ -121,17 +122,17 @@ Proof.
   subst l_low_level_spec.
   Exists q_pre_v_2 p_pre_v_2 l1_low_level_spec l2_low_level_spec.
   entailer!.
-  unfold split_rec_rel in H0.
-  rewrite (split_rec_rel_unfold (nil, l1_low_level_spec, l2_low_level_spec)) in H0.
-  simpl in H0.
+  unfold split_rec_rel in PreH2.
+  rewrite (split_rec_rel_unfold (nil, l1_low_level_spec, l2_low_level_spec)) in PreH2.
+  simpl in PreH2.
   auto.
 Qed. 
 
 Lemma proof_of_split_rec_return_wit_2 : split_rec_return_wit_2.
 Proof. 
   pre_process.
-  clear H0.
-  unfold maketuple, applyf, reversepair in *.
+  clear PreH2.
+  unfold maketuple, applyf, reversepair in *;
   Exists p_callee_v q_callee_v s2_2 s1_2.
   entailer!. 
 Qed. 
@@ -145,9 +146,9 @@ Proof.
   entailer!.
   Exists p_v_next.
   entailer!.
-  unfold split_rec_rel in H.
-  rewrite (split_rec_rel_unfold (x_data :: l_new, l1_low_level_spec, l2_low_level_spec)) in H.
-  simpl in H.
+  unfold split_rec_rel in PreH1.
+  rewrite (split_rec_rel_unfold (x_data :: l_new, l1_low_level_spec, l2_low_level_spec)) in PreH1.
+  simpl in PreH1.
   tauto.
 Qed. 
 
@@ -157,8 +158,8 @@ Proof.
   simpl sll.
   entailer!.
   unfold mergesortrec_loc0.
-  rewrite (mergesortrec_unfold l_low_level_spec) in H.
-  unfold mergesortrec_f in H.
+  rewrite (mergesortrec_unfold l_low_level_spec) in PreH1.
+  unfold mergesortrec_f in PreH1.
   tauto.
 Qed.
 
@@ -168,7 +169,7 @@ Proof.
   Exists s1 s2.
   prop_apply (sll_not_zero' q_callee_v); [ | tauto].
   entailer!.
-  + unfold applyf, mergesortrec_loc0, maketuple in H0.
+  + unfold applyf, mergesortrec_loc0, maketuple in PreH2.
     unfold mergesortrec_loc1.
     destruct s2; [ congruence | ].
     tauto.
@@ -194,7 +195,7 @@ Proof.
   sep_apply (sll_zero q_callee_v); [ | tauto].
   Exists s1.
   entailer!.
-  unfold applyf, mergesortrec_loc0, maketuple in H0.
+  unfold applyf, mergesortrec_loc0, maketuple in PreH2.
   subst s2.
   tauto.
 Qed.
@@ -211,10 +212,10 @@ Proof.
   simpl.
   entailer!.
   unfold gmergesortrec_loc0.
-  rewrite (gmergesortrec_unfold l_low_level_spec) in H2.
-  unfold gmergesortrec_f in H2.
-  apply safeExec_choice_r in H2.
-  unfold seq in H2.
+  rewrite (gmergesortrec_unfold l_low_level_spec) in PreH4.
+  unfold gmergesortrec_f in PreH4.
+  apply safeExec_choice_r in PreH4.
+  unfold seq in PreH4.
   rewrite (split_rel_refine_ext_split l_low_level_spec).
   prove_by_one_abs_step tt.
   abs_test_step.
@@ -245,12 +246,12 @@ Qed.
 Lemma proof_of_merge_sort3_return_wit_2 : merge_sort3_return_wit_2.
 Proof.
   pre_process.
-  rewrite (gmergesortrec_unfold l_low_level_spec) in H4.
-  unfold gmergesortrec_f in H4.
-  apply safeExec_choice_l in H4.
+  rewrite (gmergesortrec_unfold l_low_level_spec) in PreH6.
+  unfold gmergesortrec_f in PreH6.
+  apply safeExec_choice_l in PreH6.
   Exists l0_2.
   entailer!.
-  revert H4; apply (highstependret_derive _ _ _ (fun _ => ATrue)).
+  revert PreH6; apply (highstependret_derive _ _ _ (fun _ => ATrue)).
   hnf.
   intros ? _; exists tt.
   split; [ | exact I].

@@ -26,7 +26,7 @@ Proof.
   destruct l.
   - Intros. subst next_pre.
     Right.
-    Exists (&(retval # "sll" ->ₛ "next")).
+    Exists (&(retval # "sll" ->ₛ"next")).
     simpl sllbseg.
     entailer!.
   - Intros.
@@ -74,7 +74,7 @@ Proof.
     assert (H_eq: map_mult x_pre (l1_2 ++ p_data :: nil) = map_mult x_pre l1_2 ++ unsigned_last_nbits (x_pre * p_data) 32 :: nil).
     { unfold map_mult. rewrite map_app. simpl. reflexivity. }
     rewrite H_eq. entailer!.
-  - rewrite H1, H. rewrite <- app_assoc. simpl. reflexivity.
+  - rewrite PreH3, PreH1. rewrite <- app_assoc. simpl. reflexivity.
 Qed.
 
 Lemma proof_of_map_list_return_wit_1 : map_list_return_wit_1.
@@ -84,7 +84,7 @@ Proof.
   sep_apply sll_zero; try tauto.
   Intros. subst l2.
   sep_apply sllseg_0_sll.
-  rewrite app_nil_r in H0. subst l. entailer!.
+  rewrite app_nil_r in PreH2. subst l. entailer!.
 Qed.
 
 Lemma proof_of_map_list_which_implies_wit_1 : map_list_which_implies_wit_1.
@@ -99,13 +99,11 @@ Qed.
 Lemma proof_of_cons_list_box_return_wit_1 : cons_list_box_return_wit_1.
 Proof.
   pre_process.
-  subst l.
   simpl sll_pt.
   Intros.
-  Exists (&(retval # "sll" ->ₛ "next")).
+  Exists pt_new_2.
   simpl sllbseg.
   Exists retval.
-  simpl sllbseg.
   entailer!.
   subst pt_new_2.
   entailer!.
@@ -119,21 +117,21 @@ Proof.
   Exists pt.
   simpl sllbseg.
   Exists retval.
+  simpl sllbseg.
   entailer!.
   subst pt_new_2.
   entailer!.
 Qed. 
-
 Lemma proof_of_cons_list_box_which_implies_wit_1 : cons_list_box_which_implies_wit_1.
 Proof.
   pre_process.
-  sep_apply (sllbseg_0_sll_pt (&(box # "sllb" ->ₛ "head")) pt l).
+  sep_apply (sllbseg_0_sll_pt (&(box # "sllb" ->ₛ"head")) pt l).
   Intros h.
   Exists h.
   entailer!.
 Qed. 
 
-Lemma proof_of_app_list_box_return_wit_1 : app_list_box_return_wit_1.
+Lemma proof_of_app_list_box_return_wit_2 : app_list_box_return_wit_2.
 Proof.
   pre_process.
   unfold sll_pt.
@@ -142,20 +140,21 @@ Proof.
     rewrite app_nil_r.
     sep_apply (sllbseg_2_sllb b1_pre pt1 l1).
     entailer!.
-    rewrite <- H2.
     tauto.
   + Intros. tauto.
 Qed.
 
-Lemma proof_of_app_list_box_return_wit_2 : app_list_box_return_wit_2.
+Lemma proof_of_app_list_box_return_wit_1 : app_list_box_return_wit_1.
 Proof.
   pre_process.
   unfold sll_pt.
   destruct l2.
   + Intros. tauto.
   + Intros.
-    sep_apply (sllbseg_append_sllbseg (&(b1_pre # "sllb" ->ₛ "head")) pt1 l1 h2 pt2 z l2 H).
-    sep_apply (sllbseg_2_sllb b1_pre pt2 (l1 ++ z :: l2) H0).
+    clear H.
+    assert (h2 <> 0) as H by exact PreH1.
+    sep_apply (sllbseg_append_sllbseg (&(b1_pre # "sllb" ->ₛ"head")) pt1 l1 h2 pt2 z l2 H).
+    sep_apply (sllbseg_2_sllb b1_pre pt2 (l1 ++ z :: l2) PreH2).
     entailer!.
 Qed.
 
@@ -188,25 +187,26 @@ Proof.
     sep_apply sllseg_sllseg. entailer!.
   - entailer!.
   - rewrite Zlength_app. rewrite Zlength_cons, Zlength_nil.
-    rewrite H1.
+    rewrite PreH3.
     apply unsigned_last_nbits_eq.
-    rewrite H0, H in H2.
-    rewrite Zlength_app, Zlength_cons in H2.
+    rewrite PreH2, PreH1 in PreH4.
+    rewrite Zlength_app, Zlength_cons in PreH4.
     pose proof (Zlength_nonneg l1_2).
     pose proof (Zlength_nonneg l3). lia.
-  - rewrite H0, H. rewrite <- app_assoc. simpl. reflexivity.
+  - rewrite PreH2, PreH1. rewrite <- app_assoc. simpl. reflexivity.
 Qed.
 
 Lemma proof_of_sll_length_return_wit_1 : sll_length_return_wit_1.
 Proof.
   pre_process.
-  rewrite H.
+  rewrite PreH4.
   sep_apply sll_zero.
-  subst l.
+  Intros.
+  subst l2.
   entailer!.
-  - rewrite H, app_nil_r. rewrite H2. sep_apply sllseg_0_sll. entailer!.
-  - rewrite H, app_nil_r. assumption.
-  - rewrite H2. reflexivity.
+  - rewrite PreH1, app_nil_r. sep_apply sllseg_0_sll. entailer!.
+  - rewrite PreH1, app_nil_r. assumption.
+  - reflexivity.
 Qed.
 
 Lemma proof_of_sll_length_which_implies_wit_1 : sll_length_which_implies_wit_1.
@@ -225,7 +225,6 @@ Proof.
   simpl sllseg. simpl Zlength. simpl app.
   rewrite (UIntArray.seg_shape_empty retval_2 0).
   entailer!.
-  rewrite H.
   pose proof (Zlength_nonneg l).
   lia.
 Qed.
@@ -240,7 +239,7 @@ Proof.
     sep_apply sllseg_sllseg.
     entailer!.
   - rewrite Zlength_app, Zlength_cons, Zlength_nil. lia.
-  - rewrite H1, H. rewrite <- app_assoc. simpl. reflexivity.
+  - rewrite PreH3, PreH1. rewrite <- app_assoc. simpl. reflexivity.
 Qed.
 
 Lemma proof_of_sll2array_return_wit_1 : sll2array_return_wit_1.
@@ -249,12 +248,12 @@ Proof.
   subst p.
   sep_apply sll_zero; try tauto.
   Intros. subst l2.
-  rewrite app_nil_r in H.
+  rewrite app_nil_r in PreH1.
   subst l.
   Exists arr.
   sep_apply sllseg_0_sll.
-  rewrite H0.
-  rewrite H1.
+  rewrite PreH2.
+  rewrite PreH3.
   rewrite (UIntArray.undef_seg_empty arr (Zlength l1)).
   sep_apply (UIntArray.seg_shape_to_full_shape arr 0 (Zlength l1)).
   replace (arr + 0 * sizeof(UINT)) with arr by lia.
@@ -265,12 +264,12 @@ Qed.
 Lemma proof_of_sll2array_partial_solve_wit_3_pure : sll2array_partial_solve_wit_3_pure.
 Proof.
   pre_process.
-  prop_apply (sll_not_null_length p l2 H6).
+  prop_apply (sll_not_null_length p l2 PreH8).
   Intros.
   entailer!.
-  rewrite H0.
-  rewrite H1.
-  rewrite H.
+  rewrite PreH2.
+  rewrite PreH3.
+  rewrite PreH1.
   rewrite Zlength_app.
   lia.
 Qed.

@@ -23,22 +23,25 @@ Require Import SimpleC.EE.Applications_human.LiteOS.lib.tick_backup.
 Local Open Scope sac.
 
 Lemma proof_of_LOS_ListEmpty_return_wit_1 : LOS_ListEmpty_return_wit_1.
-Proof. 
+Proof.
     pre_process.
     intros.
-    Right.  
+    Left.
     unfold store_dll.
     Exists h pt.
-
     induction l.
     -
+    unfold dllseg.
+    simpl.
     entailer!.
     -
-    subst h; simpl.
+    simpl.
     Intros z.
-    prop_apply (dup_store_ptr (&(node_pre # "LOS_DL_LIST" ->ₛ "pstPrev")) node_pre pt).
+    subst h.
+    Exists z.
     entailer!.
-Qed. 
+    congruence.
+Qed.
 
 Lemma dllseg_neq:
   forall {A : Type} (storeA : addr -> A -> Assertion)
@@ -66,7 +69,7 @@ Lemma proof_of_LOS_ListEmpty_return_wit_2 : LOS_ListEmpty_return_wit_2.
 Proof. 
     pre_process.
     intros.
-    Left.
+    Right.
     unfold store_dll.
     Exists h pt.
     induction l.
@@ -75,8 +78,11 @@ Proof.
     simpl.
     entailer!.
     -
+    simpl.
+    Intros z.
+    subst h.
+    prop_apply (dup_store_ptr (&(node_pre # "LOS_DL_LIST" ->ₛ "pstPrev")) node_pre pt).
     entailer!.
-    congruence.
 Qed. 
 
 Lemma proof_of_LOS_ListEmpty_which_implies_wit_1 : LOS_ListEmpty_which_implies_wit_1.
@@ -84,4 +90,3 @@ Proof.
     unfold LOS_ListEmpty_which_implies_wit_1.
     pre_process.
 Qed.
-

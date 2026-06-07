@@ -28,9 +28,8 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function OsSortLinkResponseTimeConvertFreq -----*)
 
 Definition OsSortLinkResponseTimeConvertFreq_return_wit_1 := 
-forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) ,
-  “ (oldFreq_pre <> 0) ”
-  &&  (store_swtmr_sorted_dll sg (updateNodeTime (l2) (oldFreq_pre) (n)) )
+forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) (PreH1 : (oldFreq_pre <> 0)) ,
+  (store_swtmr_sorted_dll sg (updateNodeTime (l2) (oldFreq_pre) (n)) )
   **  ((( &( "g_sysClock" ) )) # UInt64  |-> n)
   **  (store_task_sorted_dll sg (updateNodeTime (l1) (oldFreq_pre) (n)) )
 |--
@@ -41,9 +40,8 @@ forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list
 .
 
 Definition OsSortLinkResponseTimeConvertFreq_partial_solve_wit_1_pure := 
-forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) ,
-  “ (oldFreq_pre <> 0) ”
-  &&  ((( &( "taskHead" ) )) # Ptr  |-> ( &( "g_taskSortLink" ) ))
+forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) (PreH1 : (oldFreq_pre <> 0)) ,
+  ((( &( "taskHead" ) )) # Ptr  |-> ( &( "g_taskSortLink" ) ))
   **  ((( &( "oldFreq" ) )) # UInt64  |-> oldFreq_pre)
   **  (store_task_sorted_dll sg l1 )
   **  (store_swtmr_sorted_dll sg l2 )
@@ -54,9 +52,8 @@ forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list
 .
 
 Definition OsSortLinkResponseTimeConvertFreq_partial_solve_wit_1_aux := 
-forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) ,
-  “ (oldFreq_pre <> 0) ”
-  &&  (store_task_sorted_dll sg l1 )
+forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) (PreH1 : (oldFreq_pre <> 0)) ,
+  (store_task_sorted_dll sg l1 )
   **  (store_swtmr_sorted_dll sg l2 )
   **  ((( &( "g_sysClock" ) )) # UInt64  |-> n)
 |--
@@ -71,9 +68,8 @@ forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list
 Definition OsSortLinkResponseTimeConvertFreq_partial_solve_wit_1 := OsSortLinkResponseTimeConvertFreq_partial_solve_wit_1_pure -> OsSortLinkResponseTimeConvertFreq_partial_solve_wit_1_aux.
 
 Definition OsSortLinkResponseTimeConvertFreq_partial_solve_wit_2_pure := 
-forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) ,
-  “ (oldFreq_pre <> 0) ”
-  &&  ((( &( "swtmrHead" ) )) # Ptr  |-> ( &( "g_swtmrSortLink" ) ))
+forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) (PreH1 : (oldFreq_pre <> 0)) ,
+  ((( &( "swtmrHead" ) )) # Ptr  |-> ( &( "g_swtmrSortLink" ) ))
   **  (store_task_sorted_dll sg (updateNodeTime (l1) (oldFreq_pre) (n)) )
   **  ((( &( "g_sysClock" ) )) # UInt64  |-> n)
   **  ((( &( "taskHead" ) )) # Ptr  |-> ( &( "g_taskSortLink" ) ))
@@ -85,9 +81,8 @@ forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list
 .
 
 Definition OsSortLinkResponseTimeConvertFreq_partial_solve_wit_2_aux := 
-forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) ,
-  “ (oldFreq_pre <> 0) ”
-  &&  (store_task_sorted_dll sg (updateNodeTime (l1) (oldFreq_pre) (n)) )
+forall (oldFreq_pre: Z) (l2: (@list (@DL_Node (@sortedLinkNode Z)))) (l1: (@list (@DL_Node (@sortedLinkNode Z)))) (sg: StableGlobVars) (n: Z) (PreH1 : (oldFreq_pre <> 0)) ,
+  (store_task_sorted_dll sg (updateNodeTime (l1) (oldFreq_pre) (n)) )
   **  ((( &( "g_sysClock" ) )) # UInt64  |-> n)
   **  (store_swtmr_sorted_dll sg l2 )
 |--

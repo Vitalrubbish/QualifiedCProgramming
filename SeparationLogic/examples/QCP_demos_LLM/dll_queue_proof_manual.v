@@ -1,4 +1,4 @@
-Require Import Coq.ZArith.ZArith.
+﻿Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Coq.Lists.List.
@@ -55,51 +55,43 @@ Proof.
 		cancel ((&((qtail_2)  # "list" ->ₛ "prev")) # Ptr  |-> qtailprev).
 	- split_pures.
 		+ dump_pre_spatial.
-			exact H0.
-		+ dump_pre_spatial.
-			exact H1.
+			exact PreH2.
 		+ dump_pre_spatial.
 			exact H.
 		+ dump_pre_spatial.
-			exact H2.
+			exact PreH1.
+		+ dump_pre_spatial.
+			exact H0.
 		+ dump_pre_spatial.
 			reflexivity.
 Qed.
 
-Lemma proof_of_enqueue_return_wit_2 : enqueue_return_wit_2.
-Proof.
-	pre_process.
-	unfold store_queue.
-	Exists qhead p.
-	cancel ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> p).
-	cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead).
-	assert (Hqtail_neq : qtail <> 0) by lia.
-	assert (Hp_neq : p <> 0) by lia.
-	sep_apply (dllseg_len1 qtail qtailprev p qtailv Hqtail_neq).
-	sep_apply (dllseg_len1 p qtail 0 x_pre Hp_neq).
-	sep_apply (dllseg_dllseg qhead).
-	sep_apply (dllseg_dllseg qhead).
-	replace ((l0 ++ qtailv :: nil) ++ x_pre :: nil) with (l ++ x_pre :: nil).
-	2:{ rewrite H2.
-		rewrite <- app_assoc.
-		reflexivity. }
-	change (dllseg qhead NULL NULL p (l ++ x_pre :: nil)) with (dllseg qhead 0 0 p (l ++ x_pre :: nil)).
-	cancel (dllseg qhead 0 0 p (l ++ x_pre :: nil)).
-Qed.
-
 Lemma proof_of_enqueue_return_wit_1 : enqueue_return_wit_1.
 Proof.
-	pre_process.
-	sep_apply (dllseg_head_zero qhead 0 0 qtail l ltac:(lia)).
-	Intros.
-	subst.
-	unfold store_queue.
-	Exists retval retval.
-	cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> retval).
-	cancel ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> retval).
-	sep_apply (dllseg_len1 retval 0 0 x_pre H0).
-	change (dllseg retval NULL NULL retval (x_pre :: nil)) with (dllseg retval 0 0 retval (x_pre :: nil)).
-	reflexivity.
+  pre_process.
+  subst.
+  unfold store_queue.
+  sep_apply dllseg_head_zero; [ | tauto ].
+  Intros.
+  subst.
+  Exists retval retval.
+  sep_apply dllseg_len1; [ | tauto ].
+  entailer!.
+Qed.
+
+Lemma proof_of_enqueue_return_wit_2 : enqueue_return_wit_2.
+Proof.
+  pre_process.
+  subst.
+  unfold store_queue.
+  Exists qhead p.
+  sep_apply (dllseg_len1 qtail); [ | tauto ].
+  sep_apply (dllseg_len1 p); [ | tauto ].
+  sep_apply (dllseg_dllseg qtail).
+  sep_apply (dllseg_dllseg qhead).
+  entailer!.
+  rewrite app_assoc.
+  entailer!.
 Qed.
 
 Lemma proof_of_dequeue_entail_wit_1 : dequeue_entail_wit_1.
@@ -109,7 +101,7 @@ Proof.
 	Intros qhead qtail.
 	simpl.
 	Intros qhead_next.
-	Exists qhead_next qtail 0 qhead.
+	Exists qtail qhead_next qhead.
 	split_pure_spatial.
 	- unfold NULL.
 		cancel ((&((qhead)  # "list" ->ₛ "prev")) # Ptr  |-> 0).
@@ -118,83 +110,54 @@ Proof.
 		cancel (dllseg qhead_next 0 qhead qtail l).
 		cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead).
 		cancel ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail).
-	- split_pures.
-		+ dump_pre_spatial.
-			unfold NULL in H.
-			exact H.
-		+ dump_pre_spatial.
-			reflexivity.
+	- dump_pre_spatial.
+		exact H.
 Qed.
 
 Lemma proof_of_dequeue_entail_wit_2 : dequeue_entail_wit_2.
 Proof.
 	pre_process.
-	assert (Hqhead_next_neq : qhead_next_2 <> 0) by lia.
-	sep_apply_l_atomic (dllseg_head_neq qhead_next_2 0 qhead qtail_2 l Hqhead_next_neq).
+	sep_apply_l_atomic (dllseg_head_neq qheadnext_2 0 qhead qtail_2 l PreH1).
 	Intros qhead_next headv l0.
-	Exists qhead_next.
 	Exists qtail_2.
-	Exists qhead.
+	Exists qhead_next.
 	Exists headv.
 	Exists l0.
-	Exists qhead_next_2.
+	Exists qheadnext_2.
 	split_pure_spatial.
-	- cancel ((&((qhead_next_2)  # "list" ->ₛ "prev")) # Ptr  |-> qhead).
-		cancel ((&((qhead_next_2)  # "list" ->ₛ "data")) # Int  |-> headv).
-		cancel ((&((qhead_next_2)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next).
-		cancel (dllseg qhead_next 0 qhead_next_2 qtail_2 l0).
-		cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead_next_2).
+	- cancel ((&((qheadnext_2)  # "list" ->ₛ "prev")) # Ptr  |-> qhead).
+		cancel ((&((qheadnext_2)  # "list" ->ₛ "data")) # Int  |-> headv).
+		cancel ((&((qheadnext_2)  # "list" ->ₛ "next")) # Ptr  |-> qhead_next).
+		cancel (dllseg qhead_next 0 qheadnext_2 qtail_2 l0).
+		cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qheadnext_2).
 		cancel ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail_2).
 	- split_pures.
 		+ dump_pre_spatial.
+			exact PreH1.
+		+ dump_pre_spatial.
 			exact H.
-		+ dump_pre_spatial.
-			exact H2.
-		+ dump_pre_spatial.
-			reflexivity.
-Qed.
-
-Lemma proof_of_dequeue_return_wit_2 : dequeue_return_wit_2.
-Proof.
-	pre_process.
-	unfold store_queue.
-	Exists qhead qtail.
-	split_pure_spatial.
-	- cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> qhead).
-		cancel ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> qtail).
-		assert (Hqhead_neq : qhead <> 0) by lia.
-		sep_apply (dllseg_len1 qhead 0 qhead_next headv Hqhead_neq).
-		sep_apply (dllseg_dllseg qhead).
-		rewrite H0.
-		simpl.
-		unfold NULL.
-		reflexivity.
-	- dump_pre_spatial.
-		reflexivity.
 Qed.
 
 Lemma proof_of_dequeue_return_wit_1 : dequeue_return_wit_1.
 Proof.
-	pre_process.
-	sep_apply (dllseg_head_zero qhead_next 0 qhead qtail l ltac:(lia)).
-	Intros.
-	subst.
-	unfold store_queue.
-	Exists 0 0.
-	split_pure_spatial.
-	- cancel ((&((q_pre)  # "queue" ->ₛ "head")) # Ptr  |-> 0).
-		cancel ((&((q_pre)  # "queue" ->ₛ "tail")) # Ptr  |-> 0).
-		simpl.
-		split_pure_spatial.
-		+ reflexivity.
-		+ split_pures.
-			* dump_pre_spatial.
-				unfold NULL.
-				reflexivity.
-			* dump_pre_spatial.
-			unfold NULL.
-			reflexivity.
-	- dump_pre_spatial.
-		reflexivity.
+  pre_process.
+  subst.
+  unfold store_queue.
+  sep_apply dllseg_head_zero; [ | tauto ].
+  Intros.
+  subst.
+  Exists 0 0.
+  simpl.
+  entailer!.
 Qed.
 
+Lemma proof_of_dequeue_return_wit_2 : dequeue_return_wit_2.
+Proof.
+  pre_process.
+  subst.
+  unfold store_queue.
+  Exists qhead qtail.
+  simpl.
+  Exists qheadnext.
+  entailer!.
+Qed.

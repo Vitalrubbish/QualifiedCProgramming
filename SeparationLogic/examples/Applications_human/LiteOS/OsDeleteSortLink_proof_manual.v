@@ -1,4 +1,4 @@
-Require Import Coq.ZArith.ZArith.
+﻿Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Strings.String.
 Require Import Coq.Lists.List.
@@ -53,46 +53,55 @@ Proof.
     entailer!.
 Qed.
 
-Lemma proof_of_OsDeleteSortLink_return_wit_3: OsDeleteSortLink_return_wit_3.
-Proof. 
+Lemma proof_of_OsDeleteSortLink_return_wit_3 : OsDeleteSortLink_return_wit_3.
+Proof.
   pre_process.
   Right.
   entailer!.
   unfold store_sorted_dll.
   entailer!.
   unfold store_dll.
-  pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) v_5 v_pstPrev x (map sortedLinkNodeMapping l2).
-  sep_apply (H3).
+  pose proof dllseg_shift_rev_to_dllseg
+    (storesortedLinkNode storeA) v_5 v_pstPrev x (map sortedLinkNodeMapping l2)
+    as Hshift_rev.
+  sep_apply Hshift_rev.
   Intros py.
-  pose proof dllseg_shift_to_dllseg (storesortedLinkNode storeA) x v_6 v_pstNext (map sortedLinkNodeMapping l1).
-  sep_apply(H4).
+  pose proof dllseg_shift_to_dllseg
+    (storesortedLinkNode storeA) x v_6 v_pstNext (map sortedLinkNodeMapping l1)
+    as Hshift.
+  sep_apply Hshift.
   Intros x0.
   Exists x0 py.
-  pose proof storesortedLinkNode_split A storeA &( node_pre #"SortLinkList"->ₛ"sortLinkNode") node_pre a t.
-  simpl in H5.
-  sep_apply(H5).
-  pose proof dllseg_head_insert (sortedLinkNode A) (storesortedLinkNode storeA) v_6 v_pstPrev v_5 x py (mksortedLinkNode a t) (map sortedLinkNodeMapping l2).
-  rewrite H1 in H7.
-  rewrite H1.
-  -
-   revert H7.
-   csimpl.
-   intros H7.
-   sep_apply(H7).
-   pose proof dllseg_concat (storesortedLinkNode storeA) x0 x v_pstNext v_6 x py (map sortedLinkNodeMapping l1) ({|
-    data := {| sl_data := a; responseTime := t |};
-    ptr := &( node_pre # "SortLinkList" ->ₛ "sortLinkNode")
-  |} :: map sortedLinkNodeMapping l2).
-   rewrite H0 in H8.
-   rewrite H0.
-   sep_apply(H8).
-   rewrite map_app.
-   rewrite map_cons.
-   entailer!.
-  -
-   lia.
+  pose proof storesortedLinkNode_split A storeA
+    &( node_pre # "SortLinkList" ->ₛ "sortLinkNode") node_pre a t
+    as Hnode.
+  simpl in Hnode.
+  sep_apply Hnode.
+  pose proof dllseg_head_insert
+    (sortedLinkNode A) (storesortedLinkNode storeA)
+    v_6 v_pstPrev v_5 x py (mksortedLinkNode a t)
+    (map sortedLinkNodeMapping l2) as Hinsert.
+  rewrite PreH3 in Hinsert.
+  rewrite PreH3.
+  - revert Hinsert.
+    csimpl.
+    intros Hinsert.
+    sep_apply Hinsert.
+    pose proof dllseg_concat
+      (storesortedLinkNode storeA) x0 x v_pstNext v_6 x py
+      (map sortedLinkNodeMapping l1)
+      ({|
+        data := {| sl_data := a; responseTime := t |};
+        ptr := &( node_pre # "SortLinkList" ->ₛ "sortLinkNode")
+      |} :: map sortedLinkNodeMapping l2) as Hconcat.
+    rewrite PreH2 in Hconcat.
+    rewrite PreH2.
+    sep_apply Hconcat.
+    rewrite map_app.
+    rewrite map_cons.
+    entailer!.
+  - lia.
 Qed.
-
 
 Lemma proof_of_OsDeleteSortLink_which_implies_wit_1 : OsDeleteSortLink_which_implies_wit_1.
 Proof. 
@@ -151,38 +160,35 @@ Proof.
     unfold store_dll.
     entailer!.
     (* Search dllseg. *)
-    pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) v_2 v_pstPrev x (map sortedLinkNodeMapping l2).
-    sep_apply(H2).
+    pose proof dllseg_shift_rev_to_dllseg (storesortedLinkNode storeA) v_2 v_pstPrev x (map sortedLinkNodeMapping l2) as Hshift_rev.
+    sep_apply(Hshift_rev).
     Intros py.
-    pose proof dllseg_shift_to_dllseg (storesortedLinkNode storeA) x v v_pstNext (map sortedLinkNodeMapping l1).
-    sep_apply(H3).
+    pose proof dllseg_shift_to_dllseg (storesortedLinkNode storeA) x v v_pstNext (map sortedLinkNodeMapping l1) as Hshift.
+    sep_apply(Hshift).
     Intros x0.
     Exists x0 py.
-    pose proof storesortedLinkNode_split A storeA &( node #"SortLinkList"->ₛ"sortLinkNode") node a t.
-    simpl in H4.
-    sep_apply(H4).
-    pose proof dllseg_head_insert (sortedLinkNode A) (storesortedLinkNode storeA) v v_pstPrev v_2 x py (mksortedLinkNode a t) (map sortedLinkNodeMapping l2).
-    rewrite H1 in H6.
-    rewrite H1.
+    pose proof storesortedLinkNode_split A storeA &( node # "SortLinkList" ->ₛ "sortLinkNode") node a t.
+    simpl in H.
+    sep_apply(H).
+    pose proof dllseg_head_insert (sortedLinkNode A) (storesortedLinkNode storeA) v v_pstPrev v_2 x py (mksortedLinkNode a t) (map sortedLinkNodeMapping l2) as Hinsert.
+    rewrite PreH3 in Hinsert.
+    rewrite PreH3.
     - 
-     revert H6.
+     revert Hinsert.
      csimpl.
-     intros H6.
-     sep_apply(H6).
+     intros Hinsert.
+     sep_apply(Hinsert).
      pose proof dllseg_concat (storesortedLinkNode storeA) x0 x v_pstNext v x py (map sortedLinkNodeMapping l1) ({|
         data := {| sl_data := a; responseTime := t |};
         ptr := &( node # "SortLinkList" ->ₛ "sortLinkNode")
-      |} :: map sortedLinkNodeMapping l2).
-     rewrite H0 in H7.
-     rewrite H0.
-     sep_apply(H7).
+      |} :: map sortedLinkNodeMapping l2) as Hconcat.
+     rewrite PreH2 in Hconcat.
+     rewrite PreH2.
+     sep_apply(Hconcat).
      rewrite map_app.
      rewrite map_cons.
      entailer!.
     -
      lia.
 Qed.
-
-
-
 

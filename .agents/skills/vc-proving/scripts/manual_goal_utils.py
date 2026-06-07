@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,12 @@ LEMMA_RE = re.compile(
     r"^(?:Lemma|Theorem|Proposition|Corollary|Example|Fact|Remark)\s+"
     r"([A-Za-z0-9_']+)\s*:"
 )
+LEMMA_DECL_KEYWORDS = "Lemma|Theorem|Proposition|Corollary|Example|Fact|Remark"
+PROOF_START_RE = re.compile(r"\bProof(?:\s+using\s+[^.]+)?\.", re.MULTILINE)
+SIMPLE_TARGET_RE = re.compile(
+    rf"^\s*(?:{LEMMA_DECL_KEYWORDS})\s+([A-Za-z0-9_']+)\s*:\s*([A-Za-z0-9_']+)\s*\.\s*$",
+    re.DOTALL,
+)
 FORBIDDEN_TOPLEVEL_RE = re.compile(
     r"^(?:Definition|Fixpoint|CoFixpoint|Inductive|CoInductive|Notation|Axiom)\b"
 )
@@ -28,6 +35,7 @@ REQUIRE_IMPORT_LINE_RE = re.compile(
     r"^Require\s+Import\s+([A-Za-z0-9_.\s]+)\.$"
 )
 SIMPLEC_EE_PREFIX = "SimpleC.EE"
+ROCQ_MEMORY_LIMIT_BYTES = 4 * 1024 * 1024 * 1024
 DEFAULT_HELPER_IMPORT_ROOTS = (
     "Coq",
     "AUXLib",
@@ -216,6 +224,215 @@ def block_has_admitted(block: str) -> bool:
     return "Admitted." in block
 
 
+def strip_rocq_comments(text: str) -> str:
+    """Remove nested Rocq comments while preserving non-comment text."""
+    result: list[str] = []
+    index = 0
+    depth = 0
+    in_string = False
+    while index < len(text):
+        pair = text[index : index + 2]
+        char = text[index]
+        if depth == 0 and char == '"':
+            result.append(char)
+            in_string = not in_string
+            index += 1
+            continue
+        if not in_string and pair == "(*":
+            depth += 1
+            index += 2
+            continue
+        if not in_string and pair == "*)" and depth > 0:
+            depth -= 1
+            index += 2
+            continue
+        if depth == 0:
+            result.append(char)
+        index += 1
+    return "".join(result)
+
+
+def normalize_rocq_text(text: str) -> str:
+    """Return a conservative normalized form for hashing Rocq source text.
+
+    The normalization intentionally preserves token content and line structure
+    instead of collapsing all whitespace, because generated goals can contain
+    string literals where whitespace is semantically meaningful.
+    """
+    text = strip_rocq_comments(text).replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.rstrip() for line in text.split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines) + "\n"
+
+
+def stable_text_digest(text: str) -> str:
+    return hashlib.sha256(normalize_rocq_text(text).encode("utf-8")).hexdigest()
+
+
+def lemma_statement_text(block_or_lemma: str | dict[str, object]) -> str:
+    block = (
+        str(block_or_lemma.get("block", ""))
+        if isinstance(block_or_lemma, dict)
+        else str(block_or_lemma)
+    )
+    match = PROOF_START_RE.search(block)
+    statement = block[: match.start()] if match else block
+    return statement.rstrip() + "\n"
+
+
+def lemma_proof_script(block_or_lemma: str | dict[str, object]) -> str:
+    block = (
+        str(block_or_lemma.get("block", ""))
+        if isinstance(block_or_lemma, dict)
+        else str(block_or_lemma)
+    )
+    match = PROOF_START_RE.search(block)
+    return block[match.start() :].lstrip() if match else ""
+
+
+def lemma_statement_hash(block_or_lemma: str | dict[str, object]) -> str:
+    statement = normalize_rocq_text(lemma_statement_text(block_or_lemma))
+    canonical = re.sub(
+        rf"^(\s*(?:{LEMMA_DECL_KEYWORDS})\s+)[A-Za-z0-9_']+(\s*:)",
+        r"\1__LEMMA_NAME__\2",
+        statement,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def lemma_proof_block_hash(block_or_lemma: str | dict[str, object]) -> str:
+    block = (
+        str(block_or_lemma.get("block", ""))
+        if isinstance(block_or_lemma, dict)
+        else str(block_or_lemma)
+    )
+    return stable_text_digest(block)
+
+
+def lemma_target_symbol(block_or_lemma: str | dict[str, object]) -> str | None:
+    statement = normalize_rocq_text(lemma_statement_text(block_or_lemma))
+    match = SIMPLE_TARGET_RE.match(statement)
+    if not match:
+        return None
+    return match.group(2)
+
+
+def proof_block_with_statement(proof_block: str, current_statement: str) -> str:
+    """Adapt a solved proof block to the current lemma statement."""
+    proof_script = lemma_proof_script(proof_block)
+    if not proof_script:
+        raise ValueError("source proof block does not contain a Proof script")
+    return current_statement.rstrip() + "\n" + proof_script.rstrip() + "\n"
+
+
+def extract_definition_block(text: str, name: str) -> str | None:
+    """Extract a generated top-level Definition/Let block by name.
+
+    QCP generated witness definitions normally end with a standalone "." line.
+    The fallback accepts a single-line declaration ending in "." for small
+    tests and helper fixtures.
+    """
+    escaped = re.escape(name)
+    standalone = re.compile(
+        rf"(?ms)^\s*(?:Definition|Let)\s+{escaped}\b.*?^\s*\.\s*$"
+    )
+    match = standalone.search(text)
+    if match:
+        return match.group(0).rstrip() + "\n"
+    single_line = re.compile(
+        rf"(?m)^\s*(?:Definition|Let)\s+{escaped}\b[^\n]*\.\s*$"
+    )
+    match = single_line.search(text)
+    if match:
+        return match.group(0).rstrip() + "\n"
+    return None
+
+
+def goal_body_hash_from_text(goal_text: str, target_symbol: str) -> str | None:
+    block = extract_definition_block(goal_text, target_symbol)
+    if block is None:
+        return None
+    canonical = normalize_rocq_text(block)
+    canonical = re.sub(
+        rf"^(\s*(?:Definition|Let)\s+){re.escape(target_symbol)}\b",
+        r"\1__DEFINITION_NAME__",
+        canonical,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def goal_definition_hash_for_lemma(
+    prelude: str,
+    lemma: dict[str, object],
+    source_file: Path | None = None,
+    module_map: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Return generated witness Definition hash metadata for a manual lemma.
+
+    The statement of a manual witness theorem is usually just
+    ``Lemma proof_of_X : X.``.  For reuse after annotation edits, the useful key
+    is the body of ``Definition X := ...`` in the imported ``*_goal`` module.
+    Missing loadpath or definition data is reported as ``None`` instead of
+    raising so callers can fall back to statement-level matching.
+    """
+    target_symbol = lemma_target_symbol(lemma)
+    result: dict[str, object] = {
+        "target_symbol": target_symbol,
+        "goal_body_hash": None,
+        "goal_definition_module": None,
+        "goal_definition_source": None,
+    }
+    if target_symbol is None:
+        return result
+
+    modules = [
+        module for module in imported_logical_modules(prelude)
+        if module.rsplit(".", 1)[-1].endswith("_goal")
+    ]
+    if not modules:
+        return result
+
+    coqproject_root: Path | None = None
+    coqc_flags: list[str] | None = None
+    if source_file is not None:
+        try:
+            coqproject_root, coqc_flags = resolve_coqc_flags(source_file)
+        except SystemExit:
+            coqproject_root, coqc_flags = None, None
+
+    for logical_module in modules:
+        source: Path | None = None
+        if module_map and logical_module in module_map:
+            source = Path(module_map[logical_module]).expanduser().resolve()
+        elif coqproject_root is not None and coqc_flags is not None:
+            source = locate_logical_module(coqproject_root, coqc_flags, logical_module)
+        if source is None or not source.is_file():
+            continue
+        try:
+            goal_text = source.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        body_hash = goal_body_hash_from_text(goal_text, target_symbol)
+        if body_hash is None:
+            continue
+        result.update(
+            {
+                "goal_body_hash": body_hash,
+                "goal_definition_module": logical_module,
+                "goal_definition_source": str(source),
+            }
+        )
+        return result
+    return result
+
+
 def added_forbidden_toplevels(original_text: str, worker_text: str) -> list[str]:
     """Return forbidden top-level declarations added by a worker manual."""
     original_headers = {
@@ -310,6 +527,17 @@ def imported_logical_modules(text: str) -> list[str]:
     return list(dict.fromkeys(modules))
 
 
+def normalize_overlay_strategy_imports(path: Path) -> None:
+    """Normalize copied overlay imports in place when a rewrite is needed.
+
+    Bare case-local strategy imports are intentionally preserved because the
+    overlay dependency discovery copies those bare modules alongside the
+    generated sources. This helper exists so overlay preparation has one stable
+    hook for future rewrites without failing on current no-rewrite cases.
+    """
+    return None
+
+
 def _module_has_allowed_root(module: str, allowed_roots: tuple[str, ...]) -> bool:
     return any(module == root or module.startswith(root + ".") for root in allowed_roots)
 
@@ -374,14 +602,39 @@ def check_rocq_file_in_project(
 ) -> None:
     """Compile a single .v file using an explicit `_CoqProject` context."""
     cmd = ["coqc"] + flags + [str(file_path.resolve())]
-    result = subprocess.run(
-        cmd,
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        preexec_fn=_set_rocq_memory_limit if os.name == "posix" else None,
-    )
-    if result.returncode != 0:
+    attempts = COQC_TRANSIENT_RETRIES + 1
+    for attempt in range(1, attempts + 1):
+        suffix = f" (attempt {attempt}/{attempts})" if attempts > 1 else ""
+        print(f"[coqc] compiling {file_path.resolve()}{suffix}", flush=True)
+        result = subprocess.run(
+            cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            preexec_fn=_set_rocq_memory_limit if os.name == "posix" else None,
+        )
+        if result.returncode == 0:
+            return
+        if result.returncode in TRANSIENT_COQC_SIGNALS and attempt < attempts:
+            signum = -result.returncode
+            signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else "unknown"
+            print(
+                f"[coqc] transient signal while compiling {file_path.resolve()}: "
+                f"{signum} ({signame}); retrying",
+                file=sys.stderr,
+                flush=True,
+            )
+            continue
+        print(
+            f"[coqc] failed: file={file_path.resolve()} "
+            f"cwd={project_root.resolve()} returncode={result.returncode}",
+            file=sys.stderr,
+        )
+        if result.returncode < 0:
+            signum = -result.returncode
+            signame = signal.Signals(signum).name if signum in signal.Signals._value2member_map_ else "unknown"
+            print(f"[coqc] terminated_by_signal={signum} ({signame})", file=sys.stderr)
+        print("[coqc] command:", " ".join(shlex.quote(part) for part in cmd), file=sys.stderr)
         output = (result.stdout + result.stderr).strip()
         if output:
             print(output, file=sys.stderr)
@@ -496,6 +749,48 @@ def absolutize_coq_load_paths(coqproject_root: Path, flags: list[str]) -> list[s
     return resolved
 
 
+def filter_shadowed_simplec_ee_flags(
+    flags: list[str],
+    *,
+    enable_overlay: bool,
+) -> list[str]:
+    """Drop repo-wide generated-case loadpaths when a case overlay is present.
+
+    The vc-proving overlay created under ``case_deps/`` provides the canonical
+    bindings for the current case's generated ``SimpleC.EE`` modules. Keeping
+    the repository-wide ``SimpleC.EE`` entries alongside that overlay makes Coq
+    free to resolve ``*_goal`` and ``*_lib`` from different physical trees,
+    which yields inconsistent-assumption errors.  When an overlay is active, we
+    therefore remove any pre-existing ``-Q``/``-R`` entries rooted at
+    ``SimpleC.EE`` and let the overlay become the single source of truth for
+    generated case modules.
+    """
+    if not enable_overlay:
+        return list(flags)
+
+    filtered: list[str] = []
+    i = 0
+    while i < len(flags):
+        flag = flags[i]
+        if flag in {"-Q", "-R"} and i + 2 < len(flags):
+            logical_root = str(flags[i + 2])
+            if logical_root == SIMPLEC_EE_PREFIX or logical_root.startswith(
+                SIMPLEC_EE_PREFIX + "."
+            ):
+                i += 3
+                continue
+            filtered.extend([flag, flags[i + 1], logical_root])
+            i += 3
+            continue
+        if flag == "-I" and i + 1 < len(flags):
+            filtered.extend([flag, flags[i + 1]])
+            i += 2
+            continue
+        filtered.append(flag)
+        i += 1
+    return filtered
+
+
 def write_coqproject(project_root: Path, flags: list[str], readonly: bool = True) -> Path:
     """Write a minimal `_CoqProject` from flags and return its path."""
     project_root.mkdir(parents=True, exist_ok=True)
@@ -523,14 +818,23 @@ def build_compile_cmd(coqproject_root: Path, flags: list[str], file_placeholder:
 
 
 def simplec_case_dependency_modules(manual_text: str) -> list[str]:
-    """Return SimpleC.EE case-local `_goal`/`_lib` modules imported by a manual."""
+    """Return generated SimpleC.EE modules imported directly by a manual.
+
+    The worker overlay replaces the repository-wide ``SimpleC.EE`` loadpath.
+    That means every ``SimpleC.EE.*`` module imported by the manual must be
+    represented in the overlay, including helper modules such as ``sound_pv``
+    that do not follow the generated ``_goal`` / ``_lib`` naming convention.
+    Bare support modules are discovered while scanning these generated sources;
+    they are intentionally not collected from arbitrary manual imports here.
+    """
     modules: list[str] = []
     for logical in imported_logical_modules(manual_text):
         if not logical.startswith(SIMPLEC_EE_PREFIX):
             continue
         leaf = logical.rsplit(".", 1)[-1]
-        if leaf.endswith("_goal") or leaf.endswith("_lib"):
-            modules.append(logical)
+        if _is_forbidden_overlay_leaf(leaf):
+            continue
+        modules.append(logical)
     return list(dict.fromkeys(modules))
 
 
@@ -545,15 +849,40 @@ def simplec_overlay_dependency_modules(text: str) -> list[str]:
     entry does not shadow the repository loadpath for that namespace.
     """
     modules: list[str] = []
-    forbidden_suffixes = ("_proof_manual",)
     for logical in imported_logical_modules(text):
-        if not logical.startswith(SIMPLEC_EE_PREFIX):
-            continue
         leaf = logical.rsplit(".", 1)[-1]
-        if any(leaf.endswith(suffix) for suffix in forbidden_suffixes):
+        if logical.startswith(SIMPLEC_EE_PREFIX):
+            if _is_forbidden_overlay_leaf(leaf):
+                continue
+            modules.append(logical)
             continue
-        modules.append(logical)
+        if _is_bare_overlay_candidate(logical):
+            modules.append(logical)
     return list(dict.fromkeys(modules))
+
+
+def _is_bare_logical_module(logical_module: str) -> bool:
+    """Return True when a logical module is imported without any namespace."""
+    return "." not in logical_module
+
+
+def _is_forbidden_overlay_leaf(leaf: str) -> bool:
+    return leaf.endswith(("_proof_manual", "_proof_auto", "_goal_check"))
+
+
+def _is_bare_overlay_candidate(logical_module: str) -> bool:
+    """Return True for bare local/generated modules worth copying.
+
+    Coq standard-library imports such as ``List`` and ``Lia`` are also bare,
+    but they must keep resolving through normal Rocq loadpaths.  Generated
+    strategy/support files in this repository use explicit suffixes; use those
+    as the admission rule before doing any filesystem lookup.
+    """
+    if not _is_bare_logical_module(logical_module):
+        return False
+    if _is_forbidden_overlay_leaf(logical_module):
+        return False
+    return logical_module.endswith(("_goal", "_lib", "_proof"))
 
 
 def _expected_task_local_lib_leaves(source_file: Path, lib_file: Path) -> list[str]:
@@ -583,9 +912,23 @@ def _infer_task_local_logical_module(
     lib_source_map: dict[str, Path | None],
     source_file: Path,
     lib_file: Path,
+    explicit_task_local_logical_module: str | None = None,
 ) -> str | None:
+    if explicit_task_local_logical_module and not lib_modules:
+        raise SystemExit(
+            "Explicit task_local_scratch_lib logical module was provided, but "
+            "the manual/goal closure imports no SimpleC.EE `_lib` modules: "
+            f"{explicit_task_local_logical_module}"
+        )
     if not lib_modules:
         return None
+    if explicit_task_local_logical_module:
+        if explicit_task_local_logical_module not in lib_modules:
+            raise SystemExit(
+                "Explicit task_local_scratch_lib logical module is not imported "
+                f"by the manual/goal closure: {explicit_task_local_logical_module}"
+            )
+        return explicit_task_local_logical_module
 
     expected_leaves = set(_expected_task_local_lib_leaves(source_file, lib_file))
     expected_matches = [
@@ -638,6 +981,7 @@ def expand_simplec_case_dependency_modules(
     """
     modules = list(dict.fromkeys(initial_modules))
     scanned: set[str] = set()
+    source_map: dict[str, Path] = {}
     index = 0
     while index < len(modules):
         logical = modules[index]
@@ -646,8 +990,16 @@ def expand_simplec_case_dependency_modules(
             continue
         scanned.add(logical)
         src = locate_logical_module(coqproject_root, flags, logical)
+        if src is None and _is_bare_overlay_candidate(logical):
+            src = locate_bare_logical_module(
+                coqproject_root,
+                flags,
+                logical,
+                context_sources=list(source_map.values()),
+            )
         if src is None or not src.is_file():
             continue
+        source_map[logical] = src.resolve()
         try:
             text = src.read_text(encoding="utf-8")
         except OSError:
@@ -699,6 +1051,84 @@ def locate_logical_module(
     return None
 
 
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(resolved)
+    return unique
+
+
+def _reject_ambiguous_bare_module(logical_module: str, candidates: list[Path]) -> None:
+    raise SystemExit(
+        f"Ambiguous bare dependency module source for {logical_module}: "
+        + ", ".join(str(path) for path in candidates)
+    )
+
+
+def _is_qcp_demos_human_path(path: Path) -> bool:
+    return "QCP_demos_human" in path.parts
+
+
+def locate_bare_logical_module(
+    coqproject_root: Path,
+    flags: list[str],
+    logical_module: str,
+    *,
+    context_sources: list[Path] | None = None,
+) -> Path | None:
+    """Locate a bare strategy/support module using case context first.
+
+    Generated goal files may import support modules by bare names.  Prefer a
+    file next to the importing generated source (for case-local strategies such
+    as the string examples).  If that fails, search the ``SimpleC.EE`` physical
+    roots and reject ambiguous matches instead of silently choosing the wrong
+    duplicate.  ``QCP_demos_human`` is excluded to preserve the repository rule
+    that automated agents use the LLM examples, not human reference copies.
+    """
+    if not _is_bare_overlay_candidate(logical_module):
+        return None
+
+    context_matches: list[Path] = []
+    for source in context_sources or []:
+        candidate = source.resolve().parent / f"{logical_module}.v"
+        if candidate.is_file():
+            context_matches.append(candidate)
+    context_matches = _dedupe_paths(context_matches)
+    if len(context_matches) == 1:
+        return context_matches[0]
+    if len(context_matches) > 1:
+        _reject_ambiguous_bare_module(logical_module, context_matches)
+
+    global_matches: list[Path] = []
+    for physical_root, logical_root in _coq_loadpath_entries(coqproject_root, flags):
+        if logical_root != SIMPLEC_EE_PREFIX or not physical_root.is_dir():
+            continue
+        for candidate in physical_root.rglob(f"{logical_module}.v"):
+            if _is_qcp_demos_human_path(candidate):
+                continue
+            global_matches.append(candidate)
+    global_matches = _dedupe_paths(global_matches)
+    if len(global_matches) == 1:
+        return global_matches[0]
+    if len(global_matches) > 1:
+        _reject_ambiguous_bare_module(logical_module, global_matches)
+    return None
+
+
+def locate_qcp_demos_llm_bare_module(
+    coqproject_root: Path,
+    flags: list[str],
+    logical_module: str,
+) -> Path | None:
+    """Backward-compatible wrapper for older callers."""
+    return locate_bare_logical_module(coqproject_root, flags, logical_module)
+
+
 def _same_file_text(left: Path, right: Path) -> bool:
     try:
         return left.read_text(encoding="utf-8") == right.read_text(encoding="utf-8")
@@ -739,6 +1169,7 @@ def prepare_simplec_case_dependencies(
     lib_file: Path,
     coqproject_root: Path,
     coqc_flags: list[str],
+    task_local_logical_module: str | None = None,
 ) -> dict[str, object]:
     """Create a read-only case dependency overlay for generated SimpleC imports.
 
@@ -754,6 +1185,12 @@ def prepare_simplec_case_dependencies(
     each imported case package with a specific `-Q` entry, e.g.
     `-Q case_deps/LLM_bench/Algorithms/foo
        SimpleC.EE.LLM_bench.Algorithms.foo`.
+
+    Generated goal files can also import sibling support modules by bare names
+    such as `Require Import int_array_strategy_goal.`. When a worker-local
+    overlay shadows the original source loadpath for the case namespace, those
+    bare support modules must also be copied into a dedicated bare logical root
+    under `case_deps/bare` and exposed via `-Q case_deps/bare ''`.
     """
     manual_text = source_file.read_text(encoding="utf-8")
     modules = expand_simplec_case_dependency_modules(
@@ -779,19 +1216,32 @@ def prepare_simplec_case_dependencies(
         lib_source_map=lib_source_map,
         source_file=source_file,
         lib_file=lib_file,
+        explicit_task_local_logical_module=task_local_logical_module,
     )
+    module_source_map = {
+        module: locate_logical_module(coqproject_root, coqc_flags, module)
+        for module in modules
+        if not _is_bare_logical_module(module)
+    }
+    context_sources = [
+        source.resolve()
+        for source in module_source_map.values()
+        if source is not None and source.is_file()
+    ]
 
     for logical in modules:
-        namespace, leaf = logical.rsplit(".", 1)
-        namespace_suffix = _logical_suffix(namespace, SIMPLEC_EE_PREFIX)
-        if namespace_suffix is None:
-            continue
-        namespace_dir = dep_root / namespace_suffix
+        if _is_bare_logical_module(logical):
+            namespace = ""
+            leaf = logical
+            namespace_dir = dep_root / "bare"
+        else:
+            namespace, leaf = logical.rsplit(".", 1)
+            namespace_suffix = _logical_suffix(namespace, SIMPLEC_EE_PREFIX)
+            if namespace_suffix is None:
+                continue
+            namespace_dir = dep_root / namespace_suffix
         namespace_dirs[namespace] = namespace_dir
         dest = namespace_dir / f"{leaf}.v"
-        suffix = _logical_suffix(logical, SIMPLEC_EE_PREFIX)
-        if suffix is None:
-            continue
         if leaf.endswith("_lib"):
             official_src = lib_source_map.get(logical)
             src, is_task_local = _select_simplec_lib_dependency_source(
@@ -804,7 +1254,14 @@ def prepare_simplec_case_dependencies(
                 task_local_modules.append(logical)
                 task_local_files.append(str(dest))
         else:
-            src = locate_logical_module(coqproject_root, coqc_flags, logical)
+            src = module_source_map.get(logical)
+            if src is None and _is_bare_overlay_candidate(logical):
+                src = locate_bare_logical_module(
+                    coqproject_root,
+                    coqc_flags,
+                    logical,
+                    context_sources=context_sources,
+                )
             if src is None:
                 raise SystemExit(f"Cannot locate dependency module source: {logical}")
         if not src.is_file():
@@ -812,6 +1269,7 @@ def prepare_simplec_case_dependencies(
         dest.parent.mkdir(parents=True, exist_ok=True)
         make_user_writable(dest)
         shutil.copy2(src, dest)
+        normalize_overlay_strategy_imports(dest)
         make_readonly(dest)
         copied.append(str(dest))
         module_map[logical] = str(dest)
@@ -823,6 +1281,7 @@ def prepare_simplec_case_dependencies(
             "files": [],
             "modules": [],
             "module_map": {},
+            "task_local_scratch_lib_module": task_local_logical_module,
             "task_local_scratch_lib_modules": [],
             "task_local_scratch_lib_files": [],
         }
@@ -836,6 +1295,7 @@ def prepare_simplec_case_dependencies(
         "files": copied,
         "modules": modules,
         "module_map": module_map,
+        "task_local_scratch_lib_module": task_local_logical_module,
         "task_local_scratch_lib_modules": task_local_modules,
         "task_local_scratch_lib_files": task_local_files,
     }
@@ -848,6 +1308,10 @@ def sorted_dependency_files(dep_files: list[str]) -> list[Path]:
     paths_by_stem: dict[str, list[Path]] = {}
     for path in stable_order:
         paths_by_stem.setdefault(path.stem, []).append(path)
+    logical_by_path = {
+        path: _logical_module_for_overlay_dep_path(path)
+        for path in stable_order
+    }
     deps: dict[Path, set[Path]] = {path: set() for path in stable_order}
     for path in stable_order:
         if not path.is_file():
@@ -862,10 +1326,13 @@ def sorted_dependency_files(dep_files: list[str]) -> list[Path]:
             except ValueError:
                 continue
             for module in modules:
-                candidates = paths_by_stem.get(module.rsplit(".", 1)[-1], [])
-                if len(candidates) != 1:
+                dep = _select_local_dependency_path(
+                    module,
+                    paths_by_stem,
+                    logical_by_path,
+                )
+                if dep is None:
                     continue
-                dep = candidates[0]
                 if dep != path:
                     deps[path].add(dep)
 
@@ -888,6 +1355,60 @@ def sorted_dependency_files(dep_files: list[str]) -> list[Path]:
     for path in stable_order:
         visit(path)
     return ordered
+
+
+def stale_vo_files(source_files: list[str | Path]) -> list[str]:
+    """Return `.v` files whose `.vo` is missing or older than the source."""
+    stale: list[str] = []
+    for raw in source_files:
+        path = Path(raw).resolve()
+        if not path.is_file():
+            continue
+        vo = path.with_suffix(".vo")
+        if not vo.exists() or vo.stat().st_mtime < path.stat().st_mtime:
+            stale.append(str(path))
+    return stale
+
+
+def all_vo_files_current(source_files: list[str | Path]) -> bool:
+    return not stale_vo_files(source_files)
+
+
+def _logical_module_for_overlay_dep_path(path: Path) -> str | None:
+    """Infer the logical module for a copied ``case_deps`` source path."""
+    parts = path.resolve().parts
+    try:
+        case_deps_index = len(parts) - 1 - list(reversed(parts)).index("case_deps")
+    except ValueError:
+        return None
+    rel_parts = list(parts[case_deps_index + 1 :])
+    if not rel_parts:
+        return None
+    leaf = Path(rel_parts[-1]).stem
+    if rel_parts[0] == "bare":
+        return leaf
+    namespace_parts = rel_parts[:-1] + [leaf]
+    return SIMPLEC_EE_PREFIX + "." + ".".join(namespace_parts)
+
+
+def _select_local_dependency_path(
+    logical_module: str,
+    paths_by_stem: dict[str, list[Path]],
+    logical_by_path: dict[Path, str | None],
+) -> Path | None:
+    exact_matches = [
+        path for path, inferred in logical_by_path.items()
+        if inferred == logical_module
+    ]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        return None
+
+    candidates = paths_by_stem.get(logical_module.rsplit(".", 1)[-1], [])
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
 
 
 def compile_rocq_files(project_root: Path, flags: list[str], files: list[Path]) -> None:

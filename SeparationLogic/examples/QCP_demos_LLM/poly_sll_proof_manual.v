@@ -48,13 +48,13 @@ Proof.
 			cancel (((&((v)  # "list" ->ₛ "next")) # Ptr  |-> w)).
 			cancel (storeA vdata x).
 		+ dump_pre_spatial.
-			exact H0.
+			exact PreH2.
 	- dump_pre_spatial.
 		subst l2_2.
 		simpl.
 		rewrite <- app_assoc.
 		simpl.
-		exact H.
+		exact PreH1.
 Qed.
 
 Lemma proof_of_reverse_return_wit_1 : reverse_return_wit_1.
@@ -62,10 +62,9 @@ Proof.
 	pre_process.
 	sep_apply (sll_zero A storeA v l2); [ | tauto].
 	Intros_p Hl2.
-	rewrite Hl2 in H.
-	rewrite app_nil_r in H.
+	rewrite Hl2 in PreH1.
+	rewrite app_nil_r in PreH1.
 	subst l.
 	rewrite rev_involutive.
 	cancel (sll storeA w l1).
 Qed.
-

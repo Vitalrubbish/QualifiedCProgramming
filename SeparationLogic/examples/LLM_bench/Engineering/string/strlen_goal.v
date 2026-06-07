@@ -16,20 +16,18 @@ Local Open Scope sets.
 Local Open Scope string_scope.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 From SimpleC.EE.QCP_demos_LLM Require Import char_array_strategy_goal.
 From SimpleC.EE.QCP_demos_LLM Require Import char_array_strategy_proof.
-Require Import string_strategy_goal.
-Require Import string_strategy_proof.
+From SimpleC.StdLib Require Import string_strategy_goal.
+From SimpleC.StdLib Require Import string_strategy_proof.
 
 (*----- Function strlen -----*)
 
 Definition strlen_safety_wit_1 := 
-forall (s_pre: Z) (str: (@list Z)) ,
-  “ (valid_string str ) ” 
-  &&  “ ((string_length (str)) < INT_MAX) ”
-  &&  ((( &( "i" ) )) # Int  |->_)
+forall (s_pre: Z) (str: (@list Z)) (PreH1 : (valid_string str )) (PreH2 : ((string_length (str)) < INT_MAX)) ,
+  ((( &( "i" ) )) # Int  |->_)
   **  ((( &( "s" ) )) # Ptr  |-> s_pre)
   **  (store_string s_pre str )
 |--
@@ -38,13 +36,8 @@ forall (s_pre: Z) (str: (@list Z)) ,
 .
 
 Definition strlen_safety_wit_2 := 
-forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
-  “ (valid_string str ) ” 
-  &&  “ ((string_length (str)) < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= (string_length (str))) ” 
-  &&  “ forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0)) ”
-  &&  ((( &( "i" ) )) # Int  |-> i)
+forall (s_pre: Z) (str: (@list Z)) (i: Z) (PreH1 : (valid_string str )) (PreH2 : ((string_length (str)) < INT_MAX)) (PreH3 : (0 <= i)) (PreH4 : (i <= (string_length (str)))) (PreH5 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "s" ) )) # Ptr  |-> s_pre)
   **  (store_string s_pre str )
 |--
@@ -53,14 +46,8 @@ forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
 .
 
 Definition strlen_safety_wit_3 := 
-forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
-  “ ((Znth i (c_string (str)) 0) <> 0) ” 
-  &&  “ (valid_string str ) ” 
-  &&  “ ((string_length (str)) < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= (string_length (str))) ” 
-  &&  “ forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0)) ”
-  &&  ((( &( "i" ) )) # Int  |-> i)
+forall (s_pre: Z) (str: (@list Z)) (i: Z) (PreH1 : ((Znth i (c_string (str)) 0) <> 0)) (PreH2 : (valid_string str )) (PreH3 : ((string_length (str)) < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= (string_length (str)))) (PreH6 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  ((( &( "i" ) )) # Int  |-> i)
   **  ((( &( "s" ) )) # Ptr  |-> s_pre)
   **  (store_string s_pre str )
 |--
@@ -69,10 +56,9 @@ forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
 .
 
 Definition strlen_entail_wit_1 := 
-forall (s_pre: Z) (str: (@list Z)) ,
-  “ (valid_string str ) ” 
-  &&  “ ((string_length (str)) < INT_MAX) ”
-  &&  (store_string s_pre str )
+(
+forall (s_pre: Z) (str: (@list Z)) (PreH1 : (valid_string str )) (PreH2 : ((string_length (str)) < INT_MAX)) ,
+  (store_string s_pre str )
 |--
   “ (valid_string str ) ” 
   &&  “ ((string_length (str)) < INT_MAX) ” 
@@ -80,17 +66,26 @@ forall (s_pre: Z) (str: (@list Z)) ,
   &&  “ (0 <= (string_length (str))) ” 
   &&  “ forall (k: Z) , (((0 <= k) /\ (k < 0)) -> ((Znth (k) (str) (0)) <> 0)) ”
   &&  (store_string s_pre str )
+) \/
+(
+forall (str: (@list Z)) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : (valid_string str )) (PreH3 : ((string_length (str)) < INT_MAX)) ,
+  TT && emp 
+|--
+  “ (0 <= (string_length (str))) ”
+  &&  emp
+).
+
+Definition strlen_entail_wit_1_split_goal_1 := 
+forall (str: (@list Z)) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : (valid_string str )) (PreH3 : ((string_length (str)) < INT_MAX)) ,
+  TT && emp 
+|--
+  “ (0 <= (string_length (str))) ”
 .
 
 Definition strlen_entail_wit_2 := 
-forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
-  “ ((Znth i (c_string (str)) 0) <> 0) ” 
-  &&  “ (valid_string str ) ” 
-  &&  “ ((string_length (str)) < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= (string_length (str))) ” 
-  &&  “ forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0)) ”
-  &&  (store_string s_pre str )
+(
+forall (s_pre: Z) (str: (@list Z)) (i: Z) (PreH1 : ((Znth i (c_string (str)) 0) <> 0)) (PreH2 : (valid_string str )) (PreH3 : ((string_length (str)) < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= (string_length (str)))) (PreH6 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  (store_string s_pre str )
 |--
   “ (valid_string str ) ” 
   &&  “ ((string_length (str)) < INT_MAX) ” 
@@ -98,20 +93,51 @@ forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
   &&  “ ((i + 1 ) <= (string_length (str))) ” 
   &&  “ forall (k: Z) , (((0 <= k) /\ (k < (i + 1 ))) -> ((Znth (k) (str) (0)) <> 0)) ”
   &&  (store_string s_pre str )
+) \/
+(
+forall (str: (@list Z)) (i: Z) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : ((Znth i (c_string (str)) 0) <> 0)) (PreH3 : (valid_string str )) (PreH4 : ((string_length (str)) < INT_MAX)) (PreH5 : (0 <= i)) (PreH6 : (i <= (string_length (str)))) (PreH7 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  TT && emp 
+|--
+  “ (((Znth (0) (str) (0)) <> 0) /\ ((Znth (((i + 1 ) - 1 )) (str) (0)) <> 0)) ” 
+  &&  “ ((i + 1 ) <= (string_length (str))) ”
+  &&  emp
+).
+
+Definition strlen_entail_wit_2_split_goal_1 := 
+forall (str: (@list Z)) (i: Z) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : ((Znth i (c_string (str)) 0) <> 0)) (PreH3 : (valid_string str )) (PreH4 : ((string_length (str)) < INT_MAX)) (PreH5 : (0 <= i)) (PreH6 : (i <= (string_length (str)))) (PreH7 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  TT && emp 
+|--
+  “ (((Znth (0) (str) (0)) <> 0) /\ ((Znth (((i + 1 ) - 1 )) (str) (0)) <> 0)) ”
+.
+
+Definition strlen_entail_wit_2_split_goal_2 := 
+forall (str: (@list Z)) (i: Z) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : ((Znth i (c_string (str)) 0) <> 0)) (PreH3 : (valid_string str )) (PreH4 : ((string_length (str)) < INT_MAX)) (PreH5 : (0 <= i)) (PreH6 : (i <= (string_length (str)))) (PreH7 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  TT && emp 
+|--
+  “ ((i + 1 ) <= (string_length (str))) ”
 .
 
 Definition strlen_return_wit_1 := 
-forall (s_pre: Z) (str: (@list Z)) (i: Z) ,
-  “ ((Znth i (c_string (str)) 0) = 0) ” 
-  &&  “ (valid_string str ) ” 
-  &&  “ ((string_length (str)) < INT_MAX) ” 
-  &&  “ (0 <= i) ” 
-  &&  “ (i <= (string_length (str))) ” 
-  &&  “ forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0)) ”
-  &&  (store_string s_pre str )
+(
+forall (s_pre: Z) (str: (@list Z)) (i: Z) (PreH1 : ((Znth i (c_string (str)) 0) = 0)) (PreH2 : (valid_string str )) (PreH3 : ((string_length (str)) < INT_MAX)) (PreH4 : (0 <= i)) (PreH5 : (i <= (string_length (str)))) (PreH6 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  (store_string s_pre str )
 |--
   “ (i = (string_length (str))) ”
   &&  (store_string s_pre str )
+) \/
+(
+forall (str: (@list Z)) (i: Z) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : ((Znth i (c_string (str)) 0) = 0)) (PreH3 : (valid_string str )) (PreH4 : ((string_length (str)) < INT_MAX)) (PreH5 : (0 <= i)) (PreH6 : (i <= (string_length (str)))) (PreH7 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  TT && emp 
+|--
+  “ (i = (string_length (str))) ”
+  &&  emp
+).
+
+Definition strlen_return_wit_1_split_goal_1 := 
+forall (str: (@list Z)) (i: Z) (PreH1 : (0 <= ((string_length (str)) + 1 ))) (PreH2 : ((Znth i (c_string (str)) 0) = 0)) (PreH3 : (valid_string str )) (PreH4 : ((string_length (str)) < INT_MAX)) (PreH5 : (0 <= i)) (PreH6 : (i <= (string_length (str)))) (PreH7 : forall (k: Z) , (((0 <= k) /\ (k < i)) -> ((Znth (k) (str) (0)) <> 0))) ,
+  TT && emp 
+|--
+  “ (i = (string_length (str))) ”
 .
 
 Module Type VC_Correct.

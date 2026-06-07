@@ -141,6 +141,40 @@ class TestExplicitGroupPlan(unittest.TestCase):
         self.assertEqual(entries[0]["representative_witness"], "b")
         self.assertEqual(entries[0]["grouping_source"], "vc-checking-group-plan")
 
+    def test_group_plan_accepts_raw_witness_names(self):
+        lemmas = _make_lemmas([
+            "proof_of_superPiano_entail_wit_15_4",
+            "proof_of_superPiano_return_wit_1",
+        ])
+        plan = {
+            "witness_groups": [
+                {
+                    "proof_group_id": "entail_shape",
+                    "members": ["superPiano_entail_wit_15_4"],
+                    "representative_witness": "superPiano_entail_wit_15_4",
+                },
+                {
+                    "proof_group_id": "return_shape",
+                    "members": [{"witness": "superPiano_return_wit_1"}],
+                    "representative_witness": "proof_of_superPiano_return_wit_1",
+                },
+            ]
+        }
+
+        entries = group_entries_from_plan(lemmas, plan)
+
+        self.assertEqual(
+            [[g["name"] for g in e["goals"]] for e in entries],
+            [
+                ["proof_of_superPiano_entail_wit_15_4"],
+                ["proof_of_superPiano_return_wit_1"],
+            ],
+        )
+        self.assertEqual(
+            entries[0]["representative_witness"],
+            "proof_of_superPiano_entail_wit_15_4",
+        )
+
     def test_group_goals_from_plan_returns_goal_lists(self):
         lemmas = _make_lemmas(["a", "b"])
         groups = group_goals_from_plan(lemmas, [{"members": ["b"]}, {"members": ["a"]}])

@@ -27,7 +27,8 @@ Local Open Scope sac.
 Lemma proof_of_gmp_umul_ppmm_return_wit_1 : gmp_umul_ppmm_return_wit_1.
 Proof.
   unfold gmp_umul_ppmm_return_wit_1.
-  intros v_pre u_pre w1_pre w0_pre.
+  left.
+  intros v_pre u_pre w1_pre w0_pre PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9.
   
   (* 现在目标是分离逻辑蕴含：前提 |-- 结论 *)
   (* 首先提供见证值 - 这些是算法计算出的w0和w1的值 *)
@@ -80,7 +81,7 @@ Proof.
         lia. }
     assert (Hcarry_bits: unsigned_last_nbits x1'' 32 < unsigned_last_nbits x2 32).
     { unfold x1'', x1', x0, x1, x2, ul, uh, vl, vh.
-      apply (carry_condition_transform u_pre v_pre); [exact Hu32 | exact Hv32 | exact H].
+      apply (carry_condition_transform u_pre v_pre); [exact Hu32 | exact Hv32 | exact PreH1].
     }
     rewrite (unsigned_last_nbits_eq x1'' 32) in Hcarry_bits by lia.
     rewrite (unsigned_last_nbits_eq x2 32) in Hcarry_bits by lia.
@@ -140,7 +141,8 @@ Qed.
 Lemma proof_of_gmp_umul_ppmm_return_wit_2 : gmp_umul_ppmm_return_wit_2.
 Proof.
   unfold gmp_umul_ppmm_return_wit_2.
-  intros v_pre u_pre w1_pre w0_pre.
+  left.
+  intros v_pre u_pre w1_pre w0_pre PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9.
   
   (* 首先提供见证值 *)
   Exists (unsigned_last_nbits (((unsigned_last_nbits ((Z.shiftl (unsigned_last_nbits (((unsigned_last_nbits (((unsigned_last_nbits (((Z.land u_pre 65535) * (Z.shiftr v_pre 16) )) (32)) + (Z.shiftr (unsigned_last_nbits (((Z.land u_pre 65535) * (Z.land v_pre 65535) )) (32)) 16) )) (32)) + (unsigned_last_nbits (((Z.shiftr u_pre 16) * (Z.land v_pre 65535) )) (32)) )) (32)) 16)) (32)) + (Z.land ((Z.land u_pre 65535) * (Z.land v_pre 65535) ) 65535) )) (32)).
@@ -196,13 +198,13 @@ Proof.
       pose proof (land_65535_bounds_alt v_pre) as Hvl.
       split; [apply Z.mul_nonneg_nonneg; lia | nia]. }
 
-    rewrite (unsigned_last_nbits_eq (Z.land u_pre 65535 * Z.shiftr v_pre 16) 32) in H by lia.
-    rewrite (unsigned_last_nbits_eq (Z.land u_pre 65535 * Z.land v_pre 65535) 32) in H by lia.
-    rewrite (unsigned_last_nbits_eq (Z.shiftr u_pre 16 * Z.land v_pre 65535) 32) in H by lia.
-    unfold unsigned_last_nbits in H.
-    change (2 ^ 32) with 4294967296 in H.
+    rewrite (unsigned_last_nbits_eq (Z.land u_pre 65535 * Z.shiftr v_pre 16) 32) in PreH1 by lia.
+    rewrite (unsigned_last_nbits_eq (Z.land u_pre 65535 * Z.land v_pre 65535) 32) in PreH1 by lia.
+    rewrite (unsigned_last_nbits_eq (Z.shiftr u_pre 16 * Z.land v_pre 65535) 32) in PreH1 by lia.
+    unfold unsigned_last_nbits in PreH1.
+    change (2 ^ 32) with 4294967296 in PreH1.
     unfold x1'', x1', x0, x1, x2, ul, uh, vl, vh.
-    exact H.
+    exact PreH1.
   }
   
   (* 应用引理获得结论 *)
@@ -253,10 +255,14 @@ Qed.
 Lemma proof_of_mpn_mul_1_entail_wit_1 : mpn_mul_1_entail_wit_1.
 Proof.
   unfold mpn_mul_1_entail_wit_1.
-  intros vl_pre n_pre up_pre rp_pre l.
-  Exists (@nil Z). entailer!.
-  rewrite (UIntArray.seg_empty rp_pre 0 0). entailer!.
-  apply UIntArray.undef_full_to_undef_seg.
+  left.
+  intros vl_pre n_pre up_pre rp_pre l PreH1 PreH2 PreH3 PreH4 PreH5 PreH6.
+  Exists (@nil Z).
+  entailer!.
+  sep_apply UIntArray.undef_full_to_undef_seg.
+  entailer!.
+  rewrite (UIntArray.seg_empty rp_pre 0 0).
+  entailer!.
 Qed. 
 
 (* 循环不变式保持引理：无溢出情况 *)
@@ -264,7 +270,10 @@ Qed.
 Lemma proof_of_mpn_mul_1_entail_wit_5_1 : mpn_mul_1_entail_wit_5_1.
 Proof.
   unfold mpn_mul_1_entail_wit_5_1.
-  intros vl_pre n_pre up_pre rp_pre l l_rp_2 i cl lpl hpl.
+  left.
+  intros vl_pre n_pre up_pre rp_pre l l_rp_2 i cl lpl hpl
+    PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9 PreH10
+    PreH11 PreH12 PreH13 PreH14 PreH15 PreH16 PreH17 PreH18 PreH19.
   Exists (l_rp_2 ++ (unsigned_last_nbits (lpl + cl) 32 :: nil)).
   entailer!.
   - sep_apply (store_uint_undef_store_uint &("lpl")).
@@ -272,7 +281,7 @@ Proof.
     sep_apply (store_uint_undef_store_uint &("ul")).
     entailer!.
   - (* 核心不变式 *)
-    simpl. apply mpn_mul_1_carry_invariant with (vl_pre := vl_pre); try lia; auto.
+    simpl. apply mpn_mul_1_no_carry_invariant with (vl_pre := vl_pre); try lia; auto.
     + unfold UINT_MOD. lia.
     + assert (Hw0: 0 <= lpl < UINT_MOD) by (unfold UINT_MOD in *; lia). unfold UINT_MOD in *. lia.
     + assert (Hw1: 0 <= hpl < UINT_MOD) by (unfold UINT_MOD in *; lia). unfold UINT_MOD in *. lia.
@@ -280,8 +289,6 @@ Proof.
   - apply list_within_bound_concat; auto. simpl. split; auto.
     unfold unsigned_last_nbits, UINT_MOD. pose proof (Z.mod_pos_bound (lpl + cl) (2^32)). lia.
   - rewrite Zlength_app. rewrite Zlength_cons. rewrite Zlength_nil. lia.
-  - unfold unsigned_last_nbits. pose proof (Z.mod_pos_bound (1 + hpl) (2^32)). lia.
-  - unfold unsigned_last_nbits. pose proof (Z.mod_pos_bound (1 + hpl) (2^32)). lia.
 Qed. 
 
 (* 循环出口：返回结果 *)
@@ -289,7 +296,10 @@ Qed.
 Lemma proof_of_mpn_mul_1_entail_wit_5_2 : mpn_mul_1_entail_wit_5_2.
 Proof.
   unfold mpn_mul_1_entail_wit_5_2.
-  intros vl_pre n_pre up_pre rp_pre l l_rp_2 i cl lpl hpl.
+  left.
+  intros vl_pre n_pre up_pre rp_pre l l_rp_2 i cl lpl hpl
+    PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9 PreH10
+    PreH11 PreH12 PreH13 PreH14 PreH15 PreH16 PreH17 PreH18 PreH19.
   Exists (l_rp_2 ++ (unsigned_last_nbits (lpl + cl) 32 :: nil)).
   entailer!.
   - (* 分离逻辑：数组合并 *)
@@ -298,7 +308,7 @@ Proof.
     sep_apply (store_uint_undef_store_uint &("ul")).
     entailer!.
   - (* 核心不变式 *)
-    simpl. apply mpn_mul_1_no_carry_invariant with (vl_pre := vl_pre); try lia; auto.
+    simpl. apply mpn_mul_1_carry_invariant with (vl_pre := vl_pre); try lia; auto.
     + unfold UINT_MOD. lia.
     + assert (Hw0: 0 <= lpl < UINT_MOD) by (unfold UINT_MOD in *; lia). exact Hw0.
     + assert (Hw1: 0 <= hpl < UINT_MOD) by (unfold UINT_MOD in *; lia). exact Hw1.
@@ -308,6 +318,12 @@ Proof.
     unfold unsigned_last_nbits, UINT_MOD. pose proof (Z.mod_pos_bound (lpl + cl) (2^32)). lia.
   - (* Zlength *)
     rewrite Zlength_app. rewrite Zlength_cons. rewrite Zlength_nil. lia.
+  - unfold unsigned_last_nbits, UINT_MOD.
+    pose proof (Z.mod_pos_bound (1 + hpl) (2^32)).
+    lia.
+  - unfold unsigned_last_nbits, UINT_MOD.
+    pose proof (Z.mod_pos_bound (1 + hpl) (2^32)).
+    lia.
 Qed.
 
 (* 循环不变式保持引理：溢出情况 *)
@@ -315,12 +331,15 @@ Qed.
 Lemma proof_of_mpn_mul_1_return_wit_1 : mpn_mul_1_return_wit_1.
 Proof.
   unfold mpn_mul_1_return_wit_1.
-  intros vl_pre n_pre up_pre rp_pre l l_rp cl i.
+  left.
+  intros vl_pre n_pre up_pre rp_pre l l_rp cl i
+    PreH1 PreH2 PreH3 PreH4 PreH5 PreH6 PreH7 PreH8 PreH9 PreH10
+    PreH11 PreH12 PreH13 PreH14.
   Exists (list_to_Z UINT_MOD l_rp) l_rp.
   entailer!.
   - assert (Hi_eq: i = n_pre) by lia. rewrite Hi_eq.
     rewrite (UIntArray.undef_seg_empty rp_pre n_pre).
     unfold UIntArray.full, UIntArray.seg. entailer!.
   - assert (Hi_eq: i = n_pre) by lia. rewrite Hi_eq in *.
-    rewrite (sublist_self l n_pre) in H6 by lia. lia.
+    rewrite (sublist_self l n_pre) in PreH8 by lia. lia.
 Qed. 

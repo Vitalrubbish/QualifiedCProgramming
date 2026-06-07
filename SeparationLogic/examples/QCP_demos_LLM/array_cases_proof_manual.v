@@ -118,18 +118,18 @@ Proof.
 	split_pure_spatial.
 	- cancel (UIntArray.full a_pre n_pre l).
 	- split_pures.
-	  + dump_pre_spatial. exact H0.
-	  + dump_pre_spatial. exact H1.
+	  + dump_pre_spatial. exact PreH2.
+	  + dump_pre_spatial. exact PreH3.
 	  + dump_pre_spatial. lia.
 	  + dump_pre_spatial. lia.
-	  + dump_pre_spatial. exact H4.
+	  + dump_pre_spatial. exact PreH6.
 	  + dump_pre_spatial.
-	    rewrite H5.
+	    rewrite PreH7.
 	    rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
 	    rewrite sum_app.
 	    rewrite (sublist_single 0 i_2 l) by lia.
 	    simpl.
-	    assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+	    assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
 	    destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
 	    * subst i_2. simpl in *. subst ret.
 	      assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -163,7 +163,7 @@ Proof.
 	split_pure_spatial.
 	- cancel (UIntArray.full a_pre n_pre l).
 	- dump_pre_spatial.
-	  rewrite H5.
+	  rewrite PreH7.
 	  assert (Hi : i_2 = n_pre) by lia.
 	  subst i_2.
 	  rewrite <- Hlen.
@@ -188,11 +188,8 @@ Qed.
 Lemma proof_of_array_copy1_entail_wit_2 : array_copy1_entail_wit_2.
 Proof.
 	pre_process.
-	prop_apply IntArray.full_Zlength.
+	prop_apply (IntArray.full_Zlength src_pre).
 	Intros_p Hlen.
-	sep_apply (IntArray.seg_single dest_pre i (Znth i l 0)).
-	sep_apply (IntArray.seg_merge_to_seg dest_pre 0 i (i + 1) (sublist 0 i l) (Znth i l 0 :: nil)).
-	2: { lia. }
 	replace (sublist 0 (i + 1) l) with (sublist 0 i l ++ Znth i l 0 :: nil).
 	2: {
 		rewrite (sublist_split 0 (i + 1) i l) by lia.
@@ -209,7 +206,7 @@ Qed.
 Lemma proof_of_array_copy1_return_wit_1 : array_copy1_return_wit_1.
 Proof.
 	pre_process.
-	prop_apply (IntArray.full_length src_pre).
+	prop_apply (IntArray.full_Zlength src_pre).
 	Intros_p Hlen.
 	assert (Hi : i = n_pre) by lia.
 	subst i.
@@ -239,11 +236,8 @@ Qed.
 Lemma proof_of_array_concat_entail_wit_2 : array_concat_entail_wit_2.
 Proof.
 	pre_process.
-	prop_apply IntArray.full_Zlength.
+	prop_apply (IntArray.full_Zlength a_pre).
 	Intros_p Hlen.
-	sep_apply (IntArray.seg_single ret_pre i (Znth i l1 0)).
-	sep_apply (IntArray.seg_merge_to_seg ret_pre 0 i (i + 1) (sublist 0 i l1) (Znth i l1 0 :: nil)).
-	2: { lia. }
 	replace (sublist 0 (i + 1) l1) with (sublist 0 i l1 ++ Znth i l1 0 :: nil).
 	2: {
 		rewrite (sublist_split 0 (i + 1) i l1) by lia.
@@ -283,9 +277,6 @@ Proof.
 	pre_process.
 	prop_apply (IntArray.full_Zlength b_pre).
 	Intros_p Hlen.
-	sep_apply (IntArray.seg_single ret_pre (n_pre + i) (Znth i l2 0)).
-	sep_apply (IntArray.seg_merge_to_seg ret_pre 0 (n_pre + i) (n_pre + i + 1) (l1 ++ sublist 0 i l2) (Znth i l2 0 :: nil)).
-	2: { lia. }
 	replace (l1 ++ sublist 0 (i + 1) l2) with ((l1 ++ sublist 0 i l2) ++ Znth i l2 0 :: nil).
 	2: {
 		rewrite (sublist_split 0 (i + 1) i l2) by lia.
@@ -504,8 +495,8 @@ Proof.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; reflexivity.
-	  + dump_pre_spatial; exact H1.
-	  + dump_pre_spatial; exact H2.
+	  + dump_pre_spatial; exact PreH3.
+	  + dump_pre_spatial; exact PreH4.
 	  + dump_pre_spatial. intros k_3 Hk3. lia.
 	  + dump_pre_spatial; reflexivity.
 Qed.
@@ -514,9 +505,6 @@ Lemma proof_of_array_vector_sum_entail_wit_2 : array_vector_sum_entail_wit_2.
 Proof.
 	pre_process.
 	Exists (l3_2 ++ unsigned_last_nbits (Znth i l1 0 + Znth i l2 0) 32 :: nil).
-	sep_apply (UIntArray.seg_single ret_pre i (unsigned_last_nbits (Znth i l1 0 + Znth i l2 0) 32)).
-	sep_apply (UIntArray.seg_merge_to_seg ret_pre 0 i (i + 1) l3_2 (unsigned_last_nbits (Znth i l1 0 + Znth i l2 0) 32 :: nil)).
-	2: { lia. }
 	split_pure_spatial.
 	- cancel (UIntArray.seg ret_pre 0 (i + 1) (l3_2 ++ unsigned_last_nbits (Znth i l1 0 + Znth i l2 0) 32 :: nil)).
 	  cancel (UIntArray.undef_seg ret_pre (i + 1) n_pre).
@@ -525,28 +513,28 @@ Proof.
 	- split_pures.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
-	  + dump_pre_spatial; exact H2.
-	  + dump_pre_spatial; exact H3.
+	  + dump_pre_spatial; exact PreH4.
+	  + dump_pre_spatial; exact PreH5.
 	  + dump_pre_spatial.
 	  	rewrite Zlength_app, Zlength_cons, Zlength_nil.
 	    lia.
-	  + dump_pre_spatial; exact H5.
-	  + dump_pre_spatial; exact H6.
+	  + dump_pre_spatial; exact PreH7.
+	  + dump_pre_spatial; exact PreH8.
 	  + dump_pre_spatial. intros k Hk.
 	    destruct (Z_lt_ge_dec k i).
 	    * rewrite app_Znth1 by lia.
-	      apply H7.
+	      apply PreH9.
 	      lia.
 	    * assert (k = i) by lia.
 	      subst k.
 	      rewrite app_Znth2 by lia.
-	      rewrite H4.
+	      rewrite PreH6.
 	      rewrite Z.sub_diag.
 	      simpl.
 	      assert (Hsum : 0 <= Znth i l1 0 + Znth i l2 0 < two_power_nat 32).
 	      {
-			destruct (H5 i) as [Ha1 Ha2]; try lia.
-			destruct (H6 i) as [Hb1 Hb2]; try lia.
+			destruct (PreH7 i) as [Ha1 Ha2]; try lia.
+			destruct (PreH8 i) as [Hb1 Hb2]; try lia.
 			change (two_power_nat 32) with 4294967296.
 			lia.
 	      }
@@ -569,8 +557,8 @@ Proof.
 	  cancel (UIntArray.full b_pre n_pre l2).
 	  cancel (UIntArray.full ret_pre n_pre l3_2).
 	- split_pures; dump_pre_spatial.
-	  + exact H4.
-	  + exact H7.
+	  + exact PreH6.
+	  + exact PreH9.
 Qed.
 
 Lemma proof_of_pointwise_mul_entail_wit_1 : pointwise_mul_entail_wit_1.
@@ -589,8 +577,8 @@ Proof.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; reflexivity.
-	  + dump_pre_spatial; exact H1.
-	  + dump_pre_spatial; exact H2.
+	  + dump_pre_spatial; exact PreH3.
+	  + dump_pre_spatial; exact PreH4.
 	  + dump_pre_spatial. intros k_3 Hk3.
 	    lia.
 	  + dump_pre_spatial; reflexivity.
@@ -600,9 +588,6 @@ Lemma proof_of_pointwise_mul_entail_wit_2 : pointwise_mul_entail_wit_2.
 Proof.
 	pre_process.
 	Exists (l3_2 ++ unsigned_last_nbits (Znth i l1 0 * Znth i l2 0) 32 :: nil).
-	sep_apply (UIntArray.seg_single c_pre i (unsigned_last_nbits (Znth i l1 0 * Znth i l2 0) 32)).
-	sep_apply (UIntArray.seg_merge_to_seg c_pre 0 i (i + 1) l3_2 (unsigned_last_nbits (Znth i l1 0 * Znth i l2 0) 32 :: nil)).
-	2: { lia. }
 	split_pure_spatial.
 	- cancel (UIntArray.seg c_pre 0 (i + 1) (l3_2 ++ unsigned_last_nbits (Znth i l1 0 * Znth i l2 0) 32 :: nil)).
 	  cancel (UIntArray.undef_seg c_pre (i + 1) n_pre).
@@ -611,28 +596,28 @@ Proof.
 	- split_pures.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
-	  + dump_pre_spatial; exact H2.
-	  + dump_pre_spatial; exact H3.
+	  + dump_pre_spatial; exact PreH4.
+	  + dump_pre_spatial; exact PreH5.
 	  + dump_pre_spatial.
 	  	rewrite Zlength_app, Zlength_cons, Zlength_nil.
 	    lia.
-	  + dump_pre_spatial; exact H5.
-	  + dump_pre_spatial; exact H6.
+	  + dump_pre_spatial; exact PreH7.
+	  + dump_pre_spatial; exact PreH8.
 	  + dump_pre_spatial. intros k Hk.
 	    destruct (Z_lt_ge_dec k i).
 	    * rewrite app_Znth1 by lia.
-	      apply H7.
+	      apply PreH9.
 	      lia.
 	    * assert (k = i) by lia.
 	      subst k.
 	      rewrite app_Znth2 by lia.
-	      rewrite H4.
+	      rewrite PreH6.
 	      rewrite Z.sub_diag.
 	      simpl.
 	      assert (Hmul : 0 <= Znth i l1 0 * Znth i l2 0 < two_power_nat 32).
 	      {
-			destruct (H5 i) as [Ha1 Ha2]; try lia.
-			destruct (H6 i) as [Hb1 Hb2]; try lia.
+			destruct (PreH7 i) as [Ha1 Ha2]; try lia.
+			destruct (PreH8 i) as [Hb1 Hb2]; try lia.
 			change (two_power_nat 32) with 4294967296.
 			nia.
 	      }
@@ -655,8 +640,8 @@ Proof.
 	  cancel (UIntArray.full b_pre n_pre l2).
 	  cancel (UIntArray.full c_pre n_pre l3_2).
 	- split_pures; dump_pre_spatial.
-	  + exact H4.
-	  + exact H7.
+	  + exact PreH6.
+	  + exact PreH9.
 Qed.
 
 Lemma proof_of_array_max_entail_wit_2_1 : array_max_entail_wit_2_1.
@@ -667,9 +652,9 @@ Proof.
 	- split_pures.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
-	  + dump_pre_spatial; exact H3.
-	  + dump_pre_spatial; exact H4.
-	  + dump_pre_spatial; exact H5.
+	  + dump_pre_spatial; exact PreH5.
+	  + dump_pre_spatial; exact PreH6.
+	  + dump_pre_spatial; exact PreH7.
 	  + dump_pre_spatial.
 	    intros Hi1.
 	    lia.
@@ -684,12 +669,48 @@ Proof.
 	       destruct (Z.eq_dec i 0) as [Hi0 | Hi0];
 	       [subst i; lia |
 	        assert (Hi_pos : 0 < i) by lia;
-	        specialize (H7 Hi_pos);
-	        destruct H7 as [k0 [[Hk0 Hv] Hmax]];
+	        specialize (PreH9 Hi_pos);
+	        destruct PreH9 as [k0 [[Hk0 Hv] Hmax]];
 	        specialize (Hmax k3);
 	        lia]]].
 Qed.
 
+
+Lemma proof_of_array_max_entail_wit_2_2 : array_max_entail_wit_2_2.
+Proof.
+	pre_process.
+	split_pure_spatial.
+	- cancel (IntArray.full a_pre n_pre l).
+	- split_pures.
+	  + dump_pre_spatial; lia.
+	  + dump_pre_spatial; lia.
+	  + dump_pre_spatial; exact PreH5.
+	  + dump_pre_spatial; exact PreH6.
+	  + dump_pre_spatial; exact PreH7.
+	  + dump_pre_spatial.
+	    intros Hi1.
+	    lia.
+	  + dump_pre_spatial.
+	    intros _.
+	    destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
+	    * subst i.
+	      exfalso.
+	      specialize (PreH7 0).
+	      assert (0 <= Znth 0 l 0) by (apply PreH7; lia).
+	      pose proof (PreH8 eq_refl).
+	      lia.
+	    * assert (Hi_pos : 0 < i) by lia.
+	      specialize (PreH9 Hi_pos).
+	      destruct PreH9 as [k0 [[Hk0 Hv] Hmax]].
+	      exists k0.
+	      split.
+	      { split; [lia | exact Hv]. }
+	      intros k3 Hk3.
+	      destruct (Z.eq_dec k3 i) as [Hki | Hki].
+	      { subst k3. exact PreH1. }
+	      apply Hmax.
+	      lia.
+Qed.
 Lemma proof_of_array_max_return_wit_1 : array_max_return_wit_1.
 Proof.
 	pre_process.
@@ -698,14 +719,14 @@ Proof.
 	- split_pures.
 	  + dump_pre_spatial.
 	    intros Hn0.
-	    apply H5.
+	    apply PreH7.
 	    lia.
 	  + dump_pre_spatial.
 	    intros Hnpos.
 	    assert (Hi : i_3 = n_pre) by lia.
 	    subst i_3.
-	    specialize (H6 Hnpos).
-	    exact H6.
+	    specialize (PreH8 Hnpos).
+	    exact PreH8.
 Qed.
 
 Lemma proof_of_memset_entail_wit_1 : memset_entail_wit_1.
@@ -731,30 +752,27 @@ Lemma proof_of_memset_entail_wit_2 : memset_entail_wit_2.
 Proof.
 	pre_process.
 	Exists (l_2 ++ value_pre :: nil).
-	sep_apply (IntArray.seg_single a_pre i value_pre).
-	sep_apply (IntArray.seg_merge_to_seg a_pre 0 i (i + 1) l_2 (value_pre :: nil)).
-	2: { lia. }
 	split_pure_spatial.
 	- cancel (IntArray.seg a_pre 0 (i + 1) (l_2 ++ value_pre :: nil)).
 	  cancel (IntArray.undef_seg a_pre (i + 1) n_pre).
 	- split_pures.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
-	  + dump_pre_spatial; exact H2.
-	  + dump_pre_spatial; exact H3.
+	  + dump_pre_spatial; exact PreH4.
+	  + dump_pre_spatial; exact PreH5.
 	  + dump_pre_spatial.
 	    rewrite Zlength_app, Zlength_cons, Zlength_nil.
-	    rewrite H4.
+	    rewrite PreH6.
 	    lia.
 	  + dump_pre_spatial. intros k Hk.
 	    destruct (Z_lt_ge_dec k i).
 	    * rewrite app_Znth1 by lia.
-	      apply H5.
+	      apply PreH7.
 	      lia.
 	    * assert (k = i) by lia.
 	      subst k.
 	      rewrite app_Znth2 by lia.
-	      rewrite H4.
+	      rewrite PreH6.
 	      rewrite Z.sub_diag.
 	      simpl.
 	      reflexivity.
@@ -776,7 +794,7 @@ Proof.
 	- split_pures; dump_pre_spatial.
 	  + reflexivity.
 	  + intros i Hi'.
-	    apply H5.
+	    apply PreH7.
 	    lia.
 Qed.
 
@@ -784,12 +802,12 @@ Lemma proof_of_array_to_list_entail_wit_1 : array_to_list_entail_wit_1.
 Proof.
 	pre_process.
 	Exists (Znth 0 l 0).
-	rewrite H0.
+	rewrite PreH2.
 	change (sublist 0 (1 - 1) l) with (@nil Z).
 	simpl.
 	split_pure_spatial.
-	- cancel (&( retval # "list" ->ₛ "data") # Int |-> Znth 0 l 0).
-	  cancel (&( retval # "list" ->ₛ "next") # Ptr |-> 0).
+	- cancel (&( retval # "list" ->ₛ"data") # Int |-> Znth 0 l 0).
+	  cancel (&( retval # "list" ->ₛ"next") # Ptr |-> 0).
 	  cancel (IntArray.full a_pre n_pre l).
 	- split_pures; dump_pre_spatial; lia.
 Qed.
@@ -801,9 +819,9 @@ Proof.
 	Intros_p Hlen.
 	Exists (Znth i l 0).
 	split_pure_spatial.
-	- rewrite H0.
-	  cancel (&( retval # "list" ->ₛ "data") # Int |-> Znth i l 0).
-	  cancel (&( retval # "list" ->ₛ "next") # Ptr |-> 0).
+	- rewrite PreH2.
+	  cancel (&( retval # "list" ->ₛ"data") # Int |-> Znth i l 0).
+	  cancel (&( retval # "list" ->ₛ"next") # Ptr |-> 0).
 	  sep_apply (sllseg_len1 tail v_2 retval).
 	  2: { easy. }
 	  sep_apply (sllseg_sllseg head tail retval (sublist 0 (i - 1) l) (v_2 :: nil)).
@@ -828,31 +846,15 @@ Proof.
 	- split_pures.
 	  + dump_pre_spatial; lia.
 	  + dump_pre_spatial; lia.
-	  + dump_pre_spatial; exact H4.
-	  + dump_pre_spatial; exact H.
-	  + dump_pre_spatial; exact H6.
-	  + dump_pre_spatial; exact H7.
+	  + dump_pre_spatial; exact PreH6.
+	  + dump_pre_spatial; exact PreH1.
+	  + dump_pre_spatial; exact PreH8.
+	  + dump_pre_spatial; exact PreH9.
 	  + dump_pre_spatial; replace (i + 1 - 1) with i by lia.
 	    reflexivity.
 Qed.
 
 Lemma proof_of_array_to_list_return_wit_1 : array_to_list_return_wit_1.
-Proof.
-	pre_process.
-	prop_apply IntArray.full_length.
-	Intros_p Hlen.
-	assert (Hlen0 : Zlength l = 0) by (pose proof (Zlength_correct l); lia).
-	apply Zlength_nil_inv in Hlen0.
-	subst l.
-	simpl.
-	split_pure_spatial.
-	- cancel (IntArray.full a_pre n_pre nil).
-	- dump_pre_spatial.
-	  unfold NULL.
-	  lia.
-Qed.
-
-Lemma proof_of_array_to_list_return_wit_2 : array_to_list_return_wit_2.
 Proof.
 	pre_process.
 	prop_apply IntArray.full_Zlength.
@@ -877,3 +879,18 @@ Proof.
 	cancel (IntArray.full a_pre n_pre l).
 Qed.
 
+Lemma proof_of_array_to_list_return_wit_2 : array_to_list_return_wit_2.
+Proof.
+	pre_process.
+	prop_apply IntArray.full_length.
+	Intros_p Hlen.
+	assert (Hlen0 : Zlength l = 0) by (pose proof (Zlength_correct l); lia).
+	apply Zlength_nil_inv in Hlen0.
+	subst l.
+	simpl.
+	split_pure_spatial.
+	- cancel (IntArray.full a_pre n_pre nil).
+	- dump_pre_spatial.
+	  unfold NULL.
+	  lia.
+Qed.

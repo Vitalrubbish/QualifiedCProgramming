@@ -1,10 +1,63 @@
 CURRENT_DIR=.
-COQBIN=
+COQBIN ?=
+SUF ?=
+empty :=
+space := $(empty) $(empty)
+comma := ,
+powershell_list = $(subst $(space),$(comma) ,$(strip $(foreach item,$(1),'$(item)')))
 
 -include CONFIGURE
 
 COQC=$(COQBIN)coqc$(SUF)
 COQDEP=$(COQBIN)coqdep$(SUF)
+
+ifeq ($(OS),Windows_NT)
+define BACKUP_FILES
+powershell -NoProfile -Command "$$files = @($(call powershell_list,$(1))); foreach ($$name in $$files) { if (Test-Path -LiteralPath $$name) { Move-Item -Force -LiteralPath $$name -Destination ($$name + '_BACKUP') } }"
+endef
+
+define TOUCH_FILES
+powershell -NoProfile -Command "$$files = @($(call powershell_list,$(1))); foreach ($$name in $$files) { New-Item -ItemType File -Force -Path $$name | Out-Null }"
+endef
+
+define REMOVE_FILES
+powershell -NoProfile -Command "$$files = @($(call powershell_list,$(1))); if ($$files.Length -gt 0) { Remove-Item -Force -LiteralPath $$files -ErrorAction SilentlyContinue }; exit 0"
+endef
+
+define RESTORE_FILES
+powershell -NoProfile -Command "$$files = @($(call powershell_list,$(1))); foreach ($$name in $$files) { $$backup = $$name + '_BACKUP'; if (Test-Path -LiteralPath $$backup) { Move-Item -Force -LiteralPath $$backup -Destination $$name } }"
+endef
+
+define REMOVE_TREE_OUTPUTS
+powershell -NoProfile -Command "Get-ChildItem -Path $(call powershell_list,$(1)) -Recurse -Force -Include *.vo,*.glob,*.vos,*.vok,.*.aux -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; exit 0"
+endef
+else
+define BACKUP_FILES
+for name in $(1); do \
+  if [ -f "$$name" ]; then mv -f "$$name" "$$name"_BACKUP; fi; \
+done
+endef
+
+define TOUCH_FILES
+for name in $(1); do \
+  : > "$$name"; \
+done
+endef
+
+define REMOVE_FILES
+rm -f $(1)
+endef
+
+define RESTORE_FILES
+for name in $(1); do \
+  if [ -f "$$name"_BACKUP ]; then mv -f "$$name"_BACKUP "$$name"; fi; \
+done
+endef
+
+define REMOVE_TREE_OUTPUTS
+find $(1) -type f \( -name '*.vo' -o -name '*.glob' -o -name '*.vos' -o -name '*.vok' -o -name '.*.aux' \) -delete
+endef
+endif
 
 DIRS = \
   lib GeneralLogic MinimumLogic PropositionalLogic MetaLogicInj ModalLogic SeparationLogic \
@@ -472,47 +525,33 @@ demo424:
 # DF=PropositionalLogic/DeepEmbedded/interface_Mendelson.v SeparationLogic/DeepEmbedded/MinimumSeparationLogic_LibSupport.v
 
 depend:
-	@for name in $(DF); do \
-	  if [ -f $$name ]; then \
-	    mv $$name $$name"_BACKUP"; \
-	  fi \
-	done
-	@for name in $(DF); do \
-	  echo "" >> $$name; \
-	done
-	$(COQDEP) $(DEP_FLAG) $(FILES) > .depend
-	@for name in $(DF); do \
-	  rm $$name; \
-	done
-	@for name in $(DF); do \
-	  if [ -f $$name"_BACKUP" ]; then \
-	    mv $$name"_BACKUP" $$name; \
-	  fi \
-	done
+
+ifeq ($(strip $(DF)),)
+	@$(COQDEP) $(DEP_FLAG) $(FILES) > .depend
+else
+	@$(call BACKUP_FILES,$(DF))
+	@$(call TOUCH_FILES,$(DF))
+	@$(COQDEP) $(DEP_FLAG) $(FILES) > .depend
+	@$(call REMOVE_FILES,$(DF))
+	@$(call RESTORE_FILES,$(DF))
+endif
 
 .depend:
-	@for name in $(DF); do \
-	  if [ -f $$name ]; then \
-	    mv $$name $$name"_BACKUP"; \
-	  fi \
-	done
-	@for name in $(DF); do \
-	  echo "" >> $$name; \
-	done
-	$(COQDEP) $(DEP_FLAG) $(FILES) > .depend
-	@for name in $(DF); do \
-	  rm $$name; \
-	done
-	@for name in $(DF); do \
-	  if [ -f $$name"_BACKUP" ]; then \
-	    mv $$name"_BACKUP" $$name; \
-	  fi \
-	done
+
+ifeq ($(strip $(DF)),)
+	@$(COQDEP) $(DEP_FLAG) $(FILES) > .depend
+else
+	@$(call BACKUP_FILES,$(DF))
+	@$(call TOUCH_FILES,$(DF))
+	@$(COQDEP) $(DEP_FLAG) $(FILES) > .depend
+	@$(call REMOVE_FILES,$(DF))
+	@$(call RESTORE_FILES,$(DF))
+endif
 
 clean:
-	@rm */*.vo */*.glob */*/*.vo */*/*.glob */.*.aux */*.vos */*.vok */*/.*.aux */*/*.vos */*/*.vok
+	-@$(call REMOVE_TREE_OUTPUTS,.)
+	-@$(call REMOVE_FILES,.depend)
 
 .DEFAULT_GOAL := all
 
 -include .depend
-

@@ -16,8 +16,7 @@ Local Open Scope sets.
 Local Open Scope string.
 Local Open Scope list.
 Import naive_C_Rules.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.string_lib.
-Require Import SimpleC.EE.LLM_bench.Engineering.string.memchr_lib.
+Require Import SimpleC.StdLib.string_lib.
 Local Open Scope sac.
 
 Lemma proof_of_memchr_entail_wit_2 : memchr_entail_wit_2.
@@ -28,10 +27,10 @@ Proof.
   - split_pures; dump_pre_spatial; try lia; auto.
     intros k [? ?].
     destruct (Z_lt_ge_dec k i).
-    + apply H9; lia.
+    + apply PreH11; lia.
     + assert (k = i) by lia.
       subst k.
-      exact H.
+      exact PreH1.
 Qed.
 
 Lemma proof_of_memchr_return_wit_1 : memchr_return_wit_1.
@@ -45,7 +44,7 @@ Proof.
     split; [ | reflexivity ].
     assert (i = n_pre) by lia.
     subst i.
-    exact H8.
+    exact PreH10.
 Qed.
 
 Lemma proof_of_memchr_return_wit_2 : memchr_return_wit_2.
@@ -58,8 +57,8 @@ Proof.
     left.
     exists i.
     split; [ lia | ].
-    split; [ exact H | ].
-    split; [ exact H9 | ].
+    split; [ exact PreH1 | ].
+    split; [ exact PreH11 | ].
     rewrite sizeof_char.
     lia.
 Qed.

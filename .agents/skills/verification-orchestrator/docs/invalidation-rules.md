@@ -10,6 +10,7 @@
 - 对 annotation / proving phase 来说，标记 stale 之外，还必须删除对应 scratch。
 - 如果某个 phase 是从下游失败后重新进入，则下一轮 ticket 必须带 `Re-entry Brief`，明确说明为什么回流、哪些输入变化了。
 - 如果 `Case Brief` 中冻结的 `common_case_formal_lib` 前缀定义或 `proof_manual_scope` 变化，所有基于旧 formal 文件边界的 proving / final-check 结论都必须失效。
+- 失效的 formal 结论、旧 scratch、旧 proof skeleton 不能继续作为当前 proof 结果使用；但 `.agents/reports` 中的 `partial_proof_packet.json` 若通过 schema / hash / safety 检查，可以在 direct-reuse 条件不满足、helper payload 冲突或 direct candidate compile gate 失败时转成显式标注的 proof-pattern reference，让 worker 阅读 per-goal candidates、完整 proof reference pool、旧 helper block 的证明形状并重新适配当前 VC。pattern reference 不是复用旧结论，不能移除 worker scope，也不能跳过当前 proof 的 compile / merge / helper-migration / verify gate。
 
 ## scratch 生命周期总规则
 
@@ -124,6 +125,12 @@
 - 该 witness 的旧 `vc-proving-subagent` 分析结果
 - 依赖该 witness 已完成的旧 final-check 结论
 
+若旧 round checkpoint / packet 覆盖到该 witness：
+
+- 不得执行 direct reuse，也不得把旧 packet proof script 直接写入当前 manual 后标记 solved。
+- 若问题不是 annotation-bug，且下一轮 ticket 明确采用 `exact_or_pattern` / `pattern_reference`，允许把旧 packet 中的相似 proof script、informal proof、helper import / helper block 作为 proof-pattern reference 交给 worker；worker 必须在当前 fresh scratch 中重写或适配，并重新编译通过。
+- 若 witness 被标记为 annotation-bug，旧 proof pattern 只能作为审计线索，不应自动交给 worker 当作当前证明参考。
+
 ## `*_proof_manual.v` 或 `common_case_formal_lib` 改动后
 
 以下内容失效：
@@ -197,4 +204,5 @@
 - 删除 `common_case_formal_lib`
 - 通过删除生成文件来掩盖 stale 状态
 - 继续沿用已知过期的 witness 分析或 proof skeleton
+- 把 pattern-reference JSON 当成已证明结果，或用它绕过当前 VC 的编译与 helper migration 检查
 - 继续沿用已知过期的 scratch

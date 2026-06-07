@@ -3,14 +3,22 @@
 Part A: Unit tests for verify.py helpers (NO coqc needed)
     - TestCleanProblemStatement
     - TestAxiomClassification
+    - TestParseAssumptionsCategorizedLists
     - TestParseAssumptions
     - TestBuildVerificationSource
-    - TestGateFunctions
     - TestClassifyTocDetail
     - TestVerificationHint
     - TestStripSharedDefs
     - TestBuildSharedDefsVerificationSource
     - TestVerifyInputSanitization
+    - TestCheckForbiddenCommands
+    - TestCheckTypeShadowing
+    - TestCheckModuleNameShadowing
+    - TestExtractUserAxiomNames
+    - TestBuildDirectVerificationSource
+    - TestBuildDirectTypeCheckSource
+    - TestParseCheckType
+    - TestNormalizeTypeForComparison
 
 Part B: Integration tests for rocq_verify (require coqc)
     - TestVerifySuccess
@@ -18,6 +26,8 @@ Part B: Integration tests for rocq_verify (require coqc)
     - TestVerifyInputValidation
     - TestVerifyCleanup
     - TestSharedDefsIntegration
+    - TestDirectVerification
+    - TestTimeoutFallbackToPhase3
 """
 
 from __future__ import annotations
@@ -28,17 +38,23 @@ import pytest
 
 from tests.conftest import COQC_AVAILABLE
 from rocq_mcp.verify import (
+    _check_forbidden_commands,
     _clean_problem_statement,
     _is_standard_axiom,
     _axiom_short_name,
     _parse_assumptions_raw,
     _SHARED_DEF_DETAILS,
     _strip_shared_defs,
+    _validate_rocq_identifier,
+    build_direct_type_check_source,
+    build_direct_verification_source,
     build_shared_defs_verification_source,
     classify_toc_detail,
     DefCategory,
     DefinitionInfo,
+    normalize_type_for_comparison,
     parse_and_classify_assumptions,
+    parse_check_type,
     ProblemStructure,
     build_verification_source,
     verification_hint,
@@ -104,6 +120,46 @@ class TestCleanProblemStatement:
         """Stripping 'Proof.\\nAdmitted.' must also strip trailing Proof."""
         cleaned = _clean_problem_statement("Theorem t : True.\nProof.\nAdmitted.")
         assert not cleaned.endswith("Proof.")
+        assert "Theorem t : True." in cleaned
+
+    def test_proof_using_stripped(self):
+        """'Proof using vars. Admitted.' must strip both Admitted and Proof using."""
+        cleaned = _clean_problem_statement(
+            "Theorem t : True.\nProof using x y.\nAdmitted."
+        )
+        assert "Proof" not in cleaned
+        assert "Theorem t : True." in cleaned
+
+    def test_proof_with_stripped(self):
+        """'Proof with tactic. Admitted.' must strip both Admitted and Proof with."""
+        cleaned = _clean_problem_statement(
+            "Theorem t : True.\nProof with auto.\nAdmitted."
+        )
+        assert "Proof" not in cleaned
+        assert "Theorem t : True." in cleaned
+
+    def test_proof_using_multiple_vars(self):
+        """'Proof using a b c.' must be fully stripped."""
+        cleaned = _clean_problem_statement(
+            "Theorem t : True.\nProof using a b c.\nAdmitted."
+        )
+        assert "Proof" not in cleaned
+        assert "Theorem t : True." in cleaned
+
+    def test_proof_using_qualified_name(self):
+        """Proof using with qualified names (dots) must be fully stripped."""
+        cleaned = _clean_problem_statement(
+            "Theorem t : True.\nProof using Nat.add.\nAdmitted."
+        )
+        assert "Proof" not in cleaned
+        assert "Theorem t : True." in cleaned
+
+    def test_proof_with_qualified_name(self):
+        """Proof with tactic containing dots must be fully stripped."""
+        cleaned = _clean_problem_statement(
+            "Theorem t : True.\nProof with Nat.add_comm.\nAdmitted."
+        )
+        assert "Proof" not in cleaned
         assert "Theorem t : True." in cleaned
 
 
@@ -192,6 +248,63 @@ class TestAxiomClassification:
     def test_raxioms_module_qualified(self):
         assert _is_standard_axiom("Raxioms.completeness") is True
 
+    # --- mathcomp.classical re-exports ---
+
+    def test_mathcomp_classical_functional_extensionality(self):
+        """mathcomp.classical.boolp re-exports the stdlib axiom."""
+        assert (
+            _is_standard_axiom("mathcomp.classical.boolp.functional_extensionality_dep")
+            is True
+        )
+
+    def test_mathcomp_classical_propositional_extensionality(self):
+        assert (
+            _is_standard_axiom("mathcomp.classical.boolp.propositional_extensionality")
+            is True
+        )
+
+    def test_mathcomp_em_short_name(self):
+        """``EM`` is the mathcomp-specific short name for excluded middle."""
+        assert _is_standard_axiom("mathcomp.classical.boolp.EM") is True
+
+    def test_mathcomp_pselect_short_name(self):
+        assert _is_standard_axiom("mathcomp.classical.boolp.pselect") is True
+
+    def test_mathcomp_cid_short_name(self):
+        """``cid`` is mathcomp's constructive indefinite description."""
+        assert _is_standard_axiom("mathcomp.classical.boolp.cid") is True
+
+    def test_user_axiom_named_em_rejected(self):
+        """A user ``Axiom EM`` outside mathcomp must NOT be auto-trusted."""
+        assert _is_standard_axiom("MyModule.EM") is False
+
+    def test_bare_boolp_prefix_rejected(self):
+        """A user-supplied ``boolp.v`` containing ``Axiom EM : False.`` must
+        NOT be auto-trusted just because it mimics mathcomp's short form.
+        Require the full ``mathcomp.classical.boolp.`` qualifier."""
+        assert _is_standard_axiom("boolp.EM") is False
+        assert _is_standard_axiom("boolp.functional_extensionality_dep") is False
+        assert _is_standard_axiom("boolp.cid") is False
+
+    def test_bare_classical_sets_prefix_rejected(self):
+        """Symmetric to ``boolp.``: bare ``classical_sets.`` is not a
+        trusted source."""
+        assert _is_standard_axiom("classical_sets.EM") is False
+
+    # The implementation green-lights unqualified mathcomp short names
+    # (the ``"."`` not in name branch of _is_standard_axiom).  The audit
+    # noted this was untested.  Pin the current behaviour so a future
+    # tightening (rejecting unqualified) doesn't slip through silently.
+
+    def test_mathcomp_em_unqualified_accepted(self):
+        assert _is_standard_axiom("EM") is True
+
+    def test_mathcomp_pselect_unqualified_accepted(self):
+        assert _is_standard_axiom("pselect") is True
+
+    def test_mathcomp_cid_unqualified_accepted(self):
+        assert _is_standard_axiom("cid") is True
+
     # --- SPOOFED axioms: must be REJECTED ---
 
     def test_spoofed_m_classic_rejected(self):
@@ -229,6 +342,8 @@ class TestAxiomClassification:
     def test_axiom_short_name_unqualified(self):
         assert _axiom_short_name("classic") == "classic"
 
+    # --- require_qualified mode (Phase 3) ---
+
     def test_axiom_short_name_single_dot(self):
         assert _axiom_short_name("M.classic") == "classic"
 
@@ -246,6 +361,303 @@ class TestAxiomClassification:
     def test_user_extensionality_ensembles_rejected(self):
         """User-qualified Ensembles axiom should be rejected."""
         assert _is_standard_axiom("M.Extensionality_Ensembles") is False
+
+    # --- Primitive integers (PrimInt63 / Uint63Axioms): should be ACCEPTED ---
+
+    def test_int_unqualified(self):
+        assert _is_standard_axiom("int") is True
+
+    def test_int_primint63_qualified(self):
+        assert _is_standard_axiom("PrimInt63.int") is True
+
+    def test_int_corelib_qualified(self):
+        assert _is_standard_axiom("Corelib.Numbers.Cyclic.Int63.PrimInt63.int") is True
+
+    def test_add_unqualified(self):
+        assert _is_standard_axiom("add") is True
+
+    def test_sub_unqualified(self):
+        assert _is_standard_axiom("sub") is True
+
+    def test_eqb_unqualified(self):
+        assert _is_standard_axiom("eqb") is True
+
+    def test_eqb_correct_unqualified(self):
+        assert _is_standard_axiom("eqb_correct") is True
+
+    def test_eqb_refl_unqualified(self):
+        assert _is_standard_axiom("eqb_refl") is True
+
+    def test_of_to_Z_unqualified(self):
+        assert _is_standard_axiom("of_to_Z") is True
+
+    def test_add_spec_unqualified(self):
+        assert _is_standard_axiom("add_spec") is True
+
+    def test_uint63_axioms_module_qualified(self):
+        assert _is_standard_axiom("Uint63Axioms.add_spec") is True
+
+    def test_land_unqualified(self):
+        assert _is_standard_axiom("land") is True
+
+    def test_lsr_unqualified(self):
+        assert _is_standard_axiom("lsr") is True
+
+    def test_user_int_rejected(self):
+        """User-qualified 'int' must be rejected."""
+        assert _is_standard_axiom("M.int") is False
+
+    def test_user_add_rejected(self):
+        """User-qualified 'add' must be rejected."""
+        assert _is_standard_axiom("M.add") is False
+
+    # --- Primitive floats (PrimFloat): should be ACCEPTED ---
+
+    def test_float_unqualified(self):
+        assert _is_standard_axiom("float") is True
+
+    def test_float_primfloat_qualified(self):
+        assert _is_standard_axiom("PrimFloat.sqrt") is True
+
+    def test_float_corelib_qualified(self):
+        assert _is_standard_axiom("Corelib.Floats.PrimFloat.float") is True
+
+    def test_classify_unqualified(self):
+        assert _is_standard_axiom("classify") is True
+
+    def test_normfr_mantissa_unqualified(self):
+        assert _is_standard_axiom("normfr_mantissa") is True
+
+    def test_next_up_unqualified(self):
+        assert _is_standard_axiom("next_up") is True
+
+    def test_user_float_rejected(self):
+        assert _is_standard_axiom("M.float") is False
+
+    # --- Primitive arrays (PrimArray): should be ACCEPTED ---
+
+    def test_array_unqualified(self):
+        assert _is_standard_axiom("array") is True
+
+    def test_get_primarray_qualified(self):
+        assert _is_standard_axiom("PrimArray.get") is True
+
+    def test_make_primarray_qualified(self):
+        assert _is_standard_axiom("PrimArray.make") is True
+
+    def test_copy_unqualified(self):
+        assert _is_standard_axiom("copy") is True
+
+    def test_user_array_rejected(self):
+        assert _is_standard_axiom("M.array") is False
+
+    # --- Primitive strings (PrimString): should be ACCEPTED ---
+
+    def test_string_unqualified(self):
+        assert _is_standard_axiom("string") is True
+
+    def test_cat_unqualified(self):
+        assert _is_standard_axiom("cat") is True
+
+    def test_primstring_qualified(self):
+        assert _is_standard_axiom("PrimString.cat") is True
+
+    def test_user_string_rejected(self):
+        assert _is_standard_axiom("M.string") is False
+
+    # --- Refined require_qualified: ambiguous vs unique ---
+
+
+class TestParseAssumptionsCategorizedLists:
+    """Test the categorized name lists added by §1.6 of the v2 plan.
+
+    The four meaningful combinations of (admitted, classical, user) are
+    exercised:
+
+      * closed                       — no assumptions at all
+      * classical only               — whitelist hits, nothing else
+      * admitted with no axioms      — names flagged as admits via
+        ``admitted_names``
+      * mixed user-axiom + admitted  — user-declared axiom plus an admit
+    """
+
+    @pytest.mark.parametrize(
+        "stdout,admitted_names,expected",
+        [
+            # closed: no assumptions.
+            (
+                "Closed under the global context\n",
+                None,
+                {
+                    "verdict": "closed",
+                    "admitted": [],
+                    "classical_axioms": [],
+                    "user_axioms": [],
+                },
+            ),
+            # classical only.
+            (
+                "Axioms:\n"
+                "Coq.Logic.Classical_Prop.classic : forall P : Prop, P \\/ ~ P\n",
+                None,
+                {
+                    "verdict": "standard_only",
+                    "admitted": [],
+                    "classical_axioms": ["Coq.Logic.Classical_Prop.classic"],
+                    "user_axioms": [],
+                },
+            ),
+            # admitted only (caller supplies admitted_names).  Without
+            # admitted_names, the same input would land in user_axioms — that
+            # is the documented Phase-1 limitation.
+            (
+                "Axioms:\nfuel_bound_admit : nat -> Prop\n",
+                {"fuel_bound_admit"},
+                {
+                    "verdict": "suspicious",
+                    "admitted": ["fuel_bound_admit"],
+                    "classical_axioms": [],
+                    "user_axioms": [],
+                },
+            ),
+            # mixed: user-declared axiom + admitted lemma.
+            (
+                "Axioms:\n" "my_axiom : True\n" "fuel_bound_admit : nat -> Prop\n",
+                {"fuel_bound_admit"},
+                {
+                    "verdict": "suspicious",
+                    "admitted": ["fuel_bound_admit"],
+                    "classical_axioms": [],
+                    "user_axioms": ["my_axiom"],
+                },
+            ),
+        ],
+        ids=["closed", "classical_only", "admitted_only", "mixed_user_and_admitted"],
+    )
+    def test_assumption_classification(self, stdout, admitted_names, expected):
+        verdict, details = parse_and_classify_assumptions(
+            stdout, admitted_names=admitted_names
+        )
+        assert verdict == expected["verdict"]
+        assert details["admitted"] == expected["admitted"]
+        assert details["classical_axioms"] == expected["classical_axioms"]
+        assert details["user_axioms"] == expected["user_axioms"]
+
+    def test_lists_present_even_when_closed(self):
+        """All three lists must be present in details even when verdict=closed."""
+        verdict, details = parse_and_classify_assumptions(
+            "Closed under the global context\n"
+        )
+        assert verdict == "closed"
+        # New lists are present and empty.
+        assert details["admitted"] == []
+        assert details["classical_axioms"] == []
+        assert details["user_axioms"] == []
+        # Legacy back-compat: closed still maps to (sorta) empty details
+        # — the legacy keys "standard"/"suspicious" are absent.
+        assert "standard" not in details
+        assert "suspicious" not in details
+
+    def test_admitted_takes_precedence_over_classical(self):
+        """If a name is in both admitted_names and the whitelist, admitted wins.
+
+        Pathological case, but tests the precedence rule documented in
+        ``parse_and_classify_assumptions``.  Both the new ``admitted`` list
+        *and* the legacy ``verdict`` reflect the admit: an admit overrides
+        classical-only classification, otherwise the two would disagree.
+        """
+        stdout = (
+            "Axioms:\n"
+            "Coq.Logic.Classical_Prop.classic : forall P : Prop, P \\/ ~ P\n"
+        )
+        verdict, details = parse_and_classify_assumptions(
+            stdout, admitted_names={"Coq.Logic.Classical_Prop.classic"}
+        )
+        # Admit overrides — both new lists and legacy verdict agree.
+        assert verdict == "suspicious"
+        assert details["admitted"] == ["Coq.Logic.Classical_Prop.classic"]
+        # ``classic`` moved out of classical_axioms (admitted-precedence).
+        assert details["classical_axioms"] == []
+        assert details["user_axioms"] == []
+
+    def test_admitted_names_unknown_to_assumptions_are_ignored(self):
+        """Names in admitted_names but absent from the parsed list don't appear."""
+        verdict, details = parse_and_classify_assumptions(
+            "Closed under the global context\n",
+            admitted_names={"never_referenced_admit"},
+        )
+        assert verdict == "closed"
+        assert details["admitted"] == []
+
+    def test_admitted_names_empty_set_equivalent_to_none(self):
+        """``admitted_names=set()`` must behave identically to ``None``.
+
+        verify.py treats both as falsy, so the two calls must produce
+        identical ``(verdict, details)`` outputs.  This pins the contract
+        so a future refactor cannot silently diverge the two.
+        """
+        stdout = (
+            "Axioms:\n"
+            "Coq.Logic.Classical_Prop.classic : forall P : Prop, P \\/ ~ P\n"
+            "my_axiom : True\n"
+        )
+        v_none, d_none = parse_and_classify_assumptions(stdout, admitted_names=None)
+        v_empty, d_empty = parse_and_classify_assumptions(stdout, admitted_names=set())
+        assert v_none == v_empty
+        assert d_none == d_empty
+
+    def test_admitted_classical_legacy_keys_unchanged(self):
+        """Pathological case: an admitted name that is ALSO in the classical
+        whitelist.  The new ``admitted`` list takes precedence (the name
+        moves out of ``classical_axioms``), but the legacy ``standard`` list
+        is **intentionally unchanged** — it still contains the classical
+        entry.  This documents the asymmetry between the new categorized
+        lists and the legacy back-compat keys: legacy callers continue to
+        see the same shape they did before §1.6.
+        """
+        stdout = "Axioms:\nclassic : forall P : Prop, P \\/ ~ P\n"
+        verdict, details = parse_and_classify_assumptions(
+            stdout, admitted_names={"classic"}
+        )
+        # New-list precedence: admit wins over classical.
+        assert details["admitted"] == ["classic"]
+        assert details["classical_axioms"] == []
+        # Legacy back-compat: ``standard`` keeps the classical entry,
+        # ``suspicious_names`` stays empty.  The verdict flips to
+        # ``"suspicious"`` (admit overrides) but the legacy *contents*
+        # of ``standard`` are unchanged.
+        assert verdict == "suspicious"
+        assert details["standard"] == ["classic : forall P : Prop, P \\/ ~ P"]
+        assert details["suspicious"] == []
+        assert details["suspicious_names"] == []
+
+    def test_three_lists_partition_assumptions(self):
+        """Every parsed name appears in exactly one of the three new lists."""
+        stdout = (
+            "Axioms:\n"
+            "Coq.Logic.Classical_Prop.classic : forall P : Prop, P \\/ ~ P\n"
+            "my_axiom : True\n"
+            "lemma_admit : nat -> Prop\n"
+        )
+        _, details = parse_and_classify_assumptions(
+            stdout, admitted_names={"lemma_admit"}
+        )
+        bucketed = (
+            set(details["admitted"])
+            | set(details["classical_axioms"])
+            | set(details["user_axioms"])
+        )
+        assert bucketed == {
+            "Coq.Logic.Classical_Prop.classic",
+            "my_axiom",
+            "lemma_admit",
+        }
+        # No overlap.
+        assert (
+            len(details["admitted"])
+            + len(details["classical_axioms"])
+            + len(details["user_axioms"])
+        ) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -341,13 +753,55 @@ class TestParseAssumptions:
         assert len(result) == 1
         assert result[0][0] == "cheat"
 
+    def test_injected_closed_before_real_axioms(self):
+        """CRITICAL: injected 'Closed under the global context' before real axioms.
+
+        An adversary can inject ``Print Assumptions clean_lemma.`` inside
+        Module M, producing 'Closed under the global context' on stdout
+        before the template's real Print Assumptions output that shows
+        suspicious axioms.  The parser must use the LAST output block.
+        """
+        stdout = (
+            "Closed under the global context\n"
+            "Axioms:\n"
+            "M.helper : forall n : nat, n + 0 = n\n"
+        )
+        result = _parse_assumptions_raw(stdout)
+        assert len(result) == 1
+        assert result[0][0] == "M.helper"
+
+    def test_injected_closed_before_real_closed(self):
+        """Multiple 'Closed' lines: last one wins (still closed)."""
+        stdout = "Closed under the global context\n" "Closed under the global context\n"
+        result = _parse_assumptions_raw(stdout)
+        assert result == []
+
+    def test_injected_axioms_before_real_closed(self):
+        """Injected Axioms block before real 'Closed': last block wins."""
+        stdout = "Axioms:\n" "M.fake : False\n" "Closed under the global context\n"
+        result = _parse_assumptions_raw(stdout)
+        assert result == []
+
+    def test_classify_injected_closed_before_suspicious(self):
+        """Higher-level: injected Closed before suspicious axioms must be suspicious."""
+        stdout = "Closed under the global context\n" "Axioms:\n" "M.cheat : False\n"
+        verdict, details = parse_and_classify_assumptions(stdout)
+        assert verdict == "suspicious"
+        assert "M.cheat" in details["suspicious_names"]
+
     # --- parse_and_classify_assumptions (higher-level) ---
 
     def test_classify_closed(self):
         stdout = "Closed under the global context\n"
         verdict, details = parse_and_classify_assumptions(stdout)
         assert verdict == "closed"
-        assert details == {}
+        # No legacy keys; only the additive §1.6 lists, all empty.
+        assert "standard" not in details
+        assert "suspicious" not in details
+        assert "suspicious_names" not in details
+        assert details["admitted"] == []
+        assert details["classical_axioms"] == []
+        assert details["user_axioms"] == []
 
     def test_classify_standard_only(self):
         stdout = (
@@ -450,41 +904,32 @@ class TestBuildVerificationSource:
         )
         assert "{ apply Nat.add_comm. }" in source
 
+    def test_rejects_invalid_problem_name(self):
+        """problem_name with newlines or special chars must be rejected."""
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_verification_source(
+                proof="Theorem t : True. Proof. exact I. Qed.",
+                problem_name="foo.\nAxiom cheat : False.\nPrint Assumptions",
+                problem_statement="Theorem t : True.\nAdmitted.",
+            )
 
-# ---------------------------------------------------------------------------
-# Gate functions (_has_definition_keywords)
-# ---------------------------------------------------------------------------
+    def test_rejects_empty_problem_name(self):
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_verification_source(
+                proof="Theorem t : True. Proof. exact I. Qed.",
+                problem_name="",
+                problem_statement="Theorem t : True.\nAdmitted.",
+            )
 
-
-class TestGateFunctions:
-    """Test the gate functions that decide Phase 2 fallback eligibility."""
-
-    def test_has_definition_keywords_inductive(self):
-        from rocq_mcp.server import _has_definition_keywords
-
-        assert _has_definition_keywords("Inductive color := Red.")
-
-    def test_has_definition_keywords_coinductive(self):
-        from rocq_mcp.server import _has_definition_keywords
-
-        assert _has_definition_keywords(
-            "CoInductive stream := Cons : nat -> stream -> stream."
+    def test_printing_depth_reset_in_standard_template(self):
+        """Standard Module M template must reset Printing Depth after End M."""
+        source = build_verification_source(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+            problem_statement="Theorem t : True.\nAdmitted.",
         )
-
-    def test_has_definition_keywords_record(self):
-        from rocq_mcp.server import _has_definition_keywords
-
-        assert _has_definition_keywords("Record point := { x : nat; y : nat }.")
-
-    def test_has_definition_keywords_fixpoint(self):
-        from rocq_mcp.server import _has_definition_keywords
-
-        assert _has_definition_keywords("Fixpoint f (n : nat) := n.")
-
-    def test_has_definition_keywords_no_match(self):
-        from rocq_mcp.server import _has_definition_keywords
-
-        assert not _has_definition_keywords("Theorem foo : True.\nAdmitted.")
+        after_end = source[source.index("End M.") :]
+        assert "Set Printing Depth 1000000." in after_end
 
 
 # ---------------------------------------------------------------------------
@@ -565,7 +1010,96 @@ class TestVerificationHint:
 
     def test_default_hint(self):
         hint = verification_hint("Some unknown error occurred")
-        assert len(hint) > 0  # Should return something
+        assert "does not prove" in hint
+
+
+# ---------------------------------------------------------------------------
+# _neutralize_for_regex
+# ---------------------------------------------------------------------------
+
+
+class TestNeutralizeForRegex:
+    """Test the position-preserving neutralization function."""
+
+    def test_preserves_length(self):
+        from rocq_mcp.verify import _neutralize_for_regex
+
+        for text in [
+            "no comments or strings",
+            "(* a comment *)",
+            '"a string"',
+            '(* "string in comment" *)',
+            "(* (* nested *) *)",
+            'x (* c *) "s" y',
+            '(* "a""b" *) z',
+        ]:
+            result = _neutralize_for_regex(text)
+            assert len(result) == len(
+                text
+            ), f"Length mismatch for {text!r}: {len(result)} != {len(text)}"
+
+    def test_blanks_comment_interiors(self):
+        from rocq_mcp.verify import _neutralize_for_regex
+
+        result = _neutralize_for_regex("a(* comment *)b")
+        assert result[0] == "a"
+        assert result[-1] == "b"
+        assert result[1:14] == " " * 13
+
+    def test_blanks_string_interiors(self):
+        from rocq_mcp.verify import _neutralize_for_regex
+
+        result = _neutralize_for_regex('a"Load"b')
+        assert result[0] == "a"
+        assert result[-1] == "b"
+        assert result[1] == '"'
+        assert result[6] == '"'
+        assert result[2:6] == "    "
+
+    def test_no_change_for_plain_text(self):
+        from rocq_mcp.verify import _neutralize_for_regex
+
+        text = "Definition foo := 42."
+        assert _neutralize_for_regex(text) == text
+
+
+# ---------------------------------------------------------------------------
+# _extract_source_range
+# ---------------------------------------------------------------------------
+
+
+class TestExtractSourceRange:
+    """Test _extract_source_range bounds checking."""
+
+    def test_single_line(self):
+        from rocq_mcp.compile import _extract_source_range
+
+        lines = ["hello world", "second line"]
+        assert _extract_source_range(lines, 0, 0, 0, 5) == "hello"
+
+    def test_multi_line(self):
+        from rocq_mcp.compile import _extract_source_range
+
+        lines = ["first", "second", "third"]
+        assert _extract_source_range(lines, 0, 0, 2, 5) == "first\nsecond\nthird"
+
+    def test_negative_start_raises(self):
+        from rocq_mcp.compile import _extract_source_range
+
+        with pytest.raises(IndexError):
+            _extract_source_range(["hello"], -1, 0, 0, 5)
+
+    def test_end_beyond_lines_raises(self):
+        from rocq_mcp.compile import _extract_source_range
+
+        with pytest.raises(IndexError):
+            _extract_source_range(["hello"], 0, 0, 5, 0)
+
+    def test_start_after_end_raises(self):
+        from rocq_mcp.compile import _extract_source_range
+
+        with pytest.raises(IndexError):
+            _extract_source_range(["first", "second"], 1, 0, 0, 5)
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +1271,40 @@ class TestStripSharedDefs:
         assert result.count("Definition state") == 0
         assert "Theorem foo" in result
 
+    def test_strip_nested_definition_in_body(self):
+        """A definition whose body textually contains another definition pattern.
+
+        If 'outer' and 'inner' are both in shared_names, the regex for
+        'outer' produces a span that contains the span for 'inner'.
+        Without merging, removing the inner span first corrupts the
+        outer removal because offsets shift.
+        """
+        proof = (
+            "Definition inner := 0.\n"
+            "Definition outer := Definition inner := 0.\n"
+            "Theorem foo : True.\n"
+            "Proof. exact I. Qed.\n"
+        )
+        result = _strip_shared_defs(proof, {"outer", "inner"})
+        assert "Definition outer" not in result
+        assert "Definition inner" not in result
+        assert "Theorem foo" in result
+        # The theorem and proof must survive intact.
+        assert "Proof. exact I. Qed." in result
+
+    def test_comments_outside_stripped_def_preserved(self):
+        """Comments NOT inside a stripped definition should be preserved."""
+        proof = (
+            "Definition state := 0.\n"
+            "(* This is an important comment. *)\n"
+            "Theorem foo : True.\n"
+            "Proof. exact I. Qed.\n"
+        )
+        result = _strip_shared_defs(proof, {"state"})
+        assert "Definition state" not in result
+        assert "(* This is an important comment. *)" in result
+        assert "Theorem foo" in result
+
 
 class TestBuildSharedDefsVerificationSource:
     """Test the shared-defs verification template builder."""
@@ -849,6 +1417,23 @@ class TestBuildSharedDefsVerificationSource:
         idx_end = source.index("End M.")
         assert idx_module < idx_helper < idx_end
 
+    def test_printing_depth_reset_in_shared_defs_template(self):
+        """Shared-defs template must reset Printing Depth after End M."""
+        structure = self._make_structure(
+            defs=[("state", "Definition", "Definition state := list nat.")],
+            theorem_source="Theorem foo : True.",
+            full_source=(
+                "Definition state := list nat.\n" "Theorem foo : True.\nAdmitted."
+            ),
+        )
+        source = build_shared_defs_verification_source(
+            proof="Definition state := list nat.\nTheorem foo : True.\nProof. exact I. Qed.",
+            problem_name="foo",
+            structure=structure,
+        )
+        after_end = source[source.index("End M.") :]
+        assert "Set Printing Depth 1000000." in after_end
+
     def test_end_m_in_proof_rejected_shared_defs(self):
         """End M. in proof must be rejected even in shared-defs template."""
         structure = self._make_structure(
@@ -879,6 +1464,16 @@ class TestBuildSharedDefsVerificationSource:
                 "Theorem foo : True.\nProof. exact I. Qed.", "foo", structure
             )
 
+    def test_rejects_invalid_problem_name(self):
+        """problem_name with injection payload must be rejected."""
+        structure = self._make_structure()
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_shared_defs_verification_source(
+                proof="Theorem foo : True. Proof. exact I. Qed.",
+                problem_name="foo.\nAxiom cheat : False",
+                structure=structure,
+            )
+
 
 # ---------------------------------------------------------------------------
 # Input sanitization (injection attacks)
@@ -890,27 +1485,28 @@ class TestVerifyInputSanitization:
 
     def test_problem_name_with_newline(self):
         """Newlines in problem_name must be rejected by build_verification_source."""
-        # The server-level regex rejects this before build_verification_source
-        # is ever called, but let's verify the template isn't abusable either.
-        # build_verification_source doesn't validate problem_name itself,
-        # so we test via the server's rocq_verify which does the regex check.
-        # For a pure unit test, we verify the regex pattern rejects it.
-        import re
-
-        pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_']*$")
-        assert pattern.match("add_0_r\nAxiom cheat : False") is None
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_verification_source(
+                proof="Theorem t : True. Proof. exact I. Qed.",
+                problem_name="add_0_r\nAxiom cheat : False",
+                problem_statement="Theorem t : True.\nAdmitted.",
+            )
 
     def test_problem_name_with_spaces(self):
-        import re
-
-        pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_']*$")
-        assert pattern.match("add_0_r Axiom cheat") is None
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_verification_source(
+                proof="Theorem t : True. Proof. exact I. Qed.",
+                problem_name="add_0_r Axiom cheat",
+                problem_statement="Theorem t : True.\nAdmitted.",
+            )
 
     def test_problem_name_with_semicolon(self):
-        import re
-
-        pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_']*$")
-        assert pattern.match("add_0_r;evil") is None
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_verification_source(
+                proof="Theorem t : True. Proof. exact I. Qed.",
+                problem_name="add_0_r;evil",
+                problem_statement="Theorem t : True.\nAdmitted.",
+            )
 
     def test_problem_name_valid_identifier(self):
         """A valid Rocq identifier should work."""
@@ -1153,119 +1749,529 @@ class TestVerifyInputSanitization:
                 problem_statement="Theorem t : True.\nAdmitted.",
             )
 
-    def test_comment_replaced_with_space(self):
-        """Comments should be replaced with space, not removed.
+    def test_forbidden_inside_string_not_rejected(self):
+        """Forbidden keywords inside string literals must NOT trigger rejection."""
+        source = build_verification_source(
+            proof='Definition msg := "Load something".\nTheorem t : True. Proof. exact I. Qed.',
+            problem_name="t",
+            problem_statement="Theorem t : True.\nAdmitted.",
+        )
+        assert "Module M." in source
 
-        This prevents Load(* *)bar from becoming Loadbar (bypassing \\b).
-        """
-        from rocq_mcp.verify import _strip_rocq_comments
-
-        stripped = _strip_rocq_comments("Load(* *)bar")
-        # Comment replaced with space(s), not removed — words stay separate
-        assert "Loadbar" not in stripped
-        assert "Load" in stripped and "bar" in stripped
-        # No stray delimiter characters in output
-        assert "*" not in stripped
-
-    def test_strip_desync_exploit_direct(self):
-        """Direct test: desync exploit makes End M. visible after stripping."""
-        from rocq_mcp.verify import _strip_rocq_comments
-
-        assert "End M." in _strip_rocq_comments('(* " (* " *) End M.')
-
-    def test_strip_close_in_string_direct(self):
-        """Direct test: *) in string inside comment does not close comment."""
-        from rocq_mcp.verify import _strip_rocq_comments
-
-        assert "End M." in _strip_rocq_comments('(* " *) " *) End M.')
-
-    def test_strip_escaped_quote_in_string_in_comment(self):
-        """\"\" escape in string inside comment must not end the string."""
-        from rocq_mcp.verify import _strip_rocq_comments
-
-        # (* "a""*)" *) — the "" is escape, *) still inside string
-        stripped = _strip_rocq_comments('(* "a""*)" *) End M.')
-        assert "End M." in stripped
-
-    def test_strip_multiple_strings_in_comment(self):
-        from rocq_mcp.verify import _strip_rocq_comments
-
-        stripped = _strip_rocq_comments('(* "a" and "b" *) visible')
-        assert "visible" in stripped
-        assert "and" not in stripped
-
-    def test_strip_no_stray_delimiter_chars(self):
-        """Closing *) must not leave a stray * in the output."""
-        from rocq_mcp.verify import _strip_rocq_comments
-
-        # Comment replaced with a space; no stray * or ) in output
-        assert _strip_rocq_comments("(* comment *)") == " "
-        assert _strip_rocq_comments("a(* x *)b") == "a  b"
-        assert _strip_rocq_comments("(* (* nested *) *)") == " "
-        assert _strip_rocq_comments("x (* a *) y (* b *) z") == "x    y    z"
-
-    def test_scanners_agree_on_comment_ranges(self):
-        """Cross-validate _rocq_scan (via _rocq_comment_ranges) and _strip_rocq_comments."""
-        from rocq_mcp.verify import _rocq_scan, _strip_rocq_comments
-        from rocq_mcp.server import _rocq_comment_ranges
-
-        cases = [
-            '(* " (* " *) End M.',
-            '(* " *) " *) End M.',
-            '(* "a""*)" *) x.',
-            '"(* not a comment *)" y.',
-            '(* "a" and "b" *) z.',
-            "normal code. (* comment *) more.",
-            "(* (* nested *) *) after.",
-            "(* a *)(* b *)",
-            "x (* end *)",
-        ]
-        for text in cases:
-            ranges = _rocq_comment_ranges(text)
-            # Build set of positions inside comments from ranges
-            in_comment_positions = set()
-            for start, end in ranges:
-                in_comment_positions.update(range(start, end))
-
-            # Build set from _rocq_scan
-            scan_comment_chars = set()
-            for idx, _ch, in_comment, _in_str in _rocq_scan(text):
-                if in_comment:
-                    scan_comment_chars.add(idx)
-
-            # The scanner skips the second char of two-char tokens (*, ))
-            # so scan positions are a subset of range positions.  Every
-            # scan-comment position must be inside a range, and every
-            # range position must either be a scan-comment position or
-            # the skipped second char of a two-char delimiter.
-            assert scan_comment_chars <= in_comment_positions, (
-                f"Scanner has comment positions outside ranges for: {text!r}\n"
-                f"  scan only: {scan_comment_chars - in_comment_positions}"
+    def test_forbidden_outside_string_still_rejected(self):
+        """Forbidden commands outside strings must still be caught."""
+        with pytest.raises(ValueError, match="[Ff]orbidden"):
+            build_verification_source(
+                proof='Definition msg := "safe".\nLoad evil.',
+                problem_name="t",
+                problem_statement="Theorem t : True.\nAdmitted.",
             )
-            extra = in_comment_positions - scan_comment_chars
-            for pos in extra:
-                # Each extra position must be the skipped second char
-                # of a two-char token: (*, *), or "" (escaped quote)
-                assert pos > 0 and (text[pos - 1 : pos + 1] in ("(*", "*)", '""')), (
-                    f"Range position {pos} is not a skipped delimiter char "
-                    f"for: {text!r}"
-                )
 
-            # _strip_rocq_comments should produce only non-comment chars
-            stripped = _strip_rocq_comments(text)
-            # Collect non-comment chars from the scan in order
-            expected_chars = [
-                ch for _, ch, in_comment, _ in _rocq_scan(text) if not in_comment
-            ]
-            # Stripped output (ignoring replacement spaces) must contain
-            # exactly the non-comment characters in order
-            stripped_chars = [c for c in stripped if c != " "]
-            expected_non_space = [c for c in expected_chars if c != " "]
-            assert stripped_chars == expected_non_space, (
-                f"Stripped output has wrong characters for: {text!r}\n"
-                f"  expected: {expected_non_space}\n"
-                f"  got:      {stripped_chars}"
+    def test_strip_shared_defs_ignores_def_in_comment(self):
+        """_strip_shared_defs should not match definition keywords inside comments."""
+        proof = (
+            "(* Definition state := old. *)\n"
+            "Theorem foo : True.\n"
+            "Proof. exact I. Qed.\n"
+        )
+        result = _strip_shared_defs(proof, {"state"})
+        # The Definition inside the comment should not be stripped;
+        # the comment itself is replaced with spaces.
+        assert "Theorem foo" in result
+
+
+class TestCheckForbiddenCommands:
+    """Direct unit tests for the forbidden command scanner."""
+
+    def test_clean_source_returns_none(self):
+        assert (
+            _check_forbidden_commands("Theorem t : True. Proof. exact I. Qed.") is None
+        )
+
+    def test_redirect_detected(self):
+        assert _check_forbidden_commands('Redirect "/tmp/out" Print nat.') is not None
+
+    def test_extraction_to_file_detected(self):
+        assert _check_forbidden_commands('Extraction "/tmp/evil.ml" nat.') is not None
+
+    def test_drop_detected(self):
+        assert _check_forbidden_commands("Drop.") is not None
+
+    def test_separate_extraction_detected(self):
+        assert _check_forbidden_commands("Separate Extraction nat.") is not None
+
+    def test_recursive_extraction_detected(self):
+        assert _check_forbidden_commands("Recursive Extraction nat.") is not None
+
+    def test_cd_detected(self):
+        assert _check_forbidden_commands('Cd "/tmp".') is not None
+
+    def test_load_detected(self):
+        assert _check_forbidden_commands("Load evil.") is not None
+
+    def test_extraction_library_detected(self):
+        assert _check_forbidden_commands("Extraction Library nat.") is not None
+
+    def test_declare_ml_module_detected(self):
+        assert _check_forbidden_commands('Declare ML Module "evil".') is not None
+
+    def test_unset_guard_checking_detected(self):
+        assert _check_forbidden_commands("Unset Guard Checking.") is not None
+
+    def test_unset_positivity_checking_detected(self):
+        assert _check_forbidden_commands("Unset Positivity Checking.") is not None
+
+    def test_unset_universe_checking_detected(self):
+        assert _check_forbidden_commands("Unset Universe Checking.") is not None
+
+    def test_bypass_check_detected(self):
+        assert (
+            _check_forbidden_commands("#[bypass_check(guard)] Fixpoint f := f.")
+            is not None
+        )
+
+    def test_end_m_detected(self):
+        assert _check_forbidden_commands("End M.") is not None
+
+    def test_reset_detected(self):
+        assert _check_forbidden_commands("Reset Initial.") is not None
+
+    def test_back_detected(self):
+        assert _check_forbidden_commands("Back 2.") is not None
+
+    def test_undo_detected(self):
+        assert _check_forbidden_commands("Undo.") is not None
+
+    def test_add_loadpath_detected(self):
+        assert _check_forbidden_commands('Add LoadPath "/tmp".') is not None
+
+    def test_add_rec_loadpath_detected(self):
+        assert _check_forbidden_commands('Add Rec LoadPath "/tmp".') is not None
+
+    def test_add_ml_path_detected(self):
+        assert _check_forbidden_commands('Add ML Path "/tmp".') is not None
+
+    def test_forbidden_inside_comment_ignored(self):
+        """Forbidden commands inside comments must NOT be detected."""
+        assert _check_forbidden_commands("(* Drop. Load evil. End M. *)") is None
+
+    def test_forbidden_inside_string_ignored(self):
+        """Forbidden commands inside strings must NOT be detected."""
+        assert _check_forbidden_commands('"Drop. Load evil."') is None
+
+    def test_forbidden_after_comment_detected(self):
+        """Forbidden commands after a comment must be caught."""
+        result = _check_forbidden_commands("(* safe *) Drop.")
+        assert result is not None
+
+    def test_end_other_module_not_detected(self):
+        """End Foo. must not be detected — only End M. is forbidden."""
+        assert _check_forbidden_commands("End Foo.") is None
+
+    def test_print_universes_with_file_blocked(self):
+        """Print Universes with a file argument writes to disk and must be blocked."""
+        assert _check_forbidden_commands('Print Universes "/tmp/out.txt".') is not None
+
+    def test_print_sorted_universes_with_file_blocked(self):
+        """Print Sorted Universes with a file argument writes to disk and must be blocked."""
+        assert (
+            _check_forbidden_commands('Print Sorted Universes "/tmp/out.txt".')
+            is not None
+        )
+
+    def test_print_universes_without_file_allowed(self):
+        """Print Universes without a file (stdout only) is safe and must be allowed."""
+        assert _check_forbidden_commands("Print Universes.") is None
+
+    def test_extraction_testcompile_blocked(self):
+        """Extraction TestCompile invokes an external compiler and must be blocked."""
+        assert _check_forbidden_commands("Extraction TestCompile nat.") is not None
+
+    def test_extraction_bare_allowed(self):
+        """Plain Extraction (stdout) is acceptable and must not be blocked."""
+        assert _check_forbidden_commands("Extraction nat.") is None
+
+    def test_print_universes_in_comment_allowed(self):
+        """Print Universes inside a comment must not trigger the scanner."""
+        assert (
+            _check_forbidden_commands('(* Print Universes "/tmp/out.txt". *)') is None
+        )
+
+    def test_returns_descriptive_message(self):
+        """Error messages should describe the forbidden command."""
+        msg = _check_forbidden_commands("Drop.")
+        assert "Drop" in msg
+
+
+# ---------------------------------------------------------------------------
+# Whitespace bypass variants for multi-word forbidden patterns (SEC-1/2/3/4)
+# ---------------------------------------------------------------------------
+
+
+class TestForbiddenWhitespaceBypasses:
+    """Verify that multi-word forbidden patterns match newline/tab/multi-space variants."""
+
+    def test_declare_ml_module_newline(self):
+        result = _check_forbidden_commands('Declare ML\n  Module "test".')
+        assert result is not None
+        assert "Declare ML Module" in result
+
+    def test_declare_ml_module_tab(self):
+        result = _check_forbidden_commands('Declare ML\tModule "test".')
+        assert result is not None
+
+    def test_declare_ml_module_double_space(self):
+        result = _check_forbidden_commands('Declare  ML  Module "test".')
+        assert result is not None
+
+    def test_separate_extraction_newline(self):
+        result = _check_forbidden_commands("Separate\nExtraction foo.")
+        assert result is not None
+        assert "Separate Extraction" in result
+
+    def test_separate_extraction_tab(self):
+        result = _check_forbidden_commands("Separate\tExtraction foo.")
+        assert result is not None
+
+    def test_recursive_extraction_newline(self):
+        result = _check_forbidden_commands("Recursive\n  Extraction foo.")
+        assert result is not None
+        assert "Recursive Extraction" in result
+
+    def test_recursive_extraction_crlf(self):
+        result = _check_forbidden_commands("Recursive\r\nExtraction foo.")
+        assert result is not None
+
+    def test_extraction_output_directory_basic(self):
+        result = _check_forbidden_commands('Set Extraction Output Directory "/tmp".')
+        assert result is not None
+        assert "Extraction Output Directory" in result
+
+    def test_extraction_output_directory_newline(self):
+        result = _check_forbidden_commands('Set Extraction\nOutput\nDirectory "/tmp".')
+        assert result is not None
+
+    def test_extraction_output_directory_in_comment_ok(self):
+        """Extraction Output Directory inside a comment should NOT be flagged."""
+        result = _check_forbidden_commands(
+            '(* Set Extraction Output Directory "/tmp". *)'
+        )
+        assert result is None
+
+
+class TestBuildDirectVerificationSource:
+    """Test the Phase 3 direct verification template builder."""
+
+    def test_contains_check_and_print_assumptions(self):
+        source = build_direct_verification_source(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+        assert "Print Assumptions t." in source
+
+    def test_contains_set_printing_all(self):
+        source = build_direct_verification_source(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Set Printing All." in source
+
+    def test_proof_preserved(self):
+        proof = "Require Import Arith.\nTheorem t : True. Proof. exact I. Qed."
+        source = build_direct_verification_source(proof=proof, problem_name="t")
+        assert proof in source
+
+    def test_rejects_forbidden_command(self):
+        with pytest.raises(ValueError, match="[Ff]orbidden"):
+            build_direct_verification_source(
+                proof="Drop.\nTheorem t : True. Proof. exact I. Qed.",
+                problem_name="t",
             )
+
+    def test_export_in_comment_allowed(self):
+        """Export inside a comment should not trigger rejection."""
+        source = build_direct_verification_source(
+            proof="(* Export M. *)\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_require_import_allowed(self):
+        """Require Import is safe and must NOT be rejected."""
+        source = build_direct_verification_source(
+            proof="Require Import Arith.\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_from_require_import_allowed(self):
+        """From ... Require Import is safe and must NOT be rejected."""
+        source = build_direct_verification_source(
+            proof="From Coq Require Import Arith.\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_require_export_allowed(self):
+        """Require Export is safe (equivalent to Require Import for this file)."""
+        source = build_direct_verification_source(
+            proof="Require Export Arith.\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_from_require_export_allowed(self):
+        """From ... Require Export is safe and must NOT be rejected."""
+        source = build_direct_verification_source(
+            proof="From Coq Require Export Arith.\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_long_from_require_import_allowed(self):
+        """Require Import with long From path must NOT be falsely rejected."""
+        source = build_direct_verification_source(
+            proof="From Coq.Init.Datatypes Require Import Arith.\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_rejects_invalid_name(self):
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_direct_verification_source(
+                proof="Theorem t : True. Proof. exact I. Qed.",
+                problem_name="bad name",
+            )
+
+    def test_printing_depth_reset_before_check(self):
+        """Printing Depth/Width must be reset BEFORE Check to prevent truncation."""
+        source = build_direct_verification_source(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        # Printing flags must appear before Check
+        depth_pos = source.index("Set Printing Depth 1000000.")
+        check_pos = source.index("Check @t.")
+        assert depth_pos < check_pos
+
+    def test_printing_depth_also_before_print_assumptions(self):
+        """Printing flags must also be reset before Print Assumptions."""
+        source = build_direct_verification_source(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        pa_pos = source.index("Print Assumptions t.")
+        # There should be a second Set Printing Depth before Print Assumptions
+        last_depth_pos = source.rindex("Set Printing Depth 1000000.")
+        assert last_depth_pos < pa_pos
+
+    def test_allows_custom_module(self):
+        """Module MyHelper should not be rejected."""
+        source = build_direct_verification_source(
+            proof="Module MyHelper.\nDefinition x := 0.\nEnd MyHelper.\n"
+            "Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: build_direct_type_check_source
+# ---------------------------------------------------------------------------
+
+
+class TestBuildDirectTypeCheckSource:
+    """Test the Phase 3 type check source builder for problem statements."""
+
+    def test_contains_check(self):
+        source = build_direct_type_check_source(
+            problem_statement="Theorem t : True.\nAdmitted.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+        assert "Set Printing All." in source
+
+    def test_preserves_problem_as_is(self):
+        source = build_direct_type_check_source(
+            problem_statement="Theorem t : True.\nAdmitted.",
+            problem_name="t",
+        )
+        # The problem statement is included as-is (with Admitted.)
+        assert "Theorem t : True." in source
+        assert "Admitted." in source
+
+    def test_rejects_forbidden_in_problem(self):
+        with pytest.raises(ValueError, match="[Ff]orbidden"):
+            build_direct_type_check_source(
+                problem_statement='Redirect "/tmp/evil".\nTheorem t : True.\nAdmitted.',
+                problem_name="t",
+            )
+
+    def test_rejects_invalid_name(self):
+        with pytest.raises(ValueError, match="valid Rocq identifier"):
+            build_direct_type_check_source(
+                problem_statement="Theorem t : True.\nAdmitted.",
+                problem_name="bad\nname",
+            )
+
+    def test_printing_depth_reset_before_check(self):
+        """Printing Depth must be reset before Check to prevent truncation."""
+        source = build_direct_type_check_source(
+            problem_statement="Theorem t : True.\nAdmitted.",
+            problem_name="t",
+        )
+        depth_pos = source.index("Set Printing Depth 1000000.")
+        check_pos = source.index("Check @t.")
+        assert depth_pos < check_pos
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: parse_check_type
+# ---------------------------------------------------------------------------
+
+
+class TestParseCheckType:
+    """Test parsing Check output from coqc stdout."""
+
+    def test_single_line(self):
+        stdout = "@t : True\n"
+        result = parse_check_type(stdout, "t")
+        assert result is not None
+        assert "True" in result
+
+    def test_multiline_type(self):
+        stdout = "@add_0_r\n" "     : forall n : nat,\n" "       n + 0 = n\n"
+        result = parse_check_type(stdout, "add_0_r")
+        assert result is not None
+        assert "forall" in result
+        assert "nat" in result
+
+    def test_missing_name_returns_none(self):
+        stdout = "Some unrelated output\n"
+        assert parse_check_type(stdout, "nonexistent") is None
+
+    def test_empty_stdout_returns_none(self):
+        assert parse_check_type("", "t") is None
+
+    def test_colon_on_next_line(self):
+        stdout = "@foo\n" "     : nat -> nat\n"
+        result = parse_check_type(stdout, "foo")
+        assert result is not None
+        assert "nat -> nat" in result
+
+    def test_with_other_output_before(self):
+        """Check output appears after other compilation output."""
+        stdout = "some warning here\n" "@t\n" "     : True\n"
+        result = parse_check_type(stdout, "t")
+        assert result is not None
+        assert "True" in result
+
+    def test_last_match_wins(self):
+        """If @name appears twice, the LAST match is used (prevents stdout injection)."""
+        stdout = "@t : nat\n\n@t : True\n"
+        result = parse_check_type(stdout, "t")
+        assert result is not None
+        assert "True" in result
+        assert "nat" not in result
+
+    def test_no_prefix_collision(self):
+        """@foobar must not match when searching for @foo."""
+        stdout = "@foobar : nat\n\n@foo : True\n"
+        result = parse_check_type(stdout, "foo")
+        assert result is not None
+        assert "True" in result
+        assert "nat" not in result
+
+    def test_prefix_name_no_match_when_only_prefix_exists(self):
+        """If only @foobar exists, searching for @foo returns None."""
+        stdout = "@foobar : nat\n"
+        result = parse_check_type(stdout, "foo")
+        assert result is None
+
+    def test_bare_name_without_at_prefix(self):
+        """Check output without @ prefix should still be parsed."""
+        stdout = "t\n     : True\n"
+        result = parse_check_type(stdout, "t")
+        assert result is not None
+        assert result == "True"
+
+    def test_single_line_exact_type(self):
+        """Verify exact type extraction, not just substring."""
+        stdout = "@t : True\n"
+        result = parse_check_type(stdout, "t")
+        assert result == "True"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: _remaining_timeout
+# ---------------------------------------------------------------------------
+
+
+class TestRemainingTimeout:
+    """Test the timeout budget tracking helper."""
+
+    def test_returns_remaining_when_budget_available(self):
+        import time
+
+        from rocq_mcp.compile import _remaining_timeout
+
+        t0 = time.monotonic()
+        result = _remaining_timeout(t0, timeout=60, minimum=10)
+        assert result >= 59  # just started, nearly full budget
+
+    def test_returns_minimum_when_budget_exceeded(self):
+        import time
+
+        from rocq_mcp.compile import _remaining_timeout
+
+        t0 = time.monotonic() - 100  # 100 seconds ago
+        result = _remaining_timeout(t0, timeout=60, minimum=10)
+        assert result == 10
+
+    def test_returns_minimum_when_exactly_expired(self):
+        import time
+
+        from rocq_mcp.compile import _remaining_timeout
+
+        t0 = time.monotonic() - 60
+        result = _remaining_timeout(t0, timeout=60, minimum=10)
+        assert result == 10
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: normalize_type_for_comparison
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeTypeForComparison:
+    """Test type string normalization for comparison."""
+
+    def test_collapses_whitespace(self):
+        assert normalize_type_for_comparison("forall  n :  nat,  n = n") == (
+            "forall n : nat, n = n"
+        )
+
+    def test_collapses_newlines(self):
+        result = normalize_type_for_comparison("forall n : nat,\n  n + 0 = n")
+        assert "\n" not in result
+        assert "forall n : nat, n + 0 = n" == result
+
+    def test_strips_universe_annotations(self):
+        assert normalize_type_for_comparison("Type@{Set}") == "Type"
+        assert normalize_type_for_comparison("eq@{u v}") == "eq"
+
+    def test_strips_complex_universe(self):
+        result = normalize_type_for_comparison("forall (A : Type@{u+1}), A -> A")
+        assert "@{" not in result
+        assert "forall (A : Type), A -> A" == result
+
+    def test_identity_for_clean_type(self):
+        t = "forall n : nat, n + 0 = n"
+        assert normalize_type_for_comparison(t) == t
+
+    def test_strips_leading_trailing(self):
+        assert normalize_type_for_comparison("  True  ") == "True"
 
 
 # =========================================================================
@@ -1288,7 +2294,7 @@ class TestVerifySuccess:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is True
+        assert result["success"] is True
 
     async def test_classical_proof_accepted(
         self, workspace, classical_proof, classical_problem
@@ -1300,12 +2306,9 @@ class TestVerifySuccess:
             problem_statement=classical_problem,
             workspace=str(workspace),
         )
-        assert result["verified"] is True
+        assert result["success"] is True
         # Should list classic as a standard axiom
-        if (
-            "assumptions" in result
-            and result["assumptions"] != "Closed under the global context"
-        ):
+        if "assumptions" in result and result["assumptions"] != []:
             assert any("classic" in a for a in result["assumptions"])
 
     async def test_braces_in_proof(self, workspace, braces_proof):
@@ -1321,7 +2324,28 @@ class TestVerifySuccess:
             problem_statement=problem,
             workspace=str(workspace),
         )
-        assert result["verified"] is True
+        assert result["success"] is True
+
+    async def test_printing_depth_reset(self, workspace):
+        """Proof that sets Printing Depth to 1 must still verify.
+
+        If Set Printing Depth 1 is inside the proof (Module M), it could
+        truncate Print Assumptions output. The template resets Printing Depth
+        to 1000000 after End M., so verification should succeed.
+        """
+        proof = (
+            "Require Import Arith.\n"
+            "Theorem depth_test : 1 + 1 = 2.\n"
+            "Proof. Set Printing Depth 1. reflexivity. Qed.\n"
+        )
+        problem = "Require Import Arith.\nTheorem depth_test : 1 + 1 = 2.\nAdmitted.\n"
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="depth_test",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is True
 
     async def test_multiline_import_proof(self, workspace, multiline_import_proof):
         """Proof with multi-line From...Require Import should verify."""
@@ -1338,7 +2362,7 @@ class TestVerifySuccess:
             problem_statement=problem,
             workspace=str(workspace),
         )
-        assert result["verified"] is True
+        assert result["success"] is True
 
 
 @pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
@@ -1355,7 +2379,7 @@ class TestVerifyRejection:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
 
     async def test_axiom_spoofing(self, workspace, axiom_spoofing_proof):
         """CRITICAL: user-defined 'Axiom classic : False' must be rejected.
@@ -1370,7 +2394,7 @@ class TestVerifyRejection:
             problem_statement=problem,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
 
     async def test_admitted_inside_module(
         self, workspace, admitted_proof, simple_problem_statement
@@ -1382,7 +2406,7 @@ class TestVerifyRejection:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
         # Should either have suspicious assumptions or a compilation error
         assert "assumptions" in result or "error" in result
 
@@ -1396,14 +2420,14 @@ class TestVerifyRejection:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
 
     async def test_end_module_escape(self, workspace):
         """Proof containing 'End M.' to try to escape the module sandbox.
 
         The proof tries to close Module M early, then declare an axiom at
         top level. Rocq should reject this with a compilation error, which
-        is the safe outcome (verified=False).
+        is the safe outcome (success=False).
         """
         escape_proof = (
             "Theorem t : True.\n"
@@ -1419,7 +2443,7 @@ class TestVerifyRejection:
             problem_statement="Theorem t : True.\nAdmitted.\n",
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
 
     async def test_module_m_in_problem_statement(self, workspace):
         """Problem statement containing 'Module M.' must not break template.
@@ -1443,7 +2467,7 @@ class TestVerifyRejection:
         )
         # Should fail: either the module structure is invalid, or the
         # extra Module M. causes a redefinition error
-        assert result["verified"] is False
+        assert result["success"] is False
 
 
 @pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
@@ -1460,7 +2484,7 @@ class TestVerifyInputValidation:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
         assert "valid rocq identifier" in result["error"].lower()
 
     async def test_bad_workspace(self, simple_proof, simple_problem_statement):
@@ -1471,7 +2495,7 @@ class TestVerifyInputValidation:
             problem_statement=simple_problem_statement,
             workspace="/nonexistent/path/xyz",
         )
-        assert result["verified"] is False
+        assert result["success"] is False
         assert "error" in result
 
     async def test_timeout(self, workspace, timeout_proof):
@@ -1484,7 +2508,7 @@ class TestVerifyInputValidation:
             workspace=str(workspace),
             timeout=3,
         )
-        assert result["verified"] is False
+        assert result["success"] is False
         assert "timed out" in result["error"].lower()
 
     async def test_oversized_proof(self, workspace):
@@ -1495,7 +2519,18 @@ class TestVerifyInputValidation:
             problem_statement="Theorem test : True.\nAdmitted.",
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
+        assert "size" in result["error"].lower()
+
+    async def test_oversized_problem_statement(self, workspace):
+        """Problem statement exceeding max size should be rejected."""
+        result = await rocq_verify(
+            proof="Theorem test : True. Proof. exact I. Qed.",
+            problem_name="test",
+            problem_statement="x" * 2_000_000,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
         assert "size" in result["error"].lower()
 
     async def test_newline_in_problem_name(
@@ -1507,7 +2542,7 @@ class TestVerifyInputValidation:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
 
     async def test_space_in_problem_name(
         self, workspace, simple_proof, simple_problem_statement
@@ -1518,7 +2553,7 @@ class TestVerifyInputValidation:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert result["verified"] is False
+        assert result["success"] is False
 
 
 @pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
@@ -1551,6 +2586,194 @@ class TestVerifyCleanup:
         )
         after = set(glob_mod.glob(str(workspace / "*")))
         assert before == after, f"Leftover artifacts: {after - before}"
+
+
+# ---------------------------------------------------------------------------
+# Unified envelope contract (Audit finding #4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
+class TestVerifyEnvelopeContract:
+    """rocq_verify must emit the same {success, error, reason, ...}
+    envelope as every other tool — never the legacy {verified} shape."""
+
+    async def test_success_path_uses_success_not_verified(
+        self, workspace, simple_proof, simple_problem_statement
+    ):
+        result = await rocq_verify(
+            proof=simple_proof,
+            problem_name="add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+        )
+        assert "success" in result
+        assert result["success"] is True
+        # Legacy field must NOT be emitted.
+        assert "verified" not in result
+
+    async def test_validation_failure_emits_reason_validation(
+        self, workspace, simple_proof, simple_problem_statement
+    ):
+        """A dotted problem_name fails validation; reason must be 'validation'."""
+        result = await rocq_verify(
+            proof=simple_proof,
+            problem_name="Nat.add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert result.get("reason") == "validation"
+        assert "verified" not in result
+
+    async def test_axiom_failure_emits_reason_axiom_dependency(
+        self, workspace, admitted_proof, simple_problem_statement
+    ):
+        """A proof that depends on Admitted hits the suspicious-verdict path
+        in _build_assumptions_result; reason must be 'axiom_dependency'."""
+        result = await rocq_verify(
+            proof=admitted_proof,
+            problem_name="add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert result.get("reason") == "axiom_dependency"
+        assert "verified" not in result
+
+    async def test_compile_error_emits_reason_compile_error(
+        self, workspace, cheating_proof, simple_problem_statement
+    ):
+        """A proof that fails to type-check (e.g. type redefinition) hits
+        the Phase 1 build-failure path; reason must be 'compile_error'."""
+        result = await rocq_verify(
+            proof=cheating_proof,
+            problem_name="add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert result.get("reason") == "compile_error"
+        assert "verified" not in result
+
+    async def test_oversized_proof_emits_reason_validation(self, workspace):
+        result = await rocq_verify(
+            proof="x" * 2_000_000,
+            problem_name="test",
+            problem_statement="Theorem test : True.\nAdmitted.",
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert result.get("reason") == "validation"
+
+    async def test_pet_restarted_failure_not_double_recorded(
+        self, workspace, monkeypatch
+    ):
+        """When Phase 2's pet toc lookup crashes, ``_run_with_pet`` records
+        ``rocq_verify/crashed`` into recent_errors and returns a
+        ``pet_restarted: True`` envelope.  ``run_verify`` propagates that
+        envelope; the wrapper used to record it AGAIN, producing two
+        entries for one call with conflicting attribution.  The wrapper
+        must skip its own _record_error when ``pet_restarted`` is set."""
+        from collections import deque
+
+        from rocq_mcp.server import rocq_verify
+        import rocq_mcp.server as _server
+        from tests.conftest import _MockContext
+
+        # Pre-populate the buffer with the entry _run_with_pet would
+        # have recorded inside _extract_problem_structure.
+        ls = {"recent_errors": deque(maxlen=10)}
+        ls["recent_errors"].append(
+            {
+                "tool": "rocq_verify",
+                "message": "Pet process died: <foo>",
+                "reason": "crashed",
+                "occurred_at": 0.0,
+            }
+        )
+
+        async def fake_run_verify(**kwargs):
+            return {
+                "success": False,
+                "error": "Pet process died: <foo>",
+                "reason": "crashed",
+                "pet_restarted": True,
+            }
+
+        monkeypatch.setattr(_server, "run_verify", fake_run_verify)
+        monkeypatch.setattr(_server, "_validate_workspace", lambda ws: None)
+
+        await rocq_verify(
+            proof="x",
+            problem_name="t",
+            problem_statement="Theorem t : True. Admitted.",
+            workspace=str(workspace),
+            ctx=_MockContext(ls),
+        )
+
+        # Buffer must still have exactly the one prior entry.
+        assert len(ls["recent_errors"]) == 1
+        only = ls["recent_errors"][0]
+        assert only["tool"] == "rocq_verify"
+        assert only["reason"] == "crashed"
+
+    async def test_axiom_dependency_round_trips_into_recent_errors(
+        self, workspace, admitted_proof, simple_problem_statement
+    ):
+        """End-to-end: an admit-dependent proof fails with
+        reason="axiom_dependency" AND records that into recent_errors
+        so rocq_diag surfaces it.  compile.py writes the response
+        reason but never calls _record_error itself — the wrapper does.
+        Without this test, a refactor that drops the wrapper's
+        recording would only break rocq_diag, not the response, and
+        the existing TestVerifyEnvelopeContract assertions would
+        still pass."""
+        from rocq_mcp.server import rocq_verify
+        from tests.conftest import _MockContext, make_lifespan_state
+
+        ls = make_lifespan_state(full=True)
+        result = await rocq_verify(
+            proof=admitted_proof,
+            problem_name="add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+            ctx=_MockContext(ls),
+        )
+        assert result["success"] is False
+        assert result.get("reason") == "axiom_dependency"
+        recorded = [
+            e
+            for e in ls["recent_errors"]
+            if e.get("tool") == "rocq_verify" and e.get("reason") == "axiom_dependency"
+        ]
+        assert len(recorded) == 1
+
+    async def test_compile_error_round_trips_into_recent_errors(
+        self, workspace, cheating_proof, simple_problem_statement
+    ):
+        """Same shape for compile_error: type-redefinition cheat fails
+        Phase 1 build, surfaces reason="compile_error" on the response,
+        and lands in recent_errors under that reason."""
+        from rocq_mcp.server import rocq_verify
+        from tests.conftest import _MockContext, make_lifespan_state
+
+        ls = make_lifespan_state(full=True)
+        result = await rocq_verify(
+            proof=cheating_proof,
+            problem_name="add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+            ctx=_MockContext(ls),
+        )
+        assert result["success"] is False
+        assert result.get("reason") == "compile_error"
+        recorded = [
+            e
+            for e in ls["recent_errors"]
+            if e.get("tool") == "rocq_verify" and e.get("reason") == "compile_error"
+        ]
+        assert len(recorded) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1596,7 +2819,7 @@ class TestSharedDefsIntegration:
         )
         source = build_shared_defs_verification_source(proof, "foo", structure)
         # Actually compile it with coqc
-        from rocq_mcp.server import _run_coqc
+        from rocq_mcp.compile import _run_coqc
 
         result = _run_coqc(source, "/tmp", 60)
         assert result["returncode"] == 0, f"coqc failed: {result['stderr']}"
@@ -1605,8 +2828,8 @@ class TestSharedDefsIntegration:
             or "Axioms" not in result["stdout"]
         )
 
-    async def test_module_m_fails_with_inductive(self, workspace):
-        """Standard Module M should fail when proof has Inductive types."""
+    async def test_module_m_fails_with_inductive_phase3_succeeds(self, workspace):
+        """Standard Module M fails with Inductive types, but Phase 3 catches it."""
         proof = (
             "Inductive color := Red | Green | Blue.\n"
             "Theorem foo : forall c : color, c = c.\n"
@@ -1623,6 +2846,500 @@ class TestSharedDefsIntegration:
             problem_statement=problem,
             workspace=str(workspace),
         )
-        # Without pytanque ctx, Phase 2 cannot run, so this falls back to
-        # Phase 1 which should fail due to type unification across Module M.
-        assert result["verified"] is False
+        # Without pytanque ctx, Phase 2 cannot run.  Phase 1 fails due to
+        # type unification across Module M.  Phase 3 succeeds (direct compilation).
+        assert result["success"] is True
+        assert result["verification_method"] == "direct"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Direct verification integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
+class TestDirectVerification:
+    """Test Phase 3 direct verification against real coqc.
+
+    Phase 3 compiles the proof as-is (no Module M), then verifies via
+    Print Assumptions + Check type comparison.
+    """
+
+    async def test_simple_proof_phase3(self, workspace):
+        """A simple valid proof should pass Phase 3 when Phase 1 fails."""
+        # Use Section/Variable which Module M can't handle
+        proof = (
+            "Section Foo.\n"
+            "Variable A : Type.\n"
+            "Theorem foo_id : A -> A.\n"
+            "Proof. intro x. exact x. Qed.\n"
+            "End Foo.\n"
+        )
+        problem = (
+            "Section Foo.\n"
+            "Variable A : Type.\n"
+            "Theorem foo_id : A -> A.\n"
+            "Admitted.\n"
+            "End Foo.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="foo_id",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        # Phase 1 will fail (Section inside Module M causes issues),
+        # Phase 3 should succeed
+        assert result["success"] is True
+        assert result["verification_method"] == "direct"
+
+    async def test_cheating_axiom_caught(self, workspace):
+        """Phase 3 must catch proofs that use custom axioms."""
+        proof = (
+            "Axiom cheat : False.\n"
+            "Theorem anything : 1 = 2.\n"
+            "Proof. destruct cheat. Qed.\n"
+        )
+        problem = "Theorem anything : 1 = 2.\nAdmitted.\n"
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="anything",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+
+    async def test_admitted_helper_caught(self, workspace):
+        """Phase 3 must catch proofs with Admitted helper lemmas."""
+        proof = (
+            "Require Import Arith.\n"
+            "Lemma helper : forall n : nat, n + 0 = n. Admitted.\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Proof. apply helper. Qed.\n"
+        )
+        problem = (
+            "Require Import Arith.\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Admitted.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="add_0_r",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+
+    async def test_type_mismatch_caught(self, workspace):
+        """Phase 3 must catch proofs that prove the wrong statement."""
+        proof = (
+            "Require Import Arith.\n"
+            "Theorem wrong : forall n : nat, n + 0 = n.\n"
+            "Proof. intros. lia. Qed.\n"
+        )
+        # Problem asks for a different theorem
+        problem = (
+            "Require Import Arith.\n"
+            "Theorem wrong : forall n m : nat, n + m = m + n.\n"
+            "Admitted.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="wrong",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+
+    async def test_export_in_proof_caught(self, workspace):
+        """Phase 3 must reject proofs that use Export."""
+        proof = (
+            "Module Inner. Definition x := 0. End Inner.\n"
+            "Export Inner.\n"
+            "Theorem t : x = 0.\n"
+            "Proof. reflexivity. Qed.\n"
+        )
+        problem = "Theorem t : x = 0.\nAdmitted.\n"
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="t",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        # Phase 1 should catch this via Module M compilation error,
+        # and Phase 3 rejects Export
+        assert result["success"] is False
+
+    async def test_full_fallback_chain(self, workspace):
+        """Phase 1 fails → Phase 2 skipped (no ctx) → Phase 3 succeeds."""
+        # A proof with Inductive types that Module M can't handle
+        proof = (
+            "Inductive color := Red | Green | Blue.\n"
+            "Theorem color_eq : forall c : color, c = c.\n"
+            "Proof. destruct c; reflexivity. Qed.\n"
+        )
+        problem = (
+            "Inductive color := Red | Green | Blue.\n"
+            "Theorem color_eq : forall c : color, c = c.\n"
+            "Admitted.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="color_eq",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is True
+        assert result["verification_method"] == "direct"
+
+    async def test_direct_method_has_note(self, workspace):
+        """Phase 3 results should include a note about reduced security."""
+        proof = (
+            "Inductive color := Red | Green | Blue.\n"
+            "Theorem color_eq : forall c : color, c = c.\n"
+            "Proof. destruct c; reflexivity. Qed.\n"
+        )
+        problem = (
+            "Inductive color := Red | Green | Blue.\n"
+            "Theorem color_eq : forall c : color, c = c.\n"
+            "Admitted.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="color_eq",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is True
+        assert "direct" in result.get("note", "").lower()
+
+    async def test_valid_proof_still_uses_phase1(
+        self, workspace, simple_proof, simple_problem_statement
+    ):
+        """A normal proof that works with Phase 1 should NOT use Phase 3."""
+        result = await rocq_verify(
+            proof=simple_proof,
+            problem_name="add_0_r",
+            problem_statement=simple_problem_statement,
+            workspace=str(workspace),
+        )
+        assert result["success"] is True
+        assert result["verification_method"] == "module_m"
+
+
+@pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
+class TestTimeoutFallbackToPhase3:
+    """Phase 1/2 timeout should fall through to Phase 3.
+
+    Uses monkeypatch to deterministically force Phase 1 timeout (the
+    real-world scenario is compute-heavy proofs where Module M doubles
+    the work, e.g. mathd_numbertheory_543).  Phase 3 calls use real coqc.
+    """
+
+    async def test_phase1_timeout_triggers_phase3(self, workspace, monkeypatch):
+        """When Phase 1 times out, Phase 3 should run and succeed."""
+        import rocq_mcp.compile as _cpl
+
+        real_run_coqc = _cpl._run_coqc
+        call_count = 0
+
+        def mock_run_coqc(source, ws, timeout):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Phase 1 — simulate timeout
+                return {
+                    "returncode": -1,
+                    "stdout": "",
+                    "stderr": "",
+                    "timed_out": True,
+                }
+            # Phase 3 calls — delegate to real coqc
+            return real_run_coqc(source, ws, timeout)
+
+        monkeypatch.setattr(_cpl, "_run_coqc", mock_run_coqc)
+
+        proof = (
+            "From Coq Require Import Arith.\n\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Proof.\n"
+            "  intros n. induction n as [| n' IH].\n"
+            "  - reflexivity.\n"
+            "  - simpl. rewrite IH. reflexivity.\n"
+            "Qed.\n"
+        )
+        problem = (
+            "From Coq Require Import Arith.\n\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Admitted.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="add_0_r",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is True
+        assert result["verification_method"] == "direct"
+        # Phase 1 (1 call) + Phase 3 Run A + Run B = 3 calls
+        assert call_count == 3
+
+    async def test_phase1_timeout_phase3_catches_axiom(self, workspace, monkeypatch):
+        """Phase 1 times out, Phase 3 runs and catches cheating (custom axiom).
+
+        Uses monkeypatch to force Phase 1 timeout deterministically,
+        then verifies Phase 3 catches the cheating proof via real coqc.
+        """
+        import rocq_mcp.compile as _cpl
+
+        real_run_coqc = _cpl._run_coqc
+        call_count = 0
+
+        def mock_run_coqc(source, ws, timeout):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Phase 1 — simulate timeout
+                return {
+                    "returncode": -1,
+                    "stdout": "",
+                    "stderr": "",
+                    "timed_out": True,
+                }
+            return real_run_coqc(source, ws, timeout)
+
+        monkeypatch.setattr(_cpl, "_run_coqc", mock_run_coqc)
+
+        proof = (
+            "Axiom cheat : False.\n"
+            "Theorem anything : 1 = 2.\n"
+            "Proof. destruct cheat. Qed.\n"
+        )
+        problem = "Theorem anything : 1 = 2.\nAdmitted.\n"
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="anything",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        # Phase 3 now blocks Axiom keyword before compilation
+        assert "axiom" in result.get("error", "").lower()
+
+    async def test_phase1_timeout_phase3_also_times_out(self, workspace, monkeypatch):
+        """When Phase 1 and Phase 3 both timeout, return Phase 1 timeout error."""
+        import rocq_mcp.compile as _cpl
+
+        def mock_run_coqc(source, ws, timeout):
+            return {
+                "returncode": -1,
+                "stdout": "",
+                "stderr": "",
+                "timed_out": True,
+            }
+
+        monkeypatch.setattr(_cpl, "_run_coqc", mock_run_coqc)
+
+        result = await rocq_verify(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+            problem_statement="Theorem t : True.\nAdmitted.\n",
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert "timed out" in result["error"].lower()
+
+    async def test_phase1_timeout_phase3_type_mismatch(self, workspace, monkeypatch):
+        """Phase 1 times out, Phase 3 catches type mismatch (wrong statement)."""
+        import rocq_mcp.compile as _cpl
+
+        real_run_coqc = _cpl._run_coqc
+        call_count = 0
+
+        def mock_run_coqc(source, ws, timeout):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Phase 1 — simulate timeout
+                return {
+                    "returncode": -1,
+                    "stdout": "",
+                    "stderr": "",
+                    "timed_out": True,
+                }
+            return real_run_coqc(source, ws, timeout)
+
+        monkeypatch.setattr(_cpl, "_run_coqc", mock_run_coqc)
+
+        # Proof proves 0 + n = n but problem expects n + 0 = n
+        proof = (
+            "From Coq Require Import Arith.\n\n"
+            "Theorem add_0_r : forall n : nat, 0 + n = n.\n"
+            "Proof.\n"
+            "  intros n. reflexivity.\n"
+            "Qed.\n"
+        )
+        problem = (
+            "From Coq Require Import Arith.\n\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Admitted.\n"
+        )
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="add_0_r",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert "type mismatch" in result.get("error", "").lower()
+
+
+@pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
+class TestAdmittedBanInDirectVerification:
+    """Test that Admitted, admit, and give_up are banned in Phase 3."""
+
+    def test_admitted_rejected(self):
+        """Proof containing Admitted must be rejected."""
+        with pytest.raises(ValueError, match="Admitted"):
+            build_direct_verification_source(
+                proof="Lemma helper : False. Admitted.\n"
+                "Theorem t : True. Proof. exact I. Qed.",
+                problem_name="t",
+            )
+
+    def test_admit_tactic_rejected(self):
+        """Proof containing admit tactic must be rejected."""
+        with pytest.raises(ValueError, match="admit"):
+            build_direct_verification_source(
+                proof="Theorem t : True. Proof. admit. Qed.",
+                problem_name="t",
+            )
+
+    def test_admitted_in_comment_allowed(self):
+        """Admitted inside a comment must NOT trigger the ban."""
+        source = build_direct_verification_source(
+            proof="(* Admitted *)\nTheorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+
+    def test_clean_proof_allowed(self):
+        """A clean proof without Admitted/admit must pass."""
+        source = build_direct_verification_source(
+            proof="Theorem t : True. Proof. exact I. Qed.",
+            problem_name="t",
+        )
+        assert "Check @t." in source
+        assert "Print Assumptions t." in source
+
+    def test_give_up_rejected(self):
+        """Proof containing give_up should be rejected."""
+        with pytest.raises(ValueError, match="give_up"):
+            build_direct_verification_source(
+                proof="Theorem t : True.\nProof. give_up. Qed.",
+                problem_name="t",
+            )
+
+
+@pytest.mark.skipif(not COQC_AVAILABLE, reason="coqc not available")
+class TestAxiomBanInDirectVerification:
+    """Test that axiom-introducing commands are banned in Phase 3.
+
+    This prevents a bypass where ``Axiom classic : False`` would pass
+    verification because "classic" is in _KNOWN_SAFE_AXIOMS.
+    """
+
+    @pytest.mark.parametrize(
+        "keyword",
+        ["Axiom", "Parameter", "Conjecture"],
+    )
+    def test_axiom_keyword_rejected(self, keyword):
+        """Proofs containing axiom-introducing commands must be rejected."""
+        proof = f"{keyword} my_thing : False.\nTheorem t : True. Proof. exact I. Qed."
+        with pytest.raises(ValueError, match=keyword):
+            build_direct_verification_source(proof=proof, problem_name="t")
+
+    def test_axiom_whitelist_bypass_blocked(self):
+        """The specific attack: Axiom classic : False must be blocked."""
+        proof = "Axiom classic : False.\nTheorem t : True. Proof. exact I. Qed."
+        with pytest.raises(ValueError, match="Axiom"):
+            build_direct_verification_source(proof=proof, problem_name="t")
+
+    @pytest.mark.parametrize(
+        "keyword",
+        ["Axiom", "Parameter", "Conjecture"],
+    )
+    def test_axiom_keyword_in_comment_allowed(self, keyword):
+        """Axiom keywords inside comments must NOT trigger the ban."""
+        proof = f"(* {keyword} foo : False. *)\nTheorem t : True. Proof. exact I. Qed."
+        source = build_direct_verification_source(proof=proof, problem_name="t")
+        assert "Check @t." in source
+
+    @pytest.mark.parametrize(
+        "keyword",
+        ["Axiom", "Parameter", "Conjecture"],
+    )
+    def test_axiom_keyword_in_string_allowed(self, keyword):
+        """Axiom keywords inside strings must NOT trigger the ban."""
+        proof = (
+            f'Theorem t : True. Proof. idtac "{keyword} foo : False.". exact I. Qed.'
+        )
+        source = build_direct_verification_source(proof=proof, problem_name="t")
+        assert "Check @t." in source
+
+    def test_variable_hypothesis_allowed(self):
+        """Variable/Hypothesis are section-local and allowed in Phase 3."""
+        proof = (
+            "Section Foo.\n"
+            "Variable A : Type.\n"
+            "Hypothesis H : True.\n"
+            "Theorem t : True. Proof. exact H. Qed.\n"
+            "End Foo.\n"
+        )
+        source = build_direct_verification_source(proof=proof, problem_name="t")
+        assert "Check @t." in source
+
+
+class TestValidateRocqIdentifier:
+    """Tests for _validate_rocq_identifier."""
+
+    def test_simple_identifier(self):
+        """Simple identifiers should pass."""
+        _validate_rocq_identifier("foo")
+        _validate_rocq_identifier("Bar")
+        _validate_rocq_identifier("_x")
+
+    def test_identifier_with_primes(self):
+        """Identifiers with primes (tick marks) should pass."""
+        _validate_rocq_identifier("x'")
+        _validate_rocq_identifier("foo''")
+
+    def test_identifier_with_digits(self):
+        """Identifiers with digits should pass."""
+        _validate_rocq_identifier("x1")
+        _validate_rocq_identifier("foo_bar_42")
+
+    def test_empty_string_rejected(self):
+        """Empty string is not a valid identifier."""
+        with pytest.raises(ValueError, match="must be a valid Rocq identifier"):
+            _validate_rocq_identifier("")
+
+    def test_starts_with_digit_rejected(self):
+        """Identifiers starting with digits are invalid."""
+        with pytest.raises(ValueError, match="must be a valid Rocq identifier"):
+            _validate_rocq_identifier("42foo")
+
+    def test_contains_spaces_rejected(self):
+        """Identifiers with spaces are invalid."""
+        with pytest.raises(ValueError, match="must be a valid Rocq identifier"):
+            _validate_rocq_identifier("foo bar")
+
+    def test_contains_dots_rejected(self):
+        """Qualified names (with dots) are not simple identifiers."""
+        with pytest.raises(ValueError, match="must be a valid Rocq identifier"):
+            _validate_rocq_identifier("Foo.bar")
+
+    def test_custom_label(self):
+        """Custom label should appear in error message."""
+        with pytest.raises(ValueError, match="theorem_name"):
+            _validate_rocq_identifier("123", label="theorem_name")

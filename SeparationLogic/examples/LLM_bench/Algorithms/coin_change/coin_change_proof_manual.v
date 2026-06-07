@@ -96,7 +96,7 @@ Proof.
     cancel (IntArray.full dp_pre (amount_pre + 1) dp_l_2).
   - split_pures.
     all: dump_pre_spatial;
-      try solve [auto | lia | specialize (H8 i ltac:(lia)); lia].
+      try solve [auto | lia | destruct (PreH10 i ltac:(lia)); lia].
 Qed. 
 
 Lemma proof_of_coinChange_entail_wit_7 : coinChange_entail_wit_7.
@@ -110,18 +110,19 @@ Proof.
     all: dump_pre_spatial;
       try solve [auto | lia].
     unfold DpCoinInnerProgress, DpReachableTable in *.
-    destruct H10 as [_ [Hlen Hreach]].
+    pose proof PreH12 as Htable.
+    destruct Htable as [_ [Hlen Hreach]].
     repeat split; try lia.
     + intro Hz.
       pose proof (ReachableAmount_app_single_below
-                    (sublist 0 i coins_l) coin k ltac:(lia) H10)
+                    (sublist 0 i coins_l) coin k ltac:(lia) ltac:(lia))
         as [_ Hold_new].
       apply Hold_new.
       apply (proj1 (Hreach k ltac:(lia))).
       exact Hz.
     + intro Hnew.
       pose proof (ReachableAmount_app_single_below
-                    (sublist 0 i coins_l) coin k ltac:(lia) H10)
+                    (sublist 0 i coins_l) coin k ltac:(lia) ltac:(lia))
         as [Hnew_old _].
       apply (proj2 (Hreach k ltac:(lia))).
       apply Hnew_old.
@@ -157,7 +158,7 @@ Proof.
     cancel (IntArray.full coins_pre coinsSize_pre coins_l).
   - split_pures; dump_pre_spatial; try lia; try assumption.
     unfold DpCoinInnerProgress in *.
-    destruct H13 as
+    destruct PreH15 as
       (Hcoin_pos & Hcoin_le_j & Hj_le_amount & Hdp_len &
        Hprefix & Hsuffix).
     repeat split; try lia; try exact Hdp_len.
@@ -182,7 +183,7 @@ Proof.
         {
           intro Hreach_minus.
           apply (proj2 Hprefix_minus) in Hreach_minus.
-          rewrite H in Hreach_minus.
+          rewrite PreH1 in Hreach_minus.
           contradiction Hreach_minus; reflexivity.
         }
         pose proof
@@ -203,17 +204,18 @@ Proof.
   - cancel (IntArray.full coins_pre coinsSize_pre coins_l).
     cancel (IntArray.full dp_pre (amount_pre + 1) dp_l_2).
   - split_pures; dump_pre_spatial; try lia; try assumption.
-    + assert (j = amount_pre + 1) by lia.
-      subst j.
-      rewrite (sublist_0_succ_app 0 coins_l i) by lia.
-      rewrite <- H7.
-      unfold DpReachableTable, DpCoinInnerProgress in *.
-      destruct H12 as
-        (Hcoin_pos & Hcoin_le_j & Hj_le_amount & Hdp_len &
-         Hprefix & Hsuffix).
-      repeat split; try lia; try exact Hdp_len.
-      * apply (proj1 (Hprefix k ltac:(lia))).
-      * apply (proj2 (Hprefix k ltac:(lia))).
+    + rewrite (sublist_0_succ_app 0 coins_l i) by lia.
+      rewrite <- PreH9.
+      unfold DpReachableTable in *.
+      destruct PreH12 as (Hhi_nonneg & Hdp_len & Htable).
+      split; [lia |].
+      split; [lia |].
+      intros idx Hidx.
+      split; intro Hreach.
+      * apply ReachableAmount_app_l.
+        apply (proj1 (Htable idx ltac:(lia))); assumption.
+      * rewrite ReachableAmount_app_single_below in Hreach by lia.
+        apply (proj2 (Htable idx ltac:(lia))); assumption.
 Qed. 
 
 Lemma proof_of_coinChange_entail_wit_9_2 : coinChange_entail_wit_9_2.
@@ -225,18 +227,17 @@ Proof.
     cancel (IntArray.full dp_pre (amount_pre + 1) dp_l_2).
   - split_pures; dump_pre_spatial; try lia; try assumption.
     + rewrite (sublist_0_succ_app 0 coins_l i) by lia.
-      rewrite <- H7.
-      unfold DpReachableTable in *.
-      destruct H10 as (Hhi_nonneg & Hdp_len & Htable).
-      repeat split; try lia; try exact Hdp_len.
-      * specialize (Htable k ltac:(lia)).
-        intro Hcell.
-        apply ReachableAmount_app_l.
-        apply (proj1 Htable); assumption.
-      * specialize (Htable k ltac:(lia)).
-        intro Hreach.
-        apply (proj2 Htable).
-        eapply ReachableAmount_app_single_lt; eauto; lia.
+      rewrite <- PreH9.
+      assert (j = amount_pre + 1) by lia.
+      subst j.
+      unfold DpReachableTable, DpCoinInnerProgress in *.
+      destruct PreH14 as
+        (Hcoin_pos & Hcoin_le_j & Hj_le_amount & Hdp_len &
+         Hprefix & Hsuffix).
+      split; [lia |].
+      split; [lia |].
+      intros idx Hidx.
+      apply Hprefix; lia.
 Qed. 
 
 Lemma proof_of_coinChange_entail_wit_11 : coinChange_entail_wit_11.
@@ -249,8 +250,8 @@ Proof.
   - split_pures; dump_pre_spatial; try lia; auto.
     + assert (i = coinsSize_pre) by lia.
       subst i.
-      rewrite (sublist_self coins_l coinsSize_pre (eq_sym H4)) in H7.
-      exact H7.
+      rewrite (sublist_self coins_l coinsSize_pre (eq_sym PreH6)) in PreH9.
+      exact PreH9.
     + unfold NoReachableAbove.
       split; [lia | intros k Hk HR; lia].
 Qed.
@@ -264,33 +265,17 @@ Proof.
     cancel (IntArray.full dp_pre (amount_pre + 1) dp_l_2).
   - split_pures; dump_pre_spatial; try lia; auto.
     unfold NoReachableAbove in *.
-    destruct H9 as [Hbounds Hno].
+    destruct PreH11 as [Hbounds Hno].
     split; [lia |].
     intros k Hk HR.
     destruct (Z.eq_dec k res) as [Heq | Hneq].
     + subst k.
-      unfold DpReachableTable in H8.
-      destruct H8 as [_ [_ Htab]].
+      unfold DpReachableTable in PreH10.
+      destruct PreH10 as [_ [_ Htab]].
       pose proof (proj2 (Htab res ltac:(lia)) HR) as Hnz.
-      rewrite H in Hnz.
+      rewrite PreH1 in Hnz.
       contradiction.
     + apply (Hno k); lia || exact HR.
-Qed.
-
-Lemma proof_of_coinChange_entail_wit_13_1 : coinChange_entail_wit_13_1.
-Proof.
-  pre_process.
-  Exists dp_l_2.
-  split_pure_spatial.
-  - cancel (IntArray.full coins_pre coinsSize_pre coins_l).
-    cancel (IntArray.full dp_pre (amount_pre + 1) dp_l_2).
-  - split_pures.
-    all: try (dump_pre_spatial; auto).
-    apply MaxReachableAmount_intro_no_above.
-    + replace res with 0 by lia; constructor.
-    + lia.
-    + lia.
-    + exact H8.
 Qed.
 
 Lemma proof_of_coinChange_entail_wit_13_2 : coinChange_entail_wit_13_2.
@@ -303,10 +288,26 @@ Proof.
   - split_pures.
     all: try (dump_pre_spatial; auto).
     apply MaxReachableAmount_intro_no_above.
-    + unfold DpReachableTable in H8.
-      destruct H8 as [_ [_ Htable]].
-      apply (proj1 (Htable res ltac:(lia))); exact H.
+    + replace res with 0 by lia; constructor.
     + lia.
     + lia.
-    + exact H9.
+    + exact PreH10.
+Qed.
+
+Lemma proof_of_coinChange_entail_wit_13_1 : coinChange_entail_wit_13_1.
+Proof.
+  pre_process.
+  Exists dp_l_2.
+  split_pure_spatial.
+  - cancel (IntArray.full coins_pre coinsSize_pre coins_l).
+    cancel (IntArray.full dp_pre (amount_pre + 1) dp_l_2).
+  - split_pures.
+    all: try (dump_pre_spatial; auto).
+    apply MaxReachableAmount_intro_no_above.
+    + unfold DpReachableTable in PreH10.
+      destruct PreH10 as [_ [_ Htable]].
+      apply (proj1 (Htable res ltac:(lia))); exact PreH1.
+    + lia.
+    + lia.
+    + exact PreH11.
 Qed.

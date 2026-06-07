@@ -1,9 +1,4 @@
-#include "string_def.h"
-
-/*@ Extern Coq (memchr_result : list Z -> Z -> Z -> Z -> Z -> Prop) */
-/*@ Extern Coq (strchr_result : list Z -> Z -> Z -> Z -> Prop) */
-
-/*@ Import Coq Require Import SimpleC.EE.LLM_bench.Engineering.string.search_lib */
+#include "string.h"
 
 char *memchr(char *s, int c, int n)
 /*@ With bytes

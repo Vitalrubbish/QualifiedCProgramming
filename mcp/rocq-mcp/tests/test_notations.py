@@ -110,7 +110,7 @@ class TestRunNotationsReal:
     @pytest.mark.asyncio
     async def test_basic_notations(self, mock_pet, lifespan_state, tmp_path):
         """run_notations with two mock notations produces correct formatted output."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         notations = [
             _make_notation_info("Coq.Init.Nat", "", "_ + _", "nat_scope"),
@@ -135,7 +135,7 @@ class TestRunNotationsReal:
     @pytest.mark.asyncio
     async def test_empty_notations(self, mock_pet, lifespan_state, tmp_path):
         """run_notations with no notations returns 'No notations found'."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         mock_pet.list_notations_in_statement = MagicMock(return_value=[])
 
@@ -153,7 +153,7 @@ class TestRunNotationsReal:
     @pytest.mark.asyncio
     async def test_notation_without_scope(self, mock_pet, lifespan_state, tmp_path):
         """Notation with scope=None should omit the scope suffix."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         notations = [
             _make_notation_info("Coq.Init.Logic", "", "_ = _", scope=None),
@@ -178,7 +178,7 @@ class TestRunNotationsReal:
         self, mock_pet, lifespan_state, tmp_path
     ):
         """When path is empty/None, module should fall back to secpath."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         notations = [
             _make_notation_info(
@@ -203,7 +203,7 @@ class TestRunNotationsReal:
         self, mock_pet, lifespan_state, tmp_path
     ):
         """When both path and secpath are empty, module should be 'unknown'."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         notations = [
             _make_notation_info(path="", secpath="", notation="_ ++ _", scope=None),
@@ -224,7 +224,7 @@ class TestRunNotationsReal:
     @pytest.mark.asyncio
     async def test_forbidden_command_in_statement(self, lifespan_state, tmp_path):
         """run_notations should reject forbidden commands in the statement."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         result = await run_notations(
             statement='Redirect "out" Check nat.',
@@ -240,7 +240,7 @@ class TestRunNotationsReal:
     @pytest.mark.asyncio
     async def test_forbidden_command_in_preamble(self, lifespan_state, tmp_path):
         """run_notations should reject forbidden commands in the preamble."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         result = await run_notations(
             statement="n = n",
@@ -256,7 +256,7 @@ class TestRunNotationsReal:
     @pytest.mark.asyncio
     async def test_with_preamble(self, mock_pet, lifespan_state, tmp_path):
         """run_notations passes the preamble through to the dummy source file."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         notations = [
             _make_notation_info("Coq.Reals.Rdefinitions", "", "_ + _", "R_scope"),
@@ -286,7 +286,7 @@ class TestRunNotationsReal:
         self, mock_pet, lifespan_state, tmp_path
     ):
         """Multiple notations produce correctly formatted multi-line output."""
-        from rocq_mcp.server import run_notations
+        from rocq_mcp.interactive import run_notations
 
         notations = [
             _make_notation_info("Coq.Init.Nat", "", "_ + _", "nat_scope"),
@@ -313,3 +313,38 @@ class TestRunNotationsReal:
         assert "_ + _" in lines[1]
         assert "_ = _" in lines[2]
         assert "_ * _" in lines[3]
+
+
+# ---------------------------------------------------------------------------
+# MCP wrapper tests for the ``timeout=`` clamp.
+# ---------------------------------------------------------------------------
+
+
+class TestRocqNotationsTimeout:
+    """timeout on the rocq_notations MCP wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_above_cap_clamped_with_signal(self, monkeypatch, tmp_path):
+        from rocq_mcp.server import rocq_notations
+        from tests.conftest import _MockContext
+        import rocq_mcp.server as _server
+
+        captured: dict = {}
+
+        async def mock_run_notations(**kwargs):
+            captured.update(kwargs)
+            return {"success": True, "output": "mock"}
+
+        monkeypatch.setattr(_server, "run_notations", mock_run_notations)
+        monkeypatch.setattr(_server, "_validate_workspace", lambda ws: None)
+
+        result = await rocq_notations(
+            statement="n + 0 = n",
+            preamble="",
+            workspace=str(tmp_path),
+            timeout=5000,
+            ctx=_MockContext({"pet_client": None}),
+        )
+
+        assert result["clamped_timeout"] == _server.ROCQ_QUERY_TIMEOUT_CAP
+        assert captured["timeout"] == float(_server.ROCQ_QUERY_TIMEOUT_CAP)

@@ -83,7 +83,7 @@ Proof. Admitted.
 Lemma proof_of_free_InequList_safety_wit_4 : free_InequList_safety_wit_4.
 Proof. Admitted. 
 
-Lemma proof_of_free_InequList_return_wit_3 : free_InequList_return_wit_3.
+Lemma proof_of_free_InequList_return_wit_2 : free_InequList_return_wit_2.
 Proof. Admitted. 
 
 Lemma proof_of_free_InequList_partial_solve_wit_1 : free_InequList_partial_solve_wit_1.
@@ -389,10 +389,10 @@ Proof. Admitted.
 Lemma proof_of_real_shadow_safety_wit_25 : real_shadow_safety_wit_25.
 Proof. Admitted. 
 
-Lemma proof_of_real_shadow_return_wit_3 : real_shadow_return_wit_3.
+Lemma proof_of_real_shadow_return_wit_2 : real_shadow_return_wit_2.
 Proof. Admitted. 
 
-Lemma proof_of_real_shadow_return_wit_5 : real_shadow_return_wit_5.
+Lemma proof_of_real_shadow_return_wit_4 : real_shadow_return_wit_4.
 Proof. Admitted. 
 
 Lemma proof_of_real_shadow_partial_solve_wit_1_pure : real_shadow_partial_solve_wit_1_pure.

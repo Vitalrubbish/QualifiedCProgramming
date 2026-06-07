@@ -20,83 +20,33 @@ Local Open Scope sac.
 
 Lemma proof_of_gcd_return_wit_1 : gcd_return_wit_1.
 Proof.
-	intros y_pre x_pre retval.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hret.
-		Intros_p Hy.
-		Intros_p Hxmax.
-		Intros_p Hymax.
-		Intros_p Hymin.
-		Intros_p Hxmin.
-		Intros_p Hygt.
-		cancel.
-	-
-		Intros_p Hret.
-		Intros_p Hy.
-		Intros_p Hxmax.
-		Intros_p Hymax.
-		Intros_p Hymin.
-		Intros_p Hxmin.
-		Intros_p Hygt.
-		dump_pre_spatial.
-		change (retval = Z.gcd x_pre y_pre).
-		change (retval = Z.gcd y_pre (Z.rem x_pre y_pre)) in Hret.
-		rewrite Z.gcd_comm in Hret.
-		rewrite Z.gcd_rem in Hret by exact Hy.
-		rewrite Z.gcd_comm.
-		exact Hret.
+  pre_process.
+  entailer!.
+  subst.
+  pose proof Z.gcd_rem x_pre y_pre ltac:(lia).
+  rewrite Z.gcd_comm, H, Z.gcd_comm.
+  reflexivity.
 Qed.
 
 Lemma proof_of_gcd_return_wit_2 : gcd_return_wit_2.
 Proof.
-	intros y_pre x_pre retval.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hret.
-		Intros_p Hy0.
-		Intros_p Hxmax.
-		Intros_p Hymax.
-		Intros_p Hymin.
-		Intros_p Hxmin.
-		Intros_p Hygt.
-		cancel.
-	-
-		Intros_p Hret.
-		Intros_p Hy0.
-		Intros_p Hxmax.
-		Intros_p Hymax.
-		Intros_p Hymin.
-		Intros_p Hxmin.
-		Intros_p Hygt.
-		dump_pre_spatial.
-		change (retval = Z.gcd x_pre y_pre).
-		change (retval = Z.abs x_pre) in Hret.
-		rewrite Hy0.
-		rewrite Z.gcd_0_r.
-		exact Hret.
+  pre_process.
+  entailer!.
+  subst.
+  rewrite Z.gcd_0_r.
+  reflexivity.
 Qed.
 
 Lemma proof_of_gcd_partial_solve_wit_2_pure : gcd_partial_solve_wit_2_pure.
 Proof.
-	intros y_pre x_pre.
-	repeat (split_pure_spatial || split_pures).
-	- Intros_p Hy.
-		Intros_p Hxmax.
-		Intros_p Hymax.
-		Intros_p Hymin.
-		Intros_p Hxmin.
-		Intros_p Hygt.
-		dump_pre_spatial.
-		exact Hygt.
-	-
-		Intros_p Hy.
-		Intros_p Hxmax.
-		Intros_p Hymax.
-		Intros_p Hymin.
-		Intros_p Hxmin.
-		Intros_p Hygt.
-		dump_pre_spatial.
-		pose proof (Z.rem_bound_abs x_pre y_pre Hy) as Hrem.
-		apply Z.abs_lt in Hrem.
-		assert (Z.abs y_pre <= 2147483647) by (apply Z.abs_le; lia).
-		lia.
+  pre_process.
+  prop_apply (store_int_range  (&("y")) y_pre).
+  Intros.
+  change (Int.min_signed) with (-2147483648) in H.
+  change (Int.max_signed) with (2147483647) in H.
+  pose proof Z.rem_bound_pos_pos x_pre y_pre.
+  pose proof Z.rem_bound_neg_pos x_pre y_pre.
+  pose proof Z.rem_bound_pos_neg x_pre y_pre.
+  pose proof Z.rem_bound_neg_neg x_pre y_pre.
+  entailer!.
 Qed.

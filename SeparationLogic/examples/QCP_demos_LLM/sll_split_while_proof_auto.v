@@ -33,6 +33,6 @@ Proof. Admitted.
 Lemma proof_of_split_while_entail_wit_1 : split_while_entail_wit_1.
 Proof. Admitted. 
 
-Lemma proof_of_split_while_entail_wit_6_2 : split_while_entail_wit_6_2.
+Lemma proof_of_split_while_entail_wit_6_1 : split_while_entail_wit_6_1.
 Proof. Admitted. 
 

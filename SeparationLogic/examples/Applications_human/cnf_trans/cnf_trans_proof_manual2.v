@@ -76,16 +76,14 @@ Qed.
 Lemma proof_of_prop2cnf_return_wit_3 : prop2cnf_return_wit_3.
 Proof.
   pre_process.
-  clear H8 H7.
-  rename H4 into Hs1.
-  rename H5 into Hs2.
-  rename H6 into Hs3.
-  rename H9 into H4.
+  pose proof PreH5 as Hs1.
+  pose proof PreH6 as Hs2.
+  pose proof PreH7 as Hs3.
   Exists clist pcnt ccnt var.
   unfold store_predata.
   Intros y.
   Exists y.
-  entailer!; rewrite H in *.
+  entailer!; rewrite PreH1 in *.
   2: {
     pose proof SmtProp_size_nonneg (SmtV var).
     lia.
@@ -111,10 +109,8 @@ Opaque Z.add Z.sub Z.mul Z.opp Z.of_nat Z.of_N Z.succ.
 Lemma proof_of_prop2cnf_return_wit_2 : prop2cnf_return_wit_2.
 Proof.
   pre_process.
-  clear H25.
-  rewrite H18 in *.
+  rewrite PreH20 in *.
   unfold SmtPTID in *.
-  clear H26.
   unfold store_predata.
   Intros y0.
   unfold iff2cnf_unary.
@@ -143,17 +139,17 @@ Proof.
     destruct step1 as [data1 p1''].  
     destruct data1 as [tmp clause_cnt].
     destruct tmp as [cnf_res prop_cnt].
-    unfold make_prop2cnf_ret, make_predata in H11.
-    rewrite <- H11 in Hstep1.
+    unfold make_prop2cnf_ret, make_predata in PreH13.
+    rewrite <- PreH13 in Hstep1.
     inversion Hstep1.
     subst.
     reflexivity.
   }
   (* unfold make_prop2cnf_ret, make_predata in H5. *)
   unfold prop_cnt_inf.
-  unfold prop_cnt_inf in H9.
-    pose proof Z.max_lub_l _ _ _ H9.
-    pose proof Z.max_lub_r _ _ _ H9.
+  unfold prop_cnt_inf in PreH11.
+    pose proof Z.max_lub_l _ _ _ PreH11.
+    pose proof Z.max_lub_r _ _ _ PreH11.
   apply Z.max_lub; rewrite H_c1, H_c2.
   + simpl.
     assert (p1 <= pcnt'_2 + 1) by lia.
@@ -181,45 +177,45 @@ Qed.
 Lemma proof_of_prop2cnf_return_wit_1 : prop2cnf_return_wit_1.
 Proof.
   pre_process.
-  rename H into Hs.
-  rename H0 into Hs0.
-  rename H1 into Hs1.
-  rename H2 into Hs2.
-  rename H5 into Hs3.
-  rename H6 into Hs4.
-  rename H15 into Hs5.
-  rename H16 into Hs6.
-  rename H23 into Hs7.
-  rename H24 into Hs8.
-  rename H31 into Hs9.
-  rename H32 into Hs10.
-  rename H33 into Hs11.
-  rename H25 into Hs12.
-  rename H26 into Hs13.
-  rename H3 into H.
-  rename H4 into H0.
-  rename H7 into H1.
-  rename H8 into H2.
-  rename H9 into H3.
-  rename H10 into H4.
-  rename H11 into H5.
-  rename H12 into H6.
-  rename H13 into H7.
-  rename H14 into H8.
-  rename H17 into H11.
-  rename H18 into H10.
-  rename H19 into H9.
-  rename H20 into H12.
-  rename H21 into H13.
-  rename H22 into H14.
-  rename H27 into H15.
-  rename H28 into H16.
-  rename H29 into H17.
-  rename H30 into H18.
-  rename H34 into H19.
-  rename H35 into H20.
-  rename H36 into H21.
-  rename H37 into H22.
+  pose proof PreH1 as Hs.
+  pose proof PreH2 as Hs0.
+  pose proof PreH3 as Hs1.
+  pose proof PreH4 as Hs2.
+  pose proof PreH7 as Hs3.
+  pose proof PreH8 as Hs4.
+  pose proof PreH17 as Hs5.
+  pose proof PreH18 as Hs6.
+  pose proof PreH25 as Hs7.
+  pose proof PreH26 as Hs8.
+  pose proof PreH33 as Hs9.
+  pose proof PreH34 as Hs10.
+  pose proof PreH35 as Hs11.
+  pose proof PreH27 as Hs12.
+  pose proof PreH28 as Hs13.
+  pose proof PreH5 as H.
+  pose proof PreH6 as H0.
+  pose proof PreH9 as H1.
+  pose proof PreH10 as H2.
+  pose proof PreH11 as H3.
+  pose proof PreH12 as H4.
+  pose proof PreH13 as H5.
+  pose proof PreH14 as H6.
+  pose proof PreH15 as H7.
+  pose proof PreH16 as H8.
+  pose proof PreH19 as H11.
+  pose proof PreH20 as H10.
+  pose proof PreH21 as H9.
+  pose proof PreH22 as H12.
+  pose proof PreH23 as H13.
+  pose proof PreH24 as H14.
+  pose proof PreH29 as H15.
+  pose proof PreH30 as H16.
+  pose proof PreH31 as H17.
+  pose proof PreH32 as H18.
+  pose proof PreH36 as H19.
+  pose proof PreH37 as H20.
+  pose proof PreH38 as H21.
+  pose proof PreH39 as H22.
   rewrite H15 in *.
   unfold SmtPTID in *.
   clear H19.
@@ -738,9 +734,9 @@ Qed.
 Lemma proof_of_prop2cnf_partial_solve_wit_19_pure : prop2cnf_partial_solve_wit_19_pure.
 Proof.
   pre_process.
-  rewrite H25 in *.
-  unfold make_predata, make_prop2cnf_ret in H9.
-  pose proof pcnt_upper_incr _ _ _ _ _ _ _ _ H9.
+  rewrite PreH27 in *.
+  unfold make_predata, make_prop2cnf_ret in PreH11.
+  pose proof pcnt_upper_incr _ _ _ _ _ _ _ _ PreH11.
   assert (p1 <= pcnt'_2 + 1) by lia.
   assert (- p1 <= pcnt'_2 + 1) by lia.
   entailer!.
@@ -762,8 +758,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_2 : prop2cnf_which_implies_wit_2.
 Proof.
   pre_process.
-  rewrite H0.
-  rewrite <- H, H0.
+  rewrite PreH2.
+  rewrite <- PreH1, PreH2.
   sep_apply store_SmtProp'_Binary.
   Intros op lt rt y z.
   Exists z y op lt rt.
@@ -774,17 +770,17 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_3 : prop2cnf_which_implies_wit_3.
 Proof.
   pre_process.
-  rewrite H0 in H.
-  pose proof prop_cnt_inf_Binary_l _ _ _ _ H.
-  pose proof prop_cnt_inf_Binary_r _ _ _ _ H.
+  rewrite PreH2 in PreH1.
+  pose proof prop_cnt_inf_Binary_l _ _ _ _ PreH1.
+  pose proof prop_cnt_inf_Binary_r _ _ _ _ PreH1.
   entailer!.
 Qed.
 
 Lemma proof_of_prop2cnf_which_implies_wit_4 : prop2cnf_which_implies_wit_4.
 Proof.
   pre_process.
-  rewrite H0 in H.
-  simpl in H.
+  rewrite PreH2 in PreH1.
+  simpl in PreH1.
   pose proof SmtProp_size_nonneg lt.
   pose proof SmtProp_size_nonneg rt.
   assert (SmtProp_size lt <= 10000) by lia.
@@ -795,8 +791,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_5 : prop2cnf_which_implies_wit_5.
 Proof.
   pre_process.
-  rewrite H0 in H.
-  simpl in H.
+  rewrite PreH2 in PreH1.
+  simpl in PreH1.
   pose proof SmtProp_size_nonneg lt.
   pose proof SmtProp_size_nonneg rt.
   assert (Zlength clist <= 40000 - 4 * SmtProp_size lt) by lia.
@@ -806,8 +802,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_6 : prop2cnf_which_implies_wit_6.
 Proof.
   pre_process.
-  rewrite H0 in *.
-  simpl in H.
+  rewrite PreH2 in *.
+  simpl in PreH1.
   pose proof SmtProp_size_nonneg lt.
   pose proof SmtProp_size_nonneg rt.
   assert (pcnt <= 40000 - SmtProp_size lt) by lia.
@@ -817,8 +813,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_7 : prop2cnf_which_implies_wit_7.
 Proof.
   pre_process.
-  rewrite H1 in *.
-  simpl in H0.
+  rewrite PreH3 in *.
+  simpl in PreH2.
   pose proof SmtProp_size_nonneg lt.
   pose proof SmtProp_size_nonneg rt.
   assert (Zlength clist' <= 40000 - 4 * SmtProp_size rt) by lia.
@@ -828,8 +824,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_8 : prop2cnf_which_implies_wit_8.
 Proof.
   pre_process.
-  unfold make_predata, make_prop2cnf_ret in H.
-  pose proof pcnt_upper_incr _ _ _ _ _ _ _ _ H.
+  unfold make_predata, make_prop2cnf_ret in PreH1.
+  pose proof pcnt_upper_incr _ _ _ _ _ _ _ _ PreH1.
   assert (prop_cnt_inf_SmtProp rt <= pcnt') by lia.
   entailer!.
 Qed.
@@ -837,8 +833,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_9 : prop2cnf_which_implies_wit_9.
 Proof.
   pre_process.
-  rewrite H1 in *.
-  simpl in H0.
+  rewrite PreH3 in *.
+  simpl in PreH2.
   pose proof SmtProp_size_nonneg lt.
   assert (pcnt' <= 39999 - SmtProp_size rt) by lia.
   entailer!.
@@ -858,8 +854,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_11 : prop2cnf_which_implies_wit_11.
 Proof.
   pre_process.
-  rewrite H2 in *.
-  simpl in H1.
+  rewrite PreH4 in *.
+  simpl in PreH3.
   simpl.
   pose proof SmtProp_size_nonneg lt'.
   pose proof SmtProp_size_nonneg rt'.
@@ -879,7 +875,7 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_15 : prop2cnf_which_implies_wit_15.
 Proof.
   pre_process.
-  rewrite H1.
+  rewrite PreH3.
   simpl.
   assert (Zlength clist'_2 <= Zlength clist + 4 * (1 + SmtProp_size lt' + SmtProp_size rt') - 4) by lia.
   entailer!.
@@ -888,8 +884,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_17 : prop2cnf_which_implies_wit_17.
 Proof.
   pre_process.
-  rewrite H0.
-  rewrite <- H, H0.
+  rewrite PreH2.
+  rewrite <- PreH1, PreH2.
   sep_apply store_SmtProp'_Unary.
   Intros op prop0 y.
   Exists y op prop0.
@@ -901,8 +897,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_18 : prop2cnf_which_implies_wit_18.
 Proof.
   pre_process.
-  rewrite H0 in H.
-  pose proof prop_cnt_inf_Unary_r _ _ _ H.
+  rewrite PreH2 in PreH1.
+  pose proof prop_cnt_inf_Unary_r _ _ _ PreH1.
   entailer!.
 Qed.
 
@@ -910,8 +906,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_19 : prop2cnf_which_implies_wit_19.
 Proof.
   pre_process.
-  rewrite H0 in H.
-  simpl in H.
+  rewrite PreH2 in PreH1.
+  simpl in PreH1.
   assert (SmtProp_size sub_prop <= 10000) by lia.
   entailer!.
 Qed.
@@ -919,8 +915,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_20 : prop2cnf_which_implies_wit_20.
 Proof.
   pre_process.
-  rewrite H0 in H.
-  simpl in H.
+  rewrite PreH2 in PreH1.
+  simpl in PreH1.
   pose proof SmtProp_size_nonneg sub_prop.
   assert (Zlength clist <= 40000 - 4 * SmtProp_size sub_prop) by lia.
   entailer!.
@@ -929,8 +925,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_21 : prop2cnf_which_implies_wit_21.
 Proof.
   pre_process.
-  rewrite H0 in *.
-  simpl in H.
+  rewrite PreH2 in *.
+  simpl in PreH1.
   pose proof SmtProp_size_nonneg sub_prop.
   assert (pcnt <= 40000 - SmtProp_size sub_prop) by lia.
   entailer!.
@@ -950,8 +946,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_23 : prop2cnf_which_implies_wit_23.
 Proof.
   pre_process.
-  rewrite H1 in *.
-  simpl in H0.
+  rewrite PreH3 in *.
+  simpl in PreH2.
   simpl.
   pose proof SmtProp_size_nonneg sub_prop'.
   assert (pcnt' <= pcnt + (1 + SmtProp_size sub_prop') - 1) by lia.
@@ -971,7 +967,7 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_27 : prop2cnf_which_implies_wit_27.
 Proof.
   pre_process.
-  rewrite H0.
+  rewrite PreH2.
   simpl.
   assert (Zlength clist' <= Zlength clist + 4 * (1 + SmtProp_size sub_prop') - 4) by lia.
   entailer!.
@@ -980,8 +976,8 @@ Qed.
 Lemma proof_of_prop2cnf_which_implies_wit_29 : prop2cnf_which_implies_wit_29.
 Proof.
   pre_process.
-  rewrite H.
-  rewrite <- H0, H.
+  rewrite PreH1.
+  rewrite <- PreH2, PreH1.
   sep_apply store_SmtProp'_Var.
   Intros var.
   Exists var.

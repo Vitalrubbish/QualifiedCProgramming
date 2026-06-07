@@ -23,10 +23,10 @@ Lemma proof_of_swap_entail_wit_1 : swap_entail_wit_1.
 Proof.
   pre_process.
   destruct para_all; simpl; entailer!.
-  + rewrite <- derivable1_orp_intros1.
+  + Right.
     Exists z.
     entailer!.
-  + rewrite <- derivable1_orp_intros2.
+  + Left.
     Exists z0 z.
     entailer!.
 Qed.

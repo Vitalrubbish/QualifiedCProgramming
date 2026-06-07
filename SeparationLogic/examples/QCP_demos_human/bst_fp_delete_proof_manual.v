@@ -37,30 +37,12 @@ Proof.
   Intros l1 k0 v0 r1 pl.
   Intros pr.
   sep_apply (store_tree_make_tree b_v_left k0 v0 pl pr b_v_2 l1 r1); [ | try tauto | try tauto].
-  rewrite <-H15.
+  rewrite <-H2.
   Exists
     b_v_left
     (LH b_v_key b_v_value r0 :: pt0_2)
     l0.
   subst.
-  entailer!.
-Qed.
-
-Lemma proof_of_replace_min_return_wit_2 : replace_min_return_wit_2.
-Proof.
-  pre_process.
-  sep_apply store_tree_zero; [ | try tauto].
-  entailer!.
-  rewrite H.
-  sep_apply store_tree_zero; [ | try tauto].
-  Intros.
-  assert (b # Ptr |-> 0 |-- b # Ptr |-> 0 ** store_tree 0 fa empty); simpl; entailer!.
-  sep_apply H17.
-  sep_apply store_ptb_store_tree.
-  Intros p_root.
-  Exists p_root b_v_value b_v_key.
-  subst.
-  rewrite H8.
   entailer!.
 Qed.
 
@@ -73,9 +55,30 @@ Proof.
   Exists p_root b_v_value b_v_key.
   sep_apply (store_tree_zero b_v_left b_v l0); [ | try tauto].
   entailer!.
-  + rewrite H11; rewrite H6; rewrite H19; simpl; rewrite H1; entailer!.
-  + rewrite H9; rewrite H6; rewrite H19; simpl; reflexivity.
-  + rewrite H8; rewrite H6; rewrite H19; simpl; reflexivity.
+  + rewrite PreH13; rewrite PreH8; rewrite H2; simpl; rewrite PreH3; entailer!.
+  + rewrite PreH11; rewrite PreH8; rewrite H2; simpl; reflexivity.
+  + rewrite PreH10; rewrite PreH8; rewrite H2; simpl; reflexivity.
+Qed.
+
+Lemma proof_of_replace_min_return_wit_2 : replace_min_return_wit_2.
+Proof.
+  pre_process.
+  sep_apply (store_tree_zero b_v_right b_v r0); [ | try tauto].
+  entailer!.
+  sep_apply (store_tree_zero b_v_left b_v l0); [ | try tauto].
+  Intros.
+  subst b_v_right.
+  assert (b # Ptr |-> 0 |-- b # Ptr |-> 0 ** store_tree 0 fa empty); simpl; entailer!.
+  sep_apply H3.
+  sep_apply store_ptb_store_tree.
+  Intros p_root.
+  Exists p_root b_v_value b_v_key.
+  subst.
+  rewrite PreH10.
+  rewrite PreH7.
+  rewrite PreH8.
+  simpl.
+  entailer!.
 Qed.
 
 Lemma proof_of_replace_min_which_implies_wit_1 : replace_min_which_implies_wit_1.
@@ -109,7 +112,7 @@ Proof.
   entailer!.
 Qed.
 
-Lemma proof_of_Delete_entail_wit_2_2 : Delete_entail_wit_2_2.
+Lemma proof_of_Delete_entail_wit_2_1 : Delete_entail_wit_2_1.
 Proof.
   pre_process.
   Exists
@@ -119,15 +122,15 @@ Proof.
   sep_apply (store_ptb_LH b b_v_2); [ | try tauto .. ].
   sep_apply store_ptb_app.
   entailer!.
-  rewrite <-H4.
-  rewrite H2.
+  rewrite <- PreH6.
+  rewrite PreH4.
   simpl.
   f_equal.
   destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?];
     first [reflexivity | Key.order].
 Qed.
 
-Lemma proof_of_Delete_entail_wit_2_1 : Delete_entail_wit_2_1.
+Lemma proof_of_Delete_entail_wit_2_2 : Delete_entail_wit_2_2.
 Proof.
   pre_process.
   Exists
@@ -137,34 +140,12 @@ Proof.
   sep_apply (store_ptb_RH b b_v_2); [ | try tauto .. ].
   sep_apply store_ptb_app.
   entailer!.
-  rewrite <-H5.
-  rewrite H3.
+  rewrite <- PreH7.
+  rewrite PreH5.
   simpl.
   f_equal.
   destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?];
     first [reflexivity | Key.order].
-Qed.
-
-Lemma proof_of_Delete_return_wit_5 : Delete_return_wit_5.
-Proof.
-  pre_process.
-  sep_apply (store_tree_zero b_v_right b_v r0); [ | try tauto].
-  entailer!.
-  rewrite H.
-  sep_apply store_tree_zero; [ | try tauto].
-  entailer!.
-  assert (b # Ptr |-> 0 |-- b # Ptr |-> 0 ** store_tree 0 fa empty); simpl; entailer!.
-  sep_apply H14.
-  sep_apply store_ptb_store_tree.
-  Intros p_root.
-  Exists p_root.
-  rewrite <-H7.
-  rewrite H5.
-  rewrite H11.
-  simpl.
-  destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?]; try Key.order.
-  rewrite H13.
-  reflexivity.
 Qed.
 
 Lemma proof_of_Delete_return_wit_4 : Delete_return_wit_4.
@@ -176,13 +157,35 @@ Proof.
   Intros p_root.
   Exists p_root.
   entailer!.
-  rewrite <-H10.
-  rewrite H8.
-  rewrite H1.
+  rewrite <- PreH12.
+  rewrite PreH10.
+  rewrite PreH3.
   simpl.
   destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?]; try Key.order.
   subst; simpl.
   entailer!.
+Qed.
+
+Lemma proof_of_Delete_return_wit_5 : Delete_return_wit_5.
+Proof.
+  pre_process.
+  sep_apply (store_tree_zero b_v_right b_v r0); [ | try tauto].
+  entailer!.
+  rewrite PreH1.
+  sep_apply store_tree_zero; [ | try tauto].
+  entailer!.
+  assert (b # Ptr |-> 0 |-- b # Ptr |-> 0 ** store_tree 0 fa empty); simpl; entailer!.
+  sep_apply H3.
+  sep_apply store_ptb_store_tree.
+  Intros p_root.
+  Exists p_root.
+  rewrite <- PreH9.
+  rewrite PreH7.
+  rewrite H0.
+  simpl.
+  destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?]; try Key.order.
+  rewrite H2.
+  reflexivity.
 Qed.
 
 Lemma proof_of_Delete_return_wit_3 : Delete_return_wit_3.
@@ -194,9 +197,9 @@ Proof.
   Intros p_root.
   Exists p_root.
   entailer!.
-  rewrite <-H11.
-  rewrite H9.
-  rewrite H1.
+  rewrite <- PreH13.
+  rewrite PreH11.
+  rewrite PreH3.
   simpl.
   destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?]; try Key.order.
   subst; simpl.
@@ -214,14 +217,14 @@ Proof.
   sep_apply store_ptb_store_tree.
   Intros p_root.
   Exists p_root.
-  rewrite <-H14.
-  rewrite H12.
-  rewrite H5.
-  rewrite H18.
+  rewrite <- PreH16.
+  rewrite PreH14.
+  rewrite PreH7.
+  rewrite H0.
   unfold tree_delete.
   destruct (Key.dec x_pre b_v_key) as [[? | ?] | ?]; try Key.order.
-  rewrite <-H.
-  rewrite <-H0.
+  rewrite <- PreH2.
+  rewrite <- PreH1.
   entailer!.
 Qed.
 
@@ -234,12 +237,12 @@ Proof.
   subst.
   simpl.
   entailer!.
-  sep_apply H5.
+  sep_apply H1.
   sep_apply store_ptb_store_tree.
   Intros p_root.
   Exists p_root.
-  rewrite <-H0.
-  rewrite H4.
+  rewrite <- PreH2.
+  rewrite H0.
   simpl.
   entailer!.
 Qed.

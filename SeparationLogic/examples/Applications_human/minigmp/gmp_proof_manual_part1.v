@@ -96,34 +96,15 @@ Proof.
   entailer!.
   replace (n - 1 + 1) with n by lia.
   do 2 (rewrite (sublist_split n n_pre (n + 1)) ; try lia).
-  rewrite H3.
+  rewrite PreH5.
   rewrite (sublist_single 0 n l1) ; try lia.
   rewrite (sublist_single 0 n l2) ; try lia.
-  rewrite H.
+  rewrite PreH1.
   reflexivity.
 Qed.
 
 Lemma proof_of_mpn_cmp_return_wit_2 : mpn_cmp_return_wit_2.
 Proof. 
-  pre_process.
-  Left. Left.
-  entailer!.
-  + unfold mpd_store_Z_compact.
-    Exists l1 l2.
-    unfold mpd_store_list.
-    entailer!.
-    rewrite <-H11, <-H12.
-    entailer!.
-  + assert (Znth n l1 0 < Znth n l2 0) by lia. 
-    unfold UINT_MOD in *.
-    rewrite <- H5, <- H8.
-    apply (list_to_Z_cmp_same_length 4294967296 (ltac:(lia)) l1 l2 n) ; auto ; try lia.
-    rewrite <- H11, <-H12.
-    auto.
-Qed.
-
-Lemma proof_of_mpn_cmp_return_wit_3 : mpn_cmp_return_wit_3.
-Proof.
   pre_process.
   Right.
   entailer!.
@@ -131,14 +112,33 @@ Proof.
     Exists l1 l2.
     unfold mpd_store_list.
     entailer!.
-    rewrite <-H11, <-H12.
+    rewrite <-PreH13, <-PreH14.
     entailer!.
-  + pose proof (list_to_Z_cmp_same_length 4294967296 (ltac:(lia)) l2 l1 n) .
-    rewrite <- H11, <- H12 in H14.
+  + pose proof (list_to_Z_cmp_same_length 4294967296 (ltac:(lia)) l2 l1 n) as Hcmp.
+    rewrite <- PreH14, <- PreH13 in Hcmp.
     unfold UINT_MOD in *.
-    rewrite <- H5, <- H8.
-    specialize (H14 (ltac:(lia)) (ltac:(lia)) (ltac:(auto)) H10 H7 (ltac:(lia))).
+    rewrite <- PreH7, <- PreH10.
+    specialize (Hcmp (ltac:(lia)) (ltac:(lia)) (ltac:(auto)) PreH12 PreH9 (ltac:(lia))).
     lia.
+Qed.
+
+Lemma proof_of_mpn_cmp_return_wit_3 : mpn_cmp_return_wit_3.
+Proof.
+  pre_process.
+  Left. Left.
+  entailer!.
+  + unfold mpd_store_Z_compact.
+    Exists l1 l2.
+    unfold mpd_store_list.
+    entailer!.
+    rewrite <-PreH13, <-PreH14.
+    entailer!.
+  + assert (Znth n l1 0 < Znth n l2 0) by lia.
+    unfold UINT_MOD in *.
+    rewrite <- PreH7, <- PreH10.
+    apply (list_to_Z_cmp_same_length 4294967296 (ltac:(lia)) l1 l2 n) ; auto ; try lia.
+    rewrite <- PreH13, <-PreH14.
+    auto.
 Qed.
 
 Lemma proof_of_mpn_cmp_return_wit_1 : mpn_cmp_return_wit_1.
@@ -148,8 +148,8 @@ Proof.
   unfold mpd_store_Z_compact.
   Exists l1 l2.
   unfold mpd_store_list.
-  rewrite <- H3, <- H6.
-  rewrite <- H9, <- H10.
+  rewrite <- PreH11, <- PreH12.
+  rewrite <- PreH5, <- PreH8.
   entailer!.
   replace (n + 1) with 0 in * by lia.
   do 2 rewrite sublist_self in * by lia.
@@ -170,19 +170,6 @@ Qed.
 Lemma proof_of_mpn_cmp4_return_wit_4 : mpn_cmp4_return_wit_4.
 Proof.
   pre_process.
-  Right.
-  unfold mpd_store_Z_compact.
-  Intros l1 l2.
-  Exists l1 l2.
-  entailer!.
-  unfold UINT_MOD in *.
-  pose proof list_to_Z_cmp_diff_length 4294967296 (ltac:(lia)) l2 l1 (ltac:(lia)) (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia)).
-  lia. 
-Qed.
-
-Lemma proof_of_mpn_cmp4_return_wit_5 : mpn_cmp4_return_wit_5.
-Proof.
-  pre_process.
   Left. Left.
   unfold mpd_store_Z_compact.
   Intros l1 l2.
@@ -190,13 +177,26 @@ Proof.
   entailer!.
   unfold UINT_MOD in *.
   pose proof list_to_Z_cmp_diff_length 4294967296 (ltac:(lia)) l1 l2 (ltac:(lia)) (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia)).
+  lia. 
+Qed.
+
+Lemma proof_of_mpn_cmp4_return_wit_5 : mpn_cmp4_return_wit_5.
+Proof.
+  pre_process.
+  Right.
+  unfold mpd_store_Z_compact.
+  Intros l1 l2.
+  Exists l1 l2.
+  entailer!.
+  unfold UINT_MOD in *.
+  pose proof list_to_Z_cmp_diff_length 4294967296 (ltac:(lia)) l2 l1 (ltac:(lia)) (ltac:(tauto)) (ltac:(tauto)) (ltac:(lia)) (ltac:(lia)).
   lia.
 Qed.
 
 Lemma proof_of_mpn_cmp4_return_wit_1 : mpn_cmp4_return_wit_1.
 Proof.
   pre_process.
-  Right. subst.
+  Left. Left. subst.
   entailer!.
 Qed.
 
@@ -210,7 +210,7 @@ Qed.
 Lemma proof_of_mpn_cmp4_return_wit_3 : mpn_cmp4_return_wit_3.
 Proof.
   pre_process.
-  Left. Left. subst.
+  Right. subst.
   entailer!.
 Qed.
 
@@ -225,29 +225,30 @@ Qed.
 Lemma proof_of_mpn_normalized_size_entail_wit_3 : mpn_normalized_size_entail_wit_3.
 Proof.
   pre_process.
-  rewrite Znth_sublist in H ; try lia.
+  rewrite Znth_sublist in PreH1 ; try lia.
   replace (n - 1 + 0) with (n - 1) in * by lia.
   rewrite (sublist_split 0 n (n-1)) in *  ; try lia.
   set (m := n - 1) in *.
   replace n with (m + 1) in * by lia.
   rewrite (sublist_single 0 m l) in * ; try lia.
-  rewrite H in *.
+  rewrite PreH1 in *.
   unfold UINT_MOD in *.
-  rewrite list_to_Z_concat in H3 ; [ | lia | apply list_within_bound_sublist ; [ lia | lia | tauto] | simpl ; lia].
+  rewrite list_to_Z_concat in PreH5 ; [ | lia | apply list_within_bound_sublist ; [ lia | lia | tauto] | simpl ; lia].
   sep_apply (UIntArray.full_split_to_seg xp_pre m) ; try lia.
   sep_apply (UIntArray.seg_to_undef_seg xp_pre m ).
   sep_apply UIntArray.undef_seg_merge_to_undef_seg ; try lia.
   sep_apply UIntArray.seg_to_full.
   replace (xp_pre + 0 * sizeof ( UINT )) with (xp_pre) by lia.
   replace (m - 0) with m by lia.
-  assert (m = Zlength(sublist 0 m l)).
+  assert (Hm_sub_len : m = Zlength(sublist 0 m l)).
   {
     rewrite Zlength_sublist ; try lia.
   }
-  rewrite H11 at 2.
+  rewrite Hm_sub_len at 2.
   rewrite sublist_app_exact1.
-  simpl in H3.
   entailer!.
+  simpl in PreH5.
+  lia.
 Qed.
 
 Lemma proof_of_mpn_normalized_size_return_wit_1 : mpn_normalized_size_return_wit_1.
@@ -277,9 +278,9 @@ Proof.
     replace (n - 0 -  1) with (n - 1) by lia.
     pose proof (list_within_bound_Znth UINT_MOD UINT_MOD_pos (sublist 0 n l) (n - 1) (ltac:(lia)) (ltac:(tauto))).
     lia.
-  + intro. rewrite H10 in H. 
-    apply H. unfold Znth. simpl. 
-    destruct (Z.to_nat (n - 1)) ; try lia.
+  + intro Hnil. rewrite Hnil in PreH1.
+    unfold Znth in PreH1. simpl in PreH1.
+    contradiction PreH1; destruct (Z.to_nat (n - 1)); reflexivity.
 Qed.
 
 Lemma proof_of_mpn_normalized_size_which_implies_wit_1 : mpn_normalized_size_which_implies_wit_1.
@@ -292,4 +293,3 @@ Proof.
   rewrite <- H0.
   entailer!.
 Qed.
-

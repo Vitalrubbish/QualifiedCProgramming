@@ -13,6 +13,15 @@ linux-binary/symexec \
   --no-exec-info
 ```
 
+若最终检查对象位于 `QCP_examples/LLM_bench` 且源码使用 `QCP_demos_LLM` 公共头文件的裸 include，则 symexec 命令必须同时带：
+
+```bash
+-IQCP_examples/QCP_demos_LLM/ \
+-slp QCP_examples/QCP_demos_LLM/ SimpleC.EE.QCP_demos_LLM
+```
+
+其中 `-I` 用于 C 头文件搜索，`-slp` 用于 strategy / generated Coq 依赖路径；二者不能互相替代，也不要在 final-check 中把源码 include 改成相对路径来规避 include path 配置。
+
 ## 这一步要确认什么
 
 - `examples_goal.v` 已被当前 C 文件重新覆盖。

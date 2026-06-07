@@ -57,8 +57,8 @@ Proof.
   pre_process.
   subst.
   unfold store_queue.
-  simpl in H0.
-  inversion H0; subst.
+  simpl in PreH2.
+  inversion PreH2; subst.
   Exists p_callee_v ql2 l1_tail l2.
   split_pure_spatial.
   - cancel (&((q_pre)  # "queue" ->ₛ "l1") # Ptr  |-> p_callee_v).
@@ -96,7 +96,7 @@ Proof.
     cancel (&((q_pre)  # "queue" ->ₛ "l2") # Ptr  |-> 0).
     cancel (sll retval (rev l2)).
   - dump_pre_spatial.
-    simpl in H0.
+    simpl in PreH2.
     auto.
 Qed.
 
@@ -110,8 +110,10 @@ Proof.
   Exists l2_2.
   Exists ql1_2.
   split_pure_spatial.
-  - rewrite H2 in H0.
-    inversion H0; subst.
+  - match goal with
+    | Hcons : l1 = _ :: _ |- _ => rewrite Hcons in PreH2
+    end.
+    inversion PreH2; subst.
     cancel (&((q_pre)  # "queue" ->ₛ "l1") # Ptr  |-> ql1_2).
     cancel (&((q_pre)  # "queue" ->ₛ "l2") # Ptr  |-> ql2_2).
     simpl.
@@ -124,17 +126,19 @@ Proof.
     * dump_pre_spatial.
       auto.
   - split_pures ; dump_pre_spatial ; auto.
-    rewrite H2 in H0.
-    inversion H0; subst.
+    match goal with
+    | Hcons : l1 = _ :: _ |- _ => rewrite Hcons in PreH2
+    end.
+    inversion PreH2; subst.
     reflexivity.
 Qed.
 
-Lemma proof_of_dequeue_entail_wit_4_1 : dequeue_entail_wit_4_1.
+Lemma proof_of_dequeue_entail_wit_4_2 : dequeue_entail_wit_4_2.
 Proof.
   pre_process.
   Exists 0 ql1_2.
   destruct rev_l2 ; try discriminate.
-  inversion H. subst.
+  inversion PreH1. subst.
   Exists rev_l2.
   Exists nil.
   split_pure_spatial.

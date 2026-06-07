@@ -2,17 +2,27 @@
 
 TestCompileVerifyWorkflow: compile then verify (require coqc)
 TestSharedDefsVerifyWorkflow: Phase 2 shared-defs verify (require coqc + pet)
-TestQueryStepWorkflow: query then step (require pet)
+TestQueryStepWorkflow: query then start+check (require pet)
 """
 
 from __future__ import annotations
 
+import asyncio
 import glob as glob_mod
+import re
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import COQC_AVAILABLE, PET_AVAILABLE
+from tests.conftest import COQC_AVAILABLE, PET_AVAILABLE, _MockContext
+
+
+def _call_rocq_compile(**kwargs):
+    """Run the async server wrapper from synchronous tests."""
+    from rocq_mcp.server import rocq_compile
+
+    return asyncio.run(rocq_compile(**kwargs))
+
 
 # =========================================================================
 # Compile -> Verify workflow (Phase 0)
@@ -29,7 +39,9 @@ class TestCompileVerifyWorkflow:
         """Full happy path: compile succeeds -> verify succeeds."""
         from rocq_mcp.server import rocq_compile, rocq_verify
 
-        compile_result = rocq_compile(source=simple_proof, workspace=str(workspace))
+        compile_result = await rocq_compile(
+            source=simple_proof, workspace=str(workspace)
+        )
         assert compile_result["success"] is True
 
         verify_result = await rocq_verify(
@@ -38,26 +50,29 @@ class TestCompileVerifyWorkflow:
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert verify_result["verified"] is True
+        assert verify_result["success"] is True
 
     async def test_compile_then_verify_cheat(
         self, workspace, cheating_proof, simple_problem_statement
     ):
-        """Compile may succeed but verify catches the type-redefinition cheat."""
+        """Cheat is rejected: either compilation fails or verify catches it."""
         from rocq_mcp.server import rocq_compile, rocq_verify
 
-        compile_result = rocq_compile(source=cheating_proof, workspace=str(workspace))
-        # The cheat may or may not compile (depends on exact Rocq version)
-        # The critical assertion is that verify rejects it.
+        compile_result = await rocq_compile(
+            source=cheating_proof, workspace=str(workspace)
+        )
+        # The cheat may or may not compile (depends on exact Rocq version).
+        # If compilation already rejects it, the cheat is caught — test passes.
         if not compile_result["success"]:
-            pytest.skip("cheating proof did not compile on this Rocq version")
+            return
+        # If it compiles, verify must catch it.
         verify_result = await rocq_verify(
             proof=cheating_proof,
             problem_name="add_0_r",
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert verify_result["verified"] is False
+        assert verify_result["success"] is False
 
     async def test_classical_axiom_accepted(
         self, workspace, classical_proof, classical_problem
@@ -65,7 +80,9 @@ class TestCompileVerifyWorkflow:
         """Proof using classical logic passes both compile and verify."""
         from rocq_mcp.server import rocq_compile, rocq_verify
 
-        compile_result = rocq_compile(source=classical_proof, workspace=str(workspace))
+        compile_result = await rocq_compile(
+            source=classical_proof, workspace=str(workspace)
+        )
         assert compile_result["success"] is True
 
         verify_result = await rocq_verify(
@@ -74,7 +91,7 @@ class TestCompileVerifyWorkflow:
             problem_statement=classical_problem,
             workspace=str(workspace),
         )
-        assert verify_result["verified"] is True
+        assert verify_result["success"] is True
 
     async def test_axiom_spoofing_rejected_end_to_end(
         self, workspace, axiom_spoofing_proof
@@ -87,7 +104,7 @@ class TestCompileVerifyWorkflow:
         """
         from rocq_mcp.server import rocq_compile, rocq_verify
 
-        compile_result = rocq_compile(
+        compile_result = await rocq_compile(
             source=axiom_spoofing_proof, workspace=str(workspace)
         )
         if not compile_result["success"]:
@@ -99,24 +116,164 @@ class TestCompileVerifyWorkflow:
             problem_statement=problem,
             workspace=str(workspace),
         )
-        assert verify_result["verified"] is False
+        assert verify_result["success"] is False
 
     async def test_admitted_proof_rejected_end_to_end(
         self, workspace, admitted_proof, simple_problem_statement
     ):
-        """Proof with an Admitted helper: compile may pass, verify must reject."""
+        """Proof with an Admitted helper: compile passes, verify must reject."""
         from rocq_mcp.server import rocq_compile, rocq_verify
 
-        compile_result = rocq_compile(source=admitted_proof, workspace=str(workspace))
-        if not compile_result["success"]:
-            pytest.skip("admitted proof did not compile on this Rocq version")
+        compile_result = await rocq_compile(
+            source=admitted_proof, workspace=str(workspace)
+        )
+        assert compile_result["success"] is True
         verify_result = await rocq_verify(
             proof=admitted_proof,
             problem_name="add_0_r",
             problem_statement=simple_problem_statement,
             workspace=str(workspace),
         )
-        assert verify_result["verified"] is False
+        assert verify_result["success"] is False
+
+    async def test_print_assumptions_injection_rejected(self, workspace):
+        """CRITICAL: Print Assumptions stdout injection must not bypass verification.
+
+        The proof injects ``Print Assumptions clean.`` inside Module M,
+        producing ``Closed under the global context`` on stdout before the
+        template's real ``Print Assumptions`` output.  The parser must use
+        the LAST output block and correctly detect the Admitted helper.
+        """
+        from rocq_mcp.server import rocq_compile, rocq_verify
+
+        injection_proof = (
+            "From Coq Require Import Arith.\n\n"
+            "Lemma helper : forall n : nat, n + 0 = n. Admitted.\n"
+            "Lemma clean : True. Proof. exact I. Qed.\n"
+            "Print Assumptions clean.\n\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Proof.\n"
+            "  intros n. apply helper.\n"
+            "Qed.\n"
+        )
+        problem = (
+            "From Coq Require Import Arith.\n\n"
+            "Theorem add_0_r : forall n : nat, n + 0 = n.\n"
+            "Admitted.\n"
+        )
+        compile_result = await rocq_compile(
+            source=injection_proof, workspace=str(workspace)
+        )
+        assert compile_result["success"] is True
+
+        verify_result = await rocq_verify(
+            proof=injection_proof,
+            problem_name="add_0_r",
+            problem_statement=problem,
+            workspace=str(workspace),
+        )
+        assert verify_result["success"] is False, (
+            "Print Assumptions stdout injection bypassed verification! "
+            f"Result: {verify_result}"
+        )
+
+    def test_compile_rejects_forbidden_redirect(self, workspace):
+        """rocq_compile must reject source containing Redirect."""
+        from rocq_mcp.server import rocq_compile
+
+        result = _call_rocq_compile(
+            source='Redirect "/tmp/evil" Print nat.\nTheorem t : True. Proof. exact I. Qed.',
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert "forbidden" in result["error"].lower()
+
+    def test_compile_rejects_forbidden_load(self, workspace):
+        """rocq_compile must reject source containing Load."""
+        from rocq_mcp.server import rocq_compile
+
+        result = _call_rocq_compile(
+            source='Load "evil".\nTheorem t : True. Proof. exact I. Qed.',
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert "forbidden" in result["error"].lower()
+
+    def test_compile_rejects_forbidden_drop(self, workspace):
+        """rocq_compile must reject source containing Drop."""
+        from rocq_mcp.server import rocq_compile
+
+        result = _call_rocq_compile(
+            source="Drop.\nTheorem t : True. Proof. exact I. Qed.",
+            workspace=str(workspace),
+        )
+        assert result["success"] is False
+        assert "forbidden" in result["error"].lower()
+
+    def test_compile_with_coqproject(self, tmp_path):
+        """rocq_compile resolves local imports via _CoqProject flags."""
+        import subprocess
+
+        from rocq_mcp.server import rocq_compile, ROCQ_COQC_BINARY
+
+        # Set up a mini project with a helper module
+        (tmp_path / "_CoqProject").write_text("-Q . TestProj\n")
+        (tmp_path / "Helper.v").write_text("Definition my_const : nat := 42.\n")
+
+        # Compile Helper.v directly with coqc to produce Helper.vo
+        subprocess.run(
+            [ROCQ_COQC_BINARY, "-Q", ".", "TestProj", "Helper.v"],
+            cwd=str(tmp_path),
+            check=True,
+        )
+
+        # Now compile source that imports Helper via rocq_compile
+        result = _call_rocq_compile(
+            source=(
+                "From TestProj Require Import Helper.\n" "Definition x := my_const.\n"
+            ),
+            workspace=str(tmp_path),
+        )
+        assert result["success"] is True, f"Failed: {result.get('error', '')}"
+
+    async def test_verify_with_coqproject(self, tmp_path):
+        """rocq_verify works with local imports resolved via _CoqProject."""
+        import subprocess
+
+        from rocq_mcp.server import rocq_compile, rocq_verify, ROCQ_COQC_BINARY
+
+        # Set up a mini project
+        (tmp_path / "_CoqProject").write_text("-Q . TestProj\n")
+        (tmp_path / "Helper.v").write_text("Definition my_const : nat := 42.\n")
+        subprocess.run(
+            [ROCQ_COQC_BINARY, "-Q", ".", "TestProj", "Helper.v"],
+            cwd=str(tmp_path),
+            check=True,
+        )
+
+        proof = (
+            "From TestProj Require Import Helper.\n"
+            "Theorem t : my_const = 42.\n"
+            "Proof. reflexivity. Qed.\n"
+        )
+        problem = (
+            "From TestProj Require Import Helper.\n"
+            "Theorem t : my_const = 42.\n"
+            "Admitted.\n"
+        )
+
+        compile_result = await rocq_compile(source=proof, workspace=str(tmp_path))
+        assert compile_result["success"] is True
+
+        verify_result = await rocq_verify(
+            proof=proof,
+            problem_name="t",
+            problem_statement=problem,
+            workspace=str(tmp_path),
+        )
+        assert (
+            verify_result["success"] is True
+        ), f"Verify failed: {verify_result.get('error', '')}"
 
     async def test_no_artifacts_after_workflow(
         self, workspace, simple_proof, simple_problem_statement
@@ -125,7 +282,7 @@ class TestCompileVerifyWorkflow:
         from rocq_mcp.server import rocq_compile, rocq_verify
 
         before = set(glob_mod.glob(str(workspace / "*")))
-        rocq_compile(source=simple_proof, workspace=str(workspace))
+        await rocq_compile(source=simple_proof, workspace=str(workspace))
         await rocq_verify(
             proof=simple_proof,
             problem_name="add_0_r",
@@ -141,7 +298,7 @@ class TestCompileVerifyWorkflow:
         """Multi-line From...Require Import works end-to-end."""
         from rocq_mcp.server import rocq_compile, rocq_verify
 
-        compile_result = rocq_compile(
+        compile_result = await rocq_compile(
             source=multiline_import_proof, workspace=str(workspace)
         )
         assert compile_result["success"] is True
@@ -159,7 +316,7 @@ class TestCompileVerifyWorkflow:
             problem_statement=problem,
             workspace=str(workspace),
         )
-        assert verify_result["verified"] is True
+        assert verify_result["success"] is True
 
 
 # =========================================================================
@@ -167,11 +324,194 @@ class TestCompileVerifyWorkflow:
 # =========================================================================
 
 
-class _MockContext:
-    """Minimal mock for FastMCP Context to inject lifespan_state."""
+@pytest.mark.skipif(
+    not (COQC_AVAILABLE and PET_AVAILABLE),
+    reason="coqc and pet required for compile error state capture",
+)
+class TestCompileErrorStateWorkflow:
+    """End-to-end: compile errors should include the current proof state."""
 
-    def __init__(self, lifespan_state):
-        self.lifespan_context = lifespan_state
+    @pytest.fixture
+    def lifespan_state(self):
+        from rocq_mcp.server import _invalidate_pet
+
+        state = {"pet_client": None, "pet_timeout": 30.0, "current_workspace": None}
+        yield state
+        _invalidate_pet(state)
+
+    async def test_compile_includes_error_state(self, lifespan_state, workspace):
+        """rocq_compile attaches a recoverable state with status ``ok``."""
+        from rocq_mcp.server import rocq_compile
+
+        source = "Theorem bad : True.\n" "Proof.\n" "  exact 0.\n" "Qed.\n"
+        ctx = _MockContext(lifespan_state)
+
+        result = await rocq_compile(source=source, workspace=str(workspace), ctx=ctx)
+
+        assert result["success"] is False
+        assert result["state_capture_status"] == "ok"
+        assert isinstance(result["state_id"], int)
+        assert "|-True" in result["goals"]
+        assert result["file"] == "<proof>"
+        # Position is on line 2 (0-indexed: the `exact 0.` line);
+        # the column is set by coqc and may shift across Rocq versions.
+        assert result["theorem"].startswith("@pos(2,")
+        assert result["proof_finished"] is False
+        # Hint must be rewritten when capture is actionable.
+        assert f"rocq_check(from_state={result['state_id']})" in result["hint"]
+
+    async def test_compile_file_includes_error_state(self, lifespan_state, workspace):
+        """rocq_compile_file attaches a recoverable state with status ``ok``."""
+        from rocq_mcp.server import rocq_compile_file
+
+        path = workspace / "error_state_test.v"
+        path.write_text("Theorem bad : True.\n" "Proof.\n" "  exact 0.\n" "Qed.\n")
+        ctx = _MockContext(lifespan_state)
+
+        result = await rocq_compile_file(
+            file="error_state_test.v",
+            workspace=str(workspace),
+            ctx=ctx,
+        )
+
+        assert result["success"] is False
+        assert result["state_capture_status"] == "ok"
+        assert isinstance(result["state_id"], int)
+        assert "|-True" in result["goals"]
+        assert result["file"] == "error_state_test.v"
+        assert result["theorem"].startswith("@pos(2,")
+        assert result["proof_finished"] is False
+        assert f"rocq_check(from_state={result['state_id']})" in result["hint"]
+
+    async def test_state_id_is_consumable_by_rocq_check(
+        self, lifespan_state, workspace
+    ):
+        """The state_id from a real compile failure is usable by rocq_check."""
+        from rocq_mcp.server import rocq_compile, rocq_check
+
+        source = "Theorem bad : True.\n" "Proof.\n" "  exact 0.\n" "Qed.\n"
+        ctx = _MockContext(lifespan_state)
+
+        compile_result = await rocq_compile(
+            source=source, workspace=str(workspace), ctx=ctx
+        )
+        assert compile_result["success"] is False
+        assert compile_result["state_capture_status"] == "ok"
+        state_id = compile_result["state_id"]
+
+        check_result = await rocq_check(
+            body="exact I.",
+            from_state=state_id,
+            ctx=ctx,
+        )
+        assert check_result["success"] is True
+        assert check_result["proof_finished"] is True
+        # rocq_check should advance to a fresh state after the recovery.
+        assert check_result["state_id"] != state_id
+
+    async def test_outside_proof_status_for_bad_definition(
+        self, lifespan_state, workspace
+    ):
+        """A bad ``Definition`` outside any proof yields a non-actionable status.
+
+        Pet/Rocq may either return cleanly with no open goals
+        (``outside_proof``) or raise (``crashed``); both are non-``"ok"``.
+        Either way, no ``state_id`` should leak and the original
+        ``Use rocq_start(...)`` guidance must be preserved.
+        """
+        from rocq_mcp.server import rocq_compile
+
+        source = "Definition bad : nat := wrong_term.\n"
+        ctx = _MockContext(lifespan_state)
+
+        result = await rocq_compile(source=source, workspace=str(workspace), ctx=ctx)
+
+        assert result["success"] is False
+        assert result["state_capture_status"] in {"outside_proof", "crashed"}
+        assert "state_id" not in result
+        assert "Use rocq_start" in result["hint"]
+        assert "rocq_check(from_state=" not in result["hint"]
+
+    async def test_multi_theorem_second_fails_captures_at_second(
+        self, lifespan_state, workspace
+    ):
+        """First theorem compiles, second fails: capture must point inside the second."""
+        from rocq_mcp.server import rocq_compile
+
+        source = (
+            "Theorem ok : True.\n"
+            "Proof. exact I. Qed.\n"
+            "\n"
+            "Theorem broken : True.\n"
+            "Proof.\n"
+            "  exact 0.\n"
+            "Qed.\n"
+        )
+        ctx = _MockContext(lifespan_state)
+
+        result = await rocq_compile(source=source, workspace=str(workspace), ctx=ctx)
+
+        assert result["success"] is False
+        assert result["state_capture_status"] == "ok"
+        m = re.match(r"@pos\((\d+),(\d+)\)", result["theorem"])
+        assert m, f"theorem should be @pos(line,col), got {result['theorem']!r}"
+        line = int(m.group(1))
+        # The "exact 0." line of the second theorem is line 5 (0-indexed).
+        # Allow some flexibility for coqc reporting variance, but it must land
+        # in the broken theorem's body (line >= 4 = "Theorem broken : True.").
+        assert line >= 4, (
+            f"capture should land inside the failing second theorem; "
+            f"got line={line}"
+        )
+        assert "|-True" in result["goals"]
+
+    async def test_compile_with_assumption_includes_goal_context(
+        self, lifespan_state, workspace
+    ):
+        """Captured goals should include local assumptions from the proof state."""
+        from rocq_mcp.server import rocq_compile
+
+        source = "Lemma bad (n : nat) : True.\n" "Proof.\n" "  exact 0.\n" "Qed.\n"
+        ctx = _MockContext(lifespan_state)
+
+        result = await rocq_compile(source=source, workspace=str(workspace), ctx=ctx)
+
+        assert result["success"] is False
+        assert "n : nat" in result["goals"]
+        assert "|-True" in result["goals"]
+        assert result["file"] == "<proof>"
+        assert result["theorem"].startswith("@pos(2,")
+        assert result["proof_finished"] is False
+
+    async def test_compile_multiple_tactics_same_line_uses_later_error_position(
+        self, lifespan_state, workspace
+    ):
+        """Error-state capture should point after earlier successful tactics."""
+        from rocq_mcp.server import rocq_compile
+
+        source = (
+            "Lemma bad (n : nat) : True.\n" "Proof.\n" "  idtac. exact 0.\n" "Qed.\n"
+        )
+        ctx = _MockContext(lifespan_state)
+
+        result = await rocq_compile(source=source, workspace=str(workspace), ctx=ctx)
+
+        assert result["success"] is False
+        assert "n : nat" in result["goals"]
+        assert "|-True" in result["goals"]
+        assert result["file"] == "<proof>"
+        # Capture must point on line 2 and *after* the prior `idtac.` so
+        # the goal reflects the earlier successful tactic.  The exact
+        # column is coqc-reported and may shift across Rocq versions.
+        m = re.match(r"@pos\((\d+),(\d+)\)", result["theorem"])
+        assert m, f"theorem should be @pos(line,col), got {result['theorem']!r}"
+        line, col = int(m.group(1)), int(m.group(2))
+        assert line == 2
+        assert col > len("  idtac."), (
+            f"position should be past 'idtac.' (col >{len('  idtac.')}), "
+            f"got col={col}"
+        )
+        assert result["proof_finished"] is False
 
 
 @pytest.mark.skipif(
@@ -213,7 +553,7 @@ class TestSharedDefsVerifyWorkflow:
             ctx=ctx,
         )
 
-        assert result["verified"] is True
+        assert result["success"] is True
         assert result["verification_method"] == "shared_defs"
 
     async def test_phase1_verify_no_fallback(self, lifespan_state, workspace):
@@ -231,7 +571,7 @@ class TestSharedDefsVerifyWorkflow:
             workspace=str(workspace),
             ctx=ctx,
         )
-        assert result["verified"] is True
+        assert result["success"] is True
         assert result["verification_method"] == "module_m"
 
     async def test_phase2_with_definition_and_inductive(
@@ -262,7 +602,7 @@ class TestSharedDefsVerifyWorkflow:
             ctx=ctx,
         )
 
-        assert result["verified"] is True
+        assert result["success"] is True
         assert result["verification_method"] == "shared_defs"
 
     async def test_phase2_rejects_admitted(self, lifespan_state, workspace):
@@ -289,25 +629,66 @@ class TestSharedDefsVerifyWorkflow:
             ctx=ctx,
         )
 
-        assert result["verified"] is False
+        assert result["success"] is False
+
+    async def test_phase2_with_require_import_no_defs(self, lifespan_state, workspace):
+        """Require Import Znumtheory without Inductive/Def triggers Phase 2.
+
+        Znumtheory's Require inside Module M is fragile and may cause
+        failures on some Rocq versions.  Phase 2 extracts the preamble
+        outside Module M, making verification succeed.
+        """
+        from rocq_mcp.server import rocq_verify
+
+        problem = (
+            "Require Import Nat.\n"
+            "Require Import ZArith.\n"
+            "From Coq Require Import Znumtheory.\n"
+            "Require Import Lia.\n"
+            "Open Scope Z_scope.\n\n"
+            "Theorem simple_z : forall n : Z,\n"
+            "  (0 <= n)%Z -> (0 <= n)%Z.\n"
+            "Admitted.\n"
+        )
+        proof = (
+            "Require Import Nat.\n"
+            "Require Import ZArith.\n"
+            "From Coq Require Import Znumtheory.\n"
+            "Require Import Lia.\n"
+            "Open Scope Z_scope.\n\n"
+            "Theorem simple_z : forall n : Z,\n"
+            "  (0 <= n)%Z -> (0 <= n)%Z.\n"
+            "Proof. auto. Qed.\n"
+        )
+
+        ctx = _MockContext(lifespan_state)
+        result = await rocq_verify(
+            proof=proof,
+            problem_name="simple_z",
+            problem_statement=problem,
+            workspace=str(workspace),
+            ctx=ctx,
+        )
+
+        assert result["success"] is True
 
 
 # =========================================================================
-# Query -> Step workflow (require pet)
+# Query -> Start+Check workflow (require pet)
 # =========================================================================
 
 
 @pytest.mark.skipif(not PET_AVAILABLE, reason="pet not available")
 class TestQueryStepWorkflow:
-    """End-to-end: query to search, then step to apply found lemma."""
+    """End-to-end: query to search, then start+check to prove a theorem."""
 
     @pytest.fixture(autouse=True)
-    def _reset_session(self):
-        from rocq_mcp.server import _session
+    def _reset_state(self):
+        from rocq_mcp.interactive import _state_invalidate_all
 
-        _session.update({"state": None, "file": None, "theorem": None, "history": []})
+        _state_invalidate_all()
         yield
-        _session.update({"state": None, "file": None, "theorem": None, "history": []})
+        _state_invalidate_all()
 
     @staticmethod
     def _make_state(timeout: float = 30.0) -> dict:
@@ -315,8 +696,9 @@ class TestQueryStepWorkflow:
 
     @pytest.mark.asyncio
     async def test_query_then_step(self, workspace):
-        """Use query to find a lemma, then step through a proof using it."""
-        from rocq_mcp.server import run_query, run_step, _invalidate_pet
+        """Use query to find a lemma, then start+check to prove a theorem."""
+        from rocq_mcp.interactive import run_query, run_start, run_check
+        from rocq_mcp.server import _invalidate_pet
 
         state = self._make_state()
         try:
@@ -330,57 +712,86 @@ class TestQueryStepWorkflow:
             assert qr["success"] is True
             assert "Nat.add" in qr["output"]
 
-            # Step: prove a simple theorem using what we found
+            # Start proof context
             vfile = workspace / "query_step_test.v"
             vfile.write_text(
                 "Theorem t : forall n : nat, n = n.\n"
                 "Proof. intros. reflexivity. Qed.\n"
             )
 
-            r1 = await run_step(
-                tactic="intros",
+            r1 = await run_start(
                 file=str(vfile),
                 theorem="t",
                 workspace=str(workspace),
                 lifespan_state=state,
             )
             assert r1["success"] is True
-            assert r1["proof_finished"] is False
+            start_id = r1["state_id"]
 
-            r2 = await run_step(
-                tactic="reflexivity",
-                file="",
-                theorem="",
-                workspace=str(workspace),
+            # Execute first tactic
+            r2 = await run_check(
+                body="intros.",
+                timeout=30.0,
                 lifespan_state=state,
+                from_state=start_id,
             )
             assert r2["success"] is True
-            assert r2["proof_finished"] is True
+            assert r2["proof_finished"] is False
+            intros_id = r2["state_id"]
+
+            # Execute second tactic to finish proof
+            r3 = await run_check(
+                body="reflexivity.",
+                timeout=30.0,
+                lifespan_state=state,
+                from_state=intros_id,
+            )
+            assert r3["success"] is True
+            assert r3["proof_finished"] is True
         finally:
             _invalidate_pet(state)
 
     @pytest.mark.asyncio
     async def test_pet_respawns_after_kill(self, workspace):
         """Kill pet via timeout, verify next query call respawns it."""
-        from rocq_mcp.server import run_step, run_query, _invalidate_pet
+        from rocq_mcp.interactive import run_start, run_check, run_query
+        from rocq_mcp.server import _invalidate_pet
 
         vfile = workspace / "respawn_test.v"
+        # Define the looping tactic but use a non-diverging proof body.
+        # coq-lsp processes the full file during pet.start(), so the file
+        # itself must not diverge. The loop is tested via run_check.
         vfile.write_text(
-            "Ltac loop := idtac; loop.\n" "Theorem t : True. Proof. loop. Qed.\n"
+            "Ltac loop := idtac; loop.\n" "Theorem t : True. Proof. exact I. Qed.\n"
         )
 
-        state = self._make_state(timeout=1.0)
+        # Use a normal timeout for start (pet compilation takes time),
+        # then pass a short timeout to run_check for the looping tactic.
+        state = self._make_state(timeout=30.0)
         try:
-            # Trigger timeout — kills pet
-            r1 = await run_step(
-                tactic="loop",
+            r0 = await run_start(
                 file=str(vfile),
                 theorem="t",
                 workspace=str(workspace),
                 lifespan_state=state,
             )
+            assert r0["success"] is True
+            start_id = r0["state_id"]
+
+            # Trigger timeout via looping tactic -- kills pet
+            r1 = await run_check(
+                body="loop.",
+                timeout=1.0,
+                lifespan_state=state,
+                from_state=start_id,
+            )
             assert r1["success"] is False
-            assert "timed out" in r1["error"].lower()
+            err_lower = r1.get("error", "").lower()
+            assert (
+                "timed out" in err_lower
+                or "timeout" in err_lower
+                or r1.get("pet_restarted") is True
+            )
 
             # Increase timeout for recovery
             state["pet_timeout"] = 30.0
@@ -427,5 +838,5 @@ class TestMiniF2FSample:
 
         # The problem file likely ends with Admitted, so compilation should
         # succeed (Admitted is accepted by coqc). We just verify no crash.
-        result = rocq_compile(source=source, workspace=str(ws))
+        result = _call_rocq_compile(source=source, workspace=str(ws))
         assert "success" in result

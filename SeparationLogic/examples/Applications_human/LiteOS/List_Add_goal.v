@@ -28,6 +28,7 @@ From SimpleC.EE.Applications_human Require Import los_sortlink_strategy_proof.
 (*----- Function LOS_ListAdd -----*)
 
 Definition LOS_ListAdd_return_wit_1 := 
+(
 forall (A: Type) (node_pre: Z) (list_pre: Z) (list_pstNext_low_level_spec: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
   ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pstNext_low_level_spec)
@@ -37,19 +38,62 @@ forall (A: Type) (node_pre: Z) (list_pre: Z) (list_pstNext_low_level_spec: Z) (a
 |--
   ((&((list_pstNext_low_level_spec)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> node_pre)
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pstNext_low_level_spec)
-  **  (dllseg_shift storeA_low_level_spec list_pre node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) (nil)) )
+  **  (dllseg_shift storeA_low_level_spec list_pre node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) ((@nil (@DL_Node A)))) )
+) \/
+(
+forall (A: Type) (node_pre: Z) (list_pre: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
+  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
+  **  (storeA_low_level_spec node_pre a_low_level_spec )
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> node_pre)
+|--
+  (dllseg_shift storeA_low_level_spec list_pre node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) ((@nil (@DL_Node A)))) )
+).
+
+Definition LOS_ListAdd_return_wit_1_split_goal_spatial := 
+forall (A: Type) (node_pre: Z) (list_pre: Z) (a_low_level_spec: A) (storeA_low_level_spec: (Z -> (A -> Assertion))) ,
+  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pre)
+  **  (storeA_low_level_spec node_pre a_low_level_spec )
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> node_pre)
+|--
+  (dllseg_shift storeA_low_level_spec list_pre node_pre (cons ((Build_DL_Node (a_low_level_spec) (node_pre))) ((@nil (@DL_Node A)))) )
 .
 
 (*----- Function LOS_ListTailInsert -----*)
 
 Definition LOS_ListTailInsert_return_wit_1 := 
+(
 forall (A: Type) (node_pre: Z) (list_pre: Z) (a: A) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (list_pstPrev: Z) ,
   ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> node_pre)
   **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
-  **  (dllseg_shift storeA list_pstPrev node_pre (cons ((Build_DL_Node (a) (node_pre))) (nil)) )
+  **  (dllseg_shift storeA list_pstPrev node_pre (cons ((Build_DL_Node (a) (node_pre))) ((@nil (@DL_Node A)))) )
   **  (dllseg_shift storeA list_pre list_pstPrev l )
 |--
-  (store_dll storeA list_pre (app (l) ((cons ((Build_DL_Node (a) (node_pre))) (nil)))) )
+  (store_dll storeA list_pre (app (l) ((cons ((Build_DL_Node (a) (node_pre))) ((@nil (@DL_Node A)))))) )
+) \/
+(
+forall (A: Type) (node_pre: Z) (list_pre: Z) (a: A) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (list_pstPrev: Z) ,
+  (dllseg_shift storeA node_pre node_pre (@nil (@DL_Node A)) )
+  **  ((&((list_pstPrev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> node_pre)
+  **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pstPrev)
+  **  (storeA node_pre a )
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> node_pre)
+  **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
+  **  (dllseg_shift storeA list_pre list_pstPrev l )
+|--
+  (store_dll storeA list_pre (app (l) ((cons ((Build_DL_Node (a) (node_pre))) ((@nil (@DL_Node A)))))) )
+).
+
+Definition LOS_ListTailInsert_return_wit_1_split_goal_spatial := 
+forall (A: Type) (node_pre: Z) (list_pre: Z) (a: A) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (list_pstPrev: Z) ,
+  (dllseg_shift storeA node_pre node_pre (@nil (@DL_Node A)) )
+  **  ((&((list_pstPrev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> node_pre)
+  **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pstPrev)
+  **  (storeA node_pre a )
+  **  ((&((list_pre)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> node_pre)
+  **  ((&((node_pre)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list_pre)
+  **  (dllseg_shift storeA list_pre list_pstPrev l )
+|--
+  (store_dll storeA list_pre (app (l) ((cons ((Build_DL_Node (a) (node_pre))) ((@nil (@DL_Node A)))))) )
 .
 
 Definition LOS_ListTailInsert_partial_solve_wit_1 := 
@@ -83,6 +127,7 @@ forall (A: Type) (node_pre: Z) (list_pre: Z) (a: A) (l: (@list (@DL_Node A))) (s
 .
 
 Definition LOS_ListTailInsert_which_implies_wit_1 := 
+(
 forall (A: Type) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (list: Z) ,
   (store_dll storeA list l )
 |--
@@ -90,7 +135,16 @@ forall (A: Type) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (li
   ((&((list_pstPrev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list)
   **  ((&((list)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pstPrev)
   **  (dllseg_shift storeA list list_pstPrev l )
-.
+) \/
+(
+forall (A: Type) (l: (@list (@DL_Node A))) (storeA: (Z -> (A -> Assertion))) (list: Z) ,
+  (store_dll storeA list l )
+|--
+  EX (list_pstPrev: Z) ,
+  ((&((list_pstPrev)  # "LOS_DL_LIST" ->ₛ "pstNext")) # Ptr  |-> list)
+  **  ((&((list)  # "LOS_DL_LIST" ->ₛ "pstPrev")) # Ptr  |-> list_pstPrev)
+  **  (dllseg_shift storeA list list_pstPrev l )
+).
 
 (*----- Function LOS_ListHeadInsert -----*)
 

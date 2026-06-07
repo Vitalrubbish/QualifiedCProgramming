@@ -33,18 +33,18 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH2.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H4.
+    + dump_pre_spatial. exact PreH6.
     + dump_pre_spatial.
-      rewrite H5.
+      rewrite PreH7.
       rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
       rewrite sum_app.
       rewrite (sublist_single 0 i_2 l) by lia.
       simpl.
-      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
       destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
       * subst i_2. simpl in *. subst ret.
         assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -77,7 +77,7 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - dump_pre_spatial.
-    rewrite H5.
+    rewrite PreH7.
     assert (Hi : i_2 = n_pre) by lia.
     subst i_2.
     rewrite <- Hlen.
@@ -93,7 +93,7 @@ Proof.
   prop_apply IntArray.full_length.
   Intros_p Hlen.
   assert (HlenZ : Zlength l = n_pre) by (rewrite Zlength_correct; exact Hlen).
-  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
   destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
   - subst i. simpl in *. subst ret.
     assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -130,11 +130,11 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H.
-    + dump_pre_spatial. exact H0.
+    + dump_pre_spatial. exact PreH1.
+    + dump_pre_spatial. exact PreH2.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial.
       rewrite (sublist_single 0 0 l) by (rewrite HlenZ; lia).
       unfold sum.
@@ -152,18 +152,18 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH2.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H4.
+    + dump_pre_spatial. exact PreH6.
     + dump_pre_spatial.
-      rewrite H5.
+      rewrite PreH7.
       rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
       rewrite sum_app.
       rewrite (sublist_single 0 i_2 l) by lia.
       simpl.
-      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
       destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
       * subst i_2. simpl in *. subst ret.
         assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -195,7 +195,7 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - dump_pre_spatial.
-    rewrite H5.
+    rewrite PreH7.
     assert (Hi : i_2 = n_pre) by lia.
     subst i_2.
     rewrite <- Hlen.
@@ -212,7 +212,7 @@ Proof.
   Intros_p Hlen.
   assert (HlenZ : Zlength l = n_pre) by (rewrite Zlength_correct; exact Hlen).
   assert (Hlt : i < n_pre) by lia.
-  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
   destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
   - subst i. simpl in *. subst ret.
     assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -254,18 +254,18 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH2.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H4.
+    + dump_pre_spatial. exact PreH6.
     + dump_pre_spatial.
-      rewrite H5.
+      rewrite PreH7.
       rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
       rewrite sum_app.
       rewrite (sublist_single 0 i_2 l) by lia.
       simpl.
-      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
       destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
       * subst i_2. simpl in *. subst ret.
         assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -297,7 +297,7 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - dump_pre_spatial.
-    rewrite H5.
+    rewrite PreH7.
     assert (Hi : i_2 = n_pre) by lia.
     subst i_2.
     rewrite <- Hlen.
@@ -313,7 +313,7 @@ Proof.
   prop_apply IntArray.full_length.
   Intros_p Hlen.
   assert (HlenZ : Zlength l = n_pre) by (rewrite Zlength_correct; exact Hlen).
-  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
   destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
   - subst i. simpl in *. subst ret.
     assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -355,18 +355,18 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH2.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H4.
+    + dump_pre_spatial. exact PreH6.
     + dump_pre_spatial.
-      rewrite H5.
+      rewrite PreH7.
       rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
       rewrite sum_app.
       rewrite (sublist_single 0 i_2 l) by lia.
       simpl.
-      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
       destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
       * subst i_2. simpl in *. subst ret.
         assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -398,7 +398,7 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - dump_pre_spatial.
-    rewrite H5.
+    rewrite PreH7.
     assert (Hi : i_2 = n_pre) by lia.
     subst i_2.
     rewrite <- Hlen.
@@ -414,7 +414,7 @@ Proof.
   prop_apply IntArray.full_length.
   Intros_p Hlen.
   assert (HlenZ : Zlength l = n_pre) by (rewrite Zlength_correct; exact Hlen).
-  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
   destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
   - subst i. simpl in *. subst ret.
     assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -456,12 +456,12 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H.
-    + dump_pre_spatial. exact H0.
+    + dump_pre_spatial. exact PreH1.
+    + dump_pre_spatial. exact PreH2.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. exact (eq_sym HlenZ).
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. reflexivity.
 Qed.
 
@@ -495,12 +495,12 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre (zeros (i_2 + 1) ++ sublist (i_2 + 1) n_pre l)).
   - split_pures.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH2.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H4.
-    + dump_pre_spatial. exact H5.
+    + dump_pre_spatial. exact PreH6.
+    + dump_pre_spatial. exact PreH7.
     + dump_pre_spatial.
       assert (Hzi :
         Znth i_2 (zeros i_2 ++ sublist i_2 n_pre l) 0 = Znth i_2 l 0).
@@ -513,12 +513,12 @@ Proof.
         apply Znth_indep. lia.
       }
       rewrite Hzi.
-      rewrite H6.
+      rewrite PreH8.
       rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
       rewrite sum_app.
       rewrite (sublist_single 0 i_2 l) by lia.
       simpl.
-      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H5.
+      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH7.
       destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
       * subst i_2. simpl in *. subst ret.
         assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -549,8 +549,8 @@ Proof.
   assert (Hzero_tail : zeros n_pre ++ sublist n_pre n_pre l = zeros n_pre).
   {
     unfold sublist.
-    rewrite firstn_all2 by (rewrite Zlength_correct in H4; lia).
-    rewrite skipn_all2 by (rewrite Zlength_correct in H4; lia).
+    rewrite firstn_all2 by (rewrite Zlength_correct in PreH6; lia).
+    rewrite skipn_all2 by (rewrite Zlength_correct in PreH6; lia).
     rewrite app_nil_r.
     reflexivity.
   }
@@ -558,10 +558,10 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre (zeros n_pre)).
   - dump_pre_spatial.
-    rewrite H6.
+    rewrite PreH8.
     unfold sublist.
     simpl.
-    rewrite firstn_all2 by (rewrite Zlength_correct in H4; lia).
+    rewrite firstn_all2 by (rewrite Zlength_correct in PreH6; lia).
     reflexivity.
 Qed.
 
@@ -578,7 +578,7 @@ Proof.
     replace (0 + i) with i by lia.
     apply Znth_indep. lia.
   }
-  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H5.
+  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH7.
   destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
   - subst i. simpl in *. subst ret.
     assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -614,11 +614,11 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H.
-    + dump_pre_spatial. exact H0.
+    + dump_pre_spatial. exact PreH1.
+    + dump_pre_spatial. exact PreH2.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H1.
+    + dump_pre_spatial. exact PreH3.
     + dump_pre_spatial. exact (eq_sym Hlen).
     + dump_pre_spatial. reflexivity.
     + dump_pre_spatial. reflexivity.
@@ -630,15 +630,15 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H0.
-    + dump_pre_spatial. exact H1.
-    + dump_pre_spatial. exact H2.
+    + dump_pre_spatial. exact PreH2.
+    + dump_pre_spatial. exact PreH3.
+    + dump_pre_spatial. exact PreH4.
     + dump_pre_spatial.
       destruct (Z.eq_dec i n_pre) as [Hi | Hi].
       * exfalso.
         subst i.
-        apply H.
-        rewrite H6.
+        apply PreH1.
+        rewrite PreH8.
         replace (a_pre + n_pre * sizeof ( INT ) -
           (a_pre + n_pre * sizeof ( INT ))) with 0 by lia.
         rewrite Z.quot_0_l.
@@ -647,16 +647,16 @@ Proof.
       * lia.
     + dump_pre_spatial.
       intro Heq.
-      apply H.
+      apply PreH1.
       rewrite Heq.
       replace (a_pre + i * sizeof ( INT ) - (a_pre + i * sizeof ( INT ))) with 0 by lia.
       rewrite Z.quot_0_l.
       { reflexivity. }
       { rewrite sizeof_int; lia. }
-    + dump_pre_spatial. exact H4.
-    + dump_pre_spatial. exact H5.
-    + dump_pre_spatial. exact H6.
-    + dump_pre_spatial. exact H7.
+    + dump_pre_spatial. exact PreH6.
+    + dump_pre_spatial. exact PreH7.
+    + dump_pre_spatial. exact PreH8.
+    + dump_pre_spatial. exact PreH9.
 Qed.
 
 Lemma proof_of_arr_sum_pointer_entail_wit_3: arr_sum_pointer_entail_wit_3.
@@ -668,20 +668,20 @@ Proof.
   split_pure_spatial.
   - cancel (IntArray.full a_pre n_pre l).
   - split_pures.
-    + dump_pre_spatial. exact H.
-    + dump_pre_spatial. exact H0.
+    + dump_pre_spatial. exact PreH1.
+    + dump_pre_spatial. exact PreH2.
     + dump_pre_spatial. lia.
     + dump_pre_spatial. lia.
-    + dump_pre_spatial. exact H4.
-    + dump_pre_spatial. exact H5.
-    + dump_pre_spatial. exact H6.
+    + dump_pre_spatial. exact PreH6.
+    + dump_pre_spatial. exact PreH7.
+    + dump_pre_spatial. exact PreH8.
     + dump_pre_spatial.
-      rewrite H7.
+      rewrite PreH9.
       rewrite (sublist_split 0 (i_2 + 1) i_2 l) by lia.
       rewrite sum_app.
       rewrite (sublist_single 0 i_2 l) by lia.
       simpl.
-      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+      assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
       destruct (Z.eq_dec i_2 0) as [Hi0 | Hi0].
       * subst i_2. simpl in *. subst ret.
         assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).
@@ -719,10 +719,10 @@ Proof.
       - exact Heq.
       - assert (i_2 < n_pre) by lia.
         exfalso.
-        rewrite H6 in H.
-        rewrite sizeof_int in H.
-        replace (a_pre + n_pre * 4 - (a_pre + i_2 * 4)) with ((n_pre - i_2) * 4) in H by lia.
-        rewrite Z.quot_mul in H by lia.
+        rewrite PreH8 in PreH1.
+        rewrite sizeof_int in PreH1.
+        replace (a_pre + n_pre * 4 - (a_pre + i_2 * 4)) with ((n_pre - i_2) * 4) in PreH1 by lia.
+        rewrite Z.quot_mul in PreH1 by lia.
         lia.
     }
     subst i_2 ret.
@@ -738,7 +738,7 @@ Proof.
   prop_apply IntArray.full_length.
   Intros_p Hlen.
   assert (HlenZ : Zlength l = n_pre) by (rewrite Zlength_correct; exact Hlen).
-  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact H4.
+  assert (Hrange : forall j : Z, 0 <= j < n_pre -> 0 <= Znth j l 0 < 100) by exact PreH6.
   destruct (Z.eq_dec i 0) as [Hi0 | Hi0].
   - subst i. simpl in *. subst ret.
     assert (Hcur : 0 <= Znth 0 l 0 < 100) by (apply Hrange; lia).

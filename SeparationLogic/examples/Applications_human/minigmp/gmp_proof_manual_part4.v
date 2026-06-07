@@ -39,11 +39,10 @@ Proof.
   pre_process.
   unfold store_Z at 1.
   Intros rptr rsize rcap.
-  Exists rptr; Exists ptr; Exists ptr_2; Exists rcap; Exists rsize.
-  Exists cap; Exists cap_2; Exists size; Exists size_2; Exists m; Exists n.
+  Exists rptr; Exists ptr_2; Exists ptr; Exists rcap; Exists rsize.
+  Exists cap_2; Exists cap; Exists size_2; Exists size; Exists n; Exists m.
   subst retval retval_2.
   entailer!.
-  apply perm_swap.
 Qed.
 
 Lemma proof_of_mpz_abs_add_entail_wit_1_2 : mpz_abs_add_entail_wit_1_2.
@@ -51,10 +50,11 @@ Proof.
   pre_process.
   unfold store_Z at 1.
   Intros rptr rsize rcap.
-  Exists rptr; Exists ptr_2; Exists ptr; Exists rcap; Exists rsize.
-  Exists cap_2; Exists cap; Exists size_2; Exists size; Exists n; Exists m.
+  Exists rptr; Exists ptr; Exists ptr_2; Exists rcap; Exists rsize.
+  Exists cap; Exists cap_2; Exists size; Exists size_2; Exists m; Exists n.
   subst retval retval_2.
   entailer!.
+  apply perm_swap.
 Qed.
 
 Lemma proof_of_mpz_abs_add_entail_wit_2 : mpz_abs_add_entail_wit_2.
@@ -140,7 +140,7 @@ Proof.
       sep_apply (store_uint_undef_store_uint (rp + an * sizeof ( UINT )) 0).
       sep_apply (UIntArray.undef_seg_single rp an).
       sep_apply UIntArray.undef_seg_merge_to_undef_seg.
-      rewrite H13, H14.
+      rewrite PreH15, PreH16.
       replace (Zabs asize) with an by lia.
       replace (Zabs bsize) with bn by lia.
       entailer!.
@@ -163,7 +163,7 @@ Proof.
       sep_apply (store_uint_undef_store_uint (rp + an * sizeof ( UINT )) 0).
       sep_apply (UIntArray.undef_seg_single rp an).
       sep_apply UIntArray.undef_seg_merge_to_undef_seg.
-      rewrite H13, H14.
+      rewrite PreH15, PreH16.
       replace (Zabs asize) with an by lia.
       replace (Zabs bsize) with bn by lia.
       entailer!.
@@ -214,12 +214,12 @@ Proof.
       sep_apply (mpd_store_Z_to_mpd_store_Z_compact bptr (Zabs m_new) bn).
       sep_apply (mpd_store_Z_append_one_compact rp val_r_out an).
       replace (val_r_out + UINT_MOD ^ an) with (Zabs n_new + Zabs m_new) by lia.
-      rewrite H13, H14.
+      rewrite PreH15, PreH16.
       replace (Zabs asize) with an by lia.
       replace (Zabs bsize) with bn by lia.
       entailer!.
       * unfold same_sign; left.
-        pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs n_new) an H1)
+        pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs n_new) an PreH3)
           as [Han_nonneg _].
         pose proof (Z.pow_pos_nonneg UINT_MOD an UINT_MOD_pos (Z.ge_le _ _ Han_nonneg)).
         lia.
@@ -240,12 +240,12 @@ Proof.
       sep_apply (mpd_store_Z_to_mpd_store_Z_compact aptr (Zabs n_new) an).
       sep_apply (mpd_store_Z_append_one_compact rp val_r_out an).
       replace (val_r_out + UINT_MOD ^ an) with (Zabs m_new + Zabs n_new) by lia.
-      rewrite H13, H14.
+      rewrite PreH15, PreH16.
       replace (Zabs asize) with an by lia.
       replace (Zabs bsize) with bn by lia.
       entailer!.
       * unfold same_sign; left.
-        pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs n_new) an H1)
+        pose proof (is_compact_Z_bounds UINT_MOD UINT_MOD_pos (Zabs n_new) an PreH3)
           as [Han_nonneg _].
         pose proof (Z.pow_pos_nonneg UINT_MOD an UINT_MOD_pos (Z.ge_le _ _ Han_nonneg)).
         lia.
