@@ -51,3 +51,8 @@ __pycache__/
 .codex
 .claude
 .tmp
+
+mcp/rocq-mcp-wrapper.sh
+.mcp.json
+CLAUDE.md
+AGENTS.md
