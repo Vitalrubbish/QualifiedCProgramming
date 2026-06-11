@@ -10,7 +10,8 @@ powershell_list = $(subst $(space),$(comma) ,$(strip $(foreach item,$(1),'$(item
 
 # Platform-specific settings
 ifeq ($(OS),Windows_NT)
-	timeit = @echo $(1) && $(2)
+	print_line = @powershell -NoProfile -Command "[Console]::Out.Write('$(1)' + [char]10)"
+	timeit = $(call print_line,$(1)) && $(2)
 
 define MOVE_FILE
 powershell -NoProfile -Command "Move-Item -Force '$(1)' '$(2)'"
@@ -28,6 +29,7 @@ define REMOVE_TREE_OUTPUTS
 powershell -NoProfile -Command "Get-ChildItem -Path $(call powershell_list,$(1)) -Recurse -Force -Include *.vo,*.glob,*.vos,*.vok,.*.aux,.lia.cache -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; exit 0"
 endef
 else
+	print_line = @printf "%s\n" "$(1)"
 	PYTHON_FOR_TIME := $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null)
 
 	ifneq ($(strip $(PYTHON_FOR_TIME)),)
@@ -199,7 +201,8 @@ MONAD_FILES = \
 SL_FILES = \
   CommonAssertion.v Assertion.v Mem.v ConAssertion.v \
   NestedCriticalSTS.v CriticalSTS.v \
-  IntLib.v ArrayLib.v ArrayLibCore.v StoreAux.v pocv02.v SeparationLogic.v CNotation.v MapLib.v StringLib.v
+  IntLib.v StoreAux.v pocv02.v SeparationLogic.v CNotation.v MapLib.v StringLib.v \
+  ArrayLib.v ArrayLibCore.v Array2Lib.v Array2LibCore.v PtrArray2Lib.v PtrArray2LibCore.v \
 
 StrategyLib_FILES = \
   DepList.v Mapping.v
@@ -267,7 +270,8 @@ QCP_DEMO_EXAMPLE_FILE_NAME = \
 LLM_FRIENDLY_CASES_EXAMPLE_FILE_NAME = \
 	poly_sll sll sll_insert_sort functional_queue dll_queue sll_queue simple_arith/abs simple_arith/add simple_arith/max3 simple_arith/gcd simple_arith/Always_pos simple_arith/div_test simple_arith/exgcd \
 	sum bst_insert bst_insert_rec bst_fp_insert bst_fp_delete swap eval bst_delete_rec bst_delete_rec2 avl_insert sll_auto dll_auto array_auto chars \
-	kmp_rel int_array_merge_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases union_find_err_rel
+	kmp_rel int_array_merge_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases union_find_err_rel \
+	two_d_int_array two_d_int_ptr_array two_d_char_ptr_array
 
 LLM_BENCH_EXAMPLE_FILE_NAME = \
 	Algorithms/coin_change/coin_change \
@@ -394,7 +398,8 @@ QCP_DEMO_STRATEGY_FILE_NAME = \
 	common poly_sll sll_shape sll dll_queue functional_queue sll_queue int_array undef_uint_array uint_array array_shape bst bst_fp eval char_array avl dll_shape safeexec safeexecE
 
 LLM_FRIENDLY_CASES_STRATEGY_FILE_NAME = \
-	common poly_sll sll_shape sll dll_queue functional_queue sll_queue int_array undef_uint_array uint_array array_shape bst bst_fp eval char_array avl dll_shape safeexec safeexecE
+	common poly_sll sll_shape sll dll_queue functional_queue sll_queue int_array undef_uint_array uint_array array_shape bst bst_fp eval char_array avl dll_shape safeexec safeexecE \
+	array2 int_ptr_array2 ptr_array2
 
 APPLICATION_STRATEGY_FILE_NAME = \
 	fme/fme typeinfer/typeinfer minigmp/gmp mergeablelist/sll_project
@@ -524,10 +529,10 @@ DEPEND_TARGETS := depend depend-core depend-examples depend-examples-application
 
 $(EXAMPLE:%.v=%.vo): %.vo: %.v
 ifeq ($(TIMING),)
-	@echo "COQC $*.v"
+	$(call print_line,COQC $*.v)
 	@$(COQC) $(COQ_FLAG) $(CURRENT_DIR)/$*.v
 else
-	$(call timeit, "COQC $*.v", $(COQC) $(COQ_FLAG) $(CURRENT_DIR)/$*.v)
+	$(call timeit,COQC $*.v,$(COQC) $(COQ_FLAG) $(CURRENT_DIR)/$*.v)
 endif
 
 	

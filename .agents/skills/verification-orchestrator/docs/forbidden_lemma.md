@@ -37,8 +37,9 @@
 | 18 | `logic_equiv_orp_sepcon` | orp-sepcon 分配律 |
 | 19 | `derivable1_trans` | derivable 传递性 |
 | 20 | `derivable1_refl` | derivable 自反性 |
-| 21 | `coq_prop_andp_right` | Coq prop andp 右侧引理 |
-| 22 | `derivable1_sepcon_mono` | derivable sepcon 单调性 |
+| 21 | `derivable1_sepcon_comm` | derivable sepcon commutativity |
+| 22 | `coq_prop_andp_right` | Coq prop andp 右侧引理 |
+| 23 | `derivable1_sepcon_mono` | derivable sepcon 单调性 |
 
 ## 检查方式
 
