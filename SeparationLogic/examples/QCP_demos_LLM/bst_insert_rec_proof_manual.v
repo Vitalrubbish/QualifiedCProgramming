@@ -160,7 +160,7 @@ Proof.
 	  unfold Bst.store_map.
 	  Exists (tree_insert x_pre value_pre tr).
 	  repeat (split_pure_spatial || split_pures).
-	  + apply derivable1_refl.
+	  + cancel.
 	  + dump_pre_spatial.
 	    eapply insert_SearchTree; eauto.
 	  + dump_pre_spatial.
