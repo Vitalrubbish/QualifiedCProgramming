@@ -1,21 +1,20 @@
 # 使用 QCP 框架证明 Tarjan SCC 算法正确性并用于 2-SAT 的全过程计划
 
-> **⚠️ 架构变更说明 (2026-06-11)**
+> **当前架构状态 (2026-06-11 更新)**
 >
-> 本计划编写时假设 SCC 基础定义在 `GraphLib/examples/scc_basic.v`。当前仓库已重构：
-> - Tarjan 算法形式化已移至 `SeparationLogic/algorithms/Tarjan/`（8911 行，11 个文件）
-> - `scc_basic.v` 已删除，其 SCC 数学定义（`mutually_reachable`、`is_SCC`、`scc_partition`、`condensation`）尚未在新架构中重写
-> - 新架构使用 `OriginalGraphType`（无向图），而原 `scc_basic.v` 使用自建的 `DirectedGraphType`
-> - **若恢复 SCC 正确性证明工作**，应在 `algorithms/Tarjan/` 下基于 `OriginalGraphType` 重建 SCC 数学规格层
->
-> 本文档保留作为整体路线参考，但具体文件路径和依赖关系需按新架构调整。
+> 本计划已根据仓库最新架构全面刷新。关键变更：
+> - Tarjan 算法形式化已位于 `SeparationLogic/algorithms/Tarjan/`（11 文件，8911 行），使用 monadic Hoare logic + TraceLib
+> - 仓库新增 `algorithms/DFS/`、`tracelib/`、`coq-record-update/` 等基础设施
+> - 图表示统一使用 `OriginalGraphType`（来自 `GraphLib/examples/tarjan.v`），不再使用自建的 `DirectedGraphType`
+> - SCC 数学定义（`mutually_reachable`、`is_SCC`、`scc_partition`、`condensation`）尚未在新架构中实现——这是阶段一的核心待办
+> - 原 `GraphLib/examples/scc_basic.v` 已删除，阶段一的 SCC 基础层应在 `algorithms/Tarjan/` 下重建
 
 ## 目录
 
 1. [项目背景与 QCP 框架概述](#1-项目背景与-qcp-框架概述)
 2. [现有基础设施分析](#2-现有基础设施分析)
 3. [总体路线图](#3-总体路线图)
-4. [阶段一：Rocq 中 Tarjan SCC 算法的数学形式化](#4-阶段一rocq-中-tarjan-scc-算法的数学形式化)
+4. [阶段一：Rocq 中 SCC 数学基础与算法规格](#4-阶段一rocq-中-scc-数学基础与算法规格)
 5. [阶段二：C 语言的 Tarjan SCC 实现与标注](#5-阶段二c-语言的-tarjan-scc-实现与标注)
 6. [阶段三：符号执行与 VC 生成](#6-阶段三符号执行与-vc-生成)
 7. [阶段四：验证条件的证明](#7-阶段四验证条件的证明)
@@ -43,7 +42,7 @@ QCP（Qualified C Programming）是一个基于分离逻辑的 C 程序验证工
 2. **运行符号执行**（`symexec` 命令行工具）
    - 逐条语句执行符号计算
    - 在每个标注点生成蕴含条件（entailment）
-   - 输出三个 Rocq（Coq 8.20.1）文件：
+   - 输出三个 Rocq 文件：
      - `*_goal.v`：全部需要证明的验证条件（VC）
      - `*_proof_auto.v`：工具自动证明的 VC
      - `*_proof_manual.v`：需要人工补全证明的 VC
@@ -87,81 +86,118 @@ intake → annotation → goal-frozen → vc-checking → vc-proving → final-c
 
 ## 2. 现有基础设施分析
 
-### 2.1 GraphLib 图论库
+### 2.1 仓库总体架构
 
-位于 `SeparationLogic/GraphLib/`，这是一个基于 **Type Classes** 的高度抽象 Coq 图论形式化库。
-
-**核心 Type Classes**：
-
-```coq
-Class Graph (G V E: Type) := {
-  vvalid : G -> V -> Prop;       (* 顶点有效性 *)
-  evalid : G -> E -> Prop;       (* 边有效性 *)
-  step_aux : G -> E -> V -> V -> Prop  (* 边 e 连接 u 到 v *)
-}.
-
-Class Path (G V E: Type) `{Graph G V E} (P: Type) := {
-  path_valid: G -> P -> Prop;
-  head: P -> V;
-  tail: P -> V;
-  vertex_in_path: P -> list V;
-  edge_in_path: P -> list E;
-}.
-
-Class RootedTree (G V E: Type) `{Graph G V E} `{GValid G} := {
-  root: G -> V;
-  root_is_valid: forall g, gvalid g -> vvalid g (root g);
-  root_is_root: forall g x, gvalid g -> vvalid g x -> reachable g (root g) x;
-  root_no_father: forall g x, gvalid g -> ~ step g x (root g);
-  father_eunique: forall g x1 x2 e1 e2 y, ... -> e1 = e2;
-}.
-```
-
-**库的层次结构**：
+当前仓库的 Rocq 形式化部分组织如下：
 
 ```
-Graph / Path（抽象接口层）
+SeparationLogic/
+├── GraphLib/             # 图论核心库（Type Classes、有根树、可达性、子图）
+│   ├── graph_basic.v     # Graph/GValid/StepValid/reachable 等核心定义
+│   ├── directed/         # rootettree.v, dfstree.v
+│   ├── reachable/        # reachable_basic.v, epath.v, bfs_dist.v 等
+│   ├── subgraph/         # subgraph.v
+│   ├── undirected/       # undirected_basic.v, tree.v
+│   └── examples/         # floyd.v, dijkstra.v, prim.v, kruskal.v, tarjan.v
+├── algorithms/           # 算法形式化（monadic/trace-based 风格）
+│   ├── BFS/              # BFS.v, BFS_path.v, Go.v
+│   ├── DFS/              # DFS.v, DFS_traditional.v, C10909_MonadProg_DFS.v
+│   ├── Tarjan/           # Tarjan SCC 算法（11 文件，8911 行）
+│   ├── Dijkstra/         # Dijkstra.v, Dijkstra_trace.v
+│   ├── Floyd/            # Floyd.v
+│   ├── Kruskal/          # Kruskal.v
+│   └── Prim/             # Prim.v
+├── MonadLib/             # Monad 库（StateRelMonad, MonadErr）
+├── tracelib/             # Trace 推理库（ghost code, trace logic）
+├── MaxMinLib/            # 最小值/最大值语义
+├── listlib/              # 列表引理库
+├── SeparationLogic/      # 分离逻辑核心
+├── coq-record-update/    # Record 字段更新宏（第三方）
+└── examples/             # QCP 验证案例（QCP_demos_LLM, LLM_bench, Applications_human）
+```
+
+### 2.2 `algorithms/Tarjan/` — Tarjan 算法形式化
+
+这是阶段一最重要的现有资产。当前 11 个文件覆盖了 Tarjan 算法的操作语义验证：
+
+| 文件 | 行数 | 内容 |
+|------|------|------|
+| `Tarjan.v` | 467 | 主程序定义（monadic `program St unit`）、`Tarjan_DFS_rel` 定理、`Tarjan_visited_reachable` |
+| `Tarjan_basics.v` | 1577 | 基本不变量：visited/dfn/low/offspring/step_aux 保持性 |
+| `Tarjan_basics_ex.v` | 2614 | 扩展不变量：树性质、low 正确性 |
+| `Tarjan_is_low.v` | 2812 | `is_low` 定义与全局 low 性质的归纳证明 |
+| `Tarjan_is_dfn.v` | 253 | dfn 编号性质 |
+| `Tarjan_bridge_iff.v` | 493 | 桥 ↔ (low > dfn) 等价定理 |
+| `Tarjan_no_cross_edge.v` | 293 | 无横叉边条件下的路径分析 |
+| `Tarjan_set_tree.v` | 252 | DFS 树设置操作的引理 |
+| `Tarjan_tactics.v` | 91 | 自定义策略 |
+| `Tarjan_tarjan.v` | 59 | 顶层模块聚合 |
+
+**关键依赖链**：
+```
+GraphLib (graph_basic, tarjan, GraphLib)
     ↓
-vpath / epath（具体实现层）
+algorithms/DFS (DFS.v, DFS_traditional.v)
     ↓
-Dijkstra / Floyd / Prim / Kruskal / Tarjan（应用层）
+algorithms/Tarjan/Tarjan.v  ←  tracelib (TraceBasic, TraceLogic, GhostCode, ...)
+    ↓                        ←  MonadLib (StateRelHoare, FixpointLib, safeexec_lib)
+algorithms/Tarjan/Tarjan_basics.v  ←  coq-record-update
+    ↓
+Tarjan_basics_ex.v → Tarjan_is_low.v → Tarjan_bridge_iff.v
 ```
 
-**与 SCC 直接相关的文件**：
+**编程风格**：使用 `MonadLib.StateRelMonad` 的 `program St unit` monad 和非确定性 choice/`forset` 组合子，配合 `TraceLib` 的 ghost code 和 trace logic 进行规约。
+
+**已验证的核心定理**：
+- `Tarjan_visited_reachable`：Tarjan 访问的顶点恰好是从 root 可达的顶点
+- `Tarjan_DFS_rel`：Tarjan 的 visited 行为等价于标准 DFS
+- 桥判定定理（`Tarjan_bridge_iff.v`）
+- `is_low` 的全局归纳性质
+- dfn/low 序的不变量
+
+**尚未完成的关键部分**：
+- **SCC 数学定义**（`mutually_reachable`、`is_SCC`、`scc_partition`）——不存在
+- **SCC 正确性定理**：Tarjan 弹出操作产生的顶点集满足 `is_SCC`
+- **缩点图 DAG 性质**（`condensation_is_acyclic`）
+- **图反转操作**（Kosaraju 算法需要）
+
+### 2.3 `GraphLib/examples/tarjan.v` — 桥定理
+
+这是 Tarjan 算法的早期数学风格版本（区别于 `algorithms/Tarjan/` 的操作风格）：
+
+- 定义了 `OriginalGraphType`（Record 含 `original_vvalid`/`original_evalid`/`original_source`/`original_target`）
+- 类型类实例：`Graph`、`GValid`、`StepValid`、`StepUniqueUndirected`、`FiniteGraph`
+- Type Class：`RootedTree`、`DFSTree`、`dfn_valid`、`is_low`、`low_valid_implies_is_low`
+- 核心定理：树边是桥 ↔ `low[child] > dfn[parent]`
+
+**与 `algorithms/Tarjan/` 的关系**：`algorithms/Tarjan/` import `GraphLib.examples.tarjan`，重用了 `OriginalGraphType`、`St` Record 结构、`RootedTree` Type Class 等定义。两者共享相同的图表示。
+
+### 2.4 `algorithms/DFS/` — DFS 参考实现
 
 | 文件 | 内容 |
 |------|------|
-| `graph_basic.v` | Graph Type Class 定义、step、reachable、StepValid 等 |
-| `directed/rootedtree.v` | RootedTree Type Class、offspring、有根树归纳原理 |
-| `directed/dfstree.v` | dfn_valid 定义（`dfn x < dfn y` 当 x 是 y 的父节点）、dfn 相关引理 |
-| `directed/dfstree_dfn.v` | dfn 和 offspring 之间的更多性质 |
-| `subgraph/subgraph.v` | 子图关系、增边/删边操作 |
-| `reachable/reachable_basic.v` | 可达性基础定义与策略 |
-| `reachable/reachable_restricted.v` | 受限可达性（不经过特定边的路径） |
-| `examples/tarjan.v` | **Tarjan 桥定理的完整证明** |
+| `DFS.v` | 标准 DFS 的 monadic 实现与正确性证明（`DFS_visited_reachable`） |
+| `DFS_traditional.v` | DFS 的传统 Hoare 风格验证 |
+| `C10909_MonadProg_DFS.v` | DFS 的扩展正确性引理 |
 
-### 2.2 `tarjan.v` 已有的关键成果
+`Tarjan.v` 中 `Tarjan_DFS_rel` 的证明依赖 `DFS.v` 的 `DFS_visited_reachable` 定理。
 
-`examples/tarjan.v` 已经完整证明了 Tarjan 算法相关的**核心数学定理**：
+### 2.5 新增基础设施库
 
-1. **dfn 与 offspring 的关系**：`dfn_valid_offspring`（后代有更大的 dfn）
-2. **low 值的定义与性质**：
-   - `is_low`：low 是 `low_tree` 上 dfn 的最小值
-   - `low_tree`：子树 ∪ 通过子树可达的非树边目标
-   - `low_valid_implies_is_low`：局部 low 条件蕴含全局 low 性质（通过有根树归纳）
-3. **无横叉边性质**：`no_cross_edge` 假设下的路径分析
-4. **Tarjan 主定理**：`dfn x < low y ↔ is_bridge g e`（当 e 是树边 x→y 时）
-5. **副定理**：非树边一定不是桥
+| 库 | 路径 | 用途 |
+|----|------|------|
+| **TraceLib** | `tracelib/` | Ghost code、trace logic、trace 递归/循环推理。`Tarjan.v` 使用 trace call 机制将纯程序提升为 trace 程序 |
+| **coq-record-update** | `coq-record-update/` | Record 字段更新的 `settable!` 宏。Tarjan 程序用 `` s <| visited ::= ... |> `` 语法更新状态字段 |
+| **MonadLib 更新** | `MonadLib/` | `MonadErrHoarePartial.v` 新增、`FixpointLib.v` 扩展、`safeexec_lib.v` 更新 |
 
-这些成果**直接为 SCC 算法验证提供了理论基础**——特别是 `is_low`、`low_tree`、`closed_offspring` 等概念。
+### 2.6 现有示例参考
 
-### 2.3 现有示例参考
-
-根据 `AGENTS.md`，只参考 `QCP_demos_LLM` 版本的示例（不参考 `QCP_demos_human`）。与本计划最相关的现有示例：
+根据 `AGENTS.md`，只参考 `QCP_demos_LLM` 版本的示例：
 
 - `sll_insert_sort.c`：展示了多函数、复杂循环不变量、函数调用
 - `fme/fme.c`：展示了嵌套循环、复杂数据结构、多文件组织
 - `kmp_rel.c` / `int_array_merge_rel.c`：展示了 refinement proof 模式
+- `glibc_slist_rel/*.c`（新增 17 个案例）：C refines monad 的 refinement 模式参考
 
 ---
 
@@ -170,7 +206,7 @@ Dijkstra / Floyd / Prim / Kruskal / Tarjan（应用层）
 本计划分六个阶段推进，各阶段之间存在依赖关系：
 
 ```
-阶段一：Rocq 数学形式化（SCC 定义 + Tarjan 算法）
+阶段一：SCC 数学定义 + Tarjan SCC 正确性定理（在 algorithms/Tarjan/ 下）
     ↓
 阶段二：C 语言的 Tarjan SCC 实现与标注
     ↓
@@ -183,150 +219,169 @@ Dijkstra / Floyd / Prim / Kruskal / Tarjan（应用层）
 阶段六：集成与最终验证
 ```
 
-建议**从阶段一开始，先不碰 C 代码**。在纯 Coq 中完成 SCC 理论后，再进入标注-符号执行-证明的循环。
+当前进度：阶段一的**算法操作语义部分**（Tarjan 程序定义 + visited/dfn/low 不变量 + 桥定理）已基本完成。**SCC 数学规格层**和**SCC 正确性定理**尚未开始。
 
 ---
 
-## 4. 阶段一：Rocq 中 Tarjan SCC 算法的数学形式化
+## 4. 阶段一：Rocq 中 SCC 数学基础与算法规格
 
-### 4.1 新建文件：`GraphLib/examples/scc_basic.v`
+### 4.1 现状与缺口
 
-定义强连通分量的基本概念和性质。
+当前 `algorithms/Tarjan/` 中的定理聚焦于**操作层面**（程序执行了什么），但缺少**规格层面**的定义（程序的数学目标是什么）。具体缺口：
 
-#### 4.1.1 相互可达性与 SCC
+| 缺失项 | 用途 |
+|--------|------|
+| `mutually_reachable` (on `OriginalGraphType`) | SCC 的数学定义：两点相互可达 |
+| `is_SCC` | 顶点集合是否为 SCC 的判定谓词 |
+| `scc_partition` | 整个图的 SCC 划分定义 |
+| `scc_partition_exists` | SCC 划分的存在性证明 |
+| `condensation_edge` / `condensation_is_acyclic` | 缩点图 DAG 性质 |
+| `reverse_graph` (for `OriginalGraphType`) | 图反转（Kosaraju 和 2-SAT 蕴含图需要） |
+| Tarjan SCC 正确性定理 | 连接操作语义与 SCC 规格 |
+
+### 4.2 新建文件：`algorithms/Tarjan/SCC_basic.v`
+
+定义 SCC 的数学基础（图类型使用 `OriginalGraphType`）：
+
+#### 4.2.1 相互可达性与 SCC
 
 ```coq
+Require Import GraphLib.GraphLib.
+Require Import GraphLib.examples.tarjan.
+
+Section SCC_DEFS.
+
+Context {V E: Type} (g: OriginalGraphType V E) `{OriginalGraph_gvalid g}.
+
 (* 相互可达性 *)
-Definition mutually_reachable {G V E: Type} `{Graph G V E} (g: G) (u v: V): Prop :=
+Definition mutually_reachable (u v: V) : Prop :=
   reachable g u v /\ reachable g v u.
 
-(* 证明这是一个等价关系 *)
-Lemma mutually_reachable_refl: forall g u, vvalid g u -> mutually_reachable g u u.
-Lemma mutually_reachable_sym: forall g u v, mutually_reachable g u v -> mutually_reachable g v u.
-Lemma mutually_reachable_trans: forall g u v w,
-  mutually_reachable g u v -> mutually_reachable g v w -> mutually_reachable g u w.
+(* 等价关系性质 *)
+Lemma mutually_reachable_refl : forall u, vvalid g u -> mutually_reachable u u.
+Lemma mutually_reachable_sym : forall u v, mutually_reachable u v -> mutually_reachable v u.
+Lemma mutually_reachable_trans : forall u v w,
+  mutually_reachable u v -> mutually_reachable v w -> mutually_reachable u w.
 
-(* SCC 定义为相互可达的等价类 *)
-Definition is_SCC {G V E: Type} `{Graph G V E} (g: G) (s: V -> Prop): Prop :=
-  (exists v, s v) /\                                  (* 非空 *)
-  (forall u v, s u -> s v -> mutually_reachable g u v) /\  (* 内部相互可达 *)
-  (forall u v, s u -> mutually_reachable g u v -> s v).    (* 极大性 *)
+(* SCC 定义：非空 + 内部相互可达 + 极大 *)
+Definition is_SCC (s: V -> Prop) : Prop :=
+  (exists v, s v /\ vvalid g v) /\
+  (forall u v, s u -> s v -> mutually_reachable u v) /\
+  (forall u v, s u -> vvalid g v -> mutually_reachable u v -> s v).
+
+(* SCC 的基本性质 *)
+Lemma is_SCC_vvalid : forall s u, is_SCC s -> s u -> vvalid g u.
+Lemma is_SCC_closed_under_mr : forall s u v,
+  is_SCC s -> s u -> mutually_reachable u v -> s v.
+Lemma is_SCC_maximal : forall s1 s2,
+  is_SCC s1 -> is_SCC s2 ->
+  (forall v, s1 v -> s2 v) -> (forall v, s2 v -> s1 v).
 ```
 
-#### 4.1.2 SCC 划分
+#### 4.2.2 SCC 划分
 
 ```coq
-(* SCC 构成顶点的划分 *)
-Definition scc_partition {G V E: Type} `{Graph G V E} (g: G) (sccs: list (V -> Prop)): Prop :=
-  (forall v, vvalid g v -> exists s, In s sccs /\ s v) /\       (* 覆盖 *)
-  (forall s, In s sccs -> is_SCC g s) /\                        (* 每个都是 SCC *)
-  (forall s1 s2 v, In s1 sccs -> In s2 sccs -> s1 v -> s2 v -> s1 = s2). (* 互不相交 *)
+(* SCC 划分：覆盖 + 每个是 SCC + 互不相交 *)
+Definition scc_partition (sccs: list (V -> Prop)) : Prop :=
+  (forall v, vvalid g v -> exists s, In s sccs /\ s v) /\
+  (forall s, In s sccs -> is_SCC s) /\
+  (forall s1 s2 v, In s1 sccs -> In s2 sccs -> s1 v -> s2 v -> s1 = s2).
+
+(* 相互可达的顶点在同一 SCC 中 *)
+Lemma mutually_reachable_same_SCC : forall u v sccs,
+  vvalid g u -> scc_partition sccs -> mutually_reachable u v ->
+  exists s, In s sccs /\ s u /\ s v.
+
+(* SCC 划分存在性（使用 FiniteGraph + 古典逻辑） *)
+Theorem scc_partition_exists : exists sccs, scc_partition sccs.
 ```
 
-#### 4.1.3 缩点图
+#### 4.2.3 缩点图（Condensation DAG）
 
 ```coq
-(* 缩点图：以 SCC 为顶点 *)
-Definition condensation_graph {G V E: Type} `{Graph G V E} (g: G) (sccs: list (V -> Prop)):
-  Graph (list (V -> Prop)) (V -> Prop) (V * V) := ...
+(* 缩点图边：从 SCC s1 到不同 SCC s2 存在原图边 *)
+Definition condensation_edge (sccs: list (V -> Prop)) (s1 s2: V -> Prop) : Prop :=
+  In s1 sccs /\ In s2 sccs /\ s1 <> s2 /\
+  exists u v, s1 u /\ s2 v /\ step g u v.
 
-(* 缩点图是一个 DAG *)
-Lemma condensation_is_dag: forall g sccs,
-  scc_partition g sccs -> acyclic (condensation_graph g sccs).
+(* 缩点图无环 *)
+Theorem condensation_is_acyclic : forall sccs s1 s2,
+  scc_partition sccs ->
+  condensation_edge sccs s1 s2 ->
+  ~ condensation_reachable sccs s2 s1.
 ```
 
-### 4.2 新建文件：`GraphLib/examples/scc_tarjan.v`
-
-形式化 Tarjan 算法本身（栈式 DFS 的数学描述）。
-
-#### 4.2.1 算法状态
+#### 4.2.4 图反转
 
 ```coq
-Record TarjanState (V: Type) := {
-  ts_index    : V -> option nat;   (* None = 未访问 *)
-  ts_lowlink  : V -> option nat;
-  ts_onStack  : V -> bool;
-  ts_stack    : list V;
-  ts_sccs     : list (list V);     (* 已发现的 SCC *)
-  ts_nextIdx  : nat;
-}.
+(* OriginalGraphType 的反转：交换 source/target *)
+Definition reverse_graph (g: OriginalGraphType V E) : OriginalGraphType V E := ...
 
-(* 初始状态 *)
-Definition tarjan_init (vertices: list V): TarjanState V :=
-  {| ts_index   := fun _ => None;
-     ts_lowlink := fun _ => None;
-     ts_onStack := fun _ => false;
-     ts_stack   := nil;
-     ts_sccs    := nil;
-     ts_nextIdx := 0 |}.
+(* mutually_reachable 和 is_SCC 在图反转下不变 *)
+Lemma mutually_reachable_reverse : forall u v,
+  mutually_reachable g u v <-> mutually_reachable (reverse_graph g) u v.
+Corollary is_SCC_reverse : forall s,
+  is_SCC g s <-> is_SCC (reverse_graph g) s.
+Corollary scc_partition_reverse : forall sccs,
+  scc_partition g sccs <-> scc_partition (reverse_graph g) sccs.
 ```
 
-#### 4.2.2 算法步骤
+**设计要点**：
+- 使用 `OriginalGraphType`（与 `tarjan.v` 和 `algorithms/Tarjan/` 一致）
+- 不引入新的 `DirectedGraphType`——`OriginalGraphType` 已包含 `original_source`/`original_target`
+- 所有定义对任意 `OriginalGraphType` 有效（算法无关）
+- 图反转在 Kosaraju 和 2-SAT 蕴含图构造时需要
+
+### 4.3 新建文件：`algorithms/Tarjan/SCC_correctness.v`
+
+将 Tarjan 算法的操作语义与 SCC 数学规格连接：
 
 ```coq
-(* 对顶点 v 执行 strongconnect *)
-Inductive strongconnect_step {V E: Type} `{Graph G V E} (g: G)
-  : TarjanState V -> V -> TarjanState V -> Prop :=
-  | sc_enter:    (* v 未访问，分配 index *)
-      ts_index s v = None -> ...
-  | sc_explore:  (* 遍历邻居 w *)
-      ...
-  | sc_backtrack: (* 回溯时更新 lowlink *)
-      ...
-  | sc_pop_scc:  (* lowlink[v] == index[v] 时弹出 SCC *)
-      ...
+Require Import GraphLib.GraphLib.
+Require Import GraphLib.examples.tarjan.
+Require Import Algorithms.Tarjan.Tarjan.
+Require Import Algorithms.Tarjan.SCC_basic.
 
-(* 完整算法：对所有顶点迭代 *)
-Inductive tarjan_multi_step {V E: Type} `{Graph G V E} (g: G)
-  : TarjanState V -> TarjanState V -> Prop := ...
-```
+Section SCC_CORRECTNESS.
 
-#### 4.2.3 主正确性定理
+Context {V E: Type} `{EqDec V eq} (g: OriginalGraphType V E)
+        `{OriginalGraph_gvalid g} (root: V) `{vvalid g root}.
 
-```coq
-Theorem tarjan_scc_correctness:
-  forall (g: OriginalGraphType V E) (gvalid: OriginalGraph_gvalid g),
-  exists s_final,
-    tarjan_multi_step g (tarjan_init (original_listV g)) s_final /\
-    is_terminal s_final /\
-    (* 发现的 SCC 构成顶点的划分 *)
-    scc_partition g (map list_to_set s_final.(ts_sccs)) /\
-    (* 每个 SCC 列表对应于正确的顶点集 *)
-    (forall scc, In scc s_final.(ts_sccs) -> is_SCC g (list_to_set scc)).
-```
+(* 核心不变式：已弹出的 SCC 都是正确的 *)
+Definition scc_stack_invariant (s: St) (dfstree: DFSTreeType V E) : Prop :=
+  (* 栈中顶点按 low 值分组对应 SCC *)
+  ...
 
-### 4.3 新建文件：`GraphLib/examples/scc_characterization.v`
+(* 主正确性定理 *)
+Theorem tarjan_scc_correctness :
+  Hoare (fun s => s = initSt)
+        (tarjan g root)
+        (fun _ s =>
+          exists sccs,
+            scc_partition g sccs /\
+            (* sccs 中的每个 SCC 对应 Tarjan 算法弹出的一组顶点 *)
+            ...).
 
-建立 DFS dfn/low 理论与 SCC 之间的桥梁。这是将 `tarjan.v` 的成果连接到 SCC 理论的关键步骤，也是阶段四 VC 证明的数学基础。
-
-#### 4.3.1 关键引理
-
-```coq
-(* SCC 可以通过 low 值来刻画 *)
-Lemma scc_by_low_root:
-  forall g dfstree dfn low v,
-  dfn_valid dfstree dfn ->
-  is_low g dfstree dfn low ->
-  low v = dfn v ->
-  (* 在 dfstree 中，v 子树中所有 low >= dfn v 的顶点构成一个 SCC *)
-  let scc_v := fun w => offspring dfstree v w /\ low w >= dfn v in
-  is_SCC g scc_v.
-
-(* 栈弹出子序列构成一个 SCC *)
-Lemma stack_pop_is_scc:
-  forall g dfstree dfn low stack stack' v,
-  (* 前提：low[v] = dfn[v]，且栈包含 v *)
-  pop_until stack v = Some (popped, stack') ->
-  (* 则 popped 中的顶点构成一个 SCC *)
+(* 推论：每个被弹出的顶点组是一个 SCC *)
+Corollary tarjan_pop_is_scc : forall s s' v popped,
+  (* s --[tarjan g root]--> s' 且在某步中弹出 popped *)
+  ...
   is_SCC g (fun w => In w popped).
-
-(* Tarjan 算法发现的 SCC 与 mutual_reachability 等价类是一致的 *)
-Lemma tarjan_partition_matches_mutual_reach:
-  forall g sccs,
-  tarjan_scc_result g = sccs ->
-  scc_partition g sccs /\
-  (forall u v, mutually_reachable g u v <-> exists s, In s sccs /\ s u /\ s v).
 ```
+
+**关键依赖**：
+- `Tarjan_is_low.v` 的 `is_low` 全局性质
+- `Tarjan_basics.v` / `Tarjan_basics_ex.v` 的 visited/dfn/low/offspring 不变式
+- `Tarjan_bridge_iff.v` 的无横叉边条件下的路径引理
+
+### 4.4 阶段一产出物
+
+| 文件 | 预估行数 | 内容 |
+|------|---------|------|
+| `algorithms/Tarjan/SCC_basic.v` | 500–700 | SCC 数学定义、划分、缩点图、图反转 |
+| `algorithms/Tarjan/SCC_correctness.v` | 800–1200 | Tarjan 弹出操作的 SCC 正确性证明 |
+
+两个文件放在 `algorithms/Tarjan/` 下，与现有文件同级，`Require Import` 路径为 `From Algorithms Require Import Tarjan.SCC_basic.`
 
 ---
 
@@ -388,8 +443,7 @@ Fixpoint EdgeList_rep (x: addr) (edges: list Z): Assertion :=
         EdgeList_rep next edges'
   end.
 
-(* 邻接数组表示谓词：arr 指向 numVertices 个 EdgeNode* 的数组，
-   每个元素指向一个边链表 *)
+(* 邻接数组表示谓词 *)
 Fixpoint AdjArray_rep (arr: addr) (n: nat) (adj: list (list Z)): Assertion :=
   match n, adj with
   | O, nil => emp
@@ -453,15 +507,10 @@ void strongconnect(struct Graph *graph, int v, struct TarjanContext *ctx)
                                 nextIndex, sccCount)
       Ensure exists index' lowlink' stack' stackTop' onStack' sccIds'
                     nextIndex' sccCount',
-             (* index[v] 已被赋值 *)
              Zlength index' == n /\
              Znth v index' != -1 /\
-             (* lowlink[v] 正确刻画包含 v 的 SCC 的根 *)
-             lowlink_correct_for_root G dfstree dfn index' lowlink' v /\
-             (* 所有包含 v 的 SCC 中的顶点已经出栈并分配了 SCC ID *)
+             (* 包含 v 的 SCC 已正确识别并出栈 *)
              scc_completed_at G adj v sccIds' sccCount' /\
-             (* 对其他顶点的副作用受控 *)
-             tarjan_side_effect index index' lowlink lowlink' stack stack' ... /\
              Graph_rep(graph, adj) *
              TarjanContext_rep(ctx, n, index', lowlink', stack',
                                stackTop', onStack', sccIds',
@@ -476,35 +525,14 @@ void strongconnect(struct Graph *graph, int v, struct TarjanContext *ctx)
     ctx->stackTop++;
     ctx->onStack[v] = true;
 
-    /*@ Assert
-        exists index1 lowlink1 stack1 stackTop1,
-        index1 == set_nth(index, v, nextIndex@pre) /\
-        lowlink1 == set_nth(lowlink@pre, v, nextIndex@pre) /\
-        stackTop1 == stackTop@pre + 1 /\
-        data_at(&(ctx -> index[v]), nextIndex@pre) *
-        data_at(&(ctx -> lowlink[v]), nextIndex@pre) *
-        data_at(&(ctx -> nextIndex), nextIndex@pre + 1) *
-        data_at(&(ctx -> stack[stackTop@pre]), v) *
-        data_at(&(ctx -> stackTop), stackTop1) *
-        data_at(&(ctx -> onStack[v]), true) *
-        ...
-    */
-
     // 遍历 v 的所有邻居
     struct EdgeNode *e = graph->adj[v];
     /*@ Inv
         exists e_ptr index2 lowlink2 stack2 stackTop2 onStack2
                sccIds2 nextIndex2 sccCount2 processed,
-        (* 不变量：对已处理的邻居 w，lowlink[v] 已更新 *)
         forall w, In w processed ->
           update_lowlink_correct G dfstree dfn index2 lowlink2 v w /\
-          if Znth w index2 == -1 then
-            (* 未访问的邻居：已递归处理 *)
-            scc_completed_for_subtree G adj w sccIds2 sccCount2
-          else if Znth w onStack2 then
-            (* 在栈中的邻居：已用 index[w] 更新 lowlink[v] *)
-            lowlink2[v] <= index2[w]
-        /\
+          ...
         EdgeList_seg(graph->adj[v], e, e_ptr, processed, adj_nth adj v) *
         TarjanContext_rep(ctx, n, index2, lowlink2, stack2,
                           stackTop2, onStack2, sccIds2,
@@ -513,23 +541,9 @@ void strongconnect(struct Graph *graph, int v, struct TarjanContext *ctx)
     while (e != NULL) {
         int w = e->to;
 
-        /*@ Assert
-            exists w_val,
-            data_at(&(e -> to), w_val) *
-            data_at(&(e -> next), e_next) *
-            ...
-        */
-
         if (ctx->index[w] == -1) {
             /* w 未访问，递归调用 */
             strongconnect(graph, w, ctx);
-            /*@ Assert
-                exists index3 lowlink3 ...,
-                (* strongconnect 的后置条件在此生效 *)
-                Znth w index3 != -1 /\
-                scc_completed_at G adj w sccIds3 sccCount3 /\
-                ...
-            */
             if (ctx->lowlink[w] < ctx->lowlink[v]) {
                 ctx->lowlink[v] = ctx->lowlink[w];
             }
@@ -543,18 +557,8 @@ void strongconnect(struct Graph *graph, int v, struct TarjanContext *ctx)
         e = e->next;
     }
 
-    /*@ Assert
-        (* 所有邻居处理完毕 *)
-        lowlink_fully_updated G dfstree dfn index lowlink v
-    */
-
     /* 弹出 SCC */
     if (ctx->lowlink[v] == ctx->index[v]) {
-        /*@ Assert
-            exists sccMembers,
-            stack_prefix(ctx->stack, ctx->stackTop@pre, ctx->stackTop, v, sccMembers) /\
-            is_SCC G (list_to_set sccMembers)
-        */
         int w;
         do {
             ctx->stackTop--;
@@ -576,17 +580,12 @@ void tarjan_scc(struct Graph *graph, struct TarjanContext *ctx)
               n <= INT_MAX /\
               graph_well_formed G adj /\
               Graph_rep(graph, adj) *
-              TarjanContext_init(ctx, n)   (* 所有数组已分配，初始化为 -1/false *)
+              TarjanContext_init(ctx, n)
       Ensure exists sccIds sccCount,
-             (* 每个顶点被分配了 SCC ID *)
              Zlength sccIds == n /\
-             (forall i, 0 <= i < n -> Znth i sccIds >= 0 /\ Znth i sccIds < sccCount) /\
-             (* 两个顶点有相同的 SCC ID 当且仅当它们相互可达 *)
              (forall i j, 0 <= i < n -> 0 <= j < n ->
                Znth i sccIds == Znth j sccIds <->
                mutually_reachable G (Z.to_nat i) (Z.to_nat j)) /\
-             (* SCC 数量正确 *)
-             sccCount == scc_count G /\
              Graph_rep(graph, adj) *
              TarjanContext_rep_final(ctx, n, sccIds, sccCount)
   */
@@ -595,15 +594,10 @@ void tarjan_scc(struct Graph *graph, struct TarjanContext *ctx)
 
     /*@ Inv
         exists index lowlink stack stackTop onStack sccIds nextIndex sccCount,
-        (* 对前 v 个顶点，如果未访问，已通过 DFS 处理 *)
         (forall i, 0 <= i < v ->
-           Znth i index != -1 ->   (* 已编号 *)
+           Znth i index != -1 ->
            scc_assigned G adj i sccIds sccCount) /\
-        (* 未访问的顶点 index 为 -1 *)
         (forall i, v <= i < n -> Znth i index == -1) /\
-        (* SCC 计数正确 *)
-        partial_scc_invariant G adj v index lowlink stack
-                               stackTop onStack sccIds nextIndex sccCount /\
         Graph_rep(graph, adj) *
         TarjanContext_rep(ctx, n, index, lowlink, stack,
                           stackTop, onStack, sccIds,
@@ -612,7 +606,6 @@ void tarjan_scc(struct Graph *graph, struct TarjanContext *ctx)
     for (v = 0; v < graph->numVertices; v++) {
         if (ctx->index[v] == -1) {
             strongconnect(graph, v, ctx);
-            /*@ Assert scc_completed_for_root G adj v ctx->sccIds ctx->sccCount */
         }
     }
 }
@@ -622,12 +615,11 @@ void tarjan_scc(struct Graph *graph, struct TarjanContext *ctx)
 
 | 挑战 | 应对策略 |
 |------|----------|
-| `strongconnect` 是递归函数 | 使用 QCP 的函数规约机制。在调用点通过前置条件匹配来实例化逻辑变量，后置条件中的 existentials 在调用后引入 |
-| 对数组的细粒度更新 | 使用 ArrayLib 谓词（`IntArray_rep`、`BoolArray_rep`）。标注中显式声明每次数组访问的权限 |
-| 递归调用中的栈帧 | 递归函数的逻辑变量在每次调用时独立量化。将"调用前的状态"保存在 `@pre` 标记变量中 |
-| DFS 树结构与 C 迭代过程的对应 | 在 `common_case_formal_lib` 中证明一个引理：C 实现的访问顺序恰好产生一个合法的 DFS 树（dfstree） |
-| 收缩传值后的不变量维护 | 在循环体中显式声明每个变量修改后的新旧值关系 |
-| 结构体字段访问的权限展开 | 使用 `Assert` + `which implies` 语法手动展开 `sll` / `EdgeList_rep` 以获得内部字段的 `data_at` 权限 |
+| `strongconnect` 是递归函数 | 使用 QCP 的函数规约机制。在调用点通过前置条件匹配来实例化逻辑变量 |
+| 对数组的细粒度更新 | 使用 ArrayLib 谓词（`IntArray_rep`、`BoolArray_rep`），标注中显式声明每次数组访问的权限 |
+| 递归调用中的栈帧 | 递归函数的逻辑变量在每次调用时独立量化 |
+| DFS 树结构与 C 迭代过程的对应 | 在 `tarjan_scc_lib.v` 中证明引理：C 访问顺序产生合法 DFS 树 |
+| 结构体字段访问的权限展开 | 使用 `Assert` + `which implies` 语法手动展开谓词获得 `data_at` 权限 |
 
 ---
 
@@ -650,8 +642,6 @@ linux-binary/symexec \
 
 ### 6.2 迭代调试流程
 
-标注调试是不可避免的迭代过程：
-
 ```
 编写/修改 C 标注
     → 运行 symexec
@@ -661,11 +651,9 @@ linux-binary/symexec \
     → 重复直到 symexec 成功到达文件尾
 ```
 
-使用 `qcp-mcp` 进行**交互式增量检查**可以大幅加速此过程。在 QIDE VS Code 扩展中，`Alt+⇒` 可以逐步执行符号执行，在每一步检查当前符号状态。
+使用 `qcp-mcp` 进行**交互式增量检查**可以大幅加速此过程。
 
 ### 6.3 预期的 VC 分类
-
-符号执行成功后，生成的 VC 可预分类为：
 
 **A 类：直接内存布局 VC（预期 40%+ 自动解决）**
 - 结构体字段访问权限（`e->to`、`e->next`）
@@ -674,7 +662,6 @@ linux-binary/symexec \
 
 **B 类：函数调用参数实例化 VC（预期 20% 策略解决）**
 - `strongconnect(graph, w, ctx)` 调用处：匹配前置条件、分离内存帧
-- 可能需要自定义 `tarjan_scc.strategies` 指导工具分离 Graph/TarjanContext
 
 **C 类：循环不变量维护 VC（预期 25% 需要手动证明）**
 - 外层循环：v 的增加保持不变量
@@ -683,7 +670,7 @@ linux-binary/symexec \
 
 **D 类：纯数学命题 VC（预期 15% 需要深入手动证明）**
 - `lowlink` 更新保持 `is_low` 性质
-- 栈弹出子序列构成 SCC
+- 栈弹出子序列构成 SCC（依赖 `SCC_correctness.v`）
 - 后置条件中的 `mutually_reachable` 等价性
 
 ### 6.4 策略文件
@@ -692,25 +679,11 @@ linux-binary/symexec \
 
 ```
 # 用于分离 Graph_rep 和 TarjanContext_rep 的策略
-# 在函数调用时指导工具如何匹配前提
-
-# 匹配 Graph_rep
 pattern: Graph_rep(g, adj) * TarjanContext_rep(ctx, ...) |-- Graph_rep(g, adj)
 action: cancel Graph_rep
 
-# 匹配 IntArray_rep 读取
 pattern: IntArray_rep(arr, n, l) |-- data_at(arr + offset, Int, v)
 action: ...
-```
-
-运行策略检查：
-
-```bash
-linux-binary/StrategyCheck \
-  --strategy-folder-path=SeparationLogic/examples/Applications_human/tarjan_scc/ \
-  --coq-logic-path=SimpleC.EE.Applications_human.tarjan_scc \
-  --input-file=QCP_examples/Applications_human/tarjan_scc/tarjan_scc.strategies \
-  --no-exec-info
 ```
 
 ---
@@ -721,57 +694,39 @@ linux-binary/StrategyCheck \
 
 在 `SeparationLogic/examples/Applications_human/tarjan_scc/tarjan_scc_lib.v` 中：
 
-- 导入 GraphLib（`graph_basic`、`reachable_basic`、`rootedtree`、`dfstree`、`tarjan`、`scc_basic`、`scc_tarjan`、`scc_characterization`）
-- 导入 ArrayLib（`ArrayLib`、`IntLib`）
+- 导入 GraphLib（`graph_basic`、`tarjan`）
+- 导入 `Algorithms.Tarjan`（`Tarjan`、`SCC_basic`、`SCC_correctness`）
 - 导入分离逻辑策略库
 - 定义阶段二中的所有表示谓词
-- 陈述辅助引理：
-  - `graph_rep_open`：展开 `Graph_rep` 以暴露单个 `data_at`
-  - `edge_list_read`：读取边链表节点的 `to` 和 `next`
-  - `int_array_read` / `int_array_write`：IntArray 的读写引理
-  - `tarjan_context_frame`：TarjanContext 各字段是分离的
+- 陈述辅助引理：`graph_rep_open`、`edge_list_read`、`int_array_read`/`int_array_write`、`tarjan_context_frame`
 - 记录 `lib_frozen_prefix_end_line` 和 `lib_frozen_prefix_snapshot`
 
 ### 7.2 VC 检查阶段（`vc-checking`）
 
-主 agent 启动 `vc-checking-subagent`，对 `*_proof_manual.v` 中的每个 VC 进行语义分类：
-
 | Proof Group | 描述 | 估计数量 | 策略 |
 |-------------|------|---------|------|
 | Group 1 | 直接 entailer 可解 | ~30% | `entailer!` 一步完成 |
-| Group 2 | 需要简单引理 | ~25% | 应用 `sep_apply graph_rep_open` 等再 `entailer!` |
-| Group 3 | 需要 low/dfn 性质 | ~20% | 引用 `tarjan.v` 和 `scc_characterization.v` 的引理 |
-| Group 4 | 深度数学（SCC 正确性） | ~15% | 结合分离逻辑与图论的复杂证明 |
+| Group 2 | 需要简单引理 | ~25% | 应用 `sep_apply` 再 `entailer!` |
+| Group 3 | 需要 low/dfn 性质 | ~20% | 引用 `Tarjan_is_low.v`、`Tarjan_basics.v` |
+| Group 4 | 深度数学（SCC 正确性） | ~15% | 结合 `SCC_correctness.v` 的复杂证明 |
 | Group 5 | 可能语义不可证 | ~10% | 回到 annotation 阶段修正 |
-
-输出：每个 VC 的 witness 分诊结论和自然语言 proof group 分组。
 
 ### 7.3 VC 证明阶段（`vc-proving`）
 
-使用 `vc-proving` 技能的**脚本化并发 worker 流水线**：
-
-1. **Split**（`split_manual_goals.py`）：将 `*_proof_manual.v` 按 proof group 拆分为 worker-local manual 文件
-2. **Prepare**（`prepare_agent.py` / `prepare_group_workdir.py`）：为每个 worker 创建工作目录和 `worker_helper_scratch_lib`
-3. **Run**（`run_agent_concurrent.py`）：并发启动 Codex worker，每个 worker 在隔离的 `rocq-mcp` 会话中证明分配到的 VC
-4. **Validate**（`validate_and_merge.py` / `verify_manual_goals.py`）：检查所有 VC 已证明（无 `Admitted`）、合并 manual
-5. **Migrate**（`migrate_helpers_to_lib.py`）：将审计通过的 helper lemmas 迁移到 `task_local_scratch_lib`→`common_case_formal_lib`
+使用 `vc-proving` 技能的脚本化并发 worker 流水线：Split → Prepare → Run → Validate → Migrate。
 
 #### Group 3 证明示例
 
 ```coq
-(* VC: state after processing neighbor w implies loop invariant *)
 Lemma neighbor_processed_preserves_invariant:
   forall G dfstree dfn low index lowlink stack ...,
-  (* 前提：处理 w 后的状态 *)
   ...
   |--
-  (* 结论：不变量仍然成立 *)
   EX index' lowlink' ..., ... ** TarjanContext_rep ...
 Proof.
   intros. Intros.
-  (* 使用 GraphLib tarjan.v 中的引理 *)
   sep_apply lowlink_update_preserves_is_low.
-  { (* 证明更新条件 *) ... }
+  { ... }
   entailer!.
 Qed.
 ```
@@ -779,7 +734,6 @@ Qed.
 #### Group 4 证明示例（核心困难 VC）
 
 ```coq
-(* VC: lowlink[v] == index[v] 时弹出的顶点构成一个 SCC *)
 Lemma pop_scc_when_low_equals_index:
   forall G dfstree dfn low stack stack' v popped,
   dfn_valid dfstree dfn ->
@@ -791,19 +745,14 @@ Lemma pop_scc_when_low_equals_index:
   is_SCC G (fun w => In w popped).
 Proof.
   intros.
-  (* 这需要深入的图论证明，连接 GraphLib 已有的理论 *)
-  apply scc_characterization.stack_pop_is_scc with (g := G) (dfstree := dfstree); auto.
-  (* 从 C 状态重建 dfstree *)
-  - (* 证明 C 的访问顺序产生合法的 DFS 树 *)
-    apply build_dfstree_from_tarjan_trace; auto.
-  - (* 证明 low 值满足 is_low *)
-    apply lowlink_implies_is_low; auto.
+  (* 引用阶段一的 SCC_correctness.v 主定理 *)
+  apply SCC_correctness.tarjan_pop_is_scc with (g := G) (dfstree := dfstree); auto.
+  - apply build_dfstree_from_tarjan_trace; auto.
+  - apply lowlink_implies_is_low; auto.
 Qed.
 ```
 
 ### 7.4 分离逻辑策略参考
-
-根据 `SeparationLogic/README.md`，可用的主要策略：
 
 | 策略 | 用途 |
 |------|------|
@@ -820,105 +769,51 @@ Qed.
 
 ## 8. 阶段五：2-SAT 问题形式化与归约
 
-### 8.1 新建文件：`GraphLib/examples/two_sat.v`
+### 8.1 新建文件：`algorithms/TwoSAT/TwoSAT.v`
 
-#### 8.1.1 2-SAT 的形式化
+（或在 `algorithms/Tarjan/` 下新增 `TwoSAT.v`，因为 2-SAT 归约直接依赖 Tarjan SCC）
 
 ```coq
+Require Import GraphLib.GraphLib.
+Require Import GraphLib.examples.tarjan.
+Require Import Algorithms.Tarjan.SCC_basic.
+
 (* 文字：变量编号 + 极性 *)
-Definition literal := (Z * bool).  (* (var, true) = 正文字，(var, false) = 负文字 *)
+Definition literal := (Z * bool).
 Definition negate (l: literal): literal := (fst l, negb (snd l)).
 
-(* 子句：两个文字的析取 *)
+(* 子句和公式 *)
 Definition clause := (literal * literal).
-
-(* 公式：子句的列表 *)
 Definition formula := list clause.
-
-(* 赋值 *)
 Definition assignment := Z -> bool.
 
-(* 文字求值 *)
-Definition eval_literal (a: assignment) (l: literal): bool :=
-  if snd l then a (fst l) else negb (a (fst l)).
-
-(* 子句和公式的可满足性 *)
-Definition satisfies_clause (a: assignment) (c: clause): Prop :=
-  eval_literal a (fst c) = true \/ eval_literal a (snd c) = true.
-
+(* 可满足性 *)
 Definition satisfies (a: assignment) (f: formula): Prop :=
-  forall c, In c f -> satisfies_clause a c.
+  forall c, In c f ->
+    (eval_literal a (fst c) = true \/ eval_literal a (snd c) = true).
 
-Definition satisfiable (f: formula): Prop :=
-  exists a, satisfies a f.
-```
+Definition satisfiable (f: formula): Prop := exists a, satisfies a f.
 
-#### 8.1.2 蕴含图构造
-
-```coq
-(* 对公式 f 构造蕴含图（implication graph）：
-   顶点：2 * numVars 个顶点（每个变量对应两个文字）
-   边：对每个子句 (a \/ b)，添加边 (~a -> b) 和 (~b -> a) *)
+(* 蕴含图构造 *)
 Definition implication_graph (f: formula) (numVars: Z): OriginalGraphType Z Z := ...
 
-(* 蕴含图的关键性质 *)
-Lemma implication_graph_meaning:
-  forall f numVars G,
-  G = implication_graph f numVars ->
-  forall l1 l2,
-  reachable G (encode_literal l1) (encode_literal l2) <->
-  (forall a, satisfies a f -> eval_literal a l1 = true -> eval_literal a l2 = true).
-```
-
-#### 8.1.3 2-SAT 定理
-
-```coq
-(* 主定理：公式可满足 当且仅当 没有变量与其否定在同一个 SCC *)
+(* 2-SAT 主定理：公式可满足 ↔ 没有变量与其否定在同一 SCC *)
 Theorem two_sat_characterization:
   forall f numVars,
   (forall c, In c f -> valid_clause c numVars) ->
   (satisfiable f <->
    forall v, 1 <= v <= numVars ->
      ~ same_SCC (implication_graph f numVars) (v, true) (v, false)).
-
-(* SCC 测试的正确性 *)
-Lemma same_scc_implies_contradiction:
-  forall f numVars v,
-  same_SCC (implication_graph f numVars) (v, true) (v, false) ->
-  ~ satisfiable f.
-
-(* 从缩点图的拓扑序构造满足性赋值 *)
-Lemma build_assignment_from_scc_order:
-  forall f numVars,
-  (forall v, 1 <= v <= numVars ->
-    ~ same_SCC (implication_graph f numVars) (v, true) (v, false)) ->
-  exists a, satisfies a f.
 ```
 
 ### 8.2 C 语言的 2-SAT 实现
 
-创建 `QCP_examples/Applications_human/tarjan_scc/two_sat.c`：
-
 ```c
-#include "tarjan_scc_def.h"
-
-// 2-SAT 求解器
-// 返回 true 表示可满足，并将赋值写入 assignment 数组
-// 返回 false 表示不可满足
 int two_sat(int numVars, int *clauseA, int *clauseB, int numClauses,
             int *assignment)
   /*@ With (f: formula) (nv nc: Z)
       Require nv == numVars /\
-              nc == numClauses /\
-              numVars > 0 /\
-              numVars <= INT_MAX / 2 /\
-              2 * numVars <= INT_MAX /\
-              numClauses >= 0 /\
-              numClauses <= INT_MAX /\
               formula_from_arrays clauseA clauseB numClauses f /\
-              (* clauseA, clauseB 编码为整数：
-                 正数 v 表示文字 v，
-                 负数 -v 表示文字 ~v *)
               int_array_rep(clauseA, nc, ...) *
               int_array_rep(clauseB, nc, ...) *
               int_array_undef(assignment, nv)
@@ -929,47 +824,24 @@ int two_sat(int numVars, int *clauseA, int *clauseB, int numClauses,
              int_array_rep(assignment, nv, ...)
   */
 {
-    // 步骤 1：构造蕴含图
-    // 顶点数 = 2 * numVars（每个变量对应正负两个文字）
     int n = 2 * numVars;
     struct Graph *graph = build_implication_graph(clauseA, clauseB,
                                                    numClauses, numVars);
-
-    // 步骤 2：分配 Tarjan 上下文
     struct TarjanContext ctx;
     allocate_tarjan_context(&ctx, n);
 
-    // 步骤 3：运行 Tarjan SCC
     tarjan_scc(graph, &ctx);
 
-    // 步骤 4：检查每个变量的正负文字是否在同一 SCC
-    /*@ Inv
-        forall i, 0 <= i < v -> ctx.sccIds[2*i] != ctx.sccIds[2*i + 1]
-    */
     for (int v = 0; v < numVars; v++) {
         if (ctx.sccIds[2 * v] == ctx.sccIds[2 * v + 1]) {
-            // 矛盾：v 和 ~v 在同一 SCC 中
             free_graph(graph);
             free_tarjan_context(&ctx);
             return 0;
         }
     }
 
-    // 步骤 5：根据 SCC 拓扑序构造赋值
-    // SCC ID 越小的 SCC 在缩点图的拓扑序中越靠前
-    // 如果 SCC(~x) 的 ID 小于 SCC(x)，则设 x = true
-    // 否则设 x = false
-    /*@ Inv
-        forall i, 0 <= i < v ->
-          assignment[i] == (ctx.sccIds[2*i + 1] < ctx.sccIds[2*i] ? 1 : 0) /\
-          consistent_with_scc_order G i assignment[i] ctx.sccIds
-    */
     for (int v = 0; v < numVars; v++) {
-        if (ctx.sccIds[2 * v + 1] < ctx.sccIds[2 * v]) {
-            assignment[v] = 1;   // ~v 的 SCC 拓扑序更前，设 x = true
-        } else {
-            assignment[v] = 0;   // x 的 SCC 拓扑序更前，设 x = false
-        }
+        assignment[v] = (ctx.sccIds[2 * v + 1] < ctx.sccIds[2 * v]) ? 1 : 0;
     }
 
     free_graph(graph);
@@ -980,8 +852,6 @@ int two_sat(int numVars, int *clauseA, int *clauseB, int numClauses,
 
 ### 8.3 2-SAT 的 VC 证明策略
 
-2-SAT 验证的关键在于**归约**——C 实现步骤与 `two_sat.v` 中形式化定理之间的对应：
-
 | C 实现 | 对应的 Coq 定理 |
 |--------|----------------|
 | `build_implication_graph` | `implication_graph` 构造 |
@@ -989,86 +859,46 @@ int two_sat(int numVars, int *clauseA, int *clauseB, int numClauses,
 | `sccIds[2*v] == sccIds[2*v+1]` 检查 | `same_scc_implies_contradiction` |
 | 按 SCC 序赋值 | `build_assignment_from_scc_order` |
 
-因为 `two_sat.c` 调用的是**已验证的 `tarjan_scc`**，其前置条件只需要匹配 `tarjan_scc` 的前置条件。2-SAT 的额外 VC 主要是：
-
-1. 蕴含图构造保持了语义对应关系
-2. SCC ID 相等性检查正确检测了"同 SCC"条件
-3. 赋值构造产生一个满足性赋值
-
 ---
 
 ## 9. 阶段六：集成与最终验证
 
 ### 9.1 文件编译依赖
 
-确保 Rocq 文件之间的依赖正确：
-
 ```
-GraphLib/graph_basic.v
+GraphLib/graph_basic.v → reachable/*.v, directed/*.v
     ↓
-GraphLib/reachable/*.v、directed/*.v、subgraph/*.v
+GraphLib/examples/tarjan.v（已有，桥定理）
     ↓
-GraphLib/examples/tarjan.v（已有）
-GraphLib/examples/scc_basic.v（新增）
-GraphLib/examples/scc_tarjan.v（新增）
-GraphLib/examples/scc_characterization.v（新增）
-GraphLib/examples/two_sat.v（新增）
+algorithms/DFS/DFS.v（已有，DFS 正确性）
     ↓
-SeparationLogic/examples/Applications_human/tarjan_scc/tarjan_scc_lib.v
+algorithms/Tarjan/Tarjan.v → Tarjan_basics.v → Tarjan_basics_ex.v  （已有，操作语义）
+    ↓                         ↓
+algorithms/Tarjan/Tarjan_is_low.v → Tarjan_bridge_iff.v             （已有）
     ↓
-SeparationLogic/examples/Applications_human/tarjan_scc/tarjan_scc_goal.v
-SeparationLogic/examples/Applications_human/tarjan_scc/tarjan_scc_proof_auto.v
-SeparationLogic/examples/Applications_human/tarjan_scc/tarjan_scc_proof_manual.v
-SeparationLogic/examples/Applications_human/tarjan_scc/two_sat_goal.v
-SeparationLogic/examples/Applications_human/tarjan_scc/two_sat_proof_auto.v
-SeparationLogic/examples/Applications_human/tarjan_scc/two_sat_proof_manual.v
-```
-
-### 9.2 多规约层次
-
-使用 QCP 的多规约机制：
-
-```c
-// tarjan_scc 的实现规约（用于验证函数体）
-void tarjan_scc(struct Graph *graph, struct TarjanContext *ctx)
-  /*@ impl_spec
-      Require ...
-      Ensure sccIds 和 sccCount 对应 tarjan_algorithm_trace...
-  */
-
-// tarjan_scc 的抽象规约（供 two_sat 等调用者使用）
-void tarjan_scc(struct Graph *graph, struct TarjanContext *ctx)
-  /*@ abstract_spec <= impl_spec
-      Require ...
-      Ensure *(ctx->sccIds) 是 SCC 划分的正确编码
-  */
+algorithms/Tarjan/SCC_basic.v（新增，SCC 数学定义）
+    ↓
+algorithms/Tarjan/SCC_correctness.v（新增，SCC 正确性定理）
+    ↓
+algorithms/TwoSAT/TwoSAT.v（新增，2-SAT 归约）
+    ↓
+examples/Applications_human/tarjan_scc/tarjan_scc_lib.v（common_case_formal_lib）
+    ↓
+tarjan_scc_goal.v / tarjan_scc_proof_auto.v / tarjan_scc_proof_manual.v
+two_sat_goal.v / two_sat_proof_auto.v / two_sat_proof_manual.v
 ```
 
-在 `two_sat.c` 中指定使用哪个规约：
-
-```c
-tarjan_scc(graph, &ctx) /*@ where (abstract_spec) */;
-```
-
-### 9.3 Final-Check 检查清单
-
-根据 `AGENTS.md` 的完成标准：
+### 9.2 Final-Check 检查清单
 
 1. **符号执行**：已到达文件尾，生成文件是最新的
 2. **手动 VC**：所有 manual VC 都已完成证明（无 `Admitted`）
 3. **Goal check**：`*_goal_check.v` 编译通过
-4. **Proof manual 审计**：
-   - `*_proof_manual.v` 只含 witness proofs，无 helper lemmas
-   - 无新增顶层 `Definition`/`Fixpoint`/`Inductive`/`Axiom`
-5. **Common lib 审计**：
-   - `common_case_formal_lib` 无可疑 spec 定义（不是 C 算法镜像）
-   - 冻结前缀未被改写
-   - 冻结前缀后的 helper imports 均为审计通过的 `Require Import` 行
-   - helper lemmas 均已证明
-6. **Rocq 编译**：`coqc` 全量编译通过
+4. **Proof manual 审计**：只含 witness proofs，无 helper lemmas，无 forbidden top-level 定义，无 forbidden lemma
+5. **Common lib 审计**：spec 定义不是算法镜像，冻结前缀未被改写，helper imports 经审计
+6. **Rocq 编译**：全量编译通过
 7. **清理**：`.tmp` 文件、`.aux` 文件、临时 scratch 删除完毕
 
-### 9.4 最终编译命令
+### 9.3 最终编译命令
 
 ```bash
 cd SeparationLogic
@@ -1076,8 +906,11 @@ cd SeparationLogic
 # 编译核心库
 make depend-core && make core
 
-# 编译 GraphLib（包括新增的 scc 文件）
+# 编译 GraphLib
 cd GraphLib && make && cd ..
+
+# 编译 algorithms（包括新增的 SCC_basic、SCC_correctness）
+cd algorithms && make && cd ..
 
 # 编译 tarjan_scc 案例
 make depend-examples-applications && make examples-applications
@@ -1090,6 +923,13 @@ make depend-examples-applications && make examples-applications
 ### 10.1 新增文件清单
 
 ```
+SeparationLogic/algorithms/Tarjan/
+├── SCC_basic.v                   # 新增：SCC 数学定义、划分、缩点图、图反转
+└── SCC_correctness.v             # 新增：Tarjan 弹出操作的 SCC 正确性证明
+
+SeparationLogic/algorithms/TwoSAT/
+└── TwoSAT.v                      # 新增：2-SAT 归约的形式化与正确性定理
+
 QCP_examples/Applications_human/tarjan_scc/
 ├── tarjan_scc_def.h              # C 结构体定义
 ├── tarjan_scc.c                  # Tarjan SCC 实现（带标注）
@@ -1108,20 +948,17 @@ SeparationLogic/examples/Applications_human/tarjan_scc/
 ├── two_sat_proof_manual.v        # 人工证明（最终所有 VC 被证明）
 ├── two_sat_goal_check.v          # 生成的：一致性检查
 └── tarjan_scc_lib.v              # common_case_formal_lib（两个 C 文件共用）
-
-SeparationLogic/GraphLib/examples/
-├── scc_basic.v                   # 新增：SCC 定义、等价关系、划分、缩点图
-├── scc_tarjan.v                  # 新增：Tarjan 算法的数学描述与正确性定理
-├── scc_characterization.v        # 新增：SCC 与 dfn/low 之间的桥梁引理
-└── two_sat.v                     # 新增：2-SAT 归约的形式化与正确性定理
 ```
 
-### 10.2 不修改的已有文件
+### 10.2 已有的只读依赖（不修改）
 
-- `SeparationLogic/GraphLib/examples/tarjan.v`（直接引用）
-- `SeparationLogic/GraphLib/*.v`（核心库，只读引用）
-- `SeparationLogic/SeparationLogic/*.v`（分离逻辑库，只读引用）
-- `SeparationLogic/ArrayLib/*.v`（数组库，只读引用）
+- `SeparationLogic/GraphLib/**/*.v`（核心图论库）
+- `SeparationLogic/algorithms/Tarjan/Tarjan*.v`（Tarjan 操作语义，11 文件）
+- `SeparationLogic/algorithms/DFS/*.v`（DFS 参考实现）
+- `SeparationLogic/tracelib/*.v`（Trace 推理库）
+- `SeparationLogic/MonadLib/**/*.v`（Monad 库）
+- `SeparationLogic/SeparationLogic/*.v`（分离逻辑库）
+- `SeparationLogic/coq-record-update/`（Record 更新宏）
 
 ---
 
@@ -1129,44 +966,39 @@ SeparationLogic/GraphLib/examples/
 
 ### 11.1 工作量估算
 
-| 阶段 | 子任务 | 预估人周 | 关键交付物 |
-|------|--------|---------|-----------|
-| **一** | 阶段一共 3 个 `.v` 文件 | **3–4 周** | `scc_basic.v`, `scc_tarjan.v`, `scc_characterization.v` |
-| | 1.1 SCC 基础定义与性质 | 1 周 | `scc_basic.v` |
-| | 1.2 Tarjan 算法的数学描述 | 1–1.5 周 | `scc_tarjan.v` |
-| | 1.3 dfn/low 与 SCC 的桥梁 | 1–1.5 周 | `scc_characterization.v` |
+| 阶段 | 子任务 | 预估人周 | 关键交付物 | 备注 |
+|------|--------|---------|-----------|------|
+| **一** | SCC 数学基础 + 正确性定理 | **3–5 周** | `SCC_basic.v`, `SCC_correctness.v` | 操作语义已有，聚焦规格层 |
+| | 1.1 SCC 数学定义与性质 | 1–1.5 周 | `SCC_basic.v` | 可复用之前 scc_basic.v 的证明思路 |
+| | 1.2 Tarjan SCC 正确性证明 | 2–3.5 周 | `SCC_correctness.v` | 核心难点，连接 low/dfn 理论与 SCC |
 | **二** | C 实现与标注 | **4–5 周** | `tarjan_scc.c`, `two_sat.c`, `tarjan_scc_lib.v` |
 | | 2.1 表示谓词定义 | 0.5 周 | `tarjan_scc_lib.v` |
 | | 2.2 `strongconnect` 标注 | 2–3 周 | 核心递归函数标注 |
 | | 2.3 `tarjan_scc` 主函数标注 | 1 周 | 外层循环标注 |
 | | 2.4 `two_sat` 标注 | 0.5 周 | 调用已验证的 tarjan_scc |
 | **三** | 符号执行迭代 | **1–2 周** | `*_goal.v`, `*_proof_*.v` |
-| | 3.1 tarjan_scc 的 symexec | 1 周 | 生成正确的 VC |
-| | 3.2 two_sat 的 symexec | 0.5 周 | 较简单（主要靠函数调用） |
-| | 3.3 策略文件编写 | 0.5 周 | `.strategies` 文件 |
 | **四** | VC 证明 | **3–5 周** | 全部 VC 被证明 |
 | | 4.1 Group 1–2 VC（简单） | 0.5 周 | entailer! 一步解决 |
 | | 4.2 Group 3 VC（中等） | 1–1.5 周 | low/dfn 性质 |
-| | 4.3 Group 4 VC（困难） | 1.5–2 周 | SCC 正确性的深度证明 |
-| | 4.4 迭代修正 | 0.5–1 周 | 标注与证明之间的往返 |
-| **五** | 阶段五 2-SAT 形式化 | **1–2 周** | `two_sat.v` + 证明 |
+| | 4.3 Group 4 VC（困难） | 1.5–2 周 | SCC 正确性 |
+| | 4.4 迭代修正 | 0.5–1 周 | 标注与证明往返 |
+| **五** | 2-SAT 形式化 + C 实现 | **1–2 周** | `TwoSAT.v` + 证明 |
 | **六** | 集成与 final-check | **1 周** | 编译通过，checklist 完成 |
-| **总计** | | **13–19 周** | |
+| **总计** | | **13–20 周** | |
 
-- **单人总预估**：约 4–5 个月
-- **两人团队**：约 2.5–3 个月（阶段二和阶段四可并行推进）
-- **有经验团队（3 人）**：约 2–2.5 个月（纯 Coq / 标注 / 证明可部分并行）
+- **单人总预估**：约 4–5 个月（阶段一已有操作语义基础，节省 1–2 周）
+- **两人团队**：约 2.5–3 个月
 
 ### 11.2 风险矩阵
 
 | 风险 | 可能性 | 影响 | 缓解措施 |
 |------|--------|------|----------|
-| `strongconnect` 的递归函数规约在 QCP 中不被充分支持 | 中 | 高：可能需要重新设计 | 尽早用最小递归示例（如阶乘）测试递归支持；准备迭代版本作为备选 |
-| 标注调试循环耗时过长 | 高 | 中：推迟进度 | 使用 `qcp-mcp` 交互式验证做增量检查；从最简单的标注（只有前后置条件）开始，逐步细化不变量 |
-| SCC 正确性的数学证明比预期更深 | 中 | 高：核心定理无法按时完成 | 先证一个简化版本（固定图、无递归），再泛化；充分利用已有的 `tarjan.v` 引理 |
-| GraphLib 的 Type Class 机制与自动生成的 VC 不兼容 | 低 | 中：需要额外的胶水代码 | 在 `tarjan_scc_lib.v` 中预先实例化 GraphLib 的 instance；减少 VC 中的类型类推导 |
-| 数组/栈操作的细粒度权限在符号执行中产生意外 | 中 | 中：VC 爆炸 | 在标注中使用更高层的聚合谓词（如 `IntArray_rep`），通过引理展开而非在标注中展开 |
-| 2-SAT 蕴含图构造与 Tarjan SCC 之间的接口不匹配 | 低 | 中：需要适配 | 确保 Tarjan 适用于任意 `OriginalGraphType`；2-SAT 图必须在相同的 `V = E = Z` 类型参数下构造 |
+| `SCC_correctness.v` 中 low/dfn → SCC 的桥梁证明比预期更深 | 中 | 高 | 充分利用已有的 `Tarjan_is_low.v`（2812 行）和 `Tarjan_basics_ex.v`（2614 行）；从单 SCC 弹出操作开始逐步泛化 |
+| `OriginalGraphType` 的 step 关系对 SCC 定义不适合（无向 step） | 低 | 中 | `OriginalGraphType` 已有 `original_source`/`original_target`；SCC 规格层可定义有向 step 关系 `dg_step_aux`，证明与 `original_step_aux` 的包含关系 |
+| `strongconnect` 递归函数规约在 QCP 中不被充分支持 | 中 | 高 | 尽早用最小递归示例测试；准备迭代版本作为备选 |
+| 标注调试循环耗时过长 | 高 | 中 | 使用 `qcp-mcp` 交互式验证做增量检查；从最简单标注开始逐步细化 |
+| 数组/栈操作的细粒度权限在符号执行中产生 VC 爆炸 | 中 | 中 | 使用高层聚合谓词，通过引理展开而非在标注中展开 |
+| 2-SAT 蕴含图构造与 Tarjan SCC 之间接口不匹配 | 低 | 中 | 确保 Tarjan 适用于任意 `OriginalGraphType`；2-SAT 图以 `V = E = Z` 构造 |
 
 ---
 
@@ -1174,40 +1006,40 @@ SeparationLogic/GraphLib/examples/
 
 ### 12.1 推荐执行顺序
 
-1. **首先在纯 Coq 中完成 SCC 形式化（阶段一）**
-   - 不涉及 C 代码、标注或符号执行
-   - 如果数学定义和定理不能在纯 Coq 中证出，那么 C 验证将无从谈起
-   - 这是整个项目**最关键的降低风险步骤**
+1. **首先完成 SCC 数学定义（阶段一 1.1）**
+   - 在 `algorithms/Tarjan/SCC_basic.v` 中定义 `mutually_reachable`、`is_SCC`、`scc_partition`
+   - 使用 `OriginalGraphType`（与现有 `algorithms/Tarjan/` 一致）
+   - 可参考已删除的 `GraphLib/examples/scc_basic.v` 中的证明思路（但图类型需调整）
+   - 这是**最低风险的第一步**——如果 SCC 数学定义无法在 Rocq 中建立，后续所有工作都无从谈起
 
-2. **充分利用 `tarjan.v` 已有的成果**
-   - `is_low` / `low_valid` / `low_valid_implies_is_low` 等定义直接适用
-   - `closed_offspring` 和 `tarjan`（桥定理）两个引理是 SCC 证明的核心
-   - 不要重新定义 low 或 dfn，在已有基础上扩展
+2. **然后证明 Tarjan SCC 正确性（阶段一 1.2）**
+   - 充分利用 `algorithms/Tarjan/` 已有的操作语义（`Tarjan.v`、`Tarjan_is_low.v` 等）
+   - 核心挑战：将 `is_low` 全局性质连接到 `is_SCC` 判定
+   - 关键引理：`low[v] = dfn[v]` 时，v 子树中 low ≥ dfn[v] 的顶点构成一个 SCC
 
-3. **在两个方向上逐步推进**
-   - 先用**最简标注**（只有函数规约，没有循环不变量）运行 `symexec`
-   - 如果符号执行成功到达文件尾，说明函数调用和基本内存操作无误
-   - 然后再逐步细化循环不变量和内部断言
-   - 每次迭代都使用 `qcp-mcp` 做交互式检查
+3. **在两个方向上逐步推进 C 验证**
+   - 先用最简标注（只有函数规约）运行 `symexec`，确认基本内存操作无误
+   - 再逐步细化循环不变量和内部断言
+   - 每次迭代使用 `qcp-mcp` 做交互式检查
 
-4. **将 2-SAT 作为独立的后续案例**
-   - 一旦 Tarjan SCC 模块通过 `final-check`，2-SAT 案例就是"调用已验证的 Tarjan + 额外的归约证明"
-   - 2-SAT 的 C 实现本身相对简单（构建图、调用 Tarjan、检查 SCC、构造赋值）
-   - 难度集中在"构建图保持语义"的引理上
+4. **将 2-SAT 作为独立案例**
+   - Tarjan SCC 通过 `final-check` 后，2-SAT 就是"调用已验证的 Tarjan + 归约证明"
+   - 2-SAT 的难度集中在蕴含图构造保持语义的引理上
 
 5. **遵循 Agent 工作流纪律**
-   - 不要在主线程做子 agent 的工作
-   - annotation 阶段使用 annotation scratch + `annotation_scratch_lib`，通过 `annotation-checking` 质量门后才能回填正式文件
-   - vc-proving 阶段先让 `vc-checking-subagent` 完成分类，再进行并发证明
-   - 最终 `final-check` 必须由主 agent 串行执行
+   - 不要在 main 线程做 sub agent 的工作
+   - annotation 使用 scratch + 质量门机制
+   - vc-proving 先让 `vc-checking-subagent` 分类，再并发证明
 
-6. **参考 `QCP_demos_LLM` 的示例**
-   - `sll_insert_sort.c` 的多函数、复杂不变量模式
-   - `fme/fme.c` 的嵌套循环、多文件组织模式
-   - 不参考 `QCP_demos_human`（按照 `AGENTS.md` 的规定）
+6. **参考现有资产**
+   - `algorithms/Tarjan/Tarjan.v` 的 monadic Hoare 证明风格（`Tarjan_DFS_rel` 的模式可复用）
+   - `algorithms/DFS/DFS.v` 的 DFS 正确性证明（`Tarjan.v` 已引用）
+   - `glibc_slist_rel/` 的 refinement 模式（阶段四 VC 证明可参考）
+   - 只参考 `QCP_demos_LLM`（不参考 `QCP_demos_human`）
 
 ---
 
-*计划文档版本：1.0*
-*最后更新：2026-06-05*
-*本计划基于 QCP v2.0.2、Rocq 8.20.1、GraphLib 现有版本编写*
+*计划文档版本：2.0*
+*最后更新：2026-06-11*
+*本计划基于 QCP v2.0.2、Rocq 8.20.1、algorithms/Tarjan/ (8911 lines) 现有版本编写*
+*历史版本 v1.0 (2026-06-05) 基于旧 GraphLib/examples/ 架构，已归档*
