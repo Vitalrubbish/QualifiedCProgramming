@@ -71,7 +71,7 @@ Proof.
 	  cancel (&(b_v # "tree" ->ₛ "value") # Int |-> v).
 	  cancel (&(b_v # "tree" ->ₛ "left") # Ptr |-> pl).
 	  cancel (store_tree pr r0).
-	  apply derivable1_sepcon_comm.
+	  cancel.
 	- dump_pre_spatial.
 	  exact PreH2.
 	- dump_pre_spatial.
@@ -211,7 +211,7 @@ Proof.
 	  unfold Bst.store_map.
 	  Exists (tree_insert x_pre value_pre tr).
 	  split_pure_spatial.
-	  + apply derivable1_sepcon_comm.
+	  + cancel.
 	  + split_pures.
 	    * dump_pre_spatial.
 	      eapply insert_SearchTree; eauto.

@@ -205,7 +205,7 @@ Proof.
 	  unfold Bst.store_map.
 	  Exists (tree_insert x_pre value_pre tr).
 	  split_pure_spatial.
-	  + apply derivable1_sepcon_comm.
+	  + cancel.
 	  + split_pures.
 	    * dump_pre_spatial.
 	      eapply insert_SearchTree; eauto.
