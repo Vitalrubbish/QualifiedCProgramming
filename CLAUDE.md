@@ -146,7 +146,7 @@ pet --version   # 0.2.x，rocq-mcp 交互式工具依赖
 
 ## Rocq-MCP 交互式证明
 
-项目已配置 `rocq-mcp`（MCP server for Rocq），提供交互式证明能力，替代盲编译循环。Agent 在证明开发中**必须优先使用** rocq-mcp 工具。
+项目已配置 `rocq-mcp`（MCP server for Rocq），提供交互式证明能力，替代盲编译循环。Agent 在证明开发中**必须优先使用 rocq-mcp 工具**。
 
 ### 可用工具
 
