@@ -54,5 +54,6 @@ __pycache__/
 
 mcp/rocq-mcp-wrapper.sh
 .mcp.json
+rocq_mcp_cache_*.v
 CLAUDE.md
 AGENTS.md
