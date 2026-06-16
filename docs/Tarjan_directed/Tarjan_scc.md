@@ -26,6 +26,7 @@ Context {V E: Type}
 | `Coq.Classes.Morphisms` | 态射类型类 |
 | `Coq.Logic.Classical_Prop` | `classic` 排中律 |
 | `Coq.Classes.EquivDec` | `equiv_decb` 可判定等价 |
+| `Coq.Relations.Relations` | `clos_refl_trans`、`rt_refl` 等关系运算 |
 | `SetsClass.SetsClass` | 集合记法 (`SetsNotation`) |
 | `MonadLib.StateRelMonad` | `StateRelBasic`、`StateRelHoare`、`FixpointLib` — 状态关系单子基础设施 |
 | `RecordUpdate` | `settable!` 宏、Record update 语法 `<| field ::= f |>` |
@@ -181,6 +182,15 @@ Definition set_fa (v: V) (p: V): program SCCSt unit :=
 
 **语义**：将顶点 `v` 的父节点设置为 `p`。
 
+### `set_fa_state` — 纯函数版本
+
+```coq
+Definition set_fa_state (s: SCCSt) (v p: V): SCCSt :=
+  s <| fa ::= fun fa0 x => if equiv_decb x v then p else fa0 x |>.
+```
+
+**语义**：与 `set_fa` 相同的行为，但作为纯状态函数暴露。用于 `state_to_dfs_tree` 的结构性引理中，描述 `set_fa` 对 DFS 树结构的影响（`set_fa_preserves_tree_edges` 等），不涉及 monadic Hoare 推理。
+
 ### `incr_timer`
 
 ```coq
@@ -309,6 +319,11 @@ Definition tarjan_scc (u: V): program SCCSt unit :=
 ### 定义
 
 ```coq
+(** [state_to_dfs_tree s root] constructs the DFS tree from the algorithm
+    state [s].  The [root] parameter is the DFS traversal root vertex; it
+    is not used in the tree structure itself but is required by the
+    [RootedTree] Type Class instance (proved in a separate file) which
+    takes [root] as the tree root. *)
 Definition state_to_dfs_tree (s: SCCSt) (root: V): OriginalGraphType V E :=
   {|
     original_vvalid   := fun v => v ∈ visited s;
@@ -323,6 +338,7 @@ Definition state_to_dfs_tree (s: SCCSt) (root: V): OriginalGraphType V E :=
 ```
 
 **语义**：从算法状态 `s` 构造 DFS 树图：
+- `root` 参数是 DFS 遍历的根顶点，函数体未使用，但为 `RootedTree` Type Class 实例（在 `Tarjan_scc_is_dfn.v` 中证明）保留，以 `root` 作为树根。
 - **有效顶点**：所有在 `visited s` 中的顶点
 - **边**：从父节点 `fa[v]` 到子节点 `v` 的树边（要求 `fa[v] ≠ v`，即排除根节点自指）
 - 边的方向与原始图保持一致
@@ -556,7 +572,149 @@ tarjan_scc u ==
 
 ---
 
-## 9. Outer Loop — `tarjan_scc_all`
+## 9. DFS Tree — Structural Lemmas
+
+本部分包含 `state_to_dfs_tree` 的 6 个结构性引理，描述 DFS 树的顶点集、边集基本性质。这些引理是后续四个证明文件（`Tarjan_scc_is_dfn.v`、`Tarjan_scc_is_low.v`、`Tarjan_scc_stack.v`、`SCC_correctness.v`）的共同前置依赖。
+
+### 分层原则
+
+| 放在 `Tarjan_scc.v` | 不放在 `Tarjan_scc.v` |
+|---------------------|----------------------|
+| 结构性的、仅依赖 `state_to_dfs_tree` 定义的引理 | 依赖算法不变量（`dfn_inv`、`is_low` 等）的引理 |
+| `set_fa` 对树结构的纯函数影响 | `dfn_valid` 实例（需 `timer`/`visited` 关系） |
+| 树的顶点集、边集基本刻画 | `RootedTree` Type Class 实例（~200 行，在 `Tarjan_scc_is_dfn.v` 中证明） |
+| 无自环等简单图性质 | `subtree_segment` / `no_cross_edge` / `dfn_unique` |
+
+### 设计决策：`dg_step` 的反向刻画与边存在条件
+
+`state_to_dfs_tree` 构造的 DFS 树图的 `original_step` 定义为：
+
+```coq
+original_step (state_to_dfs_tree s root) e :=
+  exists v, v ∈ visited s /\ fa s v <> v /\
+            original_step_fst g e = fa s v /\
+            original_step_snd g e = v
+```
+
+`dg_step` 要求提供一条边 `e : E` 作为存在证据。当需要证明 `dg_step (state_to_dfs_tree ...) x y` 时，必须构造一个 `e` 使得 `original_step_fst g e = x` 且 `original_step_snd g e = y`。由于类型 `E` 是任意的（无构造子保证），这个存在性无法从 `fa s y = x` 等纯状态条件推出。
+
+在算法实际运行时，`fa s y = x` 仅在 `process_edge` 的树边分支中被 `set_fa y x` 设置，而该分支受 `dg_step g x y` 守卫——因此 `fa s y = x` 总是伴随 `dg_step g x y` 出现，后者恰好提供了所需的边 `e`。因此，含 `dg_step g` 前提的引理在实际使用中总是可实例化的。
+
+### Lemma `state_to_dfs_tree_vvalid`
+
+```coq
+Lemma state_to_dfs_tree_vvalid (s: SCCSt) (root v: V):
+  original_vvalid (state_to_dfs_tree s root) v <-> v ∈ visited s.
+```
+
+**用途**：将树的顶点有效性与算法状态的 `visited` 集关联。后续所有涉及 `vvalid dfs_tree v` 的前提都可展开为 `v ∈ visited s`。
+
+**证明**：直接展开 `state_to_dfs_tree` 和 `original_vvalid`，`reflexivity`。
+
+### Lemma `state_to_dfs_tree_step_char` (→ 方向)
+
+```coq
+Lemma state_to_dfs_tree_step_char (s: SCCSt) (root x y: V):
+  dg_step (state_to_dfs_tree s root) x y ->
+  fa s y = x /\ fa s y <> y /\ y ∈ visited s.
+```
+
+**用途**：从 DFS 树中存在边 `x → y` 推出状态中的 `fa` 和 `visited` 条件。这是正向推理的核心引理。
+
+**证明**：展开 `dg_step` 和 `original_step`，提取内部 `exists v` 的证据，通过 `step_fst`/`step_snd` 的等式重写统一 `v` 与 `y`。
+
+### Lemma `state_to_dfs_tree_step_char_backward` (← 方向，带边条件)
+
+```coq
+Lemma state_to_dfs_tree_step_char_backward (s: SCCSt) (root x y: V):
+  dg_step g x y ->
+  fa s y = x -> fa s y <> y -> y ∈ visited s ->
+  dg_step (state_to_dfs_tree s root) x y.
+```
+
+**用途**：反向构造 DFS 树中的边。`dg_step g x y` 前提提供原始图中的边 `e`，该边恰好满足树边条件。在算法运行时，该条件由 `process_edge` 树边分支中的 `dg_step g u v` 守卫提供。
+
+### Lemma `state_to_dfs_tree_step_fa`
+
+```coq
+Lemma state_to_dfs_tree_step_fa (s: SCCSt) (root v: V):
+  dg_step g (fa s v) v ->
+  v ∈ visited s -> fa s v <> v ->
+  dg_step (state_to_dfs_tree s root) (fa s v) v.
+```
+
+**用途**：最常用的正向推理引理——若顶点已访问且 `fa` 被赋值（且存在对应的原始图边），则在 DFS 树中存在父节点到该顶点的有向边。
+
+### Lemma `state_to_dfs_tree_dg_reachable_refl`
+
+```coq
+Lemma state_to_dfs_tree_dg_reachable_refl (s: SCCSt) (root v: V):
+  v ∈ visited s ->
+  dg_reachable (state_to_dfs_tree s root) v v.
+```
+
+**用途**：树中每个已访问顶点自反可达。`dg_reachable` 是 `clos_refl_trans dg_step` 的包装，自反性直接由 `rt_refl` 得到。
+
+### Lemma `state_to_dfs_tree_root_visited`
+
+```coq
+Lemma state_to_dfs_tree_root_visited (s: SCCSt) (root: V):
+  root ∈ visited s ->
+  original_vvalid (state_to_dfs_tree s root) root.
+```
+
+**用途**：便捷引理——若 root 已访问，则 root 在树中有效。由 `state_to_dfs_tree_vvalid` 直接得到。
+
+### Lemma `state_to_dfs_tree_no_self_loop`
+
+```coq
+Lemma state_to_dfs_tree_no_self_loop (s: SCCSt) (root v: V):
+  ~ dg_step (state_to_dfs_tree s root) v v.
+```
+
+**用途**：树中无自环——`fa s v ≠ v` 条件排除了 `dg_step` 的自环可能。由 `state_to_dfs_tree_step_char` 推出矛盾。
+
+---
+
+## 10. DFS Tree — set_fa Preservation Lemmas
+
+以下 3 个引理描述 `set_fa_state v p`（纯函数版本的 `set_fa`）操作对 DFS 树结构的影响。
+
+### Lemma `set_fa_preserves_tree_vvalid`
+
+```coq
+Lemma set_fa_preserves_tree_vvalid (s: SCCSt) (root v p: V):
+  original_vvalid (state_to_dfs_tree s root) v ->
+  original_vvalid (state_to_dfs_tree (set_fa_state s v p) root) v.
+```
+
+**用途**：`set_fa` 不修改 `visited`，故不减少树的顶点集。由直接展开得证。
+
+### Lemma `set_fa_preserves_tree_edges`
+
+```coq
+Lemma set_fa_preserves_tree_edges (s: SCCSt) (root v x w p: V):
+  w <> v ->
+  dg_step (state_to_dfs_tree s root) x w ->
+  dg_step (state_to_dfs_tree (set_fa_state s v p) root) x w.
+```
+
+**用途**：对 `w ≠ v`，已有的树边 `x → w` 不受 `set_fa v p` 影响。证明复用原始树 `dg_step` 中的边证据 `e`，因为 `w ≠ v` 时 `fa s' w = fa s w`。此引理**不需要** `dg_step g` 条件——边证据直接来自已有树边。
+
+### Lemma `set_fa_adds_tree_edge`
+
+```coq
+Lemma set_fa_adds_tree_edge (s: SCCSt) (root v p: V):
+  dg_step g p v ->
+  p <> v -> v ∈ visited s ->
+  dg_step (state_to_dfs_tree (set_fa_state s v p) root) p v.
+```
+
+**用途**：`set_fa v p`（`p ≠ v`，`v` 已访问）在树中新增一条有向边 `p → v`。`dg_step g p v` 前提提供边证据；`v ∈ visited s` 反映算法中 `visit v`（递归 `tarjan_scc v` 内部）之后的实际状态。
+
+---
+
+## 11. Outer Loop — `tarjan_scc_all`
 
 ### 定义
 
@@ -596,19 +754,30 @@ Definition tarjan_scc_all: program SCCSt unit :=
 | `process_edge` | `V → (V → program SCCSt unit) → V → program SCCSt unit` | 116 | 处理单条有向边 |
 | `tarjan_scc_f` | `(V → program SCCSt unit) → V → program SCCSt unit` | 127 | Tarjan 单步函数体 |
 | `tarjan_scc` | `V → program SCCSt unit` | 132 | 最小不动点递归 |
-| `state_to_dfs_tree` | `SCCSt → V → OriginalGraphType V E` | 139 | 从状态构造 DFS 树 |
-| `tarjan_scc_all` | `program SCCSt unit` | 280 | 外层循环：覆盖全图 |
+| `set_fa_state` | `SCCSt → V → V → SCCSt` | — | `set_fa` 的纯函数版本 |
+| `state_to_dfs_tree` | `SCCSt → V → OriginalGraphType V E` | — | 从状态构造 DFS 树 |
+| `tarjan_scc_all` | `program SCCSt unit` | — | 外层循环：覆盖全图 |
 
 ### 引理与定理 (Lemmas)
 
-| 名称 | 行号 | 摘要 |
-|------|------|------|
-| `process_edge_mono_cont` | 157 | `process_edge` 在 `W` 参数上单调连续 |
-| `forset_body_mono_cont` | 168 | `forset_f` 循环体在 `W` 上单调连续 |
-| `mono_cont_apply` | 190 | 函数应用 `W s` 对固定 `s` 单调连续 |
-| `forset_f_mono_cont_body` | 209 | 常量 `body` 下 `forset_f` 单调连续 |
-| `tarjan_scc_f_mono_cont` | 226 | `tarjan_scc_f` 单调连续（核心） |
-| `tarjan_scc_unfold` | 267 | 不动点展开：`tarjan_scc u == tarjan_scc_f tarjan_scc u` |
+| 名称 | 摘要 |
+|------|------|
+| `process_edge_mono_cont` | `process_edge` 在 `W` 参数上单调连续 |
+| `forset_body_mono_cont` | `forset_f` 循环体在 `W` 上单调连续 |
+| `mono_cont_apply` | 函数应用 `W s` 对固定 `s` 单调连续 |
+| `forset_f_mono_cont_body` | 常量 `body` 下 `forset_f` 单调连续 |
+| `tarjan_scc_f_mono_cont` | `tarjan_scc_f` 单调连续（核心） |
+| `tarjan_scc_unfold` | 不动点展开：`tarjan_scc u == tarjan_scc_f tarjan_scc u` |
+| `state_to_dfs_tree_vvalid` | 树的顶点有效性与 `visited` 集等价 (`iff`) |
+| `state_to_dfs_tree_step_char` | 树边 → `fa s y = x` 等状态条件 (→ 方向) |
+| `state_to_dfs_tree_step_char_backward` | 反向构造树边，需 `dg_step g x y` 前提 |
+| `state_to_dfs_tree_step_fa` | `fa s v` 到 `v` 的树边，需 `dg_step g (fa s v) v` |
+| `state_to_dfs_tree_dg_reachable_refl` | 已访问顶点在树中自反可达 |
+| `state_to_dfs_tree_root_visited` | 已访问的 root 在树中有效 |
+| `state_to_dfs_tree_no_self_loop` | DFS 树中无自环 |
+| `set_fa_preserves_tree_vvalid` | `set_fa` 不改变树顶点集 |
+| `set_fa_preserves_tree_edges` | 对 `w ≠ v`，已有树边 `x → w` 不变 |
+| `set_fa_adds_tree_edge` | `set_fa v p` 后新增树边 `p → v`，需 `dg_step g p v` |
 
 ### Ltac
 

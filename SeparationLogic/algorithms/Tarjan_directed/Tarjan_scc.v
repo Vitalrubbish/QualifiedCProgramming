@@ -2,6 +2,7 @@ Require Import Coq.Lists.List.
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.Logic.Classical_Prop.
 Require Import Coq.Classes.EquivDec.
+Require Import Coq.Relations.Relations.
 Require Import SetsClass.SetsClass.
 From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
 From RecordUpdate Require Import RecordUpdate.
@@ -136,6 +137,11 @@ Section TarjanSCC.
   (* DFS Tree Construction                                            *)
   (* ================================================================ *)
 
+  (** [state_to_dfs_tree s root] constructs the DFS tree from the algorithm
+      state [s].  The [root] parameter is the DFS traversal root vertex; it
+      is not used in the tree structure itself but is required by the
+      [RootedTree] Type Class instance (proved in a separate file) which
+      takes [root] as the tree root. *)
   Definition state_to_dfs_tree (s: SCCSt) (root: V): OriginalGraphType V E :=
     {|
       original_vvalid   := fun v => v ∈ visited s;
@@ -147,6 +153,14 @@ Section TarjanSCC.
       original_step_snd := original_step_snd g;
       original_listV    := original_listV g;
     |}.
+
+  (** [set_fa_state s v p] is the pure functional version of [set_fa].
+      It returns a new state where [fa] maps [v] to [p] and leaves all
+      other [fa] entries unchanged.  This is the same update as the
+      monadic [set_fa] but exposed as a pure function for use in
+      structural lemmas about [state_to_dfs_tree]. *)
+  Definition set_fa_state (s: SCCSt) (v p: V): SCCSt :=
+    s <| fa ::= fun fa0 x => if equiv_decb x v then p else fa0 x |>.
 
   (* ================================================================ *)
   (* Monotonicity                                                     *)
@@ -280,5 +294,211 @@ Section TarjanSCC.
   Definition tarjan_scc_all: program SCCSt unit :=
     forset (fun v => original_vvalid g v)
            (fun v => If (fun s => ~ v ∈ visited s) (tarjan_scc v)).
+
+  (* ================================================================ *)
+  (* DFS Tree — Structural Lemmas                                    *)
+  (* ================================================================ *)
+
+  (** [state_to_dfs_tree_vvalid]: The vertex set of the DFS tree is
+      exactly the [visited] set of the algorithm state. *)
+  Lemma state_to_dfs_tree_vvalid (s: SCCSt) (root v: V):
+    original_vvalid (state_to_dfs_tree s root) v <-> v ∈ visited s.
+  Proof.
+    unfold state_to_dfs_tree, original_vvalid. reflexivity.
+  Qed.
+
+  (** [state_to_dfs_tree_step_char]: Forward characterization of
+      directed edges in the DFS tree.  If the tree has an edge
+      [x → y], then [fa s y = x], [fa s y ≠ y] (the [fa] field
+      was actually assigned), and [y] is visited.
+
+      The converse direction requires an additional edge-existence
+      condition in the original graph [g]; see
+      [state_to_dfs_tree_step_char_backward]. *)
+  Lemma state_to_dfs_tree_step_char (s: SCCSt) (root x y: V):
+    dg_step (state_to_dfs_tree s root) x y ->
+    fa s y = x /\ fa s y <> y /\ y ∈ visited s.
+  Proof.
+    unfold dg_step.
+    intros [e [Hstep [Hfst_eq Hsnd_eq]]].
+    unfold original_step in Hstep.
+    unfold state_to_dfs_tree in Hfst_eq, Hsnd_eq.
+    simpl in Hfst_eq, Hsnd_eq.
+    unfold state_to_dfs_tree in Hstep.
+    simpl in Hstep.
+    destruct Hstep as [v [Hvis [Hfa_ne [Hfst_fa Hsnd_v]]]].
+    rewrite Hsnd_v in Hsnd_eq. (* Hsnd_eq: v = y *)
+    rewrite Hfst_fa in Hfst_eq. (* Hfst_eq: fa s v = x *)
+    rewrite <- Hsnd_eq.
+    split; [exact Hfst_eq | split; [exact Hfa_ne | exact Hvis]].
+  Qed.
+
+  (** [state_to_dfs_tree_step_char_backward]: The converse direction
+      of the edge characterization, requiring that a corresponding
+      edge exists in the original graph [g].  This condition holds
+      in reachable algorithm states because [fa s y = x] can only
+      be established by [set_fa] in the tree-edge branch of
+      [process_edge], which is guarded by [dg_step g x y]. *)
+  Lemma state_to_dfs_tree_step_char_backward (s: SCCSt) (root x y: V):
+    dg_step g x y ->
+    fa s y = x -> fa s y <> y -> y ∈ visited s ->
+    dg_step (state_to_dfs_tree s root) x y.
+  Proof.
+    intros Hstep_g Hfa_eq Hfa_ne Hvis.
+    destruct Hstep_g as [e [Horig_step [Hfst_eq Hsnd_eq]]].
+    unfold dg_step.
+    exists e. split.
+    - unfold original_step at 1.
+      exists y. split; [exact Hvis | split; [exact Hfa_ne |]].
+      rewrite Hfst_eq, Hsnd_eq.
+      rewrite Hfa_eq. split; reflexivity.
+    - split; [exact Hfst_eq | exact Hsnd_eq].
+  Qed.
+
+  (** [state_to_dfs_tree_step_fa]: If [v] is visited, [fa s v ≠ v],
+      and the original graph has an edge from [fa s v] to [v], then
+      there is a tree edge from [fa s v] to [v] in the DFS tree. *)
+  Lemma state_to_dfs_tree_step_fa (s: SCCSt) (root v: V):
+    dg_step g (fa s v) v ->
+    v ∈ visited s -> fa s v <> v ->
+    dg_step (state_to_dfs_tree s root) (fa s v) v.
+  Proof.
+    intros Hstep_g Hvis Hfa_ne.
+    eapply state_to_dfs_tree_step_char_backward;
+      eauto.
+  Qed.
+
+  (** [state_to_dfs_tree_dg_reachable_refl]: Every visited vertex is
+      trivially reachable from itself in the DFS tree (reflexivity of
+      [clos_refl_trans]). *)
+  Lemma state_to_dfs_tree_dg_reachable_refl (s: SCCSt) (root v: V):
+    v ∈ visited s ->
+    dg_reachable (state_to_dfs_tree s root) v v.
+  Proof.
+    intros Hvis.
+    apply rt_refl.
+  Qed.
+
+  (** [state_to_dfs_tree_root_visited]: If [root] is visited, then
+      [root] is a valid vertex of the DFS tree. *)
+  Lemma state_to_dfs_tree_root_visited (s: SCCSt) (root: V):
+    root ∈ visited s ->
+    original_vvalid (state_to_dfs_tree s root) root.
+  Proof.
+    intros Hvis.
+    apply state_to_dfs_tree_vvalid. exact Hvis.
+  Qed.
+
+  (** [state_to_dfs_tree_no_self_loop]: The DFS tree has no self-loops.
+      This follows from the [fa s v ≠ v] condition in the tree edge
+      definition. *)
+  Lemma state_to_dfs_tree_no_self_loop (s: SCCSt) (root v: V):
+    ~ dg_step (state_to_dfs_tree s root) v v.
+  Proof.
+    intros Hstep.
+    apply state_to_dfs_tree_step_char in Hstep.
+    destruct Hstep as [Hfa_eq [Hfa_ne _]].
+    apply Hfa_ne. exact Hfa_eq.
+  Qed.
+
+  (* ================================================================ *)
+  (* DFS Tree — set_fa Preservation Lemmas                           *)
+  (* ================================================================ *)
+
+  (** [set_fa_preserves_tree_vvalid]: [set_fa] does not change the
+      [visited] set, so the vertex set of the DFS tree is unchanged. *)
+  Lemma set_fa_preserves_tree_vvalid (s: SCCSt) (root v p: V):
+    original_vvalid (state_to_dfs_tree s root) v ->
+    original_vvalid (state_to_dfs_tree (set_fa_state s v p) root) v.
+  Proof.
+    unfold state_to_dfs_tree, set_fa_state, original_vvalid.
+    simpl. auto.
+  Qed.
+
+  (** [set_fa_preserves_tree_edges]: When [w ≠ v], an existing tree
+      edge [x → w] is preserved after [set_fa_state s v p].  The
+      proof reuses the same edge witness [e] extracted from the
+      original tree [dg_step] (no additional [dg_step g] condition
+      is needed because we are not creating a new edge, just
+      checking that the existing [e] still satisfies the tree-edge
+      definition after the [fa] update of a different vertex [v]). *)
+  Lemma set_fa_preserves_tree_edges (s: SCCSt) (root v x w p: V):
+    w <> v ->
+    dg_step (state_to_dfs_tree s root) x w ->
+    dg_step (state_to_dfs_tree (set_fa_state s v p) root) x w.
+  Proof.
+    intros Hneq Hstep.
+    unfold dg_step in Hstep.
+    destruct Hstep as [e [Hstep_tree [Hfst_eq Hsnd_eq]]].
+    unfold original_step in Hstep_tree.
+    unfold state_to_dfs_tree in Hfst_eq, Hsnd_eq, Hstep_tree.
+    simpl in Hfst_eq, Hsnd_eq, Hstep_tree.
+    destruct Hstep_tree as [u [Hvis [Hfa_ne [Hfst_fa Hsnd_u]]]].
+    rewrite Hsnd_u in Hsnd_eq. (* Hsnd_eq: u = w *)
+    rewrite Hfst_fa in Hfst_eq. (* Hfst_eq: fa s u = x *)
+    (* From Hneq and Hsnd_eq we get u <> v *)
+    assert (Huneqv: u <> v).
+    { intros Heq. apply Hneq. rewrite <- Heq. rewrite Hsnd_eq. reflexivity. }
+    (* Rewrite the goal to use u instead of w, and fa s u instead of x *)
+    rewrite <- Hsnd_eq.
+    rewrite <- Hfst_eq.
+    (* Goal: dg_step (state_to_dfs_tree (set_fa_state s v p) root) (fa s u) u *)
+    unfold dg_step.
+    exists e. split.
+    - unfold state_to_dfs_tree, set_fa_state, original_step. simpl.
+      exists u. split; [exact Hvis | split].
+      + unfold equiv_decb. destruct (equiv_dec u v) as [Heq | _].
+        { exfalso; apply Huneqv; exact Heq. }
+        exact Hfa_ne.
+      + split.
+        * unfold equiv_decb. destruct (equiv_dec u v) as [Heq | _].
+          { exfalso; apply Huneqv; exact Heq. }
+          exact Hfst_fa.
+        * exact Hsnd_u.
+    - unfold state_to_dfs_tree, set_fa_state. simpl.
+      split.
+      + unfold equiv_decb. destruct (equiv_dec u v) as [Heq | _].
+        { exfalso; apply Huneqv; exact Heq. }
+        exact Hfst_fa.
+      + exact Hsnd_u.
+  Qed.
+
+  (** [set_fa_adds_tree_edge]: After [set_fa_state s v p] with [p ≠ v]
+      and [v ∈ visited s], the DFS tree gains a new edge [p → v],
+      provided that such an edge exists in the original graph [g].
+
+      In the algorithm, this edge-creation happens in the tree-edge
+      branch of [process_edge]: [set_fa v u] is executed when the
+      original graph has edge [u → v] ([dg_step g u v]), and [v] is
+      unvisited.  The [v ∈ visited s] condition here reflects the
+      state *after* [visit v] (inside the recursive [tarjan_scc v]
+      call), at which point the tree edge becomes visible. *)
+  Lemma set_fa_adds_tree_edge (s: SCCSt) (root v p: V):
+    dg_step g p v ->
+    p <> v -> v ∈ visited s ->
+    dg_step (state_to_dfs_tree (set_fa_state s v p) root) p v.
+  Proof.
+    intros Hstep_g Hneq Hvis.
+    unfold set_fa_state, state_to_dfs_tree.
+    destruct Hstep_g as [e [Horig_step [Hfst_eq Hsnd_eq]]].
+    unfold dg_step.
+    exists e. split.
+    - unfold original_step. simpl.
+      exists v. split; [exact Hvis | split].
+      + (* fa (set_fa_state s v p) v <> v *)
+        simpl. unfold equiv_decb.
+        destruct (equiv_dec v v) as [Heq | Hneq'].
+        2: { exfalso; apply Hneq'; reflexivity. }
+        exact Hneq.
+      + split.
+        * (* step_fst g e = fa (set_fa_state s v p) v *)
+          simpl. unfold equiv_decb.
+          destruct (equiv_dec v v) as [Heq | Hneq'].
+          2: { exfalso; apply Hneq'; reflexivity. }
+          rewrite Hfst_eq. reflexivity.
+        * (* step_snd g e = v *)
+          exact Hsnd_eq.
+    - split; [exact Hfst_eq | exact Hsnd_eq].
+  Qed.
 
 End TarjanSCC.

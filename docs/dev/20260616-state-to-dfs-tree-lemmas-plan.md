@@ -311,5 +311,30 @@ Tarjan_scc.v
 
 ---
 
-*设计文档版本：1.0*
+---
+
+## 实现记录 (2026-06-16)
+
+### 实现状态：已完成
+
+所有 9 个计划引理（及 1 个额外的 `state_to_dfs_tree_step_char_backward`）已证明并通过 `coqc` 编译。
+
+### 与计划的偏差
+
+**1. Lemma 2 方向调整**：原计划中的 `state_to_dfs_tree_step_char` 是一个 `iff`。实际实现中拆分为两个引理：
+
+- `state_to_dfs_tree_step_char` — 仅 `→` 方向（正向刻画）
+- `state_to_dfs_tree_step_char_backward` — `←` 方向，增加 `dg_step g x y` 前提
+
+**原因**：`dg_step` 定义要求提供一条边 `e : E` 作为存在证据。从 `fa s y = x`、`fa s y ≠ y`、`y ∈ visited s` 无法构造出任意类型 `E` 的居民。在算法运行上下文中，`fa s y = x` 仅在 `process_edge` 树边分支中由 `set_fa y x` 设置，该分支受 `dg_step g x y` 守卫，因此额外前提在实际使用中总可满足。
+
+**2. Lemma 3 (`state_to_dfs_tree_step_fa`) 和 Lemma 9 (`set_fa_adds_tree_edge`)** 同样增加了 `dg_step g ...` 前提。
+
+**3. Lemma 8 (`set_fa_preserves_tree_edges`)** 无需额外条件——证明复用原始树 `dg_step` 中已有的边证据 `e`。
+
+**4. 新增导入**：`Require Import Coq.Relations.Relations.` 用于 `rt_refl`（`clos_refl_trans` 的自反性）。
+
+---
+
+*设计文档版本：1.1*
 *最后更新：2026-06-16*
