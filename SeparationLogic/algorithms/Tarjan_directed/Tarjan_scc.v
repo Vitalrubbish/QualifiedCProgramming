@@ -44,7 +44,7 @@ Section TarjanSCC.
   (* ================================================================ *)
 
   Definition initSt: SCCSt :=
-    mkSCCSt (fun _ => False) 0 (fun v => v) (fun _ => 0) (fun _ => 0) nil nil.
+    mkSCCSt (fun _ => False) 1 (fun v => v) (fun _ => 0) (fun _ => 0) nil nil.
 
   (* ================================================================ *)
   (* stack_split_at — split stack at target vertex u (inclusive)      *)
