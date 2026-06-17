@@ -212,6 +212,13 @@ Proof.
 Qed.
 
 (* ================================================================ *)
+(* 1a. dfn_injective — Injectivity of dfn for visited vertices      *)
+(* ================================================================ *)
+
+Definition dfn_injective (s: @SCCSt V): Prop :=
+  forall x y, x <> y -> x ∈ visited s -> y ∈ visited s -> dfn s x <> dfn s y.
+
+(* ================================================================ *)
 (* 2. dfn_valid — Tree Edge dfn Monotonicity                        *)
 (* ================================================================ *)
 
@@ -224,7 +231,7 @@ Definition fa_visited (s: @SCCSt V): Prop :=
   forall v, fa s v <> v -> fa s v ∈ visited s.
 
 Definition dfn_pre (u: V) (s: @SCCSt V) (root: V): Prop :=
-  ~ u ∈ visited s /\ dfn_valid s root /\ dfn_inv s.
+  ~ u ∈ visited s /\ dfn_valid s root /\ dfn_inv s /\ fa_visited s.
 
 Definition dfn_post (s: @SCCSt V) (root: V): Prop :=
   dfn_valid s root /\ dfn_inv s.
@@ -286,6 +293,22 @@ Proof.
   subst s. unfold pop_scc_state.
   destruct (stack_split_at (stack s0) u) as [popped rest] eqn:?.
   simpl. unfold fa_visited. auto.
+Qed.
+
+Lemma pop_scc_keep_dfn_valid (u: V):
+  Hoare (fun s: @SCCSt V => dfn_valid s root)
+        (pop_scc u)
+        (fun _ s => dfn_valid s root).
+Proof.
+  unfold pop_scc, dfn_valid. intro_state. hoare_auto_s.
+  subst s.
+  assert (Htree: state_to_dfs_tree g (pop_scc_state s0 u) root
+                = state_to_dfs_tree g s0 root).
+  { unfold pop_scc_state. destruct (stack_split_at (stack s0) u) as [popped rest] eqn:?.
+    reflexivity. }
+  rewrite Htree in H2. apply H in H2.
+  unfold pop_scc_state in *. destruct (stack_split_at (stack s0) u) as [popped rest] eqn:?.
+  simpl. exact H2.
 Qed.
 
 Lemma get_low_update_low_keep_fa_visited (u v: V):
@@ -715,57 +738,645 @@ Lemma preloop_preserves_dfn_valid (u: V):
   Hoare (fun s: @SCCSt V => ~ u ∈ visited s /\ dfn_valid s root /\ dfn_inv s /\ fa_visited s)
         (preloop u)
         (fun _ s => u ∈ visited s /\ dfn_valid s root /\ dfn_inv s).
-Admitted.
+Proof.
+  apply Hoare_conj with (Q1 := fun _ s => u ∈ visited s) (Q2 := fun _ s => dfn_valid s root /\ dfn_inv s).
+  { eapply Hoare_conseq_pre.
+    { intros s Hpre. exact I. }
+    apply preloop_self_visited. }
+  { apply Hoare_conj with (Q1 := fun _ s => dfn_valid s root) (Q2 := fun _ s => dfn_inv s).
+    { (* dfn_valid preservation *)
+      intro_state. destruct H as [Hnuvis [Hvalid [Hinv Hfa]]].
+      unfold preloop. unfold_op. hoare_auto_s. subst s. simpl.
+      unfold dfn_valid. intros x y Hstep.
+      unfold dg_step in Hstep.
+      destruct Hstep as [e [Htree [Hfst_eq Hsnd_eq]]].
+      unfold original_step in Htree. simpl in Htree.
+      destruct Htree as [v [Hv [Hfa_ne' [Hfst_fa Hsnd_v]]]].
+      cbn in Hv. sets_unfold in Hv.
+      simpl in Hfst_fa.
+      unfold state_to_dfs_tree in Hfst_eq, Hsnd_eq. simpl in Hfst_eq, Hsnd_eq.
+      assert (Hvy: v = y). { rewrite <- Hsnd_v. exact Hsnd_eq. }
+      rewrite Hvy in *. clear Hvy. simpl.
+      destruct Hv as [Hyvis | Heqy].
+      { (* Case 1: y was already visited before preloop *)
+        assert (Hneqy: y <> u).
+        { intros Heqy'. apply Hnuvis. rewrite <- Heqy'. exact Hyvis. }
+        assert (Hneqx: x <> u).
+        { intros Heqx. rewrite Heqx in *. rewrite Hfst_fa in Hfst_eq.
+          apply Hnuvis. rewrite <- Hfst_eq. apply (Hfa y). exact Hfa_ne'. }
+        unfold equiv_decb.
+        destruct (equiv_dec x u) as [Heqx | _].
+        { exfalso. apply Hneqx. exact Heqx. }
+        destruct (equiv_dec y u) as [Heqy' | _].
+        { exfalso. apply Hneqy. exact Heqy'. }
+        simpl. unfold dfn_valid in Hvalid. apply Hvalid.
+        unfold dg_step. exists e. split.
+        { unfold original_step. simpl.
+          exists y. split; [exact Hyvis | split; [exact Hfa_ne' | split; [exact Hfst_fa | exact Hsnd_v]]]. }
+        { split; [exact Hfst_eq | exact Hsnd_eq]. } }
+      { (* Case 2: y = u, new tree edge fa s0 u -> u *)
+        rewrite Heqy in *. rewrite Hfst_fa in Hfst_eq. (* fa s0 y = x *)
+        rewrite Hfst_eq in Hfa_ne'. (* now Hfa_ne': x <> y *)
+        assert (Hfa_ne_orig: fa s0 y <> y). { rewrite Hfst_eq. exact Hfa_ne'. }
+        assert (Hxvis: x ∈ visited s0).
+        { apply (Hfa y) in Hfa_ne_orig. rewrite Hfst_eq in Hfa_ne_orig. exact Hfa_ne_orig. }
+        destruct Hinv as [Hdfn_lt [Hdfn_zero Htimer_pos]].
+        apply Hdfn_lt in Hxvis. (* dfn s0 x < timer s0 *)
+        unfold equiv_decb.
+        destruct (equiv_dec x y) as [Heqx | _].
+        { exfalso. apply Hfa_ne'. exact Heqx. }
+        destruct (equiv_dec y y) as [_ | Hneq].
+        { simpl. exact Hxvis. }
+        { exfalso. apply Hneq. reflexivity. } } }
+    { (* dfn_inv preservation *)
+      eapply Hoare_conseq_pre.
+      { intros s Hpre. destruct Hpre as [_ [_ [Hinv _]]]. exact Hinv. }
+      apply preloop_keep_dfn_inv. } }
+Qed.
 
 (* ================================================================ *)
 (* 2b. dfn_valid preservation through process_edge                   *)
 (* ================================================================ *)
 
+(** [set_fa_preserves_dfn_pre_child]: [set_fa v u] when [v] is
+    unvisited preserves all components of [dfn_pre v].  This bundles
+    the facts needed to call the recursive hypothesis [W v] in the
+    tree-edge branch of [process_edge]. *)
+
+Lemma set_fa_preserves_dfn_pre_child (v u: V):
+  Hoare (fun s: @SCCSt V => ~ v ∈ visited s /\ dfn_valid s root /\ dfn_inv s /\ fa_visited s /\ u ∈ visited s)
+        (set_fa v u)
+        (fun _ s => dfn_pre v s root).
+Proof.
+  unfold set_fa, dfn_pre, dfn_valid, dfn_inv, fa_visited.
+  intro_state. hoare_auto_s. subst s. simpl.
+  destruct H as [Hnv [Hvalid [Hinv [Hfa Huvis]]]].
+  repeat split.
+  - exact Hnv.
+  - intros x y Hstep. apply Hvalid.
+    unfold dg_step in Hstep. destruct Hstep as [e [Htree [Hfst Hsnd]]].
+    unfold original_step in Htree. simpl in Htree.
+    destruct Htree as [w [Hwvis [Hwfa [Hwfst Hwsnd]]]].
+    assert (Hwneq: w <> v). { intros Heq. rewrite Heq in Hwvis. apply Hnv. exact Hwvis. }
+    unfold equiv_decb in Hwfa, Hwfst. destruct (equiv_dec w v) as [Heq | Hneq].
+    { exfalso. rewrite Heq in Hwvis. apply Hnv. exact Hwvis. }
+    exists e. split; [ | split]; auto.
+    exists w. repeat split; auto.
+  - intros v0 Hvis'. apply (proj1 Hinv v0). simpl in Hvis'. auto.
+  - intros Hdfn0. simpl. apply (proj1 ((proj1 (proj2 Hinv)) v0)). auto.
+  - intros Hnvis. simpl. apply (proj2 ((proj1 (proj2 Hinv)) v0)). simpl in Hnvis. auto.
+  - simpl. apply (proj2 (proj2 Hinv)).
+  - intros v0 Hneq. simpl. unfold equiv_decb.
+    destruct (equiv_dec v0 v) as [Heq | Hneq'];
+    [ rewrite Heq in *; simpl in Hneq; unfold equiv_decb in Hneq;
+      destruct (equiv_dec v v) as [_ | Hc];
+      [ exact Huvis | exfalso; apply Hc; reflexivity ]
+    | simpl in Hneq; unfold equiv_decb in Hneq;
+      destruct (equiv_dec v0 v) as [Heq | _];
+      [ exfalso; apply Hneq'; exact Heq
+      | apply Hfa; exact Hneq ] ].
+Qed.
+
+Lemma set_fa_preserves_dfn_pre_child_rich (v u: V):
+  Hoare (fun s: @SCCSt V => dfn_pre v s root /\ u ∈ visited s)
+        (set_fa v u)
+        (fun _ s => dfn_pre v s root /\ u ∈ visited s).
+Proof.
+  apply Hoare_conj.
+  - apply Hoare_conseq_pre with
+      (P2 := fun s => ~ v ∈ visited s /\ dfn_valid s root /\ dfn_inv s /\ fa_visited s /\ u ∈ visited s).
+    + intros s [Hpre Huvis]. destruct Hpre as [Hnv [Hvalid [Hinv Hfa]]]. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto.
+    + apply set_fa_preserves_dfn_pre_child.
+  - eapply Hoare_conseq_pre;
+      [ intros s [Hpre Huvis]; exact Huvis
+      | apply (set_fa_keep_visited v u u) ].
+Qed.
+
+Lemma set_fa_preserves_dfn_pre_child_full (v u: V):
+  Hoare (fun s: @SCCSt V => dfn_pre v s root /\ u ∈ visited s /\ fa_visited s)
+        (set_fa v u)
+        (fun _ s => dfn_pre v s root /\ u ∈ visited s /\ fa_visited s).
+Proof.
+  unfold set_fa, dfn_pre, dfn_valid, dfn_inv, fa_visited.
+  intro_state. hoare_auto_s. subst s. simpl.
+  destruct H as [[Hnv [Hvalid [Hinv Hfa]]] [Huvis _]].
+  split.
+  - split; [| split; [| split]].
+    + exact Hnv.
+    + intros x y Hstep. apply Hvalid.
+      unfold dg_step in Hstep. destruct Hstep as [e [Htree [Hfst Hsnd]]].
+      unfold original_step in Htree. simpl in Htree.
+      destruct Htree as [w [Hwvis [Hwfa [Hwfst Hwsnd]]]].
+      assert (Hwneq: w <> v). { intros Heq. rewrite Heq in Hwvis. apply Hnv. exact Hwvis. }
+      unfold equiv_decb in Hwfa, Hwfst. destruct (equiv_dec w v) as [Heq | Hneq].
+      { exfalso. rewrite Heq in Hwvis. apply Hnv. exact Hwvis. }
+      exists e. split; [ | split]; auto.
+      exists w. repeat split; auto.
+    + destruct Hinv as [Hlt [Hiff Hpos]].
+      split; [| split].
+      * intros v0 Hvis'. apply Hlt. simpl in Hvis'. auto.
+      * intros v0. apply Hiff.
+      * apply Hpos.
+    + intros v0 Hneq. simpl. unfold equiv_decb.
+      destruct (equiv_dec v0 v) as [Heq | Hneq'];
+      [ rewrite Heq in *; simpl in Hneq; unfold equiv_decb in Hneq;
+        destruct (equiv_dec v v) as [_ | Hc];
+        [ exact Huvis | exfalso; apply Hc; reflexivity ]
+      | simpl in Hneq; unfold equiv_decb in Hneq;
+        destruct (equiv_dec v0 v) as [Heq | _];
+        [ exfalso; apply Hneq'; exact Heq
+        | apply Hfa; exact Hneq ] ].
+  - split.
+    + exact Huvis.
+    + intros v0 Hneq. simpl. unfold equiv_decb.
+      destruct (equiv_dec v0 v) as [Heq | Hneq'];
+      [ rewrite Heq in *; simpl in Hneq; unfold equiv_decb in Hneq;
+        destruct (equiv_dec v v) as [_ | Hc];
+        [ exact Huvis | exfalso; apply Hc; reflexivity ]
+      | simpl in Hneq; unfold equiv_decb in Hneq;
+        destruct (equiv_dec v0 v) as [Heq | _];
+        [ exfalso; apply Hneq'; exact Heq
+        | apply Hfa; exact Hneq ] ].
+Qed.
+
+Lemma update_low_keep_dfn_valid (u: V) (n: nat):
+  Hoare (fun s: @SCCSt V => dfn_valid s root)
+        (update_low u n)
+        (fun _ s => dfn_valid s root).
+Proof.
+  unfold update_low, dfn_valid. unfold_op. intro_state. hoare_auto_s.
+  - subst s. simpl. auto.
+  - match goal with
+    | [ H: _ = s0 /\ _ |- _ ] => destruct H as [Hs _]; rewrite Hs in *; auto
+    end.
+Qed.
+
+Lemma get_low_update_low_keep_dfn_valid (u v: V):
+  Hoare (fun s: @SCCSt V => dfn_valid s root)
+        (lv <- get' (fun s => low s v);; update_low u lv)
+        (fun _ s => dfn_valid s root).
+Proof.
+  intro_state.
+  eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+  apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+  { intros s1 Hs1. destruct Hs1. subst s1. simpl. auto. }
+  apply (update_low_keep_dfn_valid u lv).
+Qed.
+
+Lemma get_dfn_update_low_keep_dfn_valid (u v: V):
+  Hoare (fun s: @SCCSt V => dfn_valid s root)
+        (dv <- get' (fun s => dfn s v);; update_low u dv)
+        (fun _ s => dfn_valid s root).
+Proof.
+  intro_state.
+  eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+  apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+  { intros s1 Hs1. destruct Hs1. subst s1. simpl. auto. }
+  apply (update_low_keep_dfn_valid u dv).
+Qed.
+
 Lemma process_edge_keep_dfn_valid (u v: V) (W: V -> program (@SCCSt V) unit):
-  (forall x, Hoare (fun s => dfn_pre x s root) (W x) (fun _ s => dfn_post s root)) ->
-  Hoare (fun s: @SCCSt V => u ∈ visited s /\ dfn_valid s root /\ dfn_inv s)
+  (forall x, Hoare (fun s => dfn_pre x s root /\ u ∈ visited s) (W x)
+                   (fun _ s => dfn_post s root /\ u ∈ visited s)) ->
+  Hoare (fun s: @SCCSt V => u ∈ visited s /\ dfn_valid s root /\ dfn_inv s /\ fa_visited s)
         (process_edge u W v)
-        (fun _ s => dfn_post s root).
-Admitted.
+        (fun _ s => dfn_post s root /\ u ∈ visited s).
+Proof.
+  intros HW.
+  unfold process_edge, if_else, dfn_post.
+  intro_state. destruct H as [Huvis [Hvalid [Hinv Hfa]]].
+  apply Hoare_choice.
+  - (* Tree edge: v not visited *)
+    apply Hoare_assume_bind. simpl.
+    apply Hoare_conseq_pre with (P2 := fun s => dfn_pre v s root /\ u ∈ visited s).
+    { intros s1 [Hnv Hs1]. subst s1. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto. }
+    eapply Hoare_bind.
+    { apply (set_fa_preserves_dfn_pre_child_rich v u). }
+    simpl. intros _.
+    eapply Hoare_bind.
+    { apply (HW v). }
+    simpl. intros _.
+    apply Hoare_conj.
+    * apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root /\ dfn_inv s).
+      { intros s1 [[Hvalid' Hinv'] _]. split; auto. }
+      apply Hoare_conj.
+      -- apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root);
+           [ intros s1 [Hvalid' _]; exact Hvalid' | apply get_low_update_low_keep_dfn_valid ].
+      -- apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s);
+           [ intros s1 [_ Hinv']; exact Hinv' | apply get_low_update_low_keep_dfn_inv ].
+    * apply Hoare_conseq_pre with (P2 := fun s => u ∈ visited s);
+        [ intros s1 [_ Huvis']; exact Huvis' | apply (get_low_update_low_keep_visited u v u) ].
+  - (* Non-tree edge: v visited *)
+    intro_state. hoare_auto_s.
+    + (* v in stack: update low with dfn v *)
+      apply Hoare_conj.
+      * apply Hoare_conj.
+        -- apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+           ++ intros s1 Hs1. subst s1. exact Hvalid.
+           ++ apply (update_low_keep_dfn_valid u (dfn s0 v)).
+        -- apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s).
+           ++ intros s1 Hs1. subst s1. exact Hinv.
+           ++ apply (update_low_keep_dfn_inv u (dfn s0 v)).
+      * apply Hoare_conseq_pre with (P2 := fun s => u ∈ visited s).
+        -- intros s1 Hs1. subst s1. exact Huvis.
+        -- apply (update_low_keep_visited u u (dfn s0 v)).
+    + (* v not in stack: skip *)
+      destruct H2 as [Heq _]. subst s. subst s1. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto.
+Qed.
 
-(* ================================================================ *)
-(* 2c. dfn_valid emergence through forset                            *)
-(* ================================================================ *)
+Lemma process_edge_keep_dfn_valid_full (u v: V) (W: V -> program (@SCCSt V) unit):
+  (forall x, Hoare (fun s => dfn_post s root /\ u ∈ visited s /\ fa_visited s) (W x)
+                   (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s)) ->
+  Hoare (fun s: @SCCSt V => u ∈ visited s /\ fa_visited s /\ dfn_valid s root /\ dfn_inv s)
+        (process_edge u W v)
+        (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s).
+Proof.
+  intros HW.
+  unfold process_edge, if_else, dfn_post.
+  intro_state. destruct H as [Huvis [Hfa [Hvalid Hinv]]].
+  apply Hoare_choice.
+  - (* Tree edge: v not visited *)
+    apply Hoare_assume_bind. simpl.
+    apply Hoare_conseq_pre with
+      (P2 := fun s => dfn_pre v s root /\ u ∈ visited s /\ fa_visited s).
+    { intros s1 [Hnv Hs1]. subst s1. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto. }
+    eapply Hoare_bind.
+    { apply (set_fa_preserves_dfn_pre_child_full v u). }
+    simpl. intros _.
+    eapply Hoare_bind.
+    { assert (HWv_weaken : Hoare (fun s => dfn_pre v s root /\ u ∈ visited s /\ fa_visited s)
+                               (W v)
+                               (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s)).
+      { apply Hoare_conseq_pre with
+          (P2 := fun s => dfn_post s root /\ u ∈ visited s /\ fa_visited s).
+        - intros s1 Hs1. destruct Hs1 as [[Hpre [Hvalid' [Hinv' _]]] [Huvis1 Hfa']].
+          destruct Hinv' as [Hlt [Hiff Hpos]].
+          repeat split; auto.
+          + intros Hdfn. apply (proj1 (Hiff v0)). exact Hdfn.
+          + intros Hnvis. apply (proj2 (Hiff v0)). exact Hnvis.
+        - apply (HW v). }
+      exact HWv_weaken. }
+    simpl. intros _.
+    apply Hoare_conj with
+      (Q1 := fun (_: unit) s => dfn_valid s root /\ dfn_inv s)
+      (Q2 := fun (_: unit) s => u ∈ visited s /\ fa_visited s).
+    { apply Hoare_conj with
+        (Q1 := fun (_: unit) s => dfn_valid s root)
+        (Q2 := fun (_: unit) s => dfn_inv s).
+      - apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+        + intros s1 Hs1. apply Hs1.
+        + apply get_low_update_low_keep_dfn_valid.
+      - apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s).
+        + intros s1 Hs1. apply Hs1.
+        + apply get_low_update_low_keep_dfn_inv. }
+    { apply Hoare_conj with
+        (Q1 := fun (_: unit) s => u ∈ visited s)
+        (Q2 := fun (_: unit) s => fa_visited s).
+      - apply Hoare_conseq_pre with (P2 := fun s => u ∈ visited s).
+        + intros s1 Hs1. apply Hs1.
+        + apply (get_low_update_low_keep_visited u v u).
+      - apply Hoare_conseq_pre with (P2 := fun s => fa_visited s).
+        + intros s1 Hs1. apply Hs1.
+        + apply (get_low_update_low_keep_fa_visited u v). }
+  - (* Non-tree edge: v visited *)
+    intro_state. hoare_auto_s.
+    + (* v in stack: update low with dfn v *)
+      apply Hoare_conj with
+        (Q1 := fun (_: unit) s => dfn_valid s root /\ dfn_inv s)
+        (Q2 := fun (_: unit) s => u ∈ visited s /\ fa_visited s).
+      { apply Hoare_conj with
+          (Q1 := fun (_: unit) s => dfn_valid s root)
+          (Q2 := fun (_: unit) s => dfn_inv s).
+        - apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+          + intros s1 Hs1. subst s1. exact Hvalid.
+          + apply (update_low_keep_dfn_valid u (dfn s0 v)).
+        - apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s).
+          + intros s1 Hs1. subst s1. exact Hinv.
+          + apply (update_low_keep_dfn_inv u (dfn s0 v)). }
+      { apply Hoare_conj with
+          (Q1 := fun (_: unit) s => u ∈ visited s)
+          (Q2 := fun (_: unit) s => fa_visited s).
+        - apply Hoare_conseq_pre with (P2 := fun s => u ∈ visited s).
+          + intros s1 Hs1. subst s1. exact Huvis.
+          + apply (update_low_keep_visited u u (dfn s0 v)).
+        - apply Hoare_conseq_pre with (P2 := fun s => fa_visited s).
+          + intros s1 Hs1. subst s1. exact Hfa.
+          + apply (update_low_keep_fa_visited u (dfn s0 v)). }
+    + (* v not in stack: skip *)
+      destruct H2 as [Heq _]. subst s. subst s1. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto.
+Qed.
 
-Lemma forset_establishes_dfn_valid (u: V) (W: V -> program (@SCCSt V) unit):
-  (forall x, Hoare (fun s => dfn_pre x s root) (W x) (fun _ s => dfn_post s root)) ->
-  Hoare (fun s: @SCCSt V => u ∈ visited s /\ dfn_valid s root /\ dfn_inv s)
+Lemma process_edge_keep_dfn_valid_pre (u v: V) (W: V -> program (@SCCSt V) unit):
+  (forall x, Hoare (fun s => dfn_pre x s root /\ u ∈ visited s /\ fa_visited s) (W x)
+                   (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s)) ->
+  Hoare (fun s: @SCCSt V => u ∈ visited s /\ fa_visited s /\ dfn_valid s root /\ dfn_inv s)
+        (process_edge u W v)
+        (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s).
+Proof.
+  intros HW.
+  unfold process_edge, if_else, dfn_post.
+  intro_state. destruct H as [Huvis [Hfa [Hvalid Hinv]]].
+  apply Hoare_choice.
+  - (* Tree edge: v not visited *)
+    apply Hoare_assume_bind. simpl.
+    apply Hoare_conseq_pre with
+      (P2 := fun s => dfn_pre v s root /\ u ∈ visited s /\ fa_visited s).
+    { intros s1 [Hnv Hs1]. subst s1. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto. }
+    eapply Hoare_bind.
+    { apply (set_fa_preserves_dfn_pre_child_full v u). }
+    simpl. intros _.
+    eapply Hoare_bind.
+    { apply (HW v). }
+    simpl. intros _.
+    apply Hoare_conj with
+      (Q1 := fun (_: unit) s => dfn_valid s root /\ dfn_inv s)
+      (Q2 := fun (_: unit) s => u ∈ visited s /\ fa_visited s).
+    { apply Hoare_conj with
+        (Q1 := fun (_: unit) s => dfn_valid s root)
+        (Q2 := fun (_: unit) s => dfn_inv s).
+      - apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+        + intros s1 Hs1. apply Hs1.
+        + apply get_low_update_low_keep_dfn_valid.
+      - apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s).
+        + intros s1 Hs1. apply Hs1.
+        + apply get_low_update_low_keep_dfn_inv. }
+    { apply Hoare_conj with
+        (Q1 := fun (_: unit) s => u ∈ visited s)
+        (Q2 := fun (_: unit) s => fa_visited s).
+      - apply Hoare_conseq_pre with (P2 := fun s => u ∈ visited s).
+        + intros s1 Hs1. apply Hs1.
+        + apply (get_low_update_low_keep_visited u v u).
+      - apply Hoare_conseq_pre with (P2 := fun s => fa_visited s).
+        + intros s1 Hs1. apply Hs1.
+        + apply (get_low_update_low_keep_fa_visited u v). }
+  - (* Non-tree edge: v visited *)
+    intro_state. hoare_auto_s.
+    + (* v in stack: update low with dfn v *)
+      apply Hoare_conj with
+        (Q1 := fun (_: unit) s => dfn_valid s root /\ dfn_inv s)
+        (Q2 := fun (_: unit) s => u ∈ visited s /\ fa_visited s).
+      { apply Hoare_conj with
+          (Q1 := fun (_: unit) s => dfn_valid s root)
+          (Q2 := fun (_: unit) s => dfn_inv s).
+        - apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+          + intros s1 Hs1. subst s1. exact Hvalid.
+          + apply (update_low_keep_dfn_valid u (dfn s0 v)).
+        - apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s).
+          + intros s1 Hs1. subst s1. exact Hinv.
+          + apply (update_low_keep_dfn_inv u (dfn s0 v)). }
+      { apply Hoare_conj with
+          (Q1 := fun (_: unit) s => u ∈ visited s)
+          (Q2 := fun (_: unit) s => fa_visited s).
+        - apply Hoare_conseq_pre with (P2 := fun s => u ∈ visited s).
+          + intros s1 Hs1. subst s1. exact Huvis.
+          + apply (update_low_keep_visited u u (dfn s0 v)).
+        - apply Hoare_conseq_pre with (P2 := fun s => fa_visited s).
+          + intros s1 Hs1. subst s1. exact Hfa.
+          + apply (update_low_keep_fa_visited u (dfn s0 v)). }
+    + (* v not in stack: skip *)
+      destruct H2 as [Heq _]. subst s. subst s1. repeat split; auto.
+      all: destruct Hinv as [Hlt [Hiff Hpos]];
+           try (apply Hlt); try (apply (proj1 (Hiff v0)));
+           try (apply (proj2 (Hiff v0))); try exact Hpos; auto.
+Qed.
+
+Lemma forset_process_edge_keep_dfn_valid_pre (u: V) (W: V -> program (@SCCSt V) unit):
+  (forall a, Hoare (fun s => dfn_pre a s root /\ u ∈ visited s /\ fa_visited s) (W a)
+                   (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s)) ->
+  Hoare (fun s: @SCCSt V => u ∈ visited s /\ fa_visited s /\ dfn_valid s root /\ dfn_inv s)
         (forset (fun w => dg_step g u w) (process_edge u W))
-        (fun _ s => dfn_post s root).
-Admitted.
-
-(* ================================================================ *)
-(* 2d. tarjan_scc keeps dfn_valid (Hoare_fix)                        *)
-(* ================================================================ *)
+        (fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s).
+Proof.
+  intros HW.
+  unfold forset. hoare_fix_nolv_auto (V -> Prop).
+  simpl; intros W0 IH0 todo.
+  unfold forset_f. hoare_auto_s. intro_state. hoare_auto_s.
+  - (* Goal 1: a ∈ todo, process_edge + recursion *)
+    eapply Hoare_bind with
+      (Q := fun (_: unit) s => u ∈ visited s /\ fa_visited s /\ dfn_valid s root /\ dfn_inv s).
+    { (* process_edge u W a *)
+      apply Hoare_conseq_post with
+        (Q2 := fun _ s => dfn_post s root /\ u ∈ visited s /\ fa_visited s).
+      { intros _ s [Hpost [Huvis' Hfa']].
+        destruct Hpost as [Hvalid' Hinv'].
+        destruct Hinv' as [Hlt [Hiff Hpos]].
+        split; [exact Huvis' | split; [exact Hfa' | split; [exact Hvalid' |]]].
+        split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
+      apply Hoare_conseq_pre with
+        (P2 := fun s => u ∈ visited s /\ fa_visited s /\ dfn_valid s root /\ dfn_inv s).
+      { intros s1 Hs1. subst s1. exact H. }
+      apply (process_edge_keep_dfn_valid_pre u a W). intros x. apply HW. }
+    { intros _. apply IH0. }
+  - (* Goal 2: todo == ∅ *)
+    destruct H1 as [Huvis [Hfa [Hvalid Hinv]]].
+    destruct Hinv as [Hlt [Hiff Hpos]].
+    split.
+    { split; [exact Hvalid | split; [exact Hlt | split; [exact Hiff | exact Hpos]]]. }
+    { split; [exact Huvis | exact Hfa]. }
+Qed.
 
 Theorem tarjan_scc_keep_dfn_valid (u: V):
   Hoare (fun s: @SCCSt V => dfn_pre u s root)
         (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
         (fun _ s => dfn_post s root).
-Admitted.
-
-(* ================================================================ *)
-(* 2e. tarjan_scc_all establishes dfn_valid                          *)
-(* ================================================================ *)
+Proof.
+  (* First prove a richer version that also preserves fa_visited *)
+  cut (Hoare (fun s: @SCCSt V => dfn_pre u s root)
+             (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
+             (fun _ s => dfn_post s root /\ fa_visited s)).
+  { intros H. eapply Hoare_conseq_post; [| apply H]. intros _ s [Hpost _]. exact Hpost. }
+  unfold tarjan_scc.
+  apply (Hoare_fix_logicv_conj (tarjan_scc_f g)
+           (fun (x: V) (_: unit) (s: SCCSt) => dfn_pre x s root)
+           (fun (x: V) (_: unit) (_: unit) (s: SCCSt) => dfn_post s root /\ fa_visited s)
+           u tt
+           (fun (x: V) (d: V) (s: SCCSt) => d ∈ visited s)
+           (fun (x: V) (d: V) (_: unit) (s: SCCSt) => d ∈ visited s)).
+  { (* Auxiliary: tarjan_scc preserves visitedness of any vertex *)
+    intros x d. exact (tarjan_scc_keep_visited g x d). }
+  { (* Main induction step *)
+    intros W IHvis IHdfn x.
+    unfold tarjan_scc_f.
+    intros _.
+    (* Step 1: preloop x — establish x ∈ visited /\ fa_visited /\ dfn_post *)
+    eapply Hoare_bind.
+    { apply Hoare_conj with
+        (Q1 := fun _ s => x ∈ visited s /\ dfn_valid s root /\ dfn_inv s)
+        (Q2 := fun _ s => fa_visited s).
+      - apply preloop_preserves_dfn_valid.
+      - eapply Hoare_conseq_pre.
+        2: apply preloop_keep_fa_visited.
+        intros s Hpre. destruct Hpre as [_ [_ [_ Hfa]]]. exact Hfa. }
+    simpl. intros _. intro_state.
+    destruct H as [[Hxvis [Hvalid Hinv]] Hfa].
+    (* Step 2: forset + if-else, target dfn_post /\ fa_visited *)
+    eapply Hoare_bind with (Q := fun _ s => dfn_post s root /\ fa_visited s).
+    { (* forset: apply lemma with pre/post adapted via Hoare_conseq *)
+      apply (Hoare_conseq
+        (fun s => s = s0)
+        (fun s => x ∈ visited s /\ fa_visited s /\ dfn_valid s root /\ dfn_inv s)
+        (forset (fun w => dg_step g x w) (process_edge x W))
+        (fun _ s => dfn_post s root /\ fa_visited s)
+        (fun _ s => dfn_post s root /\ x ∈ visited s /\ fa_visited s)).
+      - (* P1 -> P2 *)
+        intros s1 Heq. subst s1.
+        destruct Hinv as [Hlt [Hiff Hpos]].
+        split; [exact Hxvis | split; [exact Hfa | split; [exact Hvalid | split; [exact Hlt | split; [exact Hiff | exact Hpos]]]]].
+      - (* Q2 -> Q1: drop x_vis *)
+        intros _ s [Hpost [Hxvis' Hfa']]. split; [exact Hpost | exact Hfa'].
+      - (* Hoare P2 f Q2: the forset lemma *)
+        apply forset_process_edge_keep_dfn_valid_pre.
+        intros a.
+        (* Callback: Hoare (dfn_pre a /\ x_vis /\ fa_visited) (W a)
+                           (dfn_post /\ x_vis /\ fa_visited) *)
+        pose proof (IHdfn a tt) as Hdfn_a.
+        pose proof (IHvis a x) as Hvis_a.
+        (* Build dfn_post from IHdfn *)
+        assert (Hdfn_post_a : Hoare (fun s => dfn_pre a s root /\ x ∈ visited s /\ fa_visited s)
+                                    (W a)
+                                    (fun _ s => dfn_post s root)).
+        { eapply Hoare_conseq_post.
+          2: { eapply Hoare_conseq_pre. 2: exact Hdfn_a. intros s [Hpre _]. exact Hpre. }
+          intros _ s [Hpost _]. exact Hpost. }
+        (* Build x_vis /\ fa_visited *)
+        assert (Hxvis_fa_a : Hoare (fun s => dfn_pre a s root /\ x ∈ visited s /\ fa_visited s)
+                                   (W a)
+                                   (fun _ s => x ∈ visited s /\ fa_visited s)).
+        { apply Hoare_conj with
+            (Q1 := fun _ s => x ∈ visited s)
+            (Q2 := fun _ s => fa_visited s).
+          - eapply Hoare_conseq_pre. 2: exact Hvis_a. intros s [_ [Hxvis' _]]. exact Hxvis'.
+          - eapply Hoare_conseq_post.
+            2: { eapply Hoare_conseq_pre. 2: exact Hdfn_a. intros s [Hpre _]. exact Hpre. }
+            intros _ s [_ Hfa']. exact Hfa'. }
+        (* Combine: dfn_post /\ x_vis /\ fa_visited *)
+        apply Hoare_conj with
+          (Q1 := fun _ s => dfn_post s root)
+          (Q2 := fun _ s => x ∈ visited s /\ fa_visited s).
+        + exact Hdfn_post_a.
+        + exact Hxvis_fa_a. }
+    simpl. intros _.
+    (* Step 3: If low x = dfn x then pop_scc x *)
+    intro_state. hoare_auto_s.
+    - (* pop_scc x: preserve dfn_post /\ fa_visited *)
+      apply Hoare_conj with
+        (Q1 := fun _ s => dfn_post s root)
+        (Q2 := fun _ s => fa_visited s).
+      + apply Hoare_conj with
+          (Q1 := fun _ s => dfn_valid s root)
+          (Q2 := fun _ s => dfn_inv s).
+        * apply Hoare_conseq_pre with (P2 := fun s => dfn_valid s root).
+          { intros sx Hsx. subst sx. destruct H as [[Hvalid' Hinv'] Hfa']. exact Hvalid'. }
+          apply pop_scc_keep_dfn_valid.
+        * apply Hoare_conseq_pre with (P2 := fun s => dfn_inv s).
+          { intros sx Hsx. subst sx. destruct H as [[Hvalid' Hinv'] Hfa']. exact Hinv'. }
+          apply pop_scc_keep_dfn_inv.
+      + apply Hoare_conseq_pre with (P2 := fun s => fa_visited s).
+        { intros sx Hsx. subst sx. destruct H as [[Hvalid' Hinv'] Hfa']. exact Hfa'. }
+        apply pop_scc_keep_fa_visited.
+    - (* skip: preserve dfn_post /\ fa_visited *)
+      destruct H1 as [Heq _]. subst s.
+      destruct H as [[Hvalid' Hinv'] Hfa'].
+      destruct Hinv' as [Hlt [Hiff Hpos]].
+      split.
+      { split; [exact Hvalid' | split; [exact Hlt | split; [exact Hiff | exact Hpos]]]. }
+      { exact Hfa'. } }
+Qed.
 
 Theorem tarjan_scc_all_dfn_valid:
-  Hoare (fun s: @SCCSt V => dfn_inv s /\ fa_visited s)
+  Hoare (fun s: @SCCSt V => dfn_inv s /\ fa_visited s /\ dfn_valid s root)
         (tarjan_scc_all g)
         (fun _ s => dfn_valid s root).
-Admitted.
-
-(* ================================================================ *)
-(* 3. dfn_unique — Injectivity of dfn                                *)
-(* ================================================================ *)
+Proof.
+  unfold tarjan_scc_all.
+  apply Hoare_conseq with
+    (P2 := fun s => dfn_inv s /\ fa_visited s /\ dfn_valid s root)
+    (Q2 := fun _ s => dfn_inv s /\ fa_visited s /\ dfn_valid s root).
+  - (* P1 -> P2: trivial, same condition *)
+    intros s H. exact H.
+  - (* Q2 -> Q1: extract dfn_valid from the conjunction *)
+    intros _ s [Hinv [Hfa Hvalid]]. exact Hvalid.
+  - (* Hoare P2 forset Q2 — now postcondition matches *)
+    apply Hoare_forset with
+      (P := fun (_: V -> Prop) (s: @SCCSt V) => dfn_inv s /\ fa_visited s /\ dfn_valid s root).
+    + (* ProperP *)
+      intros done1 done2 Hdone s1 s2 Heq. subst s2. reflexivity.
+    + (* Step case: for each vertex a, the body preserves the invariant *)
+      intros done a Hdone_sub Huniv Hnot_done.
+      unfold_op. intro_state. hoare_auto_s.
+      * (* a ∉ visited s0 — execute tarjan_scc a *)
+        apply Hoare_conj with
+          (Q1 := fun _ s => dfn_inv s)
+          (Q2 := fun _ s => fa_visited s /\ dfn_valid s root).
+        -- (* Q1: dfn_inv via tarjan_scc_keep_dfn_inv *)
+           eapply Hoare_conseq_pre.
+           2: apply (tarjan_scc_keep_dfn_inv a).
+           intros s' Heq. subst s'. destruct H as [Hinv _]. exact Hinv.
+        -- (* Q2: fa_visited /\ dfn_valid *)
+           apply Hoare_conj with
+             (Q1 := fun _ s => fa_visited s)
+             (Q2 := fun _ s => dfn_valid s root).
+           ++ (* fa_visited via tarjan_scc_keep_fa_visited *)
+              eapply Hoare_conseq_pre.
+              2: apply (tarjan_scc_keep_fa_visited a).
+              intros s' Heq. subst s'. destruct H as [_ [Hfa _]]. exact Hfa.
+           ++ (* dfn_valid via tarjan_scc_keep_dfn_valid *)
+              eapply Hoare_conseq_post.
+              2: { eapply Hoare_conseq_pre.
+                   2: apply (tarjan_scc_keep_dfn_valid a).
+                   intros s' Heq. subst s'.
+                   destruct H as [Hinv [Hfa Hvalid]].
+                   split; [exact H1 | split; [exact Hvalid | split; [exact Hinv | exact Hfa]]]. }
+              intros _ s [Hvalid _]. exact Hvalid.
+      * (* a ∈ visited s0 — skip *)
+        destruct H1 as [Heq _]. subst s. exact H.
+Qed.
 
 Lemma dfn_unique (s: @SCCSt V):
-  dfn_inv s ->
+  dfn_inv s -> dfn_injective s ->
   forall x y, dfn s x = dfn s y -> x = y \/ (~ x ∈ visited s /\ ~ y ∈ visited s).
-Admitted.
+Proof.
+  intros Hinv Hinj x y Heq.
+  destruct Hinv as [Hlt [Hiff Hpos]].
+  destruct (classic (x = y)) as [Hxy | Hxy].
+  { left. exact Hxy. }
+  right. split.
+  - intro Hxv.
+    destruct (classic (y ∈ visited s)) as [Hyv | Hnyv].
+    + exfalso. apply (Hinj x y Hxy Hxv Hyv). exact Heq.
+    + exfalso.
+      assert (Hdfn_x_nonzero: dfn s x <> 0). {
+        intro Hzero. apply (proj1 (Hiff x)) in Hzero. exact (Hzero Hxv). }
+      assert (Hdfn_y_zero: dfn s y = 0). {
+        apply (proj2 (Hiff y)). exact Hnyv. }
+      apply Hdfn_x_nonzero. rewrite Heq. exact Hdfn_y_zero.
+  - intro Hyv.
+    destruct (classic (x ∈ visited s)) as [Hxv | Hnxv].
+    + exfalso. apply (Hinj x y Hxy Hxv Hyv). exact Heq.
+    + exfalso.
+      assert (Hdfn_y_nonzero: dfn s y <> 0). {
+        intro Hzero. apply (proj1 (Hiff y)) in Hzero. exact (Hzero Hyv). }
+      assert (Hdfn_x_zero: dfn s x = 0). {
+        apply (proj2 (Hiff x)). exact Hnxv. }
+      apply Hdfn_y_nonzero. rewrite <- Heq. exact Hdfn_x_zero.
+Qed.
 
 End IS_DFN.
