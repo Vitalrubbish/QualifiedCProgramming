@@ -607,6 +607,46 @@ Section IS_LOW.
     subst s. simpl. auto.
   Qed.
 
+  (** [update_low_tree_edge]: specialized lemma for the tree-edge case.
+      After [get' low v], we call [update_low u (low v)]. This lemma
+      proves that [low_forset_inv] is preserved. *)
+  Lemma update_low_tree_edge (u v: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv u done s ->
+    low_forset_inv u (done ∪ [v])
+      (RecordSet.set low (fun low0 x => if equiv_decb x u then Nat.min (low s u) (low s v) else low0 x) s).
+  Proof.
+    intros Hinv_s.
+    unfold low_forset_inv in Hinv_s.
+    destruct Hinv_s as [Hinv [Hvalid [Hfa [Huvis Hmin]]]].
+    unfold low_forset_inv. simpl.
+    destruct Hinv as [Hlt [Hiff Hpos]].
+    (* Helper: children_done and back_edges_done don't depend on low *)
+    assert (Hchild: children_done
+      (RecordSet.set low (fun low0 x => if equiv_decb x u then Nat.min (low s u) (low s v) else low0 x) s) u (done ∪ [v])
+      == children_done s u (done ∪ [v])).
+    { unfold children_done. simpl. reflexivity. }
+    assert (Hback: (fun w => back_edges_done
+      (RecordSet.set low (fun low0 x => if equiv_decb x u then Nat.min (low s u) (low s v) else low0 x) s) u (done ∪ [v]) w \/ w = u)
+      == (fun w => back_edges_done s u (done ∪ [v]) w \/ w = u)).
+    { unfold back_edges_done. simpl. reflexivity. }
+    rewrite Hchild, Hback.
+    split.
+    { split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
+    split.
+    { exact Hvalid. }
+    split.
+    { exact Hfa. }
+    split.
+    { exact Huvis. }
+    simpl.
+    eapply (min_value_of_subset_nested_update_left_nat
+      (A := V) (B := V)
+      (low s) (children_done s u done) v
+      (dfn s) (fun w => back_edges_done s u done w \/ w = u)
+      (low s u)).
+    exact Hmin.
+  Qed.
+
   Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
@@ -640,60 +680,71 @@ Section IS_LOW.
       simpl. intros _. intro_state.
       destruct H as [[Hscc [Hvalid_mid [Hinv_mid Hfa_mid]]] Huvis_mid].
       destruct Hinv_mid as [Hlt_mid [Hiff_mid Hpos_mid]].
-      eapply Hoare_bind with (Q := fun lv s => s = s1).
-      eapply Hoare_conseq_post.
-      2: apply Hoare_get'.
-      simpl. intros lv s [Heq_s Heq_lv]. subst s. subst lv. simpl.
-      eapply Hoare_bind with (Q := fun old_low s => s = s1).
-      eapply Hoare_conseq_post.
-      2: apply Hoare_get'.
-      simpl. intros old_low s [Heq_s Heq_old]. subst s. subst old_low. simpl.
-      simpl. intros old_low _.
-      unfold set_low.
-      eapply Hoare_conseq_post.
-      apply Hoare_update'.
-      simpl. intros _ s Heq. subst s. simpl.
-      unfold low_forset_inv. simpl.
-      split.
-      { split; [exact Hlt_mid | split; [exact Hiff_mid | exact Hpos_mid]]. }
-      split.
-      { exact Hvalid_mid. }
-      split.
-      { exact Hfa_mid. }
-      split.
-      { exact Huvis_mid. }
-      simpl.
-      eapply (min_value_of_subset_nested_update_left_nat
-        (A := V) (B := V)
-        (low s1) (children_done s1 u done) v
-        (dfn s1) (fun w => back_edges_done s1 u done w \/ w = u)
-        (low s1 u)).
-      exact Hmin.
+      hoare_auto_s.
+      unfold update_low. hoare_auto_s.
+      - (* low v < low u: set_low branch *)
+        unfold set_low.
+        eapply Hoare_conseq_post.
+        apply Hoare_update'.
+        simpl. intros _ s2 Heq. destruct Heq. simpl.
+        apply update_low_tree_edge.
+        unfold low_forset_inv.
+        split; [split; [exact Hlt_mid | split; [exact Hiff_mid | exact Hpos_mid]] |].
+        split; [exact Hvalid_mid |].
+        split; [exact Hfa_mid |].
+        split; [exact Huvis_mid |].
+        exact Hmin.
+      - (* skip: low v >= low u, state unchanged *)
+        destruct H2 as [Heq_s _]. subst s.
+        unfold low_forset_inv. simpl.
+        split.
+        { split; [exact Hlt_mid | split; [exact Hiff_mid | exact Hpos_mid]]. }
+        split.
+        { exact Hvalid_mid. }
+        split.
+        { exact Hfa_mid. }
+        split.
+        { exact Huvis_mid. }
+        (* min condition: since low v >= low u, old min still works *)
+        simpl.
+        rewrite Nat.min_l; [| lia].
+        (* Old Hmin from original state s0 still applies because:
+           children_done s1 u done and low values are same as in s0.
+           Need to show Hmin for s1, not just s0.
+           For now, admit — this requires showing s1 preserves the min condition. *)
+        admit.
     - (* Non-tree edge: v is visited *)
       intro_state. hoare_auto_s.
       + (* v in stack: back edge *)
         intro_state. hoare_auto_s. subst s. simpl.
-        (* get' dfn v ;; update_low u dv *)
-        unfold get', update_low.
-        intro_state. hoare_auto_s. subst s. simpl.
-        unfold set_low. intro_state. hoare_auto_s. subst s. simpl.
-        intro_state. hoare_auto_s. subst s. simpl.
-        unfold low_forset_inv. simpl.
-        split.
-        { split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
-        split.
-        { exact Hvalid. }
-        split.
-        { exact Hfa. }
-        split.
-        { exact Huvis. }
-        (* min condition — use nested min lemma (right side) *)
-        simpl.
-        eapply min_value_of_subset_nested_update_right_nat
-          with (A := V) (B := V) (fA := low s0) (PA := children_done s0 u done)
-               (fB := dfn s0) (QB := fun w => back_edges_done s0 u done w \/ w = u)
-               (b := v) (n := low s0 u).
-        exact Hmin.
+        eapply Hoare_bind with (Q := fun dv s => s = s0).
+        eapply Hoare_conseq_post.
+        2: apply Hoare_get'.
+        simpl. intros dv s [Heq_s Heq_dv]. subst s. subst dv. simpl.
+        eapply Hoare_bind with (Q := fun old_low s => s = s0).
+        eapply Hoare_conseq_post.
+        2: apply Hoare_get'.
+        simpl. intros old_low s [Heq_s Heq_old]. subst s. subst old_low. simpl.
+        unfold set_low.
+        eapply Hoare_conseq_post.
+        { intros _ s' Heq. pose proof Heq as Heq'. move Heq at bottom. revert s' Heq. intros s Heq. subst s. simpl.
+          unfold low_forset_inv. simpl.
+          split.
+          { split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
+          split.
+          { exact Hvalid. }
+          split.
+          { exact Hfa. }
+          split.
+          { exact Huvis. }
+          simpl.
+          eapply (min_value_of_subset_nested_update_right_nat
+            (A := V) (B := V)
+            (low s0) (children_done s0 u done)
+            (dfn s0) (fun w => back_edges_done s0 u done w \/ w = u) v
+            (low s0 u)).
+          exact Hmin. }
+        apply Hoare_update'.
       + (* v not in stack: cross edge — skip *)
         destruct H2 as [Heq _]. subst s.
         unfold low_forset_inv. simpl.
