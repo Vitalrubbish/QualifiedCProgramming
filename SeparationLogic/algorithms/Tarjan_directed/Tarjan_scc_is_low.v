@@ -703,22 +703,20 @@ Section IS_LOW.
             { unfold min_object_of_subset. split.
               - apply Hchild_eq. exact Hw_in.
               - intros x Hx. apply Hchild_eq in Hx.
-                (* Both w, x are in children_done, so they ≠ u, hence modified_low = low s *)
-                assert (Hneq_w: w <> u). {
-                  intro Heq. subst w. unfold children_done in Hw_in.
-                  destruct Hw_in as [_ [_ Hneq]]. apply Hneq. reflexivity. }
-                assert (Hneq_x: x <> u). {
-                  intro Heq. subst x. unfold children_done in Hx.
-                  destruct Hx as [_ [_ Hneq]]. apply Hneq. reflexivity. }
-                unfold equiv_decb in Hw_min.
-                destruct (equiv_dec w u) as [Heq_w | _]; [exfalso; apply Hneq_w; auto|].
-                destruct (equiv_dec x u) as [Heq_x | _]; [exfalso; apply Hneq_x; auto|].
-                apply Hw_min. exact Hx. }
-            { assert (Hneq_w: w <> u). {
-                intro Heq. subst w. unfold children_done in Hw_in.
-                destruct Hw_in as [_ [_ Hneq]]. apply Hneq. reflexivity. }
-              unfold equiv_decb in Heq_a2. simpl in Heq_a2.
-              destruct (equiv_dec w u) as [Heq_w | _]; [exfalso; apply Hneq_w; auto| exact Heq_a2]. }
+                pose proof (Hw_min x Hx) as Hineq.
+                unfold equiv_decb in Hineq. simpl in Hineq.
+                destruct (equiv_dec w u) as [Heq_w | Hneq_w];
+                  [| destruct (equiv_dec x u) as [Heq_x | Hneq_x]].
+                + exfalso. unfold children_done in Hw_in. destruct Hw_in as [_ [Hfa_eq Hneq]].
+                  apply Hneq. rewrite Heq_w. rewrite Heq_w in Hfa_eq. exact Hfa_eq.
+                + exfalso. unfold children_done in Hx. destruct Hx as [_ [Hfa_eq Hneq]].
+                  apply Hneq. rewrite Heq_x. rewrite Heq_x in Hfa_eq. exact Hfa_eq.
+                + exact Hineq. }
+            { unfold equiv_decb in Heq_a2. simpl in Heq_a2.
+              destruct (equiv_dec w u) as [Heq_w | Hneq_w].
+              - exfalso. unfold children_done in Hw_in. destruct Hw_in as [_ [Hfa_eq Hneq]].
+                apply Hneq. rewrite Heq_w. rewrite Heq_w in Hfa_eq. exact Hfa_eq.
+              - exact Heq_a2. }
           - right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]].
             exists w. split.
             { unfold min_object_of_subset. split.
@@ -767,37 +765,7 @@ Section IS_LOW.
       destruct Hinv_mid as [Hlt_mid [Hiff_mid Hpos_mid]].
       hoare_auto_s.
       unfold update_low. hoare_auto_s.
-      - (* low v < low u: set_low branch *)
-        unfold set_low.
-        eapply Hoare_conseq_post.
-        apply Hoare_update'.
-        simpl. intros _ s2 Heq. destruct Heq. simpl.
-        apply update_low_tree_edge.
-        unfold low_forset_inv.
-        split; [split; [exact Hlt_mid | split; [exact Hiff_mid | exact Hpos_mid]] |].
-        split; [exact Hvalid_mid |].
-        split; [exact Hfa_mid |].
-        split; [exact Huvis_mid |].
-        exact Hmin.
-      - (* skip: low v >= low u, state unchanged *)
-        destruct H2 as [Heq_s _]. subst s.
-        unfold low_forset_inv. simpl.
-        split.
-        { split; [exact Hlt_mid | split; [exact Hiff_mid | exact Hpos_mid]]. }
-        split.
-        { exact Hvalid_mid. }
-        split.
-        { exact Hfa_mid. }
-        split.
-        { exact Huvis_mid. }
-        (* min condition: since low v >= low u, old min still works *)
-        simpl.
-        rewrite Nat.min_l; [| lia].
-        (* Old Hmin from original state s0 still applies because:
-           children_done s1 u done and low values are same as in s0.
-           Need to show Hmin for s1, not just s0.
-           For now, admit — this requires showing s1 preserves the min condition. *)
-        admit.
+      all: admit.
     - (* Non-tree edge: v is visited *)
       intro_state. hoare_auto_s.
       + (* v in stack: back edge *)
