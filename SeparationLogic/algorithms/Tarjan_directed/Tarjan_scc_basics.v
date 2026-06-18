@@ -8,6 +8,7 @@ Require Import SetsClass.SetsClass.
 From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
 From GraphLib Require Import graph_basic Syntax.
 From GraphLib.examples Require Import tarjan.
+From MaxMinLib Require Import MaxMin Interface.
 From Algorithms.Tarjan_directed Require Import SCC_basic Tarjan_scc.
 
 Import SetsNotation.
@@ -1300,6 +1301,167 @@ Proof.
         -- apply H; auto.
         -- subst; exact Hnn.
 Qed.
+
+(* ================================================================ *)
+(* Nested min_value_of_subset Update Lemmas                          *)
+(* ================================================================ *)
+
+Section NestedMinUpdateNat.
+
+  Theorem min_value_of_subset_nested_update_left_nat
+    {A B: Type}
+    (fA: A -> nat) (PA: A -> Prop) (a: A)
+    (fB: B -> nat) (QB: B -> Prop)
+    (n: nat):
+    min_value_of_subset Nat.le
+      (min_value_of_subset Nat.le PA fA ∪ min_value_of_subset Nat.le QB fB) id n ->
+    min_value_of_subset Nat.le
+      (min_value_of_subset Nat.le (PA ∪ [a]) fA ∪ min_value_of_subset Nat.le QB fB) id
+      (Nat.min n (fA a)).
+  Proof.
+    intros Hmin_old.
+    unfold id in *. (* remove identity function wrappers *)
+    pose proof (min_union_iff fA PA [a]) as Hsplit_eq.
+    assert (Hsing: min_value_of_subset Nat.le [a] fA (fA a)). {
+      exists a. split.
+      - unfold min_object_of_subset. split.
+        + sets_unfold. reflexivity.
+        + intros b Hb. sets_unfold in Hb. subst b. apply Nat.le_refl.
+      - reflexivity.
+    }
+    destruct (Nat.le_ge_cases n (fA a)) as [Hle | Hge].
+    - (* n <= fA a: result = n *)
+      rewrite Nat.min_l; [| exact Hle].
+      destruct Hmin_old as [m [[Hm_in Hm_min] Heq_m]].
+      rewrite <- Heq_m.
+      exists m. split.
+      + unfold min_object_of_subset. split.
+        * (* m in new outer set *)
+          sets_unfold.
+          destruct Hm_in as [Hm_L | Hm_R].
+          -- (* m ∈ L = min(PA,fA) -> m ∈ min(PA∪[a],fA) *)
+            left. apply (proj2 (Hsplit_eq m)).
+            exists m. split.
+            { unfold min_object_of_subset. split.
+              - sets_unfold. left. exact Hm_L.
+              - intros y Hy. sets_unfold in Hy.
+                destruct Hy as [Hy_L | Hy_R].
+                + (* y ∈ L = min(PA,fA) *)
+                  unfold min_value_of_subset in Hy_L.
+                  destruct Hy_L as [a0 [[Ha0_in Ha0_min] Heq_y]].
+                  destruct Hm_L as [am [[Ham_in Ham_min] Heq_m_val]].
+                  rewrite <- Heq_m_val, <- Heq_y.
+                  apply Ham_min. exact Ha0_in.
+                + (* y ∈ min([a], fA) = {fA a}. But m = n ≤ fA a *)
+                  unfold min_value_of_subset in Hy_R.
+                  destruct Hy_R as [a' [[Ha'_in Ha'_min] Heq_y]].
+                  sets_unfold in Ha'_in. subst a'. rewrite <- Heq_y.
+                  rewrite Heq_m. exact Hle. }
+            { reflexivity. }
+          -- (* m ∈ R unchanged *)
+            right. exact Hm_R.
+        * (* minimality *)
+          intros b Hb. sets_unfold in Hb.
+          destruct Hb as [Hb_L' | Hb_R].
+          -- (* b ∈ min(PA∪[a],fA) *)
+            apply (proj1 (Hsplit_eq b)) in Hb_L'.
+            unfold min_value_of_subset in Hb_L'.
+            destruct Hb_L' as [b0 [[Hb0_in Hb0_min] Heq_b0]].
+            subst b.
+            sets_unfold in Hb0_in.
+            destruct Hb0_in as [Hb0_L | Hb0_sing].
+            ++ (* b0 from L *)
+               apply Hm_min. sets_unfold. left. exact Hb0_L.
+            ++ (* b0 from [a]: so b0 = fA a, and n ≤ fA a *)
+               destruct Hb0_sing as [a' [[Ha'_in Ha'_min] Heq_b0']].
+               sets_unfold in Ha'_in. subst a'. subst b0.
+               rewrite Heq_m. exact Hle.
+          -- (* b ∈ R unchanged *)
+            apply Hm_min. sets_unfold. right. exact Hb_R.
+      + reflexivity.
+    - (* fA a < n: result = fA a *)
+      rewrite Nat.min_r; [| exact Hge].
+      exists (fA a). split.
+      + unfold min_object_of_subset. split.
+        * (* fA a in new outer set via min(PA∪[a],fA) *)
+          sets_unfold. left.
+          apply (proj2 (Hsplit_eq (fA a))).
+          exists (fA a). split.
+          { unfold min_object_of_subset. split.
+            - sets_unfold. right.
+              unfold min_value_of_subset.
+              exists a. split.
+              { unfold min_object_of_subset. split.
+                - sets_unfold. reflexivity.
+                - intros b Hb. sets_unfold in Hb. subst b. apply Nat.le_refl. }
+              { reflexivity. }
+            - intros y Hy. sets_unfold in Hy.
+              destruct Hy as [Hy_L | Hy_R].
+              + (* y ∈ L = min(PA, fA) *)
+                destruct Hmin_old as [mm [[Hmm_in Hmm_min] Heq_mm]].
+                destruct Hy_L as [a0 [[Ha0_in Ha0_min] Heq_y]].
+                rewrite <- Heq_y.
+                assert (Hn_le_a0: n <= fA a0). {
+                  rewrite <- Heq_mm.
+                  apply Hmm_min. sets_unfold. left.
+                  exists a0. split; auto. split; auto. }
+                apply (Nat.le_trans _ _ _ Hge Hn_le_a0).
+              + (* y ∈ min([a], fA): y = fA a *)
+                destruct Hy_R as [a' [[Ha'_in Ha'_min] Heq_y]].
+                sets_unfold in Ha'_in. subst a'. rewrite <- Heq_y.
+                apply Nat.le_refl. }
+          { reflexivity. }
+        * (* minimality *)
+          intros b Hb. sets_unfold in Hb.
+          destruct Hb as [Hb_L' | Hb_R].
+          -- (* b ∈ min(PA∪[a],fA) *)
+            apply (proj1 (Hsplit_eq b)) in Hb_L'.
+            unfold min_value_of_subset in Hb_L'.
+            destruct Hb_L' as [b0 [[Hb0_in Hb0_min] Heq_b0]].
+            subst b.
+            sets_unfold in Hb0_in.
+            destruct Hb0_in as [Hb0_L | Hb0_sing].
+            ++ (* b0 from L *)
+               destruct Hmin_old as [mm [[Hmm_in Hmm_min] Heq_mm]].
+               assert (Hn_le_b0: n <= b0). {
+                 rewrite <- Heq_mm.
+                 apply Hmm_min. sets_unfold. left. exact Hb0_L.
+               }
+               exact (Nat.le_trans _ _ _ Hge Hn_le_b0).
+            ++ (* b0 from [a]: b0 = fA a *)
+               destruct Hb0_sing as [a' [[Ha'_in Ha'_min] Heq_b0']].
+               sets_unfold in Ha'_in. subst a'. subst b0.
+               apply Nat.le_refl.
+          -- (* b ∈ R *)
+            destruct Hmin_old as [mm [[Hmm_in Hmm_min] Heq_mm]].
+            assert (Hn_le_b: n <= b). {
+              rewrite <- Heq_mm.
+              apply Hmm_min. sets_unfold. right. exact Hb_R.
+            }
+            exact (Nat.le_trans _ _ _ Hge Hn_le_b).
+      + reflexivity.
+  Qed.
+
+  Theorem min_value_of_subset_nested_update_right_nat
+    {A B: Type}
+    (fA: A -> nat) (PA: A -> Prop)
+    (fB: B -> nat) (QB: B -> Prop) (b: B)
+    (n: nat):
+    min_value_of_subset Nat.le
+      (min_value_of_subset Nat.le PA fA ∪ min_value_of_subset Nat.le QB fB) id n ->
+    min_value_of_subset Nat.le
+      (min_value_of_subset Nat.le PA fA ∪ min_value_of_subset Nat.le (QB ∪ [b]) fB) id
+      (Nat.min n (fB b)).
+  Proof.
+    intros Hmin_old.
+    rewrite (Sets_union_comm (min_value_of_subset Nat.le PA fA)
+      (min_value_of_subset Nat.le (QB ∪ [b]) fB)).
+    rewrite (Sets_union_comm (min_value_of_subset Nat.le PA fA)
+      (min_value_of_subset Nat.le QB fB)) in Hmin_old.
+    apply min_value_of_subset_nested_update_left_nat with (a := b); auto.
+  Qed.
+
+End NestedMinUpdateNat.
 
 End BASICS.
  
