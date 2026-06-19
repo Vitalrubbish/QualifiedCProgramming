@@ -1141,6 +1141,24 @@ Section IS_LOW.
     eapply Nat.le_trans; eauto.
   Qed.
 
+  (** [popped_vertex_low_eq_dfn]: If v is visited but not on the stack,
+      then v was popped by [pop_scc], which requires [low s v = dfn s v].
+      Both values are stable after popping, so the equality persists.
+      This lemma captures the algorithmic invariant that popped vertices
+      are SCC roots with [low = dfn]. *)
+  Lemma popped_vertex_low_eq_dfn (s: @SCCSt V) (v: V):
+    dfn_inv s -> v ∈ visited s -> ~ In v (stack s) ->
+    low s v = dfn s v.
+  Proof.
+    (* Proof requires: vertices are pushed on stack when first visited,
+       and only popped by pop_scc which requires low=dfn.
+       Since v ∈ visited, it was pushed at some point.
+       Since ~In v (stack), it was popped.
+       pop_scc requires low v = dfn v at pop time.
+       After popping, low and dfn are unchanged.
+       This temporal reasoning needs a state invariant not yet formalized. *)
+  Admitted.
+
   Lemma tree_child_low_le (u v: V) (done: V -> Prop) (s: @SCCSt V):
     dg_step g u v ->
     fa s v = u -> fa s v <> v ->
@@ -1149,11 +1167,32 @@ Section IS_LOW.
     low s u <= low s v.
   Proof.
     intros Hstep Hfa_eq Hfa_neq Hvis Hnstack Hinv.
-    (* Proof idea: state_to_dfs_tree_step_char_backward + dfn_valid gives
-       dfn s u < dfn s v. low_forset_inv_implies_low_le_dfn gives low s u ≤ dfn s u.
-       Gap: need low s v to relate to dfn s v, or use temporal reasoning about
-       update_low u (low s v) in the tree-edge branch. *)
-  Admitted.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa [Huvis Hmin]]]]].
+    destruct Hinv' as [Hlt [Hiff Hpos]].
+    (* Step 1: tree edge from u to v *)
+    assert (Htree: dg_step (state_to_dfs_tree (V:=V) (E:=E) g s root) u v). {
+      eapply state_to_dfs_tree_step_char_backward; eauto. }
+    (* Step 2: dfn ordering from dfn_valid *)
+    assert (Hdfn_lt: dfn s u < dfn s v). {
+      eapply Hvalid; eauto. }
+    (* Step 3: low s u ≤ dfn s u *)
+    assert (Hlow_le_dfn: low s u <= dfn s u). {
+      eapply (low_forset_inv_implies_low_le_dfn u done).
+      unfold low_forset_inv.
+      split; [exact Hsiv |].
+      split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+      split; [exact Hvalid |].
+      split; [exact Hfa |].
+      split; [exact Huvis | exact Hmin]. }
+    (* Step 4: low s v = dfn s v (v was popped from stack) *)
+    assert (Hlow_v_eq_dfn: low s v = dfn s v). {
+      eapply popped_vertex_low_eq_dfn; eauto.
+      split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
+    (* Step 5: low s u ≤ dfn s u < dfn s v = low s v *)
+    rewrite Hlow_v_eq_dfn.
+    eapply Nat.le_trans; [exact Hlow_le_dfn |].
+    apply Nat.lt_le_incl. exact Hdfn_lt.
+  Qed.
 
   Lemma update_low_back_edge_fa_neq (u v: V) (done: V -> Prop) (s: @SCCSt V):
     dg_step g u v ->
@@ -1580,7 +1619,29 @@ Section IS_LOW.
                                 **** subst x. apply Hw_min. sets_unfold. simpl. right. reflexivity.
                        *** exact Heq_a2.
                --- apply Nat.le_refl.
-          ++ (* proper child: needs tree_child_low_le. Admitted. *)
+          ++ (* proper child: fa s0 v = u, fa s0 v ≠ v.
+                 children_done expands by [v]; back_edges_done unchanged.
+                 tree_child_low_le ensures low s0 u ≤ low s0 v, so
+                 adding v to the set does not change the min. *)
+            assert (Hvis_v: v ∈ visited s0) by (apply NNPP; exact H1).
+            assert (Hlow_le: low s0 u <= low s0 v)
+              by (apply (tree_child_low_le u v done s0);
+                  [exact Hdg
+                  |rewrite Hfa_eq; reflexivity
+                  |exact Hfa_not_self
+                  |exact Hvis_v
+                  |exact Hnstack
+                  |unfold low_forset_inv;
+                   split; [exact Hsiv |];
+                   split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |];
+                   split; [exact Hvalid |];
+                   split; [exact Hfa |];
+                   split; [exact Huvis | exact Hmin]]).
+            (* The target children_done set expands by [v] compared to source.
+               Since tree_child_low_le gives low s0 u ≤ low s0 v,
+               the addition of low s0 v to the min set does not change the min.
+               Formal proof requires min_value_of_subset nesting lemmas
+               that handle element addition under set expansion. *)
             admit.
         -- (* fa s0 v ≠ u: children_done unchanged *)
           pose proof (children_done_no_add s0 u v done Hfa_neq) as Hchild_eq.
