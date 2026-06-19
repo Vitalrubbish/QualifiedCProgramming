@@ -1765,7 +1765,55 @@ Section IS_LOW.
       intros b st Hfinv.
       destruct Hfinv as [Hsiv [Hinv [Hvalid [Hfa_vis [Huvis Hmin]]]]].
       split; [| split; [exact Hvalid | split; [exact Hinv | exact Hfa_vis]]].
-      (* TODO *)
+      (* Goal: scc_low_valid_v st u *)
+      unfold scc_low_valid_v.
+      destruct Hinv as [Hdfn_lt [Hdfn_zero Hpos]].
+      (* Key set equivalences:
+         (A) children_done st u (dg_step g u) == dg_step (state_to_dfs_tree g st root) u
+         (B) (w | back_edges_done st u (dg_step g u) w \/ w = u) ==
+             (w | scc_back_edge st u w \/ w = u)
+         (B) is provable; (A) requires additional invariants.
+         We prove (B) inline and admit (A) as a focused gap. *)
+      assert (Hback_eq: (fun w => back_edges_done st u (dg_step g u) w \/ w = u) ==
+                        (fun w => scc_back_edge st u w \/ w = u)). {
+        apply Sets_equiv_Sets_included. split.
+        - sets_unfold. intros w [Hback | Heq].
+          + unfold back_edges_done in Hback. sets_unfold in Hback.
+            destruct Hback as [Hneigh [Hinstack Hfa_neq]].
+            sets_unfold. left.
+            unfold scc_back_edge.
+            split; [exact Hneigh | split; [exact Hinstack |]].
+            intro Htree.
+            apply state_to_dfs_tree_step_char in Htree.
+            destruct Htree as [Hfa_eq _].
+            apply Hfa_neq. exact Hfa_eq.
+          + subst w. sets_unfold. right. reflexivity.
+        - sets_unfold. intros w [Hback | Heq].
+          + unfold scc_back_edge in Hback.
+            destruct Hback as [Hneigh [Hinstack Hnot_tree]].
+            destruct (equiv_dec (fa st w) u) as [Hfa_eq | Hfa_neq].
+            * (* fa st w = u *)
+              destruct (equiv_dec u w) as [Heq_uw | Hneq_uw].
+              { (* u = w: map to [u] *)
+                rewrite <- Heq_uw. sets_unfold. right. reflexivity. }
+              { (* u ≠ w: derive tree edge, contradict Hnot_tree *)
+                assert (Hfa_neq_self: fa st w <> w). {
+                  rewrite Hfa_eq. exact Hneq_uw. }
+                exfalso. apply Hnot_tree.
+                eapply state_to_dfs_tree_step_char_backward;
+                  [exact Hneigh | exact Hfa_eq | exact Hfa_neq_self |].
+                apply (stack_in_visited_impl st w Hsiv Hinstack). }
+            * (* fa st w ≠ u: direct mapping to back_edges_done *)
+              sets_unfold. left. unfold back_edges_done. sets_unfold.
+              split; [exact Hneigh | split; [exact Hinstack | exact Hfa_neq]].
+          + subst w. sets_unfold. right. reflexivity. }
+      (* Goal: scc_low_valid_v st u.
+         From Hmin (low_forset_inv min condition) we can transfer using:
+         - Hback_eq: back_edges_done(neighbors)∪[u] == scc_back_edge∪[u] (proved above)
+         - children_done(neighbors) == tree_edges(u)
+           (requires invariants: fa-implies-visited, fa-implies-dg_step)
+         Since proper min_value_of_subset setoid rewriting is not available,
+         the transfer is admitted here. Blocked by children_done_set_equiv. *)
       admit. }
     eapply (@Hoare_forset SCCSt V (fun done s => low_forset_inv u done s)
       (fun v => dg_step g u v) (process_edge u W)).
