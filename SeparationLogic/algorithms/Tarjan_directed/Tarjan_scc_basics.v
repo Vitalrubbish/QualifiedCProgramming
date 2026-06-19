@@ -209,6 +209,33 @@ Proof.
   subst s. simpl. left; reflexivity.
 Qed.
 
+(** [push_stack_keep_stack_in_visited]: push_stack preserves
+    [stack_in_visited], provided the vertex being pushed is already
+    visited. This is the key lemma for establishing [stack_in_visited]
+    as an invariant. *)
+Lemma push_stack_keep_stack_in_visited (v: V):
+  Hoare (fun s: @SCCSt V => v ∈ visited s /\ stack_in_visited s)
+        (push_stack v)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold push_stack. intro_state. hoare_auto_s.
+  subst s. simpl. unfold stack_in_visited. intros w [Hw | Hw].
+  - subst w. destruct H as [Hvis _]. exact Hvis.
+  - destruct H as [_ Hsi]. apply Hsi. exact Hw.
+Qed.
+
+Lemma stack_in_visited_init: stack_in_visited initSt.
+Proof.
+  unfold stack_in_visited, initSt. simpl.
+  intros v H. destruct H.
+Qed.
+
+(** [stack_in_visited_impl]: extract the state-level implication from
+    the [stack_in_visited] predicate. *)
+Lemma stack_in_visited_impl (s: @SCCSt V) (v: V):
+  stack_in_visited s -> In v (stack s) -> v ∈ visited s.
+Proof. unfold stack_in_visited. auto. Qed.
+
 Lemma update_low_keep_visited (u w: V) (n: nat):
   Hoare (fun s: @SCCSt V => w ∈ visited s)
         (update_low u n)
@@ -269,6 +296,29 @@ Proof.
   subst s. unfold pop_scc_state.
   destruct (stack_split_at (stack s0) u) as [popped rest] eqn:?.
   simpl. auto.
+Qed.
+
+(** [pop_scc_keep_stack_in_visited]: pop_scc only removes vertices
+    from the stack, so it preserves [stack_in_visited]. *)
+Lemma pop_scc_keep_stack_in_visited (u: V):
+  Hoare (fun s: @SCCSt V => stack_in_visited s)
+        (pop_scc u)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold pop_scc. intro_state. hoare_auto_s.
+  subst s. unfold pop_scc_state. simpl.
+  destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
+  unfold stack_in_visited. intros w Hw.
+  apply H. (* Use precondition: In w (stack s0) → w ∈ visited s0 *)
+  (* Need: In w (stack s0). From Hsplit: stack_split returns (popped, rest). *)
+  revert u popped rest Hsplit Hw.
+  induction (stack s0) as [| x xs IH]; intros u popped rest Hsplit Hw.
+  - cbn in Hsplit. inversion Hsplit. subst popped rest. cbn in Hw. destruct Hw.
+  - cbn in Hsplit.
+    destruct (equiv_decb x u) eqn:Heqx.
+    + inversion Hsplit. subst popped rest. simpl. right. exact Hw.
+    + destruct (stack_split_at xs u) as [popped' rest'] eqn:Hsplit_inner.
+      inversion Hsplit. subst popped rest. simpl. right. apply (IH u popped' rest' Hsplit_inner Hw).
 Qed.
 
 Lemma pop_scc_keep_dfn (u w: V) (dfnw: nat):
@@ -333,6 +383,22 @@ Lemma preloop_in_stack (u: V):
 Proof.
   unfold preloop. unfold_op. intro_state. hoare_auto_s.
   subst s. simpl. left; reflexivity.
+Qed.
+
+(** [preloop_keep_stack_in_visited]: preloop u preserves [stack_in_visited]
+    because it visits u before pushing it. *)
+Lemma preloop_keep_stack_in_visited (u: V):
+  Hoare (fun s: @SCCSt V => stack_in_visited s)
+        (preloop u)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold preloop. unfold_op. intro_state. hoare_auto_s.
+  subst s. simpl.
+  unfold stack_in_visited. intros w [Hw | Hw].
+  - subst w. sets_unfold. right; reflexivity.
+  - (* w ∈ stack s0. H: stack_in_visited s0 gives w ∈ visited s0.
+       Post-state visited = visited s0 ∪ [u], so w is still visited. *)
+    simpl. sets_unfold. left. apply H. exact Hw.
 Qed.
 
 Lemma preloop_dfn_set (u: V) (t: nat):
