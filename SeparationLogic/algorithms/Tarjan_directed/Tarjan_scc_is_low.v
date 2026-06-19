@@ -2025,6 +2025,10 @@ Section IS_LOW.
               (Q2 := fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
             { intros _ s' Hfa_uni v [Hfa_eq Hfa_neq].
               apply Hfa_uni. split; [exact Hfa_eq | exact Hfa_neq]. }
+            (* Need lemma: tarjan_scc_keep_fa_not_set_to u a.
+               Hoare (fa_children_in_universe u) (W a) (fa_children_in_universe u).
+               W a = tarjan_scc a only calls set_fa v center where center = a
+               (or descendant), never u. So fa s v = u is never newly established. *)
             admit. }
           simpl. intros _.
           eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
