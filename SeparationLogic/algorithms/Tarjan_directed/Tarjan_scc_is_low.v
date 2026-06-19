@@ -1067,6 +1067,26 @@ Section IS_LOW.
           -- apply Nat.le_refl.
   Qed.
 
+  (** [tree_child_low_le]: If v is a proper tree child of u ([fa s v = u],
+      [fa s v ≠ v]), and v has been visited but is no longer on the stack
+      (its SCC was already popped), then [low s u ≤ low s v].
+
+      This holds because the tree edge from u to v was processed earlier,
+      calling [update_low u (low v)], which set [low s u := min(old, low s v)].
+      Proving this requires either (a) the full [scc_low_valid_v] invariant
+      (which includes all tree children in its min structure, not just
+      [children_done]), or (b) a pointwise [low ≤ dfn] invariant for all nodes
+      combined with the DFS-tree dfn ordering.
+
+      For now, this lemma is stated but not yet proven. *)
+  Lemma tree_child_low_le (u v: V) (done: V -> Prop) (s: @SCCSt V):
+    fa s v = u -> fa s v <> v ->
+    v ∈ visited s -> ~ In v (stack s) ->
+    low_forset_inv u done s ->
+    low s u <= low s v.
+  Proof.
+  Admitted.
+
   Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
