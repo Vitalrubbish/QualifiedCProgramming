@@ -3,6 +3,7 @@ Require Import Coq.Logic.Classical_Prop.
 Require Import Coq.Classes.EquivDec.
 Require Import Coq.Arith.PeanoNat.
 Require Import Coq.Relations.Relations.
+Require Import Coq.Classes.Morphisms.
 Require Import Lia.
 Require Import SetsClass.SetsClass.
 From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
@@ -1268,6 +1269,112 @@ Section IS_LOW.
   (* 11. Forset Induction                                              *)
   (* ================================================================ *)
 
+  (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
+      morphism w.r.t. set equivalence of [done].  When [done1 == done2],
+      the [children_done] and [back_edges_done] sets are equivalent,
+      so the nested min condition transfers via [min_eq_forward]. *)
+  Lemma low_forset_inv_proper u: Proper (Sets.equiv ==> eq ==> iff) (low_forset_inv u).
+  Proof.
+    intros done1 done2 Hequiv s1 s2 Heq. subst s2.
+    assert (Hincl12: done1 ⊆ done2). {
+      apply Sets_equiv_Sets_included in Hequiv. tauto. }
+    assert (Hincl21: done2 ⊆ done1). {
+      apply Sets_equiv_Sets_included in Hequiv. tauto. }
+    assert (Hchild_eq: children_done s1 u done1 == children_done s1 u done2). {
+      unfold children_done.
+      apply Sets_equiv_Sets_included. split.
+      - sets_unfold. intros x [Hx_d1 [Hfa_x Hneq]]. split; [apply Hincl12; exact Hx_d1 | auto].
+      - sets_unfold. intros x [Hx_d2 [Hfa_x Hneq]]. split; [apply Hincl21; exact Hx_d2 | auto]. }
+    assert (Hback_eq: back_edges_done s1 u done1 == back_edges_done s1 u done2). {
+      unfold back_edges_done.
+      apply Sets_equiv_Sets_included. split.
+      - sets_unfold. intros x [Hx_d1 [Hst Hfa]]. split; [apply Hincl12; exact Hx_d1 | auto].
+      - sets_unfold. intros x [Hx_d2 [Hst Hfa]]. split; [apply Hincl21; exact Hx_d2 | auto]. }
+    split; intro Hlow; unfold low_forset_inv in Hlow;
+      destruct Hlow as [Hinv [Hval' [Hfa'' [Hvis' Hmin]]]];
+      destruct Hinv as [Hlt [Hiff' Hpos']].
+    - (* forward: done1 → done2 *)
+      split; [exact (conj Hlt (conj Hiff' Hpos')) |].
+      split; [exact Hval' |].
+      split; [exact Hfa'' |].
+      split; [exact Hvis' |].
+      eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+      + intros a1 Ha1. exists a1. split.
+        * destruct Ha1 as [Ha1_L | Ha1_R].
+          -- left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a1.
+          -- right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- simpl. left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. simpl. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a1.
+        * apply Nat.le_refl.
+      + intros a2 Ha2. exists a2. split.
+        * destruct Ha2 as [Ha2_L | Ha2_R].
+          -- left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a2.
+          -- right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- simpl. left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. simpl. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a2.
+        * apply Nat.le_refl.
+    - (* backward: done2 → done1, symmetric *)
+      split; [exact (conj Hlt (conj Hiff' Hpos')) |].
+      split; [exact Hval' |].
+      split; [exact Hfa'' |].
+      split; [exact Hvis' |].
+      eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+      + intros a1 Ha1. exists a1. split.
+        * destruct Ha1 as [Ha1_L | Ha1_R].
+          -- left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a1.
+          -- right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- simpl. left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. simpl. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a1.
+        * apply Nat.le_refl.
+      + intros a2 Ha2. exists a2. split.
+        * destruct Ha2 as [Ha2_L | Ha2_R].
+          -- left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a2.
+          -- right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- simpl. left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. simpl. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a2.
+        * apply Nat.le_refl.
+  Qed.
+
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
                      (fun _ s => low_post x s /\ u ∈ visited s)) ->
@@ -1288,9 +1395,8 @@ Section IS_LOW.
       admit. }
     eapply (@Hoare_forset SCCSt V (fun done s => low_forset_inv u done s)
       (fun v => dg_step g u v) (process_edge u W)).
-    - (* Proper: low_forset_inv u done s respects done equivalence.
-         Extracted to separate lemma low_forset_inv_proper (see below). *)
-      admit.
+    - (* Proper: low_forset_inv respects done set equivalence *)
+      exact (low_forset_inv_proper u).
     - (* Step: process_edge goes from done to done ∪ [a] *)
       intros done a Hdone_sub Huniv Hnot_done.
       apply (process_edge_keep_low_forset_inv u a done W). exact HW.
