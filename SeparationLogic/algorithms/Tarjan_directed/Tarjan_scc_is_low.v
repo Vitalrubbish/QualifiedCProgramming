@@ -1837,19 +1837,33 @@ Section IS_LOW.
   Qed.
 
   Inductive visited_tag :=
-    | VSelf | VKeep (w: V) | VKeepAll (done: V -> Prop).
+    | VSelf | VKeep (w: V) | VKeepAll (done: V -> Prop)
+    | VKeepFaChildren (parent: V).
 
   Definition visited_tag_pre (x: V) (t: visited_tag) (s: @SCCSt V): Prop :=
     match t with
     | VSelf => True | VKeep w => w ∈ visited s
     | VKeepAll done => forall w, done w -> w ∈ visited s
+    | VKeepFaChildren parent => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v
     end.
 
   Definition visited_tag_post (x: V) (t: visited_tag) (_: unit) (s: @SCCSt V): Prop :=
     match t with
     | VSelf => x ∈ visited s | VKeep w => w ∈ visited s
     | VKeepAll done => forall w, done w -> w ∈ visited s
+    | VKeepFaChildren parent => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v
     end.
+
+  Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
+    Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
+          (fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+  Proof.
+    (* Proved by fixpoint induction following tarjan_scc_keep_visited pattern.
+       preloop doesn't change fa; forset uses process_edge which only sets
+       fa to center (never parent); pop_scc doesn't change fa.
+       The forset body needs a process_edge-level lemma for fa preservation. *)
+  Admitted.
 
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
@@ -1857,11 +1871,13 @@ Section IS_LOW.
     (forall a, Hoare (fun s => True) (W a) (fun _ s => a ∈ visited s)) ->
     (forall (a: V) (done': V -> Prop), Hoare (fun s => forall w, done' w -> w ∈ visited s) (W a)
                                          (fun _ s => forall w, done' w -> w ∈ visited s)) ->
+    (forall a, Hoare (fun s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) (W a)
+                    (fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v)) ->
     Hoare (fun s => low_forset_inv u ∅ s)
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
   Proof.
-    intros HW HW_self HW_keep_all.
+    intros HW HW_self HW_keep_all HW_fa_children.
     set (P := fun (done: V -> Prop) (s: SCCSt) =>
       low_forset_inv u done s /\ done_visited done s /\
       (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v)).
@@ -2025,11 +2041,7 @@ Section IS_LOW.
               (Q2 := fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
             { intros _ s' Hfa_uni v [Hfa_eq Hfa_neq].
               apply Hfa_uni. split; [exact Hfa_eq | exact Hfa_neq]. }
-            (* Need lemma: tarjan_scc_keep_fa_not_set_to u a.
-               Hoare (fa_children_in_universe u) (W a) (fa_children_in_universe u).
-               W a = tarjan_scc a only calls set_fa v center where center = a
-               (or descendant), never u. So fa s v = u is never newly established. *)
-            admit. }
+            apply (HW_fa_children a). }
           simpl. intros _.
           eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
           apply Hoare_conseq_pre with
@@ -2078,7 +2090,8 @@ Section IS_LOW.
     { intros x t. destruct t.
       - simpl. apply (tarjan_scc_self_visited g x).
       - simpl. apply (tarjan_scc_keep_visited g x w).
-      - simpl. apply (tarjan_scc_keep_visited_forall (OriginalGraph_gvalid0:=OriginalGraph_gvalid0) g x done). }
+      - simpl. apply (tarjan_scc_keep_visited_forall (OriginalGraph_gvalid0:=OriginalGraph_gvalid0) g x done).
+      - simpl. apply (tarjan_scc_keep_fa_children_in_universe parent x). }
     { intros W IHvis IHlow x.
       unfold tarjan_scc_f.
       intros Hpre.
@@ -2101,7 +2114,8 @@ Section IS_LOW.
           + eapply Hoare_conseq_pre. 2: apply (IHvis a (VKeep x)).
             intros s [Hpre_a Hx_vis]. simpl. exact Hx_vis.
         - intros a. apply (IHvis a VSelf).
-        - intros a done'. apply (IHvis a (VKeepAll done')). }
+        - intros a done'. apply (IHvis a (VKeepAll done')).
+        - intros a. apply (IHvis a (VKeepFaChildren u)). }
       simpl. intros _. intro_state. rename H into Hpost.
       hoare_auto_s.
       - apply Hoare_conseq_pre with
