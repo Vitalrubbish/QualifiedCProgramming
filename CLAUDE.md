@@ -206,3 +206,6 @@ pet --version   # 0.2.x，rocq-mcp 交互式工具依赖
 1. 本项目的 github 远程仓库地址是 https://github.com/Vitalrubbish/QualifiedCProgramming
 - 如果需要将修改同步到远程仓库中，请使用 `git push fork main`；
 2. `commit message` 中只保留修改内容，不出现 `Co-Author` 信息；
+
+# 重要
+严禁使用除了Edit工具以外的其它任何手段来修改任何内容！！！
