@@ -1640,7 +1640,59 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
           (fun _ s => low_post u s).
   Proof.
-  Admitted.
+    (* Follow tarjan_scc_keep_dfn_valid pattern from Tarjan_scc_is_dfn.v.
+       Use Hoare_fix_logicv_conj with visitedness as auxiliary invariant. *)
+    unfold tarjan_scc.
+    apply (Hoare_fix_logicv_conj (tarjan_scc_f g)
+             (fun (x: V) (_: unit) (s: SCCSt) => low_pre x s)
+             (fun (x: V) (_: unit) (_: unit) (s: SCCSt) => low_post x s)
+             u tt
+             (fun (x: V) (d: V) (s: SCCSt) => d ∈ visited s)
+             (fun (x: V) (d: V) (_: unit) (s: SCCSt) => d ∈ visited s)).
+    { intros x d. exact (tarjan_scc_keep_visited g x d). }
+    { (* Main induction step *)
+      intros W IHvis IHlow x.
+      unfold tarjan_scc_f.
+      intros Hpre. (* Hpre: low_pre x s *)
+      (* Step 1: preloop x → low_forset_inv x ∅ *)
+      eapply Hoare_bind.
+      { apply Hoare_conseq_pre with (P2 := fun s => low_pre x s).
+        { intros s HP. exact HP. }
+        apply preloop_establishes_low_forset_inv. }
+      simpl. intros _. intro_state.
+      destruct H as [Hinv [Hvalid [Hfa [Hxvis Hmin_x]]]].
+      (* Step 2: forset → low_post x *)
+      eapply Hoare_bind with (Q := fun _ s => low_post x s).
+      { apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv x ∅ s).
+        { intros s1 Heq. subst s1.
+          exact (conj Hinv (conj Hvalid (conj Hfa (conj Hxvis Hmin_x)))). }
+        apply forset_keep_low_forset_inv. intros a.
+        pose proof (IHlow a tt) as Hlow_a.
+        pose proof (IHvis a x) as Hvis_a.
+        assert (Hlow_post_a : Hoare (fun s => low_pre a s /\ x ∈ visited s) (W a)
+                                    (fun _ s => low_post a s)). {
+          eapply Hoare_conseq_post. 2: { eapply Hoare_conseq_pre. 2: exact Hlow_a.
+            intros s [Hpre_a Hx_vis]. exact Hpre_a. }
+          auto. }
+        assert (Hx_vis_a : Hoare (fun s => low_pre a s /\ x ∈ visited s) (W a)
+                                 (fun _ s => x ∈ visited s)). {
+          eapply Hoare_conseq_pre. 2: exact Hvis_a.
+          intros s [Hpre_a Hx_vis]. exact Hx_vis. }
+        apply Hoare_conj with (Q1 := fun _ s => low_post a s) (Q2 := fun _ s => x ∈ visited s).
+        exact Hlow_post_a. exact Hx_vis_a. }
+      simpl. intros _. intro_state. rename H into Hpost.
+      (* Step 3: If (low x = dfn x) (pop_scc x) *)
+      hoare_auto_s.
+      - (* pop_scc x: low s x = dfn s x *)
+        apply Hoare_conseq_pre with
+          (P2 := fun s => scc_low_valid_v s x /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s /\ low s x = dfn s x).
+        { intros sx Heq. subst sx. destruct Hpost as [Hlowv [Hval [Hinv' Hfa']]].
+          split; [exact Hlowv | split; [exact Hval | split; [exact Hinv' | split; [exact Hfa' | exact H]]]]. }
+        apply (pop_scc_keep_scc_low_valid_v x).
+      - (* skip: state unchanged — find the state equality *)
+        match goal with H: _ = _ /\ _ |- _ => destruct H as [Heq _]; subst s end.
+        exact Hpost. }
+  Qed.
 
   (* ================================================================ *)
   (* 13. Global scc_low_valid / scc_is_low                             *)
