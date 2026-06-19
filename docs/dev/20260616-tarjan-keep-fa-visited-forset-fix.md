@@ -1,6 +1,6 @@
 # tarjan_scc_keep_fa_visited_rich 的 forset 层级修复
 
-**Author**: Kimi Code CLI
+**Author**: Vitalrubbish
 **Date**: 2026-06-16
 
 ---

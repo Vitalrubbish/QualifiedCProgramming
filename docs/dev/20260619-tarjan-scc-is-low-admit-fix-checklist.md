@@ -1,6 +1,6 @@
 # Tarjan_scc_is_low.v — Admit 消除修复清单
 
-**Author**: Claude Code Agent
+**Author**: Vitalrubbish
 **Date**: 2026-06-19
 
 ---

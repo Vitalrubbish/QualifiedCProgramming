@@ -1,5 +1,5 @@
 # Tarjan-SCC-is-low-min-lemma-issue
-**Author**: Assistant
+**Author**: Vitalrubbish
 **Date**: 2026-06-18
 
 ## 问题概述

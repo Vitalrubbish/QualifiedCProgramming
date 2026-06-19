@@ -1,6 +1,6 @@
 # Stack-in-visited Lemma Needed
 
-**Author**: Claude Code Agent
+**Author**: Vitalrubbish
 **Date**: 2026-06-19
 
 ---

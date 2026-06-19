@@ -1852,7 +1852,7 @@ Section IS_LOW.
     intros HW HW_self HW_keep_all.
     set (P := fun (done: V -> Prop) (s: SCCSt) =>
       low_forset_inv u done s /\ children_done_visited u done s /\
-      (forall v, fa s v = u -> dg_step g u v)).
+      (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v)).
     assert (HproperP: Proper (Sets.equiv ==> eq ==> iff) P). {
       unfold P. intros done1 done2 Hequiv s1 s2 Heq. subst s2.
       apply Sets_equiv_Sets_included in Hequiv. destruct Hequiv as [Hincl12 Hincl21].
@@ -1909,7 +1909,7 @@ Section IS_LOW.
                           children_done st u (dg_step g u)). {
         intros v Htree. apply state_to_dfs_tree_step_char in Htree.
         destruct Htree as [Hfa_eq [Hfa_neq Hvis]].
-        assert (Hneigh: dg_step g u v). { apply Hfa_uni. exact Hfa_eq. }
+        assert (Hneigh: dg_step g u v). { apply Hfa_uni. split; [exact Hfa_eq | exact Hfa_neq]. }
         split; [exact Hneigh | split; auto]. }
       eapply min_eq_forward.
       + typeclasses eauto.
@@ -1956,17 +1956,128 @@ Section IS_LOW.
       unfold P. apply Hoare_conj.
       { apply (process_edge_keep_low_forset_inv u a done W HW Huniv). }
       apply Hoare_conj.
-      { (* children_done_visited preserved; uses HW_self + HW_keep_all *)
-        admit. }
-      { (* fa_children_in_universe preserved; uses Huniv *)
-        admit. }
+      { (* children_done_visited preserved *)
+        unfold process_edge, if_else. intro_state.
+        apply Hoare_choice.
+        - (* Tree edge *)
+          apply Hoare_assume_bind. simpl.
+          eapply Hoare_bind with (R := fun _ s => children_done_visited u done s).
+          { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl.
+            unfold children_done_visited, children_done.
+            intros w [Hw_done [Hfa_w Hfa_w_neq]].
+            unfold equiv_decb. simpl.
+            destruct (equiv_dec w a) as [Heq_wa | Hneq_wa].
+            - subst w. exfalso. apply (Hnot_done Hw_done).
+            - exact Hw_done. }
+          simpl. intros _.
+          eapply Hoare_bind.
+          { apply Hoare_conj.
+            - apply Hoare_conseq_pre with
+                (P2 := fun s => forall w, done w -> w ∈ visited s).
+              { intros s' Hcdv'. unfold children_done_visited in Hcdv'.
+                intros w Hw_done. apply Hcdv'. split; [exact Hw_done |].
+                (* Need fa s' w = u ∧ fa s' w ≠ w.  W a = tarjan_scc a only
+                   changes fa for descendants of a (setting them to a ≠ u).
+                   Admitted: fa-preservation lemma for W. *)
+                admit. }
+              apply (HW_keep_all a done).
+            - apply (Hoare_conseq_post (Q2 := fun _ s => a ∈ visited s)).
+              { intros _ s' Hvis. exact Hvis. }
+              apply (HW_self a). }
+          simpl. intros [Hcdv_done Hvis_a].
+          eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+          apply Hoare_conseq_pre with
+            (P2 := fun s => children_done_visited u done s /\ a ∈ visited s).
+          { intros s' Hs'. subst s'. split; auto. }
+          unfold update_low. unfold_op. intro_state. hoare_auto_s.
+          { subst s. simpl. destruct H0 as [Hcdv' Hvis_a'].
+            unfold children_done_visited, children_done.
+            intros w [[Hw_done_or_a | Hw_a] [Hfa_w Hfa_w_neq]].
+            - apply Hcdv'. split; [exact Hw_done_or_a | split].
+              + unfold equiv_decb. simpl in Hfa_w.
+                destruct (equiv_dec w u) as [Heq_wu | Hneq_wu].
+                * subst w. exfalso. apply Hfa_w_neq. reflexivity.
+                * exact Hfa_w.
+              + exact Hfa_w_neq.
+            - subst w. exact Hvis_a'. }
+          { destruct H0 as [[Heq _] Hvis_a']. subst s. split; [exact H | exact Hvis_a']. }
+        - (* Non-tree edge *)
+          intro_state. hoare_auto_s.
+          + apply Hoare_conseq_pre with
+              (P2 := fun s => children_done_visited u done s /\ a ∈ visited s).
+            { intros s1 Hs1. subst s1. split; auto. }
+            unfold update_low. unfold_op. intro_state. hoare_auto_s.
+            { subst s. simpl. destruct H1 as [Hcdv' Hvis_a'].
+              unfold children_done_visited, children_done.
+              intros w [[Hw_done_or_a | Hw_a] [Hfa_w Hfa_w_neq]].
+              - apply Hcdv'. split; [exact Hw_done_or_a | split].
+                + unfold equiv_decb. simpl in Hfa_w.
+                  destruct (equiv_dec w u) as [Heq_wu | Hneq_wu].
+                  * subst w. exfalso. apply Hfa_w_neq. reflexivity.
+                  * exact Hfa_w.
+                + exact Hfa_w_neq.
+              - subst w. exact Hvis_a'. }
+            { destruct H1 as [Heq Hvis_a']. subst s. split; [exact H | exact Hvis_a']. }
+          + destruct H1 as [Heq _]. subst s.
+            unfold children_done_visited, children_done.
+            intros w [[Hw_done_or_a | Hw_a] [Hfa_w Hfa_w_neq]].
+            * apply H. split; [exact Hw_done_or_a | split; auto].
+            * subst w. exact H0. }
+      { (* fa_children_in_universe preserved *)
+        unfold process_edge, if_else. intro_state.
+        apply Hoare_choice.
+        - (* Tree edge *)
+          apply Hoare_assume_bind. simpl.
+          eapply Hoare_bind with
+            (R := fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
+          { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl.
+            intros v [Hfa_v Hfa_v_neq]. unfold equiv_decb. simpl.
+            destruct (equiv_dec v a) as [Heq_va | Hneq_va].
+            - subst v. exact Huniv.
+            - apply H. split; [exact Hfa_v | exact Hfa_v_neq]. }
+          simpl. intros _.
+          eapply Hoare_bind with
+            (R := fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
+          { apply Hoare_conseq_post with
+              (Q2 := fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
+            { intros _ s' Hfa_uni v [Hfa_eq Hfa_neq].
+              apply Hfa_uni. split; [exact Hfa_eq | exact Hfa_neq]. }
+            (* W a preserves the invariant because dg_step g is static and
+               fa for u-children is never changed by set_fa in process_edge
+               (it sets fa := center where center ≠ u). *)
+            admit. }
+          simpl. intros _.
+          eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+          apply Hoare_conseq_pre with
+            (P2 := fun s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
+          { intros s' Hs'. subst s'. exact H0. }
+          unfold update_low. unfold_op. intro_state. hoare_auto_s.
+          { subst s. simpl. intros v [Hfa_v Hfa_v_neq].
+            unfold equiv_decb. simpl in Hfa_v.
+            destruct (equiv_dec v u) as [Heq_vu | Hneq_vu].
+            - subst v. exfalso. apply Hfa_v_neq. reflexivity.
+            - apply H. split; [exact Hfa_v | exact Hfa_v_neq]. }
+          { destruct H1 as [Heq _]. subst s. apply H. }
+        - (* Non-tree edge *)
+          intro_state. hoare_auto_s.
+          + apply Hoare_conseq_pre with
+              (P2 := fun s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v).
+            { intros s1 Hs1. subst s1. exact H. }
+            unfold update_low. unfold_op. intro_state. hoare_auto_s.
+            { subst s. simpl. intros v [Hfa_v Hfa_v_neq].
+              unfold equiv_decb. simpl in Hfa_v.
+              destruct (equiv_dec v u) as [Heq_vu | Hneq_vu].
+              - subst v. exfalso. apply Hfa_v_neq. reflexivity.
+              - apply H. split; [exact Hfa_v | exact Hfa_v_neq]. }
+            { destruct H2 as [Heq _]. subst s. exact H. }
+          + destruct H2 as [Heq _]. subst s. exact H. }
     - intro_state. split; [exact H | split].
       + unfold children_done_visited, children_done.
         intros v [Hv_empty _]. exfalso. exact Hv_empty.
-      + intros v Hfa. exfalso.
-        (* fa s v = u in initial forset state (fa is identity).  Only
-           u is visited (low_forset_inv).  fa s u = u, so v = u and
-           we need dg_step g u u which may not hold.  Admitted. *)
+      + intros v [Hfa_eq Hfa_neq]. exfalso.
+        (* Initially fa s v = v (identity, preloop doesn't set fa).
+           From Hfa_eq: v = u, then Hfa_neq contradicts u ≠ u.
+           Needs a lemma: preloop_establishes_low_forset_inv preserves fa. *)
         admit. }
   Admitted.
 

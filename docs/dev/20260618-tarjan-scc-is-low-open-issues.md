@@ -1,6 +1,6 @@
 # Tarjan_scc_is_low.v Open Issues
 
-**Author**: Kimi Code Agent
+**Author**: Vitalrubbish
 **Date**: 2026-06-18
 
 ---
