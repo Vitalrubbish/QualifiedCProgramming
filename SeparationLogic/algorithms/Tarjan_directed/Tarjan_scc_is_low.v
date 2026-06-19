@@ -257,6 +257,7 @@ Section IS_LOW.
     v ∈ done /\ In v (stack s) /\ fa s v <> u.
 
   Definition low_forset_inv (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
+    stack_in_visited s /\
     dfn_inv s /\
     dfn_valid g s root /\
     fa_visited s /\
@@ -268,7 +269,7 @@ Section IS_LOW.
       (fun x => x) (low s u).
 
   Definition low_pre (u: V) (s: @SCCSt V): Prop :=
-    ~ u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s.
+    stack_in_visited s /\ ~ u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s.
 
   Definition low_post (u: V) (s: @SCCSt V): Prop :=
     scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s.
@@ -347,55 +348,70 @@ Section IS_LOW.
   Proof.
     unfold low_forset_inv.
     apply Hoare_conj with
-      (Q1 := fun _ s => dfn_inv s)
-      (Q2 := fun _ s => dfn_valid g s root /\ fa_visited s /\ u ∈ visited s /\
+      (Q1 := fun _ s => stack_in_visited s)
+      (Q2 := fun _ s => dfn_inv s /\ dfn_valid g s root /\ fa_visited s /\ u ∈ visited s /\
                       min_value_of_subset Nat.le
                         (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
                          min_value_of_subset Nat.le
                            (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
                         (fun x => x) (low s u)).
     - eapply Hoare_conseq_pre.
-      { intros s Hpre. destruct Hpre as [_ [_ [Hinv _]]]. exact Hinv. }
-      apply preloop_keep_dfn_inv.
+      { intros s Hpre. destruct Hpre as [Hstack _]. exact Hstack. }
+      apply preloop_keep_stack_in_visited.
     - apply Hoare_conj with
-        (Q1 := fun _ s => dfn_valid g s root)
-        (Q2 := fun _ s => fa_visited s /\ u ∈ visited s /\
+        (Q1 := fun _ s => dfn_inv s)
+        (Q2 := fun _ s => dfn_valid g s root /\ fa_visited s /\ u ∈ visited s /\
                         min_value_of_subset Nat.le
                           (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
                            min_value_of_subset Nat.le
                              (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
                           (fun x => x) (low s u)).
-      + eapply Hoare_conseq_post with
-          (Q2 := fun _ s => u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s).
-        { intros _ s [Hvis [Hvalid _]]. exact Hvalid. }
-        apply preloop_preserves_dfn_valid.
+      + eapply Hoare_conseq_pre.
+        { intros s Hpre. destruct Hpre as [_ [_ [_ [Hinv _]]]]. exact Hinv. }
+        apply preloop_keep_dfn_inv.
       + apply Hoare_conj with
-          (Q1 := fun _ s => fa_visited s)
-          (Q2 := fun _ s => u ∈ visited s /\
+          (Q1 := fun _ s => dfn_valid g s root)
+          (Q2 := fun _ s => fa_visited s /\ u ∈ visited s /\
                           min_value_of_subset Nat.le
                             (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
                              min_value_of_subset Nat.le
                                (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
                             (fun x => x) (low s u)).
-        * eapply Hoare_conseq_pre.
-          { intros s Hpre. destruct Hpre as [_ [_ [_ Hfa]]]. exact Hfa. }
-          apply preloop_keep_fa_visited.
+        * eapply Hoare_conseq_post with
+            (Q2 := fun _ s => u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s).
+          { intros _ s [Hvis [Hvalid _]]. exact Hvalid. }
+          eapply Hoare_conseq_pre with
+            (P2 := fun s => ~ u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
+          { intros s [Hstack [Hnv [Hvalid [Hinv Hfa]]]].
+            split; [exact Hnv | split; [exact Hvalid | split; [exact Hinv | exact Hfa]]]. }
+          apply preloop_preserves_dfn_valid.
         * apply Hoare_conj with
-            (Q1 := fun _ s => u ∈ visited s)
-            (Q2 := fun _ s => min_value_of_subset Nat.le
-                                (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
-                                 min_value_of_subset Nat.le
-                                   (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
-                                (fun x => x) (low s u)).
+            (Q1 := fun _ s => fa_visited s)
+            (Q2 := fun _ s => u ∈ visited s /\
+                            min_value_of_subset Nat.le
+                              (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
+                               min_value_of_subset Nat.le
+                                 (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
+                              (fun x => x) (low s u)).
           -- eapply Hoare_conseq_pre.
-             { intros s Hpre. exact I. }
-             apply preloop_self_visited.
-          -- eapply Hoare_conseq_post with
-              (Q2 := fun _ s => low s u = dfn s u).
-             { intros _ s Heq_low_eq. apply low_eq_dfn_to_min_empty. exact Heq_low_eq. }
-             eapply Hoare_conseq_pre.
-             { intros s _. exact I. }
-             apply preloop_low_eq_dfn.
+             { intros s Hpre. destruct Hpre as [_ [_ [_ [_ Hfa]]]]. exact Hfa. }
+             apply preloop_keep_fa_visited.
+          -- apply Hoare_conj with
+              (Q1 := fun _ s => u ∈ visited s)
+              (Q2 := fun _ s => min_value_of_subset Nat.le
+                                  (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
+                                   min_value_of_subset Nat.le
+                                     (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
+                                  (fun x => x) (low s u)).
+            ++ eapply Hoare_conseq_pre.
+               { intros s Hpre. exact I. }
+               apply preloop_self_visited.
+            ++ eapply Hoare_conseq_post with
+                (Q2 := fun _ s => low s u = dfn s u).
+               { intros _ s Heq_low_eq. apply low_eq_dfn_to_min_empty. exact Heq_low_eq. }
+               eapply Hoare_conseq_pre.
+               { intros s _. exact I. }
+               apply preloop_low_eq_dfn.
   Qed.
 
   (* ================================================================ *)
@@ -595,7 +611,20 @@ Section IS_LOW.
           (fun _ s => low_pre v s /\ u ∈ visited s).
   Proof.
     unfold low_pre.
-    apply (set_fa_preserves_dfn_pre_child_rich (V:=V) (E:=E)).
+    apply Hoare_conseq with
+      (P2 := fun s => (stack_in_visited s /\ (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s)) /\ u ∈ visited s)
+      (Q2 := fun _ s => (stack_in_visited s /\ (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s)) /\ u ∈ visited s).
+    - intros s [Hstack [Hnv [Hvalid [Hinv Hfa]]] Hu].
+      split; [split; [exact Hstack | split; [exact Hnv | split; [exact Hvalid | split; [exact Hinv | exact Hfa]]]] | exact Hu].
+    - intros _ s [[Hstack [Hnv [Hvalid [Hinv Hfa]]]] Hu].
+      split; [exact Hstack | split; [exact Hnv | split; [exact Hvalid | split; [exact Hinv | exact Hfa]]]].
+      exact Hu.
+    - apply Hoare_conj with
+        (Q1 := fun _ s => stack_in_visited s)
+        (Q2 := fun _ s => (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s) /\ u ∈ visited s).
+      + intro_state. hoare_auto_s. subst s. simpl.
+        destruct H as [[Hstack _] _]. exact Hstack.
+      + apply (set_fa_preserves_dfn_pre_child_rich (V:=V) (E:=E)).
   Qed.
 
   (** [set_low_keep_low_forset_inv_components]: [set_low u n] only
