@@ -612,19 +612,21 @@ Section IS_LOW.
   Proof.
     unfold low_pre.
     apply Hoare_conseq with
-      (P2 := fun s => (stack_in_visited s /\ (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s)) /\ u ∈ visited s)
-      (Q2 := fun _ s => (stack_in_visited s /\ (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s)) /\ u ∈ visited s).
-    - intros s [Hstack [Hnv [Hvalid [Hinv Hfa]]] Hu].
-      split; [split; [exact Hstack | split; [exact Hnv | split; [exact Hvalid | split; [exact Hinv | exact Hfa]]]] | exact Hu].
-    - intros _ s [[Hstack [Hnv [Hvalid [Hinv Hfa]]]] Hu].
-      split; [exact Hstack | split; [exact Hnv | split; [exact Hvalid | split; [exact Hinv | exact Hfa]]]].
-      exact Hu.
+      (P2 := fun s => stack_in_visited s /\ (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s) /\ u ∈ visited s)
+      (Q2 := fun _ s => stack_in_visited s /\ (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s) /\ u ∈ visited s).
+    - intros s [[Hstack [Hnv [Hvalid [Hinv Hfa]]]] Hu].
+      repeat (split; try assumption).
+    - intros _ s [Hstack [[Hnv [Hvalid [Hinv Hfa]]] Hu]].
+      repeat (split; try assumption).
     - apply Hoare_conj with
         (Q1 := fun _ s => stack_in_visited s)
         (Q2 := fun _ s => (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s) /\ u ∈ visited s).
-      + intro_state. hoare_auto_s. subst s. simpl.
-        destruct H as [[Hstack _] _]. exact Hstack.
-      + apply (set_fa_preserves_dfn_pre_child_rich (V:=V) (E:=E)).
+      + intro_state. unfold set_fa. hoare_auto_s. subst s. simpl.
+        destruct H as [Hstack _]. exact Hstack.
+      + apply Hoare_conseq_pre with
+          (P2 := fun s => (~ v ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s) /\ u ∈ visited s).
+        { intros s [Hstack [Hrest Hu]]. split; [exact Hrest | exact Hu]. }
+        { apply (set_fa_preserves_dfn_pre_child_rich (V:=V) (E:=E)). }
   Qed.
 
   (** [set_low_keep_low_forset_inv_components]: [set_low u n] only
@@ -649,13 +651,15 @@ Section IS_LOW.
   Proof.
     intros Hfa_v_u Hfa_v_neq_v Hinv_s.
     unfold low_forset_inv in Hinv_s.
-    destruct Hinv_s as [Hinv [Hvalid [Hfa [Huvis Hmin]]]].
+    destruct Hinv_s as [Hstack [Hinv [Hvalid [Hfa [Huvis Hmin]]]]].
     destruct Hinv as [Hlt [Hiff Hpos]].
     unfold low_forset_inv. simpl.
-    repeat split; simpl; auto.
-    - apply Hiff.
-    - apply Hiff.
-    - (* min condition *)
+    split; [exact Hstack |].
+    split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+    split; [exact Hvalid |].
+    split; [exact Hfa |].
+    split; [exact Huvis |].
+    (* min condition *)
       unfold children_done, back_edges_done. simpl.
       change (fun x : V => (x ∈ (done ∪ [v]) /\ fa s x = u /\ fa s x <> x)%sets)
         with (children_done s u (done ∪ [v])).
@@ -764,7 +768,7 @@ Section IS_LOW.
   Lemma low_forset_inv_implies_low_le_dfn (u: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s -> low s u <= dfn s u.
   Proof.
-    intros [Hinv [Hvalid [Hfa [Huvis Hmin]]]].
+    intros [_ [Hinv [Hvalid [Hfa [Huvis Hmin]]]]].
     destruct Hmin as [m [[Hm_in Hm_min] Heq_m]].
     rewrite <- Heq_m.
     assert (Hright: exists r, min_value_of_subset Nat.le (fun w => back_edges_done s u done w \/ w = u) (dfn s) r). {
@@ -790,13 +794,15 @@ Section IS_LOW.
   Proof.
     intros Hstep Hstack Hdone_sub Hv_cases Hinv_s.
     unfold low_forset_inv in Hinv_s.
-    destruct Hinv_s as [Hinv [Hvalid [Hfa [Huvis Hmin]]]].
+    destruct Hinv_s as [Hsiv [Hinv [Hvalid [Hfa [Huvis Hmin]]]]].
     destruct Hinv as [Hlt [Hiff Hpos]].
     unfold low_forset_inv. simpl.
-    repeat split; simpl; auto.
-    - apply Hiff.
-    - apply Hiff.
-    - (* min condition *)
+    split; [exact Hsiv |].
+    split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+    split; [exact Hvalid |].
+    split; [exact Hfa |].
+    split; [exact Huvis |].
+    (* min condition *)
       unfold children_done, back_edges_done. simpl.
       change (fun x : V => (x ∈ (done ∪ [v]) /\ fa s x = u /\ fa s x <> x)%sets)
         with (children_done s u (done ∪ [v])).
@@ -835,8 +841,8 @@ Section IS_LOW.
             destruct (equiv_dec u v) as [Heq_uv | Hneq_uv].
             + (* u = v: trivial, dfn s u = dfn s v *)
               pose proof (low_forset_inv_implies_low_le_dfn u done s
-                (conj (conj Hlt (conj Hiff Hpos))
-                   (conj Hvalid (conj Hfa (conj Huvis Hmin))))) as Hle.
+                (conj Hsiv (conj (conj Hlt (conj Hiff Hpos))
+                   (conj Hvalid (conj Hfa (conj Huvis Hmin)))))) as Hle.
               rewrite <- Heq_uv. exact Hle.
             + (* u ≠ v *)
               assert (Hfa_v_neq_v: fa s v <> v). {
@@ -851,8 +857,8 @@ Section IS_LOW.
                 - exact Hvis_v. }
               apply Hvalid in Htree_edge.
               pose proof (low_forset_inv_implies_low_le_dfn u done s
-                (conj (conj Hlt (conj Hiff Hpos))
-                   (conj Hvalid (conj Hfa (conj Huvis Hmin))))) as Hle.
+                (conj Hsiv (conj (conj Hlt (conj Hiff Hpos))
+                   (conj Hvalid (conj Hfa (conj Huvis Hmin)))))) as Hle.
               exact (Nat.le_trans _ _ _ Hle (Nat.lt_le_incl _ _ Htree_edge)).
           - (* fa s v ≠ u: then v ∈ back_edges_done(done).
                From Hmin, low s u ≤ dfn s v via the right-side min. *)
@@ -1117,7 +1123,7 @@ Section IS_LOW.
   Proof.
     intros Hinv Hchild.
     unfold low_forset_inv in Hinv.
-    destruct Hinv as [Hinv' [Hvalid [Hfa [Huvis Hmin]]]].
+    destruct Hinv as [_ [Hinv' [Hvalid [Hfa [Huvis Hmin]]]]].
     destruct Hmin as [m [[Hm_in Hm_min] Heq_m]].
     rewrite <- Heq_m.
     assert (Hchild_min_exists: exists cmin,
@@ -1159,13 +1165,15 @@ Section IS_LOW.
   Proof.
     intros Hstep Hstack Hfa_neq Hinv_s.
     unfold low_forset_inv in Hinv_s.
-    destruct Hinv_s as [Hinv [Hvalid [Hfa [Huvis Hmin]]]].
+    destruct Hinv_s as [Hsiv [Hinv [Hvalid [Hfa [Huvis Hmin]]]]].
     destruct Hinv as [Hlt [Hiff Hpos]].
     unfold low_forset_inv. simpl.
-    repeat split; simpl; auto.
-    - apply Hiff.
-    - apply Hiff.
-    - unfold children_done, back_edges_done. simpl.
+    split; [exact Hsiv |].
+    split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+    split; [exact Hvalid |].
+    split; [exact Hfa |].
+    split; [exact Huvis |].
+    unfold children_done, back_edges_done. simpl.
       change (fun x : V => (x ∈ (done ∪ [v]) /\ fa s x = u /\ fa s x <> x)%sets)
         with (children_done s u (done ∪ [v])).
       change (fun x : V => ((x ∈ (done ∪ [v]) /\ In x (stack s) /\ fa s x <> u) \/ x = u)%sets)
@@ -1276,7 +1284,7 @@ Section IS_LOW.
     unfold process_edge, if_else.
     intro_state.
     unfold low_forset_inv in H.
-    destruct H as [Hinv [Hvalid [Hfa [Huvis Hmin]]]].
+    destruct H as [Hsiv [Hinv [Hvalid [Hfa [Huvis Hmin]]]]].
     destruct Hinv as [Hlt [Hiff Hpos]].
     apply Hoare_choice.
     - (* Tree edge: ~v ∈ visited *)
@@ -1284,10 +1292,7 @@ Section IS_LOW.
       apply Hoare_conseq_pre with (P2 := fun s => low_pre v s /\ u ∈ visited s).
       { intros s1 [Hnv Hs1]. subst s1. unfold low_pre.
         split.
-        - split; [exact Hnv |].
-          split; [exact Hvalid |].
-          split; [| exact Hfa].
-          split; [exact Hlt | split; [exact Hiff | exact Hpos]].
+        - split; [exact Hsiv | split; [exact Hnv | split; [exact Hvalid | split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] | exact Hfa]]]].
         - exact Huvis. }
       eapply Hoare_bind.
       apply set_fa_preserves_low_pre_rich.
@@ -1306,14 +1311,49 @@ Section IS_LOW.
         unfold update_low. hoare_auto_s.
         { (* Subgoal (1): dfn s0 v < low s0 u → set_low u (dfn s0 v) *)
           destruct (equiv_dec (fa s0 v) u) as [Hfa_eq | Hfa_neq].
-          - (* fa s0 v = u: unreachable in simple graphs. fa s0 v = u can only be
-               set by process_edge u W v tree-edge branch, which requires v ∉ visited.
-               Here v ∈ visited and In v (stack s0), so the tree-edge branch was not
-               taken for this v. Since forset processes each neighbor once, fa s v = u
-               cannot hold in the back-edge branch. *)
-            admit.
+          - (* fa s0 v = u: leads to contradiction.
+               From state_to_dfs_tree_step_fa + dfn_valid: dfn s0 u < dfn s0 v.
+               From low_forset_inv_implies_low_le_dfn: low s0 u ≤ dfn s0 u.
+               So low s0 u ≤ dfn s0 u < dfn s0 v, but H says dfn s0 v < low s0 u. *)
+            assert (Hvis_v: v ∈ visited s0). {
+              eapply stack_in_visited_impl; eauto. }
+            destruct (equiv_dec u v) as [Heq_uv | Hneq_uv].
+            { (* self-loop: fa s0 v = u = v, so state_to_dfs_tree_step_fa doesn't apply.
+                 But dfn s0 v < low s0 u and low s0 u ≤ dfn s0 u = dfn s0 v give contradiction. *)
+              assert (Hlow_le: low s0 u <= dfn s0 u).
+              { eapply low_forset_inv_implies_low_le_dfn.
+                unfold low_forset_inv.
+                split; [exact Hsiv |].
+                split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+                split; [exact Hvalid |].
+                split; [exact Hfa |].
+                split; [exact Huvis |].
+                exact Hmin. }
+              rewrite Heq_uv in H, Hlow_le.
+              lia. }
+            { (* u ≠ v: fa s0 v = u ≠ v *)
+              assert (Hfa_neq_self: fa s0 v <> v). {
+                rewrite Hfa_eq. exact Hneq_uv. }
+              assert (Htree: dg_step (state_to_dfs_tree (V:=V) (E:=E) g s0 root) u v). {
+                assert (Htree_fa: dg_step (state_to_dfs_tree g s0 root) (fa s0 v) v). {
+                rewrite <- Hfa_eq in Hdg.
+                eapply state_to_dfs_tree_step_fa; eauto. }
+                rewrite Hfa_eq in Htree_fa. exact Htree_fa. }
+              assert (Hdfn_lt: dfn s0 u < dfn s0 v). {
+                eapply Hvalid; eauto. }
+              assert (Hlow_le: low s0 u <= dfn s0 u).
+              { eapply low_forset_inv_implies_low_le_dfn.
+                unfold low_forset_inv.
+                split; [exact Hsiv |].
+                split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+                split; [exact Hvalid |].
+                split; [exact Hfa |].
+                split; [exact Huvis |].
+                exact Hmin. }
+              lia. }
           - assert (Hinv_full: low_forset_inv u done s0). {
               unfold low_forset_inv.
+              split; [exact Hsiv |].
               split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
               split; [exact Hvalid | split; [exact Hfa | split; [exact Huvis | exact Hmin]]]. }
             unfold set_low. intro_state. hoare_auto_s. subst s s1. simpl.
@@ -1326,6 +1366,7 @@ Section IS_LOW.
         { (* Subgoal (2): skip — state unchanged, ~dfn s0 v < low s0 u *)
           destruct H as [Heq Hnlt]. subst s. clear b.
           unfold low_forset_inv.
+          split; [exact Hsiv |].
           split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
           split; [exact Hvalid |].
           split; [exact Hfa |].
@@ -1334,9 +1375,12 @@ Section IS_LOW.
           destruct Hmin as [m [[Hm_in Hm_min] Heq_m]].
           rewrite <- Heq_m.
           destruct (equiv_dec (fa s0 v) u) as [Hfa_eq | Hfa_neq].
-          - (* fa s0 v = u: unreachable (same reason as set_low case).
-               fa s v = u is only set by the tree-edge branch, which cannot be
-               taken when v ∈ visited ∧ In v (stack s0). *)
+          - (* fa s0 v = u: needs low s0 u ≤ low s0 v.
+               When fa s0 v = u and fa s0 v ≠ v, the tree-edge (u,v) was previously
+               processed, calling update_low u (low v) which set low u := min(low u, low v).
+               Subsequent update_low calls only decrease low u, so low s0 u ≤ low s0 v.
+               Formal proof requires temporal reasoning about update_low_tree_edge.
+               Blocked by: tree_child_low_le (or stack_ancestor_dfn_lt for contradiction). *)
             admit.
           - (* fa s0 v <> u: standard back edge *)
             pose proof (children_done_no_add s0 u v done Hfa_neq) as Hchild_eq.
@@ -1458,6 +1502,8 @@ Section IS_LOW.
       + (* v not in stack: cross edge — state unchanged *)
         destruct H2 as [Heq Hnstack]. subst s. subst s1.
         unfold low_forset_inv. simpl.
+        split.
+        { exact Hsiv. }
         split.
         { split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
         split.
@@ -1617,9 +1663,10 @@ Section IS_LOW.
       - sets_unfold. intros x [Hx_d1 [Hst Hfa]]. split; [apply Hincl12; exact Hx_d1 | auto].
       - sets_unfold. intros x [Hx_d2 [Hst Hfa]]. split; [apply Hincl21; exact Hx_d2 | auto]. }
     split; intro Hlow; unfold low_forset_inv in Hlow;
-      destruct Hlow as [Hinv [Hval' [Hfa'' [Hvis' Hmin]]]];
+      destruct Hlow as [Hsiv [Hinv [Hval' [Hfa'' [Hvis' Hmin]]]]];
       destruct Hinv as [Hlt [Hiff' Hpos']].
     - (* forward: done1 → done2 *)
+      split; [exact Hsiv |].
       split; [exact (conj Hlt (conj Hiff' Hpos')) |].
       split; [exact Hval' |].
       split; [exact Hfa'' |].
@@ -1660,6 +1707,7 @@ Section IS_LOW.
              ++ exact Heq_a2.
         * apply Nat.le_refl.
     - (* backward: done2 → done1, symmetric *)
+      split; [exact Hsiv |].
       split; [exact (conj Hlt (conj Hiff' Hpos')) |].
       split; [exact Hval' |].
       split; [exact Hfa'' |].
@@ -1715,7 +1763,7 @@ Section IS_LOW.
       (Q2 := fun _ s => low_forset_inv u (fun v => dg_step g u v) s).
     { (* Conversion: low_forset_inv u (neighbors) s → scc_low_valid_v s u *)
       intros b st Hfinv.
-      destruct Hfinv as [Hinv [Hvalid [Hfa_vis [Huvis Hmin]]]].
+      destruct Hfinv as [Hsiv [Hinv [Hvalid [Hfa_vis [Huvis Hmin]]]]].
       split; [| split; [exact Hvalid | split; [exact Hinv | exact Hfa_vis]]].
       (* TODO *)
       admit. }
@@ -1757,12 +1805,12 @@ Section IS_LOW.
         { intros s HP. exact HP. }
         apply preloop_establishes_low_forset_inv. }
       simpl. intros _. intro_state.
-      destruct H as [Hinv [Hvalid [Hfa [Hxvis Hmin_x]]]].
+      destruct H as [Hsiv [Hinv [Hvalid [Hfa [Hxvis Hmin_x]]]]].
       (* Step 2: forset → low_post x *)
       eapply Hoare_bind with (Q := fun _ s => low_post x s).
       { apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv x ∅ s).
         { intros s1 Heq. subst s1.
-          exact (conj Hinv (conj Hvalid (conj Hfa (conj Hxvis Hmin_x)))). }
+          exact (conj Hsiv (conj Hinv (conj Hvalid (conj Hfa (conj Hxvis Hmin_x))))). }
         apply forset_keep_low_forset_inv. intros a.
         pose proof (IHlow a tt) as Hlow_a.
         pose proof (IHvis a x) as Hvis_a.
