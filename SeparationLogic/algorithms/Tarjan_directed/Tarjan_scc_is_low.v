@@ -1275,6 +1275,31 @@ Section IS_LOW.
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
   Proof.
+    intros HW.
+    (* Use Hoare_forset with P := low_forset_inv u.
+       process_edge_keep_low_forset_inv gives exactly the step condition. *)
+    apply Hoare_conseq_post with
+      (Q2 := fun _ s => low_forset_inv u (fun v => dg_step g u v) s).
+    { (* Conversion: low_forset_inv u (neighbors) s → scc_low_valid_v s u *)
+      intros b st Hfinv.
+      destruct Hfinv as [Hinv [Hvalid [Hfa_vis [Huvis Hmin]]]].
+      split; [| split; [exact Hvalid | split; [exact Hinv | exact Hfa_vis]]].
+      (* TODO *)
+      admit. }
+    eapply (@Hoare_forset SCCSt V (fun done s => low_forset_inv u done s)
+      (fun v => dg_step g u v) (process_edge u W)).
+    - (* Proper: low_forset_inv u done s respects done equivalence *)
+      repeat intro. subst.
+      unfold low_forset_inv. split; intro Hlow;
+        destruct Hlow as [Hinv [Hval [Hfa' [Hvis Hmin]]]];
+        (repeat split; auto).
+      + (* forward: x done → y done *)
+        admit.
+      + (* backward: y done → x done *)
+        admit.
+    - (* Step: process_edge goes from done to done ∪ [a] *)
+      intros done a Hdone_sub Huniv Hnot_done.
+      apply (process_edge_keep_low_forset_inv u a done W). exact HW.
   Admitted.
 
   (* ================================================================ *)
