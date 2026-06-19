@@ -1289,7 +1289,136 @@ Section IS_LOW.
             rewrite (Nat.min_r (low s0 u) (dfn s0 v)) in Hlemma;
               [| apply Nat.lt_le_incl; exact H].
             exact Hlemma. }
-        { (* Subgoal (2): skip *) admit. } (* already fully proved - see below *)
+        { (* Subgoal (2): skip — state unchanged, ~dfn s0 v < low s0 u *)
+          destruct H as [Heq Hnlt]. subst s. clear b.
+          unfold low_forset_inv.
+          split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+          split; [exact Hvalid |].
+          split; [exact Hfa |].
+          split; [exact Huvis |].
+          (* min condition *)
+          destruct Hmin as [m [[Hm_in Hm_min] Heq_m]].
+          rewrite <- Heq_m.
+          destruct (equiv_dec (fa s0 v) u) as [Hfa_eq | Hfa_neq].
+          - (* fa s0 v = u: tree child on stack — admitted (unreachable) *)
+            admit.
+          - (* fa s0 v <> u: standard back edge *)
+            pose proof (children_done_no_add s0 u v done Hfa_neq) as Hchild_eq.
+            pose proof (back_edges_done_add s0 u v done H2 Hfa_neq) as Hback_eq.
+            (* Decompose Hm_in to know whether m came from left or right *)
+            destruct Hm_in as [Hm_left | Hm_right].
+            ++ (* m ∈ left side (children_done min). Membership + minimality *)
+              exists m. split; [| reflexivity].
+              unfold min_object_of_subset. split.
+              ** (* membership: m ∈ new_left *)
+                sets_unfold. left. rewrite Hchild_eq. exact Hm_left.
+              ** (* minimality: forall b ∈ new_union, m ≤ b *)
+                intros b Hb. destruct Hb as [Hb_left | Hb_right].
+                --- (* b from new_left = old_left *)
+                  rewrite Hchild_eq in Hb_left. apply Hm_min. sets_unfold. left. exact Hb_left.
+                --- (* b from new_right. Chain: m ≤ old_right_min ≤ dfn s0 w (=b) *)
+                  destruct Hb_right as [w [[Hw_in Hw_min'] Heq_b]].
+                  rewrite <- Heq_b.
+                  destruct Hw_in as [Hw_back' | Hw_u].
+                  +++ (* w ∈ back_edges_done(done∪[v]) *)
+                    apply Hback_eq in Hw_back'.
+                    destruct Hw_back' as [Hw_back | Hw_v].
+                    *** (* w ∈ back_edges_done(done) → old-right domain.
+                           Chain: m ≤ old_right_min ≤ dfn s0 w *)
+                      destruct (min_nonempty_exists (dfn s0)
+                        (fun x => back_edges_done s0 u done x \/ x = u)) as [r Hr].
+                      { exists w. left. exact Hw_back. }
+                      assert (Hm_le_r: m <= r). {
+                        apply Hm_min. sets_unfold. right. exact Hr. }
+                      destruct Hr as [x [[[Hx_back | Hx_u] Hx_min] Heq_r]].
+                      { (* Hx_back: x ∈ back_edges_done *)
+                        assert (Hr_le_dfw: r <= dfn s0 w). {
+                          rewrite <- Heq_r. apply Hx_min. left. exact Hw_back. }
+                        eapply Nat.le_trans; eauto. }
+                      { (* Hx_u: x = u *)
+                        subst x.
+                        assert (Hr_le_dfw: r <= dfn s0 w). {
+                          apply (eq_ind (dfn s0 u) (fun v => v <= dfn s0 w)
+                            (Hx_min w (or_introl Hw_back)) r Heq_r). }
+                        eapply Nat.le_trans; eauto. }
+                    *** (* w = v → b = dfn s0 v, m ≤ dfn s0 v from Hnlt *)
+                      destruct Hw_v. rewrite Heq_m. apply Nat.nlt_ge. exact Hnlt.
+                  +++ (* w = u → rewrite then chain inequalities *)
+                    rewrite Hw_u.
+                    destruct (min_nonempty_exists (dfn s0)
+                      (fun x => back_edges_done s0 u done x \/ x = u)) as [r Hr].
+                    { exists u. right. reflexivity. }
+                    assert (Hm_le_r: m <= r). {
+                      apply Hm_min. sets_unfold. right. exact Hr. }
+                    destruct Hr as [x [[[Hx_back | Hx_u] Hx_min] Heq_r]].
+                    { (* Hx_back: x ∈ back_edges_done *)
+                      assert (Hr_le_dfu: r <= dfn s0 u). {
+                        rewrite <- Heq_r. apply Hx_min. right. reflexivity. }
+                      eapply Nat.le_trans; eauto. }
+                    { (* Hx_u: x = u *)
+                      subst x.
+                      assert (Hr_le_dfu: r <= dfn s0 u). {
+                        rewrite Heq_r. apply Nat.le_refl. }
+                      eapply Nat.le_trans; eauto. }
+            ++ (* m ∈ right side (back_edges_done∪[u] min). Decompose to get witness *)
+              destruct Hm_right as [w [[[Hw_in | Hw_u] Hw_min] Heq_w]].
+              --- (* w ∈ back_edges_done(done) — m = dfn s0 w *)
+                exists m. split; [| reflexivity].
+                unfold min_object_of_subset. split.
+                *** (* membership: lift w to expanded right side *)
+                  sets_unfold. right. exists w. split.
+                  { split.
+                    - sets_unfold. left. apply Hback_eq. sets_unfold. left. exact Hw_in.
+                    - intros x Hx. sets_unfold in Hx.
+                      destruct Hx as [Hx_back' | Hx_u].
+                      +++ apply Hback_eq in Hx_back'. sets_unfold in Hx_back'.
+                        destruct Hx_back' as [Hx_back | Hx_v].
+                        *** apply Hw_min. left. exact Hx_back.
+                        *** subst x. rewrite Heq_w, Heq_m. apply Nat.nlt_ge. exact Hnlt.
+                      +++ subst x. apply Hw_min. right. reflexivity. }
+                    { rewrite Heq_w. reflexivity. }
+                *** (* minimality *)
+                  intros b Hb. destruct Hb as [Hb_left | Hb_right].
+                  +++ (* b from left side *)
+                    rewrite Hchild_eq in Hb_left. apply Hm_min. sets_unfold. left. exact Hb_left.
+                  +++ (* b from new_right. m is old right-min, m ≤ dfn s0 v ensures new min = m *)
+                    destruct Hb_right as [x [[Hx_in Hx_min'] Heq_b]].
+                    rewrite <- Heq_b.
+                    destruct Hx_in as [Hx_back' | Hx_u].
+                    { (* x ∈ back_edges_done(done∪[v]) *)
+                      apply Hback_eq in Hx_back'.
+                      destruct Hx_back' as [Hx_back | Hx_v].
+                      - rewrite <- Heq_w. apply Hw_min. left. exact Hx_back.
+                      - destruct Hx_v. rewrite Heq_m. apply Nat.nlt_ge. exact Hnlt. }
+                    { (* x = u *)
+                      destruct Hx_u. rewrite <- Heq_w. apply Hw_min. right. reflexivity. }
+              --- (* w = u — m = dfn s0 u *)
+                rewrite Hw_u in Hw_min, Heq_w.
+                exists m. split; [| reflexivity].
+                unfold min_object_of_subset. split.
+                *** (* membership: u ∈ expanded right side *)
+                  sets_unfold. right. exists u. split.
+                  { split.
+                    - sets_unfold. right. reflexivity.
+                    - intros x Hx. sets_unfold in Hx.
+                      destruct Hx as [Hx_back' | Hx_u].
+                      +++ apply Hback_eq in Hx_back'.
+                        destruct Hx_back' as [Hx_back | Hx_v].
+                        *** apply Hw_min. left. exact Hx_back.
+                        *** destruct Hx_v. rewrite Heq_w, Heq_m. apply Nat.nlt_ge. exact Hnlt.
+                      +++ destruct Hx_u. apply Nat.le_refl. }
+                    { rewrite Heq_w. reflexivity. }
+                *** (* minimality *)
+                  intros b Hb. destruct Hb as [Hb_left | Hb_right].
+                  +++ rewrite Hchild_eq in Hb_left. apply Hm_min. sets_unfold. left. exact Hb_left.
+                  +++ destruct Hb_right as [x [[Hx_in Hx_min'] Heq_b]].
+                    rewrite <- Heq_b.
+                    destruct Hx_in as [Hx_back' | Hx_u].
+                    { apply Hback_eq in Hx_back'.
+                      destruct Hx_back' as [Hx_back | Hx_v].
+                      - rewrite <- Heq_w. apply Hw_min. left. exact Hx_back.
+                      - destruct Hx_v. rewrite Heq_m. apply Nat.nlt_ge. exact Hnlt. }
+                    { destruct Hx_u. rewrite <- Heq_w. apply Hw_min. right. reflexivity. } }
       + (* v not in stack: cross edge — state unchanged *)
         destruct H2 as [Heq Hnstack]. subst s. subst s1.
         unfold low_forset_inv. simpl.
