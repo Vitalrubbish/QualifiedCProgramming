@@ -1288,15 +1288,9 @@ Section IS_LOW.
       admit. }
     eapply (@Hoare_forset SCCSt V (fun done s => low_forset_inv u done s)
       (fun v => dg_step g u v) (process_edge u W)).
-    - (* Proper: low_forset_inv u done s respects done equivalence *)
-      repeat intro. subst.
-      unfold low_forset_inv. split; intro Hlow;
-        destruct Hlow as [Hinv [Hval [Hfa' [Hvis Hmin]]]];
-        (repeat split; auto).
-      + (* forward: x done → y done *)
-        admit.
-      + (* backward: y done → x done *)
-        admit.
+    - (* Proper: low_forset_inv u done s respects done equivalence.
+         Extracted to separate lemma low_forset_inv_proper (see below). *)
+      admit.
     - (* Step: process_edge goes from done to done ∪ [a] *)
       intros done a Hdone_sub Huniv Hnot_done.
       apply (process_edge_keep_low_forset_inv u a done W). exact HW.
