@@ -1890,8 +1890,8 @@ Section IS_LOW.
       [fa s v = u]. *)
   Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit)
-    (HW_post: forall x, Hoare (fun s => low_pre x s) (W x)
-                            (fun _ s => low_post x s))
+    (HW_vis: forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
+                            (fun _ s => low_post x s /\ u ∈ visited s))
     (HW_keep_all: forall (a: V) (done': V -> Prop),
                     Hoare (fun s => forall w, done' w -> w ∈ visited s) (W a)
                           (fun _ s => forall w, done' w -> w ∈ visited s)):
@@ -1950,23 +1950,30 @@ Section IS_LOW.
     Hoare (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
           (set_fa v u;; W v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
-  Proof. Admitted.
-  Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
-    (W: V -> program (@SCCSt V) unit)
-    (HW: forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
-                     (fun _ s => low_post x s /\ u ∈ visited s))
-    (HW_keep_all: forall (a: V) (done': V -> Prop),
-                    Hoare (fun s => forall w, done' w -> w ∈ visited s) (W a)
-                          (fun _ s => forall w, done' w -> w ∈ visited s)):
-    ~ done v -> dg_step g u v ->
-    Hoare (fun s => low_forset_inv u done s)
-          (process_edge u W v)
-          (fun _ s => low_forset_inv u (done ∪ [v]) s).
-  Proof. Admitted.
-
-  (* ================================================================ *)
-  (* 11. Forset Induction                                              *)
-  (* ================================================================ *)
+  Proof.
+    intros Hdg.
+    apply (Hoare_bind (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
+                      (set_fa v u)
+                      (fun _ s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v)
+                      (fun _ => W v)
+                      (fun _ s => low_forset_inv u done s /\ fa s v = u)).
+    { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl.
+      destruct H as [Hinv [Hnv Hndone]].
+      unfold low_forset_inv in Hinv.
+      destruct Hinv as [Hsiv [Hinv' [Hvalid_s0 [Hfa_vis_s0 [Huvis_s0 Hmin_s0]]]]].
+      destruct Hinv' as [Hlt_s0 [Hiff_s0 Hpos_s0]].
+      split.
+      - unfold low_forset_inv. simpl.
+        split; [exact Hsiv |].
+        split; [split; [exact Hlt_s0 | split; [exact Hiff_s0 | exact Hpos_s0]] |].
+        split; [unfold dfn_valid; intros x y Htree; apply Hvalid_s0; unfold dg_step in Htree; destruct Htree as [e [Htree' [Hfst Hsnd]]]; unfold original_step in Htree'; simpl in Htree'; destruct Htree' as [w [Hwvis [Hwfa [Hwfst Hwsnd]]]]; assert (Hwneq: w <> v) by (intro Heq; rewrite Heq in Hwvis; exact (Hnv Hwvis)); unfold equiv_decb in Hwfa, Hwfst; destruct (equiv_dec w v) as [Heq | Hneq]; [exfalso; rewrite Heq in Hwvis; exact (Hnv Hwvis) |]; unfold dg_step; exists e; split; [| split]; auto; unfold original_step; exists w; repeat split; auto |].
+        split; [intros w Hfa_neq; destruct (equiv_dec w v) as [Heq | Hneq_w]; [rewrite Heq in *; simpl; unfold equiv_decb; destruct (equiv_dec v v) as [_ | Hc]; [| exfalso; apply Hc; reflexivity]; exact Huvis_s0 | unfold set_fa in Hfa_neq; simpl in Hfa_neq; unfold equiv_decb in Hfa_neq; destruct (equiv_dec w v) as [Heq' | Hneq'] in Hfa_neq; [exfalso; apply Hneq_w; exact Heq' |]; unfold set_fa; simpl; unfold equiv_decb; destruct (equiv_dec w v) as [Heq'' | Hneq'']; [exfalso; apply Hneq_w; exact Heq'' |]; apply Hfa_vis_s0; exact Hfa_neq] |].
+        split; [exact Huvis_s0 |].
+        apply (set_fa_preserves_min u v done s0 Hndone Hmin_s0).
+      - split; [| split; [exact Hnv | exact Hndone]].
+        simpl; unfold equiv_decb; destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity]. }
+    intros _. apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v). { intros s H. exact H. } apply (W_preserves_ancestor_inv u v done W HW HW_keep_all).
+  Qed.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
       morphism w.r.t. set equivalence of [done].  When [done1 == done2],
