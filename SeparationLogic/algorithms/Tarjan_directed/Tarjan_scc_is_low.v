@@ -2102,7 +2102,44 @@ Section IS_LOW.
     Hoare (fun s: @SCCSt V => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
           (process_edge u W v)
           (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
-  Proof. Admitted.
+  Proof.
+    intros Hdg HW. unfold process_edge, if_else. intro_state. apply Hoare_choice.
+    { (* Tree edge *) apply Hoare_assume_bind. simpl. eapply Hoare_bind.
+      { (* set_fa v u *)
+        unfold set_fa. intro_state. hoare_auto_s.
+        instantiate (1 := fun (_:unit) (s:SCCSt) => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
+        match goal with Hconj: _ /\ _ |- _ => destruct Hconj as [Hnv Hs1]; subst s1 end. simpl.
+        intros w0 [Hfa_eq Hfa_neq]. simpl in Hfa_eq. unfold equiv_decb in Hfa_eq.
+        destruct (equiv_dec w0 v) as [Heq | Hneq_w].
+        { rewrite Heq in *. simpl in *.
+          destruct (equiv_dec u parent) as [Heq_up | Hneq_up].
+          { rewrite Heq_up in Hdg. exact Hdg. }
+          { exfalso. apply Hneq_up. rewrite H2 in Hfa_eq.
+            match type of Hfa_eq with context [set fa ?g ?s0] =>
+              pose proof (@set_get SCCSt (V -> V) fa _ g s0) as Hg;
+              pattern (fa (set fa g s0)) in Hfa_eq; rewrite Hg in Hfa_eq;
+              simpl in Hfa_eq; unfold equiv_decb in Hfa_eq;
+              destruct (equiv_dec v v) as [e | n] in Hfa_eq;
+              [exact Hfa_eq | exfalso; apply n; reflexivity] end. } }
+        { rewrite H2 in Hfa_eq, Hfa_neq. simpl in Hfa_eq, Hfa_neq.
+          unfold equiv_decb in Hfa_eq, Hfa_neq.
+          destruct (equiv_dec w0 v) as [e | n] in Hfa_eq.
+          { exfalso. apply Hneq_w. exact e. }
+          { destruct (equiv_dec w0 v) as [e' | n'] in Hfa_neq.
+            { exfalso. apply Hneq_w. exact e'. }
+            { apply H. split; assumption. } } } }
+      { simpl. intros _. eapply Hoare_bind.
+        { apply HW. }
+        { simpl. intros _. eapply Hoare_bind.
+          { instantiate (1 := fun (lv: nat) (s: SCCSt) => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
+            unfold get'. intro_state. hoare_auto_s.
+            destruct H2, H3. subst s. eapply H1. split; assumption. }
+          { simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
+            { unfold set_low. intro_state. hoare_auto_s.
+              rewrite H4, H3 in H5. destruct H5. eapply H1. split; assumption. }
+            { destruct H2, H3. subst s. eapply H1. split; assumption. } } } } }
+    { (* Non-tree edge *) admit. }
+  Admitted.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
     Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
