@@ -1812,6 +1812,30 @@ Section IS_LOW.
       processes one neighbor [x] of [v].  The operations on [v]'s
       edges do not modify [fa] for [u]'s done vertices, [low u],
       or [fa v]. *)
+  (** [update_low_preserves_low_forset_inv_for_other]: When [~ done v],
+      [update_low v n] does not affect [low_forset_inv u done] because [v]
+      is not in [children_done s u done] (requires [v ∈ done]) nor in
+      [back_edges_done s u done] (requires [fa s v ≠ u], but here
+      [fa s v = u]).  The key proof obligation is that changing [low v]
+      does not shift the minimum over [children_done] or [back_edges_done]
+      since [v] appears in neither set. *)
+  Lemma update_low_preserves_low_forset_inv_for_other (u v: V) (n: nat) (done: V -> Prop) (s: @SCCSt V):
+    ~ done v -> fa s v = u ->
+    low_forset_inv u done s ->
+    low_forset_inv u done (RecordSet.set low (fun low0 x => if equiv_decb x v then Nat.min (low s v) n else low0 x) s).
+  Admitted.
+
+  (** [set_fa_preserves_low_forset_inv_for_new_child]: When [~ x ∈ visited],
+      [u ∈ visited], and [~ done v], setting [fa x := v] does not affect
+      [low_forset_inv u done].  The key insight: [x ≠ u] (since x is
+      unvisited but u is visited), so [children_done u done] (which requires
+      [fa = u]) and [back_edges_done u done] are unchanged. *)
+  Lemma set_fa_preserves_low_forset_inv_for_new_child (u v x: V) (done: V -> Prop) (s0: @SCCSt V):
+    ~ x ∈ visited s0 -> v ∈ visited s0 -> u ∈ visited s0 -> ~ done v -> fa s0 v = u ->
+    low_forset_inv u done s0 ->
+    low_forset_inv u done (RecordSet.set fa (fun _ x0 => if equiv_decb x0 x then v else fa s0 x0) s0).
+  Proof. Admitted.
+
   Lemma process_edge_preserves_ancestor_inv (u v x: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit)
     (HW: forall x, Hoare (fun s => low_pre x s /\ v ∈ visited s) (W x)
@@ -1823,7 +1847,25 @@ Section IS_LOW.
     Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ v ∈ visited s)
           (process_edge v W x)
           (fun _ s => low_forset_inv u done s /\ fa s v = u /\ v ∈ visited s).
-  Proof. Admitted.
+  Proof.
+    (* Proof strategy: three branches of process_edge.
+       Tree edge: set_fa x v ;; W x ;; get' low x ;; update_low v lv.
+         - set_fa x v: use set_fa_preserves_low_forset_inv_for_new_child.
+         - W x: use HW + HW_keep_all to preserve u's invariant.
+           The remaining admit here is that W x preserves all six
+           components of low_forset_inv u done (not just the ones in
+           low_post x = dfn_valid + dfn_inv + fa_visited).
+         - get' low x: pure read.
+         - update_low v lv: use update_low_preserves_low_forset_inv_for_other.
+       Back edge (in stack): get' dfn x ;; update_low v dv.
+         - get': pure read.
+         - update_low: use update_low_preserves_low_forset_inv_for_other.
+       Cross edge (not in stack): skip, invariant trivially preserved. *)
+  Admitted.
+
+
+
+
 
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
@@ -1945,7 +1987,7 @@ Section IS_LOW.
       split; [exact Hval' |].
       split; [exact Hfa'' |].
       split; [exact Hvis' |].
-      eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+      eapply min_eq_forward; [auto using NatLe_TotalOrder | exact Hmin | | ].
       + intros a1 Ha1. exists a1. split.
         * destruct Ha1 as [Ha1_L | Ha1_R].
           -- left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
@@ -1986,7 +2028,7 @@ Section IS_LOW.
       split; [exact Hval' |].
       split; [exact Hfa'' |].
       split; [exact Hvis' |].
-      eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+      eapply min_eq_forward; [auto using NatLe_TotalOrder | exact Hmin | | ].
       + intros a1 Ha1. exists a1. split.
         * destruct Ha1 as [Ha1_L | Ha1_R].
           -- left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
