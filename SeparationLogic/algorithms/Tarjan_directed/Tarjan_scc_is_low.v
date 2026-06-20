@@ -1453,13 +1453,17 @@ Section IS_LOW.
       split; [exact Hvalid |].
       split; [exact Hfa_vis |].
       split; [exact Huvis |].
-      (* min condition: back_edges_done depends on In w (stack s).
-         The stack changed from s0.(stack) to rest, which is a suffix
-         of s0.(stack).  Vertices in [done] are not among the [popped]
-         vertices (they were processed by u before v was discovered,
-         so they are below v on the stack).  Hence [In w (stack s)]
-         is unchanged for w ∈ done, and the min condition transfers.
-         Pending lemma: popped_fresh_from_done. *)
+      (* min: cbv expands RecordUpdate, revealing only stack differs.
+         children_done uses fa (same as s0); back_edges_done uses
+         stack=rest instead of stack s0.  For w∈done, In w rest ↔ In w(stack s0)
+         because popped contains v and vertices above v, while done vertices
+         were processed before v (below v on stack). *)
+      unfold children_done, back_edges_done. cbv. cbv in Hmin.
+      (* After cbv: goal uses 'rest', Hmin uses 'stack s0' in back_edges_done.
+         Children_done (uses fa s0) and low/dfn are identical.
+         Back_edges_done: for w∈done, In w rest ↔ In w (stack s0)
+         because popped = [v, vertices-above-v] and done vertices
+         (processed before v) are below v.  Pending lemma: rest_done_equiv. *)
       admit.
     - (* fa s v = u: pop_scc doesn't modify fa *)
       exact Hfa_eq.
@@ -1488,10 +1492,28 @@ Section IS_LOW.
         - subst w. sets_unfold. left. reflexivity.
         - apply Hsiv in Hin_tail. sets_unfold. right. exact Hin_tail. }
       split.
-      { (* dfn_inv: preloop modifies dfn v, timer; dfn_inv preserved.
-           We reuse the existing Hoare lemma preloop_keep_dfn_inv via
-           a direct state argument (pending full proof). *)
-        admit. }
+      { (* dfn_inv: set_dfn v sets dfn v = old_timer, incr_timer adds 1.
+           For w ≠ v: dfn unchanged. *)
+        destruct Hinv' as [Hlt_s0 [Hiff_s0 Hpos_s0]].
+        split.
+        - intros w Hvis.
+          destruct (classic (w = v)) as [Heq | Hneq].
+          + subst w. (* dfn v = old_timer < old_timer + 1 = new_timer *)
+            simpl. lia.
+          + apply Hlt_s0. sets_unfold in Hvis. destruct Hvis as [Heq' | Hvis'];
+              [exfalso; apply Hneq; exact Heq' | exact Hvis'].
+        - split.
+          + intros w. split.
+            * intros Hdfn0.
+              destruct (classic (w = v)) as [Heq | Hneq].
+              { subst w. simpl in Hdfn0. lia. }
+              { apply Hiff_s0 in Hdfn0. intro Hvis.
+                apply Hdfn0. sets_unfold in Hvis. destruct Hvis as [Heq' | Hvis'];
+                  [exfalso; apply Hneq; exact Heq' | exact Hvis']. }
+            * intros Hnvis.
+              apply Hiff_s0. intro Hvis.
+              apply Hnvis. sets_unfold. right. exact Hvis.
+          + simpl. lia. }
       split.
       { (* dfn_valid: no new tree edges from v (no children yet) *)
         exact Hvalid. }
@@ -1506,7 +1528,7 @@ Section IS_LOW.
       exact Hmin.
     - (* fa s v = u: preloop doesn't modify fa *)
       exact Hfa_eq.
-  Admitted.
+  Qed.
 
   (** [process_edge_preserves_ancestor_inv]: [process_edge v W x]
       processes one neighbor [x] of [v].  The operations on [v]'s
@@ -1547,8 +1569,8 @@ Section IS_LOW.
         split; [exact Hvalid_mid |].
         split; [exact Hfa_mid |].
         split; [exact Huvis |].
-        (* min: children_done/back_edges_done unchanged, low u unchanged *)
-        admit. }
+        (* min: unchanged, set_fa x v and update_low v don't touch u's stuff *)
+        exact Hmin. }
       { (* skip branch: ~low x < low v *)
         destruct H as [Heq _]. subst s. simpl.
         split; [| exact Hfa_eq].
@@ -1558,12 +1580,12 @@ Section IS_LOW.
         split; [exact Hvalid_mid |].
         split; [exact Hfa_mid |].
         split; [exact Huvis |].
-        admit. }
+        exact Hmin. }
     - (* Non-tree edge: x ∈ visited *)
       intro_state. hoare_auto_s.
       + (* x in stack: back edge *)
         unfold update_low. hoare_auto_s.
-        { (* set_low v (dfn x) *)
+        { (* set_low v (dfn x): update_low modifies low v, not low u *)
           intro_state. hoare_auto_s. subst s. simpl.
           split; [| exact Hfa_eq].
           unfold low_forset_inv. simpl.
@@ -1572,8 +1594,8 @@ Section IS_LOW.
           split; [exact Hvalid |].
           split; [exact Hfa_vis |].
           split; [exact Huvis |].
-          admit. }
-        { (* skip *)
+          exact Hmin. }
+        { (* skip: ~dfn x < low v, state unchanged *)
           destruct H0 as [Heq _]. subst s.
           split; [| exact Hfa_eq].
           unfold low_forset_inv. simpl.
@@ -1582,8 +1604,8 @@ Section IS_LOW.
           split; [exact Hvalid |].
           split; [exact Hfa_vis |].
           split; [exact Huvis |].
-          admit. }
-      + (* x not in stack: cross edge *)
+          exact Hmin. }
+      + (* x not in stack: cross edge, state unchanged *)
         destruct H0 as [Heq _]. subst s.
         split; [| exact Hfa_eq].
         unfold low_forset_inv. simpl.
@@ -1592,8 +1614,8 @@ Section IS_LOW.
         split; [exact Hvalid |].
         split; [exact Hfa_vis |].
         split; [exact Huvis |].
-        admit.
-  Admitted.
+        exact Hmin.
+  Qed.
 
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
