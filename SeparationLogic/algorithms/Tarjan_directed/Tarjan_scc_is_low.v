@@ -1995,7 +1995,7 @@ Section IS_LOW.
         destruct s0 as [vis0 tim0 fa0 dfn0 low0 stk0 sccs0]; simpl.
         exact Hmin_s0.
       + (* fa s v = u *)
-        destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
+        unfold equiv_decb. destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
     - (* Goal 2: W v preserves low_forset_inv u done and fa s v = u *)
       intro _. apply Hoare_conseq_pre with
         (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v).
