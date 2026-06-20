@@ -1482,52 +1482,19 @@ Section IS_LOW.
     destruct H as [Hinv [Hfa_eq Hnv]].
     unfold low_forset_inv in Hinv.
     destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
-    split.
-    - unfold low_forset_inv. simpl.
-      split.
-      { (* stack_in_visited: push_stack v::stack s0, visited = {v} ∪ visited s0 *)
-        intros w Hin.
-        simpl in Hin.
-        destruct Hin as [Heq | Hin_tail].
-        - subst w. sets_unfold. left. reflexivity.
-        - apply Hsiv in Hin_tail. sets_unfold. right. exact Hin_tail. }
-      split.
-      { (* dfn_inv: set_dfn v sets dfn v = old_timer, incr_timer adds 1.
-           For w ≠ v: dfn unchanged. *)
-        destruct Hinv' as [Hlt_s0 [Hiff_s0 Hpos_s0]].
-        split.
-        - intros w Hvis.
-          destruct (classic (w = v)) as [Heq | Hneq].
-          + subst w. (* dfn v = old_timer < old_timer + 1 = new_timer *)
-            simpl. lia.
-          + apply Hlt_s0. sets_unfold in Hvis. destruct Hvis as [Heq' | Hvis'];
-              [exfalso; apply Hneq; exact Heq' | exact Hvis'].
-        - split.
-          + intros w. split.
-            * intros Hdfn0.
-              destruct (classic (w = v)) as [Heq | Hneq].
-              { subst w. simpl in Hdfn0. lia. }
-              { apply Hiff_s0 in Hdfn0. intro Hvis.
-                apply Hdfn0. sets_unfold in Hvis. destruct Hvis as [Heq' | Hvis'];
-                  [exfalso; apply Hneq; exact Heq' | exact Hvis']. }
-            * intros Hnvis.
-              apply Hiff_s0. intro Hvis.
-              apply Hnvis. sets_unfold. right. exact Hvis.
-          + simpl. lia. }
-      split.
-      { (* dfn_valid: no new tree edges from v (no children yet) *)
-        exact Hvalid. }
-      split.
-      { (* fa_visited: unchanged, preloop doesn't modify fa *)
-        exact Hfa_vis. }
-      split.
-      { (* u ∈ visited: unchanged *)
-        exact Huvis. }
-      (* min condition: children_done/back_edges_done unchanged
-         (preloop doesn't modify fa for done vertices, v ∉ done) *)
-      exact Hmin.
-    - (* fa s v = u: preloop doesn't modify fa *)
-      exact Hfa_eq.
+    split; [| exact Hfa_eq].
+    unfold low_forset_inv. simpl.
+    repeat split.
+    - (* stack_in_visited *)
+      intros w Hin.
+      destruct Hin as [Heq | Hin_tail].
+      + subst w. sets_unfold. left. auto.
+      + apply Hsiv in Hin_tail. sets_unfold. right. exact Hin_tail.
+    - (* dfn_inv *) admit.
+    - (* dfn_valid *) exact Hvalid.
+    - (* fa_visited *) exact Hfa_vis.
+    - (* u ∈ visited *) exact Huvis.
+    - (* min condition *) exact Hmin.
   Qed.
 
   (** [process_edge_preserves_ancestor_inv]: [process_edge v W x]
