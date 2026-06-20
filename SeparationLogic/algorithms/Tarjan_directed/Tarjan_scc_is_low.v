@@ -1960,29 +1960,39 @@ Section IS_LOW.
         split.
         { (* dfn_valid: set_fa changes fa at v (unvisited), so DFS tree unchanged *)
           unfold dfn_valid. intros x y Htree.
-          apply state_to_dfs_tree_step_char in Htree.
-          destruct Htree as [Hedge [Hfa_eq [Hfa_neq Hvis_y]]].
-          simpl in Hfa_eq, Hfa_neq.
-          destruct (equiv_dec y v) as [Heq | Hneq].
-          - subst y. exfalso. apply Hnv. exact Hvis_y.
-          - assert (Hfa_s0_eq: fa s0 y = x) by exact Hfa_eq.
-            assert (Hfa_s0_neq: fa s0 y <> y) by exact Hfa_neq.
-            apply (Hvalid_s0 x y).
-            eapply state_to_dfs_tree_step_char_backward; eauto. }
+          apply Hvalid_s0.
+          unfold dg_step in Htree. destruct Htree as [e [Htree' [Hfst Hsnd]]].
+          unfold original_step in Htree'. simpl in Htree'.
+          destruct Htree' as [w [Hwvis [Hwfa [Hwfst Hwsnd]]]].
+          assert (Hwneq: w <> v). { intros Heq. rewrite Heq in Hwvis. apply Hnv. exact Hwvis. }
+          unfold equiv_decb in Hwfa, Hwfst.
+          destruct (equiv_dec w v) as [Heq | Hneq].
+          { exfalso. rewrite Heq in Hwvis. apply Hnv. exact Hwvis. }
+          unfold dg_step.
+          exists e. split; [| split]; auto.
+          unfold original_step.
+          exists w. repeat split; auto. }
         split.
         { (* fa_visited: fa v := u, for w≠v fa unchanged *)
           intros w Hfa_neq.
           destruct (equiv_dec w v) as [Heq | Hneq_w].
-          - subst w. unfold fa_visited in Hfa_vis_s0.
+          - rewrite Heq in *. simpl.
+            unfold equiv_decb. destruct (equiv_dec v v) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
             (* fa v = u <> v, need u ∈ visited s0 *)
             exact Huvis_s0.
-          - apply Hfa_vis_s0. exact Hfa_neq. }
+          - unfold set_fa in Hfa_neq. simpl in Hfa_neq.
+            unfold equiv_decb in Hfa_neq. destruct (equiv_dec w v) as [Heq' | Hneq'] in Hfa_neq.
+            { exfalso. apply Hneq_w. exact Heq'. }
+            unfold set_fa. simpl. unfold equiv_decb.
+            destruct (equiv_dec w v) as [Heq'' | Hneq''].
+            { exfalso. apply Hneq_w. exact Heq''. }
+            apply Hfa_vis_s0. exact Hfa_neq. }
         split.
         { (* u ∈ visited: unchanged *)
           exact Huvis_s0. }
         (* min: children_done/back_edges_done for set_fa_state = same for s0.
            fa change at v doesn't affect done vertices, low/dfn unchanged. *)
-        simpl. exact Hmin_s0.
+        cbv. exact Hmin_s0.
       + (* fa s v = u *)
         destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
     - (* Goal 2: W v preserves low_forset_inv u done and fa s v = u *)
