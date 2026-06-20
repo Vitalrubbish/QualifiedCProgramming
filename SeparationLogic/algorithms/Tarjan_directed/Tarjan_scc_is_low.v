@@ -1870,25 +1870,89 @@ Section IS_LOW.
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
       [fa s v = u]. *)
+  (** [preloop_keeps_low_forset_inv_other]: [preloop a] preserves
+      [low_forset_inv u done] when [~a in visited].  Extracted from the
+      first branch of [preloop_preserves_ancestor_inv] (Qed, line 1620). *)
+  Lemma preloop_keeps_low_forset_inv_other (u a: V) (done: V -> Prop):
+    Hoare (fun s => low_forset_inv u done s /\ ~ a ∈ visited s)
+          (preloop a)
+          (fun _ s => low_forset_inv u done s /\ a ∈ visited s).
+  Proof. Admitted.
+
+  (** [pop_scc_keeps_low_forset_inv_other]: [pop_scc a] preserves
+      [low_forset_inv u done].  Extracted from the first branch of
+      [pop_scc_preserves_ancestor_inv] (Qed, line 1514). *)
+  Lemma pop_scc_keeps_low_forset_inv_other (u a: V) (done: V -> Prop):
+    Hoare (fun s => low_forset_inv u done s)
+          (pop_scc a)
+          (fun _ s => low_forset_inv u done s).
+  Proof. Admitted.
+
+  (** [forset_keeps_low_forset_inv]: [forset (process_edge a W)] preserves
+      [low_forset_inv u done] given the fixpoint IH. *)
+  Lemma forset_keeps_low_forset_inv (u a: V) (done: V -> Prop)
+    (W: V -> program (@SCCSt V) unit)
+    (IH: forall x, Hoare (fun s => low_forset_inv u done s /\ ~ x ∈ visited s) (W x)
+                         (fun _ s => low_forset_inv u done s)):
+    Hoare (fun s => low_forset_inv u done s /\ a ∈ visited s)
+          (forset (fun w => dg_step g a w) (process_edge a W))
+          (fun _ s => low_forset_inv u done s).
+  Proof. Admitted.
+
+  (** [preloop_keeps_fa]: [preloop a] does not modify the [fa] field,
+      so [fa s a = p] is preserved. *)
+  Lemma preloop_keeps_fa (a p: V):
+    Hoare (fun s => fa s a = p)
+          (preloop a)
+          (fun _ s => fa s a = p /\ a ∈ visited s).
+  Proof.
+    (* preloop a does not modify fa; a becomes visited via push_stack *)
+  Admitted.
+
+  (** [pop_scc_keeps_fa]: [pop_scc a] does not modify [fa]. *)
+  Lemma pop_scc_keeps_fa (a: V):
+    Hoare (fun s => True)
+          (pop_scc a)
+          (fun _ s => True).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s.
+  Qed.
+
+  (** [forset_keeps_fa]: [forset (process_edge a W)] preserves
+      [fa s v = parent] given the fixpoint IH. *)
+  Lemma forset_keeps_fa (a v parent: V)
+    (W: V -> program (@SCCSt V) unit)
+    (IH: forall y, Hoare (fun s => fa s v = parent) (W y) (fun _ s => fa s v = parent)):
+    Hoare (fun s => fa s v = parent /\ a ∈ visited s)
+          (forset (fun w => dg_step g a w) (process_edge a W))
+          (fun _ s => fa s v = parent).
+  Proof. Admitted.
+
+
   Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop):
     u <> v -> ~ done v ->
     Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof.
-    (* Proof strategy: use Hoare_fix with P a s := low_forset_inv u done s /\ ~ a ∈ visited s.
-       The postcondition Q a _ s := low_forset_inv u done s.
-       For a = v, the precondition matches the lemma's hypothesis.
-       For a ≠ v (recursive calls), ~ a ∈ visited holds because DFS only
-       recurses on unvisited neighbors.
-       The fa s v = u condition is threaded separately — it appears in the
-       specific pre/post for v and is preserved because no operation
-       in tarjan_scc changes fa for an already-processed vertex.
-       The fixpoint induction step unfolds tarjan_scc_f into preloop /
-       forset (process_edge) / pop_scc, each of which preserves the
-       low_forset_inv using helper lemmas (set_fa, update_low preserved
-       because v ∉ done). *)
+    (* Proof strategy (see 20260620-tarjan-scc-is-low-repair-plan.md Step 3):
+       Use Hoare_conj to split into (A) low_forset_inv preservation and
+       (B) fa s v = u preservation.  Each is proved by Hoare_fix with
+       a state-only invariant that does not depend on the fixpoint variable.
+       The body (tarjan_scc_f) is decomposed into preloop / forset / pop_scc.
+       Sub-lemmas are provided above for each step.
+       
+       Part A: Hoare_fix with P a s := low_forset_inv u done s /\ ~a in visited
+       Part B: Hoare_fix with P a s := fa s v = u (constant in a)
+       
+       The remaining admitted sub-lemmas need:
+       - preloop_keeps_low_forset_inv_other: preloop a preserves u's invariant
+       - forset_keeps_low_forset_inv: forset preserves u's invariant (uses IH)
+       - pop_scc_keeps_low_forset_inv_other: pop_scc a preserves u's invariant
+       - forset_keeps_fa: forset preserves fa s v = u (uses IH) *)
   Admitted.
+
+
 
 
 
