@@ -1,6 +1,9 @@
 {
   "name": "QCP Dev Container",
-  "image": "qcp",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
   "workspaceFolder": "/home/coq/qcp",
   "customizations": {
     "vscode": {
@@ -9,17 +12,9 @@
         "qide.lspBinPath": "/home/coq/qcp/linux-binary/lsp"
       },
       "extensions": [
-        // Specify a local VSIX file to install an extension in the devcontainer.
-        // This is an undocumented feature and may not work on all VS Code versions or platforms.
-        // For details, see: https://github.com/microsoft/vscode-remote-release/issues/8827
-        // If you see a warning about the format, it can usually be ignored if the extension installs successfully.
         "/home/coq/qcp/qide.vsix"
       ]
     }
   },
-  // "postCreateCommand": "code --install-extension /home/coq/qcp/qide.vsix",
   "remoteUser": "coq"
-  // "mounts": [
-  //   "source=${localWorkspaceFolder},target=/home/coq/qcp,type=bind"
-  // ]
 }
