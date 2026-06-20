@@ -2102,15 +2102,13 @@ Section IS_LOW.
     Hoare (fun s: @SCCSt V => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
           (process_edge u W v)
           (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
-  Proof.
-  Admitted.
+  Proof. Admitted.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
     Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
           (fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
-  Proof.
-  Admitted.
+  Proof. Admitted.
 
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
