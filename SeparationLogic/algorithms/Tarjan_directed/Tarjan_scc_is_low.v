@@ -2097,10 +2097,6 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
           (fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
   Proof.
-    (* Proved by fixpoint induction following tarjan_scc_keep_visited pattern.
-       preloop doesn't change fa; forset uses process_edge which only sets
-       fa to center (never parent); pop_scc doesn't change fa.
-       The forset body needs a process_edge-level lemma for fa preservation. *)
   Admitted.
 
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
