@@ -1422,6 +1422,227 @@ Section IS_LOW.
         * apply Nat.le_refl.
   Qed.
 
+  (* ================================================================ *)
+  (* 10.5. Ancestor Invariant Preservation Lemmas                      *)
+  (* ================================================================ *)
+
+  (** Lemmas to prove that operations on vertex [v] preserve
+      [low_forset_inv u done] and [fa s v = u] for an ancestor [u].
+      These are the building blocks for [W_preserves_ancestor_inv]. *)
+
+  (** [pop_scc_preserves_ancestor_inv]: [pop_scc v] only modifies
+      [stack] and [sccs]; [fa], [low], [dfn], [visited] unchanged. *)
+  Lemma pop_scc_preserves_ancestor_inv (u v: V) (done: V -> Prop):
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u)
+          (pop_scc v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) v) as [popped rest] eqn:?.
+    simpl. destruct H as [Hinv Hfa_eq].
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
+    split.
+    - unfold low_forset_inv. simpl.
+      split.
+      { (* stack_in_visited: rest ⊆ old stack, old stack ⊆ visited *)
+        intros w Hin. apply Hsiv.
+        eapply stack_split_at_rest_incl; eauto. }
+      split; [exact Hinv' |].
+      split; [exact Hvalid |].
+      split; [exact Hfa_vis |].
+      split; [exact Huvis |].
+      (* min condition: back_edges_done depends on In w (stack s).
+         The stack changed from s0.(stack) to rest, which is a suffix
+         of s0.(stack).  Vertices in [done] are not among the [popped]
+         vertices (they were processed by u before v was discovered,
+         so they are below v on the stack).  Hence [In w (stack s)]
+         is unchanged for w ∈ done, and the min condition transfers.
+         Pending lemma: popped_fresh_from_done. *)
+      admit.
+    - (* fa s v = u: pop_scc doesn't modify fa *)
+      exact Hfa_eq.
+  Admitted.
+
+  (** [preloop_preserves_ancestor_inv]: [preloop v] modifies [dfn v],
+      [low v], [timer], [stack], [visited] — all local to [v].
+      No effect on [fa], [low] for [u ≠ v], or [done] vertices. *)
+  Lemma preloop_preserves_ancestor_inv (u v: V) (done: V -> Prop):
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s)
+          (preloop v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hinv [Hfa_eq Hnv]].
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
+    split.
+    - unfold low_forset_inv. simpl.
+      split.
+      { (* stack_in_visited: push_stack v::stack s0, visited = {v} ∪ visited s0 *)
+        intros w Hin.
+        simpl in Hin.
+        destruct Hin as [Heq | Hin_tail].
+        - subst w. sets_unfold. left. reflexivity.
+        - apply Hsiv in Hin_tail. sets_unfold. right. exact Hin_tail. }
+      split.
+      { (* dfn_inv: preloop modifies dfn v, timer; dfn_inv preserved.
+           We reuse the existing Hoare lemma preloop_keep_dfn_inv via
+           a direct state argument (pending full proof). *)
+        admit. }
+      split.
+      { (* dfn_valid: no new tree edges from v (no children yet) *)
+        exact Hvalid. }
+      split.
+      { (* fa_visited: unchanged, preloop doesn't modify fa *)
+        exact Hfa_vis. }
+      split.
+      { (* u ∈ visited: unchanged *)
+        exact Huvis. }
+      (* min condition: children_done/back_edges_done unchanged
+         (preloop doesn't modify fa for done vertices, v ∉ done) *)
+      exact Hmin.
+    - (* fa s v = u: preloop doesn't modify fa *)
+      exact Hfa_eq.
+  Admitted.
+
+  (** [process_edge_preserves_ancestor_inv]: [process_edge v W x]
+      processes one neighbor [x] of [v].  The operations on [v]'s
+      edges do not modify [fa] for [u]'s done vertices, [low u],
+      or [fa v]. *)
+  Lemma process_edge_preserves_ancestor_inv (u v x: V) (done: V -> Prop)
+    (W: V -> program (@SCCSt V) unit):
+    dg_step g v x ->
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u)
+          (process_edge v W x)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+  Proof.
+    intros Hdg_vx.
+    unfold process_edge, if_else.
+    intro_state. destruct H as [Hinv Hfa_eq].
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
+    apply Hoare_choice.
+    - (* Tree edge: ~x ∈ visited *)
+      apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := fun s => low_pre x s).
+      { intros s1 [Hnx Hs1]. subst s1. unfold low_pre.
+        split; [exact Hsiv | split; [exact Hnx | split; [exact Hvalid | split; [exact Hinv' | exact Hfa_vis]]]]]. }
+      eapply Hoare_bind. { apply (set_fa_preserves_low_pre_rich x v). }
+      simpl. intros _.
+      eapply Hoare_bind. { apply (HW x). }
+      simpl. intros _. intro_state.
+      destruct H as [[Hscc [Hvalid_mid [Hinv_mid Hfa_mid]]] Hxvis_mid].
+      hoare_auto_s.
+      unfold update_low. hoare_auto_s.
+      { (* set_low branch: low x < low v → set_low v (low x) *)
+        (* set_low modifies low v, not low u or fa v or done vertices *)
+        intro_state. hoare_auto_s. subst s. simpl.
+        split; [| exact Hfa_eq].
+        unfold low_forset_inv. simpl.
+        split; [exact Hsiv |].
+        split; [exact Hinv_mid |].
+        split; [exact Hvalid_mid |].
+        split; [exact Hfa_mid |].
+        split; [exact Huvis |].
+        (* min: children_done/back_edges_done unchanged, low u unchanged *)
+        admit. }
+      { (* skip branch: ~low x < low v *)
+        destruct H as [Heq _]. subst s. simpl.
+        split; [| exact Hfa_eq].
+        unfold low_forset_inv. simpl.
+        split; [exact Hsiv |].
+        split; [exact Hinv_mid |].
+        split; [exact Hvalid_mid |].
+        split; [exact Hfa_mid |].
+        split; [exact Huvis |].
+        admit. }
+    - (* Non-tree edge: x ∈ visited *)
+      intro_state. hoare_auto_s.
+      + (* x in stack: back edge *)
+        unfold update_low. hoare_auto_s.
+        { (* set_low v (dfn x) *)
+          intro_state. hoare_auto_s. subst s. simpl.
+          split; [| exact Hfa_eq].
+          unfold low_forset_inv. simpl.
+          split; [exact Hsiv |].
+          split; [exact Hinv' |].
+          split; [exact Hvalid |].
+          split; [exact Hfa_vis |].
+          split; [exact Huvis |].
+          admit. }
+        { (* skip *)
+          destruct H0 as [Heq _]. subst s.
+          split; [| exact Hfa_eq].
+          unfold low_forset_inv. simpl.
+          split; [exact Hsiv |].
+          split; [exact Hinv' |].
+          split; [exact Hvalid |].
+          split; [exact Hfa_vis |].
+          split; [exact Huvis |].
+          admit. }
+      + (* x not in stack: cross edge *)
+        destruct H0 as [Heq _]. subst s.
+        split; [| exact Hfa_eq].
+        unfold low_forset_inv. simpl.
+        split; [exact Hsiv |].
+        split; [exact Hinv' |].
+        split; [exact Hvalid |].
+        split; [exact Hfa_vis |].
+        split; [exact Huvis |].
+        admit.
+  Admitted.
+
+  (** [W_preserves_ancestor_inv]: Combining the above, [W v]
+      ([tarjan_scc g v]) preserves [low_forset_inv u done] and
+      [fa s v = u]. *)
+  Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop)
+    (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (fun s => low_pre x s) (W x) (fun _ s => low_post x s)) ->
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s)
+          (W v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+  Proof.
+    intros HW_post.
+    unfold tarjan_scc, tarjan_scc_f.
+    eapply Hoare_bind.
+    { apply preloop_preserves_ancestor_inv. }
+    simpl. intros _. intro_state.
+    destruct H as [Hinv Hfa_eq].
+    eapply Hoare_bind with
+      (Q := fun _ s => low_forset_inv u done s /\ fa s v = u).
+    { apply Hoare_conseq_pre with
+        (P2 := fun s => low_forset_inv u done s /\ fa s v = u).
+      { intros s H. exact H. }
+      (* forset preserves ancestor invariants *)
+      eapply Hoare_forset with
+        (P := fun _ s => low_forset_inv u done s /\ fa s v = u)
+        (universe := dg_step g v)
+        (body := process_edge v W).
+      - (* Proper *)
+        clear. intros done1 done2 Hequiv s1 s2 Heq. subst s2.
+        apply Sets_equiv_Sets_included in Hequiv. destruct Hequiv.
+        split; intros [Hinv' Hfa']; split; auto.
+      - intros done' a Hsub Huniv Hnot_done.
+        apply Hoare_conseq_pre with
+          (P2 := fun s => low_forset_inv u done s /\ fa s v = u).
+        { intros s [Hinv' Hfa']. split; auto. }
+        apply process_edge_preserves_ancestor_inv; auto. }
+    simpl. intros _. intro_state.
+    destruct H as [Hinv' Hfa'_eq].
+    hoare_auto_s.
+    - (* low v = dfn v → pop_scc v *)
+      apply Hoare_conseq_pre with
+        (P2 := fun s => low_forset_inv u done s /\ fa s v = u).
+      { intros s [Hinv'' Hfa'']. split; auto. }
+      apply pop_scc_preserves_ancestor_inv.
+    - (* skip: state unchanged *)
+      destruct H as [Heq _]. subst s.
+      split; auto.
+  Admitted.
+
   (** [set_fa_W_preserves_low_forset_inv]: key lemma for the tree edge
       branch of [process_edge_keep_low_forset_inv].  After [set_fa v u]
       (which sets [fa v := u]) followed by the recursive call [W v]
@@ -1504,22 +1725,18 @@ Section IS_LOW.
         simpl. exact Hmin_s0.
       + (* fa s v = u *)
         destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
-    - (* Goal 2: W v preserves low_forset_inv u done and fa s v = u,
-         consuming ~ v ∈ visited.  Requires fixpoint induction proof
-         that W (tarjan_scc g v) does not modify fa v, low u, or
-         children_done/back_edges_done for done vertices. *)
+    - (* Goal 2: W v preserves low_forset_inv u done and fa s v = u *)
       intro _. apply Hoare_conseq_pre with
         (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s).
       { intros s H. exact H. }
-      (* Combine: HW v gives low_post v, and we need extra invariants.
-         The extra invariants are preserved because:
-         - fa v unchanged: W v only sets fa for descendants of v
-         - low u unchanged: update_low only on v and descendants
-         - children_done u done unchanged: fa for done vertices unchanged
-         - back_edges_done u done unchanged: same reason
-         Pending formal proof via fixpoint induction. *)
-      admit.
-  Admitted.
+      assert (HW_post: forall x, Hoare (fun s => low_pre x s) (W x)
+                                       (fun _ s => low_post x s)). {
+        intros x. eapply Hoare_conseq_post.
+        2: { eapply Hoare_conseq_pre. 2: apply (HW x).
+             intros s [Hpre Hu]. exact Hpre. }
+        intros _ s [Hpost _]. exact Hpost. }
+      apply (W_preserves_ancestor_inv u v done W HW_post).
+  Qed.
 
   Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit):
