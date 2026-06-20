@@ -1916,6 +1916,29 @@ Section IS_LOW.
          and back_edges_done for done vertices unchanged (done vertices
          are not descendants of v). Proved by fixpoint induction on
          tarjan_scc, adding a new visited_tag constructor. *)
+  Lemma set_fa_preserves_min (u v: V) (done: V -> Prop) (s0: @SCCSt V): ~ done v ->
+    min_value_of_subset Nat.le (min_value_of_subset Nat.le (children_done s0 u done) (low s0) ∪ min_value_of_subset Nat.le (fun w => back_edges_done s0 u done w \/ w = u) (dfn s0)) (fun x => x) (low s0 u) ->
+    min_value_of_subset Nat.le (min_value_of_subset Nat.le (children_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done) (low s0) ∪ min_value_of_subset Nat.le (fun w => back_edges_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done w \/ w = u) (dfn s0)) (fun x => x) (low s0 u).
+  Proof.
+    intros Hndone Hmin_s0. set (f := fun (fa0 : V -> V) (x : V) => if equiv_decb x v then u else fa0 x).
+    assert (Hchild_eq: children_done (set fa f s0) u done == children_done s0 u done). {
+      unfold children_done. simpl. apply Sets_equiv_Sets_included. split; sets_unfold.
+      - intros w [Hw_done [Hw_fa Hw_neq]]. unfold f in Hw_fa, Hw_neq; simpl in Hw_fa, Hw_neq. unfold equiv_decb in Hw_fa, Hw_neq. destruct (equiv_dec w v) as [Heqw | Hneqw]. + rewrite Heqw in Hw_done. exfalso. exact (Hndone Hw_done). + split; [exact Hw_done | split; [exact Hw_fa | exact Hw_neq]].
+      - intros w [Hw_done [Hw_fa Hw_neq]]. unfold f; simpl; unfold equiv_decb. destruct (equiv_dec w v) as [Heqw | Hneqw]. + rewrite Heqw in Hw_done. exfalso. exact (Hndone Hw_done). + split; [exact Hw_done | split; [exact Hw_fa | exact Hw_neq]]. }
+    assert (Hback_eq: back_edges_done (set fa f s0) u done == back_edges_done s0 u done). {
+      unfold back_edges_done. simpl. apply Sets_equiv_Sets_included. split; sets_unfold.
+      - intros w [Hw_done [Hw_stack Hw_fa]]. unfold f in Hw_fa; simpl in Hw_fa; unfold equiv_decb in Hw_fa. destruct (equiv_dec w v) as [Heqw | Hneqw]. + rewrite Heqw in Hw_done. exfalso. exact (Hndone Hw_done). + split; [exact Hw_done | split; [exact Hw_stack | exact Hw_fa]].
+      - intros w [Hw_done [Hw_stack Hw_fa]]. unfold f; simpl; unfold equiv_decb. destruct (equiv_dec w v) as [Heqw | Hneqw]. + rewrite Heqw in Hw_done. exfalso. exact (Hndone Hw_done). + split; [exact Hw_done | split; [exact Hw_stack | exact Hw_fa]]. }
+    unfold f.
+    apply min_eq_forward with (f1 := fun x : nat => x) (f2 := fun x : nat => x) (P1 := fun n => min_value_of_subset Nat.le (children_done s0 u done) (low s0) n \/ min_value_of_subset Nat.le (fun w => back_edges_done s0 u done w \/ w = u) (dfn s0) n) (P2 := fun n => min_value_of_subset Nat.le (children_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done) (low s0) n \/ min_value_of_subset Nat.le (fun w => back_edges_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done w \/ w = u) (dfn s0) n) (n := low s0 u); [typeclasses eauto|exact Hmin_s0| |].
+    { intros a1 Ha1; destruct Ha1 as [Ha1|Ha1].
+      - destruct Ha1 as [w' [[Hw_in Hw_min] Heq_a1]]; exists a1; split; [left; exists w'; split; [unfold min_object_of_subset; split; [apply Hchild_eq; exact Hw_in|intros x Hx; apply Hchild_eq in Hx; apply Hw_min; exact Hx]|exact Heq_a1]|apply Nat.le_refl].
+      - destruct Ha1 as [w' [[Hw_in Hw_min] Heq_a1]]; exists a1; split; [right; exists w'; split; [unfold min_object_of_subset; split; [destruct Hw_in as [Hw_back|Hw_u]; [left; apply Hback_eq; exact Hw_back|right; exact Hw_u]|intros x Hx; destruct Hx as [Hx_back|Hx_u]; [apply Hw_min; left; apply Hback_eq; exact Hx_back|subst x; apply Hw_min; right; reflexivity]]|exact Heq_a1]|apply Nat.le_refl]. }
+    { intros a2 Ha2; destruct Ha2 as [Ha2|Ha2].
+      - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [left; exists w'; split; [unfold min_object_of_subset; split; [apply Hchild_eq; exact Hw_in|intros x Hx; apply Hchild_eq in Hx; apply Hw_min; exact Hx]|exact Heq_a2]|apply Nat.le_refl].
+      - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [right; exists w'; split; [unfold min_object_of_subset; split; [destruct Hw_in as [Hw_back|Hw_u]; [left; apply Hback_eq; exact Hw_back|right; exact Hw_u]|intros x Hx; destruct Hx as [Hx_back|Hx_u]; [apply Hw_min; left; apply Hback_eq; exact Hx_back|subst x; apply Hw_min; right; reflexivity]]|exact Heq_a2]|apply Nat.le_refl]. }
+  Qed.
+
   Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit)
     (HW: forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
