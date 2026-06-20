@@ -2138,8 +2138,17 @@ Section IS_LOW.
             { unfold set_low. intro_state. hoare_auto_s.
               rewrite H4, H3 in H5. destruct H5. eapply H1. split; assumption. }
             { destruct H2, H3. subst s. eapply H1. split; assumption. } } } } }
-    { (* Non-tree edge: fa unchanged by get'/update_low/skip *) admit. }
-  Admitted.
+    { (* Non-tree edge *) intro_state. hoare_auto_s.
+      { (* In stack: update_low u (dfn s0 v) *)
+        unfold update_low. intro_state. hoare_auto_s.
+        { (* lv < low: set_low, fa unchanged *)
+          unfold set_low. intro_state. hoare_auto_s.
+          rewrite H5, H4 in H6. destruct H6. eapply H. split; assumption. }
+        { (* skip: fa unchanged *)
+          destruct H1. subst s. destruct H4. eapply H. split; assumption. } }
+      { (* Not in stack: skip, fa unchanged *)
+        destruct H3. subst s. destruct H4. rewrite H1 in H3, H4. eapply H. split; assumption. } }
+  Qed.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
     Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
