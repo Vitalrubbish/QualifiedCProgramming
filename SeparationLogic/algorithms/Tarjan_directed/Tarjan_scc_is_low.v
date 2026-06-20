@@ -2138,7 +2138,7 @@ Section IS_LOW.
             { unfold set_low. intro_state. hoare_auto_s.
               rewrite H4, H3 in H5. destruct H5. eapply H1. split; assumption. }
             { destruct H2, H3. subst s. eapply H1. split; assumption. } } } } }
-    { (* Non-tree edge *) admit. }
+    { (* Non-tree edge: fa unchanged by get'/update_low/skip *) admit. }
   Admitted.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
