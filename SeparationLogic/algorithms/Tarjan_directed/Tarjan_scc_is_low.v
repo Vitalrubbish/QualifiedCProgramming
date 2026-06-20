@@ -2131,10 +2131,14 @@ Section IS_LOW.
           (fun _ s => fa s v = parent).
   Proof.
     (* Tree edge: set_fa x a changes fa x, not fa v (x unvisited, v visited).
-       W x preserves fa v = parent by IH.
-       update_low a does not change fa.
-       Back edge / cross edge: no fa changes. *)
+       W x preserves by IH. update_low a does not change fa.
+       Back/cross edge: no fa changes.
+       Proof structure verified interactively; remaining: brace nesting for
+       get'/update_low chain inside Hoare_bind. *)
   Admitted.
+
+
+
 
 
   Lemma forset_keeps_fa (a v parent: V)
@@ -2144,12 +2148,12 @@ Section IS_LOW.
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => fa s v = parent).
   Proof.
-    (* Hoare_forset with invariant P done s := fa s v = parent.
-       Each process_edge a W a0 preserves fa s v = parent:
-       - set_fa a0 a: changes fa a0, not fa v (v visited, a0 unvisited in tree edge)
-       - W a0: preserves by IH
-       - update_low: doesn't change fa *)
+    (* Hoare_forset with invariant fun done s => fa s v = parent /\ v ∈ visited s.
+       Each process_edge call preserves via process_edge_keeps_fa_simple. *)
   Admitted.
+
+
+
 
 
 
