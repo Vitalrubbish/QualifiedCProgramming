@@ -2154,7 +2154,37 @@ Section IS_LOW.
     Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
           (fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
-  Proof. Admitted.
+  Proof.
+    unfold tarjan_scc. hoare_fix_nolv_auto V. clear a. intros W IH a. unfold tarjan_scc_f.
+    eapply Hoare_bind with (R := fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+    { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+      instantiate (1 := fun (_:unit) (s:SCCSt) => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+      exact H. }
+    { simpl. intros _.
+      eapply Hoare_bind with (R := fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+      { (* forset: Hoare_forset provides a ∈ universe = dg_step g a a0 *)
+        apply (@Hoare_forset SCCSt V
+          (fun done s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
+          (fun v => dg_step g a v) (process_edge a W)).
+        { unfold Proper, respectful. intros. subst. reflexivity. }
+        { intros todo a0 Hsub Huniv Hnotdone.
+          apply process_edge_keep_fa_children.
+          { exact Huniv. }
+          { intros x. apply IH. } } }
+      { simpl. intros _.
+        intro_state. hoare_auto_s.
+        { (* pop_scc a: fa unchanged *)
+          unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+          unfold pop_scc_state.
+          destruct (stack_split_at (stack s0) a) as [popped rest] eqn:Heqp; simpl.
+          match goal with Hfa: fa ?s' ?v = _ /\ _ |- _ => destruct Hfa as [Hfa_eq Hfa_neq] end.
+          match goal with Heq: ?x = s0 |- _ => rewrite Heq in Hfa_eq, Hfa_neq end.
+          unfold pop_scc_state in Hfa_eq, Hfa_neq.
+          rewrite Heqp in Hfa_eq, Hfa_neq. simpl in Hfa_eq, Hfa_neq.
+          eapply H. split; eauto. }
+        { (* skip: fa unchanged *)
+          destruct H1. subst s. destruct H2. eapply H. split; assumption. } } }
+  Qed.
 
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
