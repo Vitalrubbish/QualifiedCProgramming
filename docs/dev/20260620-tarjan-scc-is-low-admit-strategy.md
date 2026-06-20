@@ -522,7 +522,29 @@ Proof.
 
 ### Phase 2：修复 `popped_vertex_low_eq_dfn`（line 1166）
 
-4. 使用 `low_forset_inv` 结构或新增 `visited_not_on_stack_low_eq_dfn` 不变量证明此引理。
+**状态**：分析完成，暂未修复。详见下方分析。
+
+**分析结论**（2026-06-20）：
+
+`popped_vertex_low_eq_dfn` 声称：`dfn_inv s -> v ∈ visited s -> ~ In v (stack s) -> low s v = dfn s v`。
+
+经过深入分析，该引理**在通用情况下不成立**：在 Tarjan SCC 算法中，非 SCC 根的顶点被弹出时 `low ≠ dfn`（它们的 low 值等于 SCC 根的 dfn，而非自身的 dfn）。
+
+然而，在该引理被使用的上下文（`tree_child_low_le`）中，v 是 u 的直接 tree child（`fa v = u, fa v ≠ v`）且 v 不在栈上。在此特定上下文中：
+- 若 v 与 u 在同一 SCC 中，v 仍会在栈上（因为整个 SCC 尚未被弹出）
+- `~ In v (stack s)` 意味着 v 的 SCC 已独立完成，v 是 SCC root
+- 因此 `pop_scc v` 被调用，前置条件 `low v = dfn v` 满足
+- 所以 `low s v = dfn s v` 在此上下文中是成立的
+
+**三种可行修复路径**：
+
+1. **新增 Hoare 不变量**：添加 `forall v, v ∈ visited s -> ~ In v (stack s) -> low s v = dfn s v` 为独立不变量，对所有操作证明保持性。工作量较大（类似 Phase 1 的 `fa_children_are_done`）。
+
+2. **fixpoint 归纳证明**：在 `tarjan_scc` 的 fixpoint 归纳中，对每个递归调用 `W v` 使用归纳假设来证明 `low s v = dfn s v`（当 v 不在栈上时）。这需要修改 `tarjan_scc_keep_low_valid` 的结构。
+
+3. **重构 `tree_child_low_le`**：避免使用 `popped_vertex_low_eq_dfn`，改用 case analysis（u 和 v 在同一 SCC vs 不同 SCC）来直接证明 `low u ≤ low v`。在同一 SCC 情况下 `low u = low v`；在不同 SCC 情况下 `low u ≤ dfn u < dfn v = low v`。
+
+推荐路径 2 或 3，因为它们利用了算法的 fixpoint 结构。此 admit 留待后续 phase 解决。
 
 ### Phase 3：修复 `process_edge_keep_low_forset_inv` 内部 admits
 
