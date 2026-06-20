@@ -1455,9 +1455,18 @@ Section IS_LOW.
       destruct Hinv_mid as [Hlt_mid [Hiff_mid Hpos_mid]].
       hoare_auto_s.
       unfold update_low. hoare_auto_s.
-      { (* Subgoal 1: low v < low s u → set_low u (low v) *)
+      { (* Subgoal 1: low s1 v < low s1 u → set_low u (low s1 v).
+           After set_low, state becomes RecordSet.set low (λ_. min (low s1 u) (low s1 v)) s1.
+           update_low_tree_edge gives exactly low_forset_inv u (done ∪ [v]) s'.
+           BLOCKED: need low_forset_inv u done s1, fa s1 v = u, fa s1 v <> v.
+           These are preserved through set_fa v u;; W v but not yet formalized. *)
         admit. }
-      { (* Subgoal 2: ~ low v < low s u → skip *)
+      { (* Subgoal 2: ~ low s1 v < low s1 u → skip, state = s1 unchanged.
+           Applying low_forset_inv_expand_child_done reduces to:
+           (1) low_forset_inv u done s1 — blocker, needs set_fa_W_preserves lemma
+           (2) fa s1 v = u — set by set_fa v u, preserved through W v
+           (3) fa s1 v <> v — from u <> v (v unvisited in s0, u visited in s0)
+           (4) low s1 u <= low s1 v — from ~ low s1 v < low s1 u via Nat.nlt_ge *)
         admit. }
     - (* Non-tree edge: v is visited *)
       intro_state. hoare_auto_s.
