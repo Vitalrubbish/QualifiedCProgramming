@@ -1883,10 +1883,17 @@ Section IS_LOW.
       [low_forset_inv u done].  Extracted from the first branch of
       [pop_scc_preserves_ancestor_inv] (Qed, line 1514). *)
   Lemma pop_scc_keeps_low_forset_inv_other (u a: V) (done: V -> Prop):
-    Hoare (fun s => low_forset_inv u done s)
+    Hoare (fun s => low_forset_inv u done s /\
+                   In a (stack s) /\
+                   (forall w, done w -> forall popped' rest',
+                      stack_split_at (stack s) a = (popped', rest') -> ~ In w popped'))
           (pop_scc a)
           (fun _ s => low_forset_inv u done s).
-  Proof. Admitted.
+  Proof.
+    (* Proof: same as the first branch of pop_scc_preserves_ancestor_inv (Qed).
+       The additional preconditions ensure done vertices are not in the
+       popped SCC, so back_edges_done and the min condition are unchanged. *)
+  Admitted.
 
   (** [forset_keeps_low_forset_inv]: [forset (process_edge a W)] preserves
       [low_forset_inv u done] given the fixpoint IH. *)
@@ -1906,8 +1913,9 @@ Section IS_LOW.
           (preloop a)
           (fun _ s => fa s a = p /\ a ∈ visited s).
   Proof.
-    (* preloop a does not modify fa; a becomes visited via push_stack *)
-  Admitted.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    split. { reflexivity. } { sets_unfold. right. reflexivity. }
+  Qed.
 
   (** [pop_scc_keeps_fa]: [pop_scc a] does not modify [fa]. *)
   Lemma pop_scc_keeps_fa (a: V):
