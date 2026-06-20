@@ -1876,20 +1876,21 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof.
-    intros Hneq Hndone.
-    unfold tarjan_scc. hoare_fix_nolv_auto V.
-    rename v into v_outer. intros W IH v.
-    unfold tarjan_scc_f.
-    (* Step 1: preloop v *)
-    eapply Hoare_bind with (R := fun _ s => (low_forset_inv u done s /\ fa s v = u) /\ v ∈ visited s).
-    { (* preloop v *) admit. }
-    { simpl. intros _. eapply Hoare_bind with (R := fun _ s => low_forset_inv u done s /\ fa s v = u).
-      { (* forset (process_edge v W) *) admit. }
-      { simpl. intros _. (* If low = dfn then pop_scc *)
-        intro_state. hoare_auto_s.
-        { (* pop_scc v *) admit. }
-        { (* skip *) destruct H0. subst s. exact H. } } } }
+    (* Proof strategy: use Hoare_fix with P a s := low_forset_inv u done s /\ ~ a ∈ visited s.
+       The postcondition Q a _ s := low_forset_inv u done s.
+       For a = v, the precondition matches the lemma's hypothesis.
+       For a ≠ v (recursive calls), ~ a ∈ visited holds because DFS only
+       recurses on unvisited neighbors.
+       The fa s v = u condition is threaded separately — it appears in the
+       specific pre/post for v and is preserved because no operation
+       in tarjan_scc changes fa for an already-processed vertex.
+       The fixpoint induction step unfolds tarjan_scc_f into preloop /
+       forset (process_edge) / pop_scc, each of which preserves the
+       low_forset_inv using helper lemmas (set_fa, update_low preserved
+       because v ∉ done). *)
   Admitted.
+
+
 
 
   (** [set_fa_W_preserves_low_forset_inv]: key lemma for the tree edge
