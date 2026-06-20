@@ -1459,12 +1459,19 @@ Section IS_LOW.
          because popped contains v and vertices above v, while done vertices
          were processed before v (below v on stack). *)
       unfold children_done, back_edges_done. cbv. cbv in Hmin.
-      (* After cbv: goal uses 'rest', Hmin uses 'stack s0' in back_edges_done.
-         Children_done (uses fa s0) and low/dfn are identical.
-         Back_edges_done: for w∈done, In w rest ↔ In w (stack s0)
-         because popped = [v, vertices-above-v] and done vertices
-         (processed before v) are below v.  Pending lemma: rest_done_equiv. *)
-      admit.
+      eapply min_eq_forward.
+      - typeclasses eauto.
+      - exact Hmin.
+      - (* forward: elements of Hmin's set are in goal's set.
+           Only difference: back_edges_done uses stack s0 (Hmin) vs rest (goal).
+           stack_split_at_rest_incl gives In w rest -> In w (stack s0).
+           The reverse (In w (stack s0) -> In w rest for w∈done) requires
+           that done vertices are below v on stack.
+           Since both children_done parts are identical, we use the
+           same witness with stack_split_at_rest_incl for the adjust. *)
+        admit.
+      - (* backward: symmetric *)
+        admit.
     - (* fa s v = u: pop_scc doesn't modify fa *)
       exact Hfa_eq.
   Admitted.
