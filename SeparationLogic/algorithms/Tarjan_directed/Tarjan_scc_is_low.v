@@ -1951,7 +1951,6 @@ Section IS_LOW.
           (set_fa v u;; W v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof. Admitted.
-
   Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit)
     (HW: forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
