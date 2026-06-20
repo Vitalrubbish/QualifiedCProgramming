@@ -1447,8 +1447,78 @@ Section IS_LOW.
           (set_fa v u;; W v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof.
-    (* TODO: requires sub-lemmas set_fa_preserves_low_forset_inv
-       and W_preserves_low_forset_inv_and_fa (see proof sketch above). *)
+    intros HW Hdg.
+    apply (Hoare_bind (fun s => low_forset_inv u done s /\ ~ v ∈ visited s)
+                      (set_fa v u)
+                      (fun _ s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s)
+                      (fun _ => W v)
+                      (fun _ s => low_forset_inv u done s /\ fa s v = u)).
+    - (* Goal 1: set_fa v u *)
+      unfold set_fa. intro_state. hoare_auto_s. subst s.
+      simpl.
+      destruct H as [Hinv Hnv].
+      unfold low_forset_inv in Hinv.
+      destruct Hinv as [Hsiv [Hinv' [Hvalid_s0 [Hfa_vis_s0 [Huvis_s0 Hmin_s0]]]]].
+      destruct Hinv' as [Hlt_s0 [Hiff_s0 Hpos_s0]].
+      (* After simpl, the goal is:
+         low_forset_inv u done (set_fa_state s0) /\ fa_final v = u /\ ~v∈visited s0.
+         For low_forset_inv, all components that don't depend on fa
+         are identical to s0. Only fa_visited and the min condition
+         (which uses children_done/back_edges_done, which use fa) might
+         differ. But v ∉ done (v ∉ visited), so fa change at v doesn't
+         affect children_done/back_edges_done. *)
+      split; [| split; [| exact Hnv]].
+      + (* low_forset_inv u done preserved *)
+        unfold low_forset_inv. simpl.
+        split.
+        { (* stack_in_visited: unchanged, doesn't depend on fa *)
+          exact Hsiv. }
+        split.
+        { (* dfn_inv: unchanged, doesn't depend on fa *)
+          split; [exact Hlt_s0 | split; [exact Hiff_s0 | exact Hpos_s0]]. }
+        split.
+        { (* dfn_valid: set_fa changes fa at v (unvisited), so DFS tree unchanged *)
+          unfold dfn_valid. intros x y Htree.
+          apply state_to_dfs_tree_step_char in Htree.
+          destruct Htree as [Hedge [Hfa_eq [Hfa_neq Hvis_y]]].
+          simpl in Hfa_eq, Hfa_neq.
+          destruct (equiv_dec y v) as [Heq | Hneq].
+          - subst y. exfalso. apply Hnv. exact Hvis_y.
+          - assert (Hfa_s0_eq: fa s0 y = x) by exact Hfa_eq.
+            assert (Hfa_s0_neq: fa s0 y <> y) by exact Hfa_neq.
+            apply (Hvalid_s0 x y).
+            eapply state_to_dfs_tree_step_char_backward; eauto. }
+        split.
+        { (* fa_visited: fa v := u, for w≠v fa unchanged *)
+          intros w Hfa_neq.
+          destruct (equiv_dec w v) as [Heq | Hneq_w].
+          - subst w. unfold fa_visited in Hfa_vis_s0.
+            (* fa v = u <> v, need u ∈ visited s0 *)
+            exact Huvis_s0.
+          - apply Hfa_vis_s0. exact Hfa_neq. }
+        split.
+        { (* u ∈ visited: unchanged *)
+          exact Huvis_s0. }
+        (* min: children_done/back_edges_done for set_fa_state = same for s0.
+           fa change at v doesn't affect done vertices, low/dfn unchanged. *)
+        simpl. exact Hmin_s0.
+      + (* fa s v = u *)
+        destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
+    - (* Goal 2: W v preserves low_forset_inv u done and fa s v = u,
+         consuming ~ v ∈ visited.  Requires fixpoint induction proof
+         that W (tarjan_scc g v) does not modify fa v, low u, or
+         children_done/back_edges_done for done vertices. *)
+      intro _. apply Hoare_conseq_pre with
+        (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s).
+      { intros s H. exact H. }
+      (* Combine: HW v gives low_post v, and we need extra invariants.
+         The extra invariants are preserved because:
+         - fa v unchanged: W v only sets fa for descendants of v
+         - low u unchanged: update_low only on v and descendants
+         - children_done u done unchanged: fa for done vertices unchanged
+         - back_edges_done u done unchanged: same reason
+         Pending formal proof via fixpoint induction. *)
+      admit.
   Admitted.
 
   Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
