@@ -1422,6 +1422,35 @@ Section IS_LOW.
         * apply Nat.le_refl.
   Qed.
 
+  (** [set_fa_W_preserves_low_forset_inv]: key lemma for the tree edge
+      branch of [process_edge_keep_low_forset_inv].  After [set_fa v u]
+      (which sets [fa v := u]) followed by the recursive call [W v]
+      (which is [tarjan_scc g v]), both [low_forset_inv u done] and
+      [fa s v = u] are preserved.
+
+      Proof sketch (requires 2 sub-lemmas):
+      1. [set_fa_preserves_low_forset_inv]: set_fa v u does not change
+         children_done/back_edges_done (v ∉ done), fa_visited preserved
+         via u ∈ visited, stack/dfn/low unchanged.
+      2. [W_preserves_low_forset_inv_and_fa]: W v (tarjan_scc g v) does
+         not modify fa v (only sets fa for v's descendants), does not
+         modify low u (only update_low on v/descendants), children_done
+         and back_edges_done for done vertices unchanged (done vertices
+         are not descendants of v). Proved by fixpoint induction on
+         tarjan_scc, adding a new visited_tag constructor. *)
+  Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop)
+    (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
+                     (fun _ s => low_post x s /\ u ∈ visited s)) ->
+    dg_step g u v ->
+    Hoare (fun s => low_forset_inv u done s /\ ~ v ∈ visited s)
+          (set_fa v u;; W v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+  Proof.
+    (* TODO: requires sub-lemmas set_fa_preserves_low_forset_inv
+       and W_preserves_low_forset_inv_and_fa (see proof sketch above). *)
+  Admitted.
+
   Lemma process_edge_keep_low_forset_inv (u v: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
@@ -1455,19 +1484,7 @@ Section IS_LOW.
       destruct Hinv_mid as [Hlt_mid [Hiff_mid Hpos_mid]].
       hoare_auto_s.
       unfold update_low. hoare_auto_s.
-      { (* Subgoal 1: low s1 v < low s1 u → set_low u (low s1 v).
-           After set_low, state becomes RecordSet.set low (λ_. min (low s1 u) (low s1 v)) s1.
-           update_low_tree_edge gives exactly low_forset_inv u (done ∪ [v]) s'.
-           BLOCKED: need low_forset_inv u done s1, fa s1 v = u, fa s1 v <> v.
-           These are preserved through set_fa v u;; W v but not yet formalized. *)
-        admit. }
-      { (* Subgoal 2: ~ low s1 v < low s1 u → skip, state = s1 unchanged.
-           Applying low_forset_inv_expand_child_done reduces to:
-           (1) low_forset_inv u done s1 — blocker, needs set_fa_W_preserves lemma
-           (2) fa s1 v = u — set by set_fa v u, preserved through W v
-           (3) fa s1 v <> v — from u <> v (v unvisited in s0, u visited in s0)
-           (4) low s1 u <= low s1 v — from ~ low s1 v < low s1 u via Nat.nlt_ge *)
-        admit. }
+      all: admit.
     - (* Non-tree edge: v is visited *)
       intro_state. hoare_auto_s.
       + (* v in stack: back edge *)
