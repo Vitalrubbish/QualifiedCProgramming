@@ -2092,6 +2092,19 @@ Section IS_LOW.
     | VKeepFaChildren parent => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v
     end.
 
+  (** [process_edge_keep_fa_children]: preserves the forall fa-children
+      property.  Requires [dg_step g u v] (the edge being processed)
+      to justify the new [fa]-child when [set_fa v u] creates one. *)
+  Lemma process_edge_keep_fa_children (parent u v: V) (W: V -> program (@SCCSt V) unit):
+    dg_step g u v ->
+    (forall x, Hoare (fun s: @SCCSt V => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w) (W x)
+                     (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)) ->
+    Hoare (fun s: @SCCSt V => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
+          (process_edge u W v)
+          (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
+  Proof.
+  Admitted.
+
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
     Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
