@@ -281,6 +281,37 @@ Section IS_LOW.
     scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s.
 
   (* ================================================================ *)
+  (* 6.5. Fa Constraint Lemmas (Phase 1)                               *)
+  (* ================================================================ *)
+
+  (** [low_pre_fa_eq_u_implies_eq_u]: In the [low_pre u s] state
+      (u is not yet visited), no vertex has [fa = u] except possibly u
+      itself.  This follows from [fa_visited s]: if [fa s v ≠ v] then
+      [fa s v ∈ visited s]; since [~ u ∈ visited s], [fa s v] cannot
+      equal [u] when [v ≠ u]. *)
+  Lemma low_pre_fa_eq_u_implies_eq_u (u v: V) (s: @SCCSt V):
+    low_pre u s -> fa s v = u -> v = u.
+  Proof.
+    unfold low_pre. intros [Hsiv [Hnuvis [Hvalid [Hinv Hfa_vis]]]] Hfa_eq.
+    destruct (classic (v = u)) as [Heq | Hneq]; [exact Heq |].
+    exfalso.
+    assert (Htemp: fa s v <> v).
+    { rewrite Hfa_eq. intro Heq2. apply Hneq. symmetry; exact Heq2. }
+    apply Hfa_vis in Htemp.
+    rewrite Hfa_eq in Htemp.
+    exact (Hnuvis Htemp).
+  Qed.
+
+  Lemma low_pre_no_fa_child_of_u (u v: V) (s: @SCCSt V):
+    low_pre u s -> ~ (fa s v = u /\ fa s v <> v).
+  Proof.
+    intros Hpre [Hfa_eq Hfa_neq].
+    pose proof (low_pre_fa_eq_u_implies_eq_u u v s Hpre Hfa_eq) as Heq_uv.
+    subst v.
+    exact (Hfa_neq Hfa_eq).
+  Qed.
+
+  (* ================================================================ *)
   (* 7. Preloop Establishes Low Forset Invariant                      *)
   (* ================================================================ *)
 
@@ -1873,29 +1904,38 @@ Section IS_LOW.
                                          (fun _ s => forall w, done' w -> w ∈ visited s)) ->
     (forall a, Hoare (fun s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) (W a)
                     (fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v)) ->
-    Hoare (fun s => low_forset_inv u ∅ s)
+    Hoare (fun s => low_forset_inv u ∅ s /\ (forall v, fa s v = u -> v = u))
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
   Proof.
     intros HW HW_self HW_keep_all HW_fa_children.
     set (P := fun (done: V -> Prop) (s: SCCSt) =>
       low_forset_inv u done s /\ done_visited done s /\
+      (forall v, fa s v = u -> v = u \/ children_done s u done v) /\
       (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v)).
     assert (HproperP: Proper (Sets.equiv ==> eq ==> iff) P). {
       unfold P. intros done1 done2 Hequiv s1 s2 Heq. subst s2.
       apply Sets_equiv_Sets_included in Hequiv. destruct Hequiv as [Hincl12 Hincl21].
       split.
-      { intros [Hlow [Hdv Hfa_uni]]. split; [| split].
+      { intros [Hlow [Hdv [Hfa_child Hfa_uni]]]. split; [| split; [| split]].
         - eapply (low_forset_inv_proper u); eauto. apply Sets_equiv_Sets_included. split; auto.
         - eapply done_visited_proper; eauto. apply Sets_equiv_Sets_included. split; auto.
+        - intros v Hfa_eq. destruct (Hfa_child v Hfa_eq) as [Heq_v | Hchild].
+          + left. exact Heq_v.
+          + right. unfold children_done in *. destruct Hchild as [Hd [Hfa_v Hneq]].
+            split; [apply Hincl12; exact Hd | split; auto].
         - exact Hfa_uni. }
-      { intros [Hlow [Hdv Hfa_uni]]. split; [| split].
+      { intros [Hlow [Hdv [Hfa_child Hfa_uni]]]. split; [| split; [| split]].
         - eapply (low_forset_inv_proper u); eauto. apply Sets_equiv_Sets_included. split; auto.
         - eapply done_visited_proper; eauto. apply Sets_equiv_Sets_included. split; auto.
+        - intros v Hfa_eq. destruct (Hfa_child v Hfa_eq) as [Heq_v | Hchild].
+          + left. exact Heq_v.
+          + right. unfold children_done in *. destruct Hchild as [Hd [Hfa_v Hneq]].
+            split; [apply Hincl21; exact Hd | split; auto].
         - exact Hfa_uni. } }
     apply Hoare_conseq_post with
       (Q2 := fun _ s => P (fun v => dg_step g u v) s).
-    { intros b st [Hfinv [Hdv Hfa_uni]].
+    { intros b st [Hfinv [Hdv [Hfa_child Hfa_uni]]].
       destruct Hfinv as [Hsiv [Hinv [Hvalid [Hfa_vis [Huvis Hmin]]]]].
       split; [| split; [exact Hvalid | split; [exact Hinv | exact Hfa_vis]]].
       unfold scc_low_valid_v.
@@ -1984,7 +2024,7 @@ Section IS_LOW.
       unfold P. apply Hoare_conj.
       { apply (process_edge_keep_low_forset_inv u a done W HW Huniv). }
       apply Hoare_conj.
-      { (* done_visited preserved: simple — HW_keep_all + HW_self *)
+      { (* done_visited preserved *)
         unfold process_edge, if_else. intro_state.
         apply Hoare_choice.
         - apply Hoare_assume_bind. simpl.
@@ -2023,6 +2063,15 @@ Section IS_LOW.
             unfold done_visited. intros w [Hw_done | Hw_a].
             * apply H. exact Hw_done.
             * subst w. exact H0. }
+      apply Hoare_conj.
+      { (* fa_children_are_done preserved: fa s v = u -> v = u \/
+           children_done s u (done ∪ [a]) v.
+           The only way fa s v = u can become newly true is when
+           set_fa a u is called (tree edge), creating fa a = u;
+           then a ∈ done ∪ [a] certifies children_done.
+           The recursive W a call does not add new fa = u vertices.
+           TODO: formal proof via process_edge lemma. *)
+        admit. }
       { (* fa_children_in_universe preserved *)
         unfold process_edge, if_else. intro_state.
         apply Hoare_choice.
@@ -2066,13 +2115,16 @@ Section IS_LOW.
               - apply H. split; [exact Hfa_v | exact Hfa_v_neq]. }
             { destruct H2 as [Heq _]. subst s. exact H. }
           + destruct H2 as [Heq _]. subst s. exact H. }
-    - intro_state. split; [exact H | split].
+    - intro_state. destruct H as [Hlow_inv Hfa_prop].
+      split; [exact Hlow_inv | split].
       + unfold done_visited. intros v Hv_empty. exfalso. exact Hv_empty.
-      + intros v [Hfa_eq Hfa_neq]. exfalso.
-        (* Initially fa s v = v (identity, preloop doesn't set fa).
-           From Hfa_eq: v = u, then Hfa_neq contradicts u ≠ u.
-           Needs a lemma: preloop_establishes_low_forset_inv preserves fa. *)
-        admit. }
+      + split.
+        * (* fa_children_are_done: fa s v = u -> v = u \/ children_done s u ∅ v *)
+          intros v Hfa_eq. left. apply Hfa_prop. exact Hfa_eq.
+        * (* fa_children_in_universe: fa s v = u /\ fa s v <> v -> dg_step g u v *)
+          intros v [Hfa_eq Hfa_neq].
+          apply Hfa_prop in Hfa_eq. subst v.
+          exfalso. apply Hfa_neq. reflexivity. }
   Admitted.
 
   Theorem tarjan_scc_keep_low_valid (u: V):
@@ -2096,15 +2148,26 @@ Section IS_LOW.
       unfold tarjan_scc_f.
       intros Hpre.
       eapply Hoare_bind.
-      { apply Hoare_conseq_pre with (P2 := fun s => low_pre x s).
-        { intros s HP. exact HP. }
-        apply preloop_establishes_low_forset_inv. }
+      { apply Hoare_conj.
+        - apply Hoare_conseq_pre with (P2 := fun s => low_pre x s).
+          { intros s HP. exact HP. }
+          apply preloop_establishes_low_forset_inv.
+        - apply Hoare_conseq_pre with (P2 := fun s => low_pre x s).
+          { intros s HP. exact HP. }
+          unfold preloop. unfold_op. intro_state. hoare_auto_s.
+          subst s. simpl.
+          intros v Hfa_eq. unfold equiv_decb in Hfa_eq.
+          destruct (equiv_dec v x) as [Heq | Hneq].
+          { exact Heq. }
+          simpl in Hfa_eq.
+          exfalso. apply Hneq.
+          eapply low_pre_fa_eq_u_implies_eq_u; eauto. }
       simpl. intros _. intro_state.
-      destruct H as [Hsiv [Hinv [Hvalid [Hfa [Hxvis Hmin_x]]]]].
+      destruct H as [[Hsiv [Hinv [Hvalid [Hfa [Hxvis Hmin_x]]]]] Hfa_prop].
       eapply Hoare_bind with (Q := fun _ s => low_post x s).
-      { apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv x ∅ s).
+      { apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv x ∅ s /\ (forall v, fa s v = x -> v = x)).
         { intros s1 Heq. subst s1.
-          exact (conj Hsiv (conj Hinv (conj Hvalid (conj Hfa (conj Hxvis Hmin_x))))). }
+          exact (conj (conj Hsiv (conj Hinv (conj Hvalid (conj Hfa (conj Hxvis Hmin_x))))) Hfa_prop). }
         apply forset_keep_low_forset_inv.
         - intros a. pose proof (IHlow a tt) as Hlow_a.
           apply Hoare_conj.
