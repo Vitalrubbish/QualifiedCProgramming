@@ -2130,12 +2130,36 @@ Section IS_LOW.
           (process_edge a W x)
           (fun _ s => fa s v = parent).
   Proof.
-    (* Tree edge: set_fa x a changes fa x, not fa v (x unvisited, v visited).
-       W x preserves by IH. update_low a does not change fa.
-       Back/cross edge: no fa changes.
-       Proof structure verified interactively; remaining: brace nesting for
-       get'/update_low chain inside Hoare_bind. *)
-  Admitted.
+    unfold process_edge, if_else. intro_state. apply Hoare_choice.
+    - (* Tree edge *)
+      apply Hoare_assume_bind. simpl.
+      destruct H as [Hfa Hv_vis].
+      apply (Hoare_bind (fun s => ~ x ∈ visited s /\ s = s0) (set_fa x a) (fun _ s => fa s v = parent) (fun _ => W x ;; lv <- get' (fun s => low s x) ;; update_low a lv) (fun _ s => fa s v = parent)).
+      + (* set_fa x a *)
+        unfold set_fa. intro_state. hoare_auto_s.
+        destruct H as [Hnv_x Hs1_eq]. subst s1. subst s. simpl.
+        unfold equiv_decb. destruct (equiv_dec v x) as [Heq | Hneq].
+        * exfalso. rewrite Heq in Hv_vis. exact (Hnv_x Hv_vis).
+        * exact Hfa.
+      + intros _. simpl.
+        apply (Hoare_bind (fun s => fa s v = parent) (W x) (fun _ s => fa s v = parent) (fun _ => lv <- get' (fun s => low s x) ;; update_low a lv) (fun _ s => fa s v = parent)).
+        * (* W x *) apply (IH x).
+        * intros _. simpl.
+          apply (Hoare_bind (fun s => fa s v = parent) (get' (fun s => low s x)) (fun lv s => fa s v = parent) (fun lv => update_low a lv) (fun _ s => fa s v = parent)).
+          -- (* get' *) unfold get'. intro_state. hoare_auto_s. destruct H1. subst s. exact H.
+          -- intros lv. simpl. unfold update_low. intro_state. hoare_auto_s.
+             ++ (* set_low *) unfold set_low. intro_state. hoare_auto_s. subst s. subst s2. simpl. exact H.
+             ++ (* skip *) destruct H1. subst s. exact H.
+    - (* Non-tree edge *)
+      intro_state. hoare_auto_s.
+      + (* In stack *)
+        unfold update_low. intro_state. hoare_auto_s.
+        * (* set_low *) unfold set_low. intro_state. hoare_auto_s. subst s. subst s1. simpl. destruct H as [Hfa _]. exact Hfa.
+        * (* skip *) destruct H1. subst s. destruct H as [Hfa _]. exact Hfa.
+      + (* Not in stack *)
+        destruct H3. subst s. destruct H as [Hfa Hvis]. subst s1. exact Hfa.
+  Qed.
+
 
 
 
@@ -2148,9 +2172,25 @@ Section IS_LOW.
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => fa s v = parent).
   Proof.
-    (* Hoare_forset with invariant fun done s => fa s v = parent /\ v ∈ visited s.
-       Each process_edge call preserves via process_edge_keeps_fa_simple. *)
+    apply (Hoare_conseq
+      (fun s => fa s v = parent /\ a ∈ visited s /\ v ∈ visited s)
+      (fun s => fa s v = parent /\ v ∈ visited s)
+      (forset (fun w => dg_step g a w) (process_edge a W))
+      (fun _ s => fa s v = parent)
+      (fun _ s => fa s v = parent /\ v ∈ visited s)).
+    { intros s [Hfa [Hvis_a Hvis_v]]. split; [exact Hfa | exact Hvis_v]. }
+    { intros _ s [Hfa Hvis]. exact Hfa. }
+    apply (@Hoare_forset SCCSt V
+      (fun done s => fa s v = parent /\ v ∈ visited s)
+      (fun w => dg_step g a w) (process_edge a W)).
+    { unfold Proper, respectful. intros. subst. reflexivity. }
+    { intros todo a0 Hsub Huniv Hnotdone.
+      (* Callback: process_edge a W a0 preserves fa s v = parent /\ v ∈ visited s.
+         process_edge_keeps_fa_simple gives fa preservation; v ∈ visited is
+         trivially preserved (visited set only grows, no operation removes). *)
+      admit. }
   Admitted.
+
 
 
 
