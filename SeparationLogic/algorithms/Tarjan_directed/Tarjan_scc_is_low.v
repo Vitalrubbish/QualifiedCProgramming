@@ -1282,18 +1282,6 @@ Section IS_LOW.
           -- apply Nat.le_refl.
   Qed.
 
-  (** [tree_child_low_le]: If v is a proper tree child of u ([fa s v = u],
-      [fa s v ≠ v]), and v has been visited but is no longer on the stack
-      (its SCC was already popped), then [low s u ≤ low s v].
-
-      This holds because the tree edge from u to v was processed earlier,
-      calling [update_low u (low v)], which set [low s u := min(old, low s v)].
-      Proving this requires either (a) the full [scc_low_valid_v] invariant
-      (which includes all tree children in its min structure, not just
-      [children_done]), or (b) a pointwise [low ≤ dfn] invariant for all nodes
-      combined with the DFS-tree dfn ordering.
-
-      For now, this lemma is stated but not yet proven. *)
 
   Lemma low_forset_inv_children_done_low_le (u v: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s ->
@@ -1395,58 +1383,7 @@ Section IS_LOW.
       { apply Nat.le_refl. }
   Qed.
 
-  (** [popped_vertex_low_eq_dfn]: If v is visited but not on the stack,
-      then v was popped by [pop_scc], which requires [low s v = dfn s v].
-      Both values are stable after popping, so the equality persists.
-      This lemma captures the algorithmic invariant that popped vertices
-      are SCC roots with [low = dfn]. *)
-  Lemma popped_vertex_low_eq_dfn (s: @SCCSt V) (v: V):
-    dfn_inv s -> v ∈ visited s -> ~ In v (stack s) ->
-    low s v = dfn s v.
-  Proof.
-    (* Proof requires: vertices are pushed on stack when first visited,
-       and only popped by pop_scc which requires low=dfn.
-       Since v ∈ visited, it was pushed at some point.
-       Since ~In v (stack), it was popped.
-       pop_scc requires low v = dfn v at pop time.
-       After popping, low and dfn are unchanged.
-       This temporal reasoning needs a state invariant not yet formalized. *)
-  Admitted.
 
-  Lemma tree_child_low_le (u v: V) (done: V -> Prop) (s: @SCCSt V):
-    dg_step g u v ->
-    fa s v = u -> fa s v <> v ->
-    v ∈ visited s -> ~ In v (stack s) ->
-    low_forset_inv u done s ->
-    low s u <= low s v.
-  Proof.
-    intros Hstep Hfa_eq Hfa_neq Hvis Hnstack Hinv.
-    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa [Huvis Hmin]]]]].
-    destruct Hinv' as [Hlt [Hiff Hpos]].
-    (* Step 1: tree edge from u to v *)
-    assert (Htree: dg_step (state_to_dfs_tree (V:=V) (E:=E) g s root) u v). {
-      eapply state_to_dfs_tree_step_char_backward; eauto. }
-    (* Step 2: dfn ordering from dfn_valid *)
-    assert (Hdfn_lt: dfn s u < dfn s v). {
-      eapply Hvalid; eauto. }
-    (* Step 3: low s u ≤ dfn s u *)
-    assert (Hlow_le_dfn: low s u <= dfn s u). {
-      eapply (low_forset_inv_implies_low_le_dfn u done).
-      unfold low_forset_inv.
-      split; [exact Hsiv |].
-      split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
-      split; [exact Hvalid |].
-      split; [exact Hfa |].
-      split; [exact Huvis | exact Hmin]. }
-    (* Step 4: low s v = dfn s v (v was popped from stack) *)
-    assert (Hlow_v_eq_dfn: low s v = dfn s v). {
-      eapply popped_vertex_low_eq_dfn; eauto.
-      split; [exact Hlt | split; [exact Hiff | exact Hpos]]. }
-    (* Step 5: low s u ≤ dfn s u < dfn s v = low s v *)
-    rewrite Hlow_v_eq_dfn.
-    eapply Nat.le_trans; [exact Hlow_le_dfn |].
-    apply Nat.lt_le_incl. exact Hdfn_lt.
-  Qed.
 
   Lemma update_low_back_edge_fa_neq (u v: V) (done: V -> Prop) (s: @SCCSt V):
     dg_step g u v ->
@@ -1878,7 +1815,10 @@ Section IS_LOW.
   Lemma process_edge_preserves_ancestor_inv (u v x: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit)
     (HW: forall x, Hoare (fun s => low_pre x s /\ v ∈ visited s) (W x)
-                        (fun _ s => low_post x s /\ v ∈ visited s)):
+                        (fun _ s => low_post x s /\ v ∈ visited s))
+    (HW_keep_all: forall (a: V) (done': V -> Prop),
+                    Hoare (fun s => forall w, done' w -> w ∈ visited s) (W a)
+                          (fun _ s => forall w, done' w -> w ∈ visited s)):
     u <> v -> ~ done v -> dg_step g v x ->
     Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ v ∈ visited s)
           (process_edge v W x)
