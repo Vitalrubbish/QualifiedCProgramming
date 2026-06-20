@@ -1575,7 +1575,11 @@ Section IS_LOW.
   (** [pop_scc_preserves_ancestor_inv]: [pop_scc v] only modifies
       [stack] and [sccs]; [fa], [low], [dfn], [visited] unchanged. *)
   Lemma pop_scc_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ done v)
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ done v /\
+                   dg_step g u v /\ In v (stack s) /\
+                   forall w, done w -> forall popped' rest',
+                     stack_split_at (stack s) v = (popped', rest') ->
+                     ~ In w popped')
           (pop_scc v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof.
@@ -1583,7 +1587,7 @@ Section IS_LOW.
     unfold pop_scc_state.
     destruct (stack_split_at (stack s0) v) as [popped rest] eqn:?.
     simpl.
-    destruct H as [Hinv [Hfa_eq Hndone]].
+    destruct H as [Hinv [Hfa_eq [Hndone [Hdg [Hv_in_stack Hdone_not_popped]]]]].
     unfold low_forset_inv in Hinv.
     destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
     split.
@@ -1612,7 +1616,7 @@ Section IS_LOW.
                   destruct (classic (In a0 rest)) as [Hr | Hnr]; [exact Hr |].
                   destruct (stack_split_at_covers (stack s0) v popped rest Heqp a0
                     Hin_stk0) as [Hpop | Hrest]; [| exfalso; apply Hnr; exact Hrest].
-                  exfalso. admit.
+                  exfalso. exact (Hdone_not_popped a0 Hdone popped rest eq_refl Hpop).
                 - intros b0 Hb0.
                   destruct Hb0 as [[Hdone_b [Hin_rest_b Hfa_neq_b]] | Heq_ub].
                   + apply Hright_min. left. split; [exact Hdone_b |].
@@ -1647,7 +1651,10 @@ Section IS_LOW.
                 - intros b0 Hb0.
                   destruct Hb0 as [[Hdone_b [Hin_stk0_b Hfa_neq_b]] | Heq_ub].
                   + apply Hright_min. left. split; [exact Hdone_b |].
-                    split; [exact Hin_stk0_b | exact Hfa_neq_b].
+                    split.
+                    { apply (stack_split_at_popped_fresh (stack s0) v popped rest Heqp b0 Hin_stk0_b).
+                      exact (Hdone_not_popped b0 Hdone_b popped rest eq_refl). }
+                    { exact Hfa_neq_b. }
                   + subst b0. apply Hright_min. right. reflexivity. }
               { exact Heq_a0. } }
             { apply Nat.le_refl. }
@@ -1659,13 +1666,16 @@ Section IS_LOW.
                 - intros b0 Hb0.
                   destruct Hb0 as [[Hdone_b [Hin_stk0_b Hfa_neq_b]] | Heq_ub].
                   + apply Hright_min. left. split; [exact Hdone_b |].
-                    split; [exact Hin_stk0_b | exact Hfa_neq_b].
+                    split.
+                    { apply (stack_split_at_popped_fresh (stack s0) v popped rest Heqp b0 Hin_stk0_b).
+                      exact (Hdone_not_popped b0 Hdone_b popped rest eq_refl). }
+                    { exact Hfa_neq_b. }
                   + subst b0. apply Hright_min. right. reflexivity. }
               { exact Heq_a0. } }
             { apply Nat.le_refl. } }
     - (* fa s v = u: pop_scc doesn't modify fa *)
       exact Hfa_eq.
-  Admitted.
+  Qed.
 
   (** [preloop_preserves_ancestor_inv]: [preloop v] modifies [dfn v],
       [low v], [timer], [stack], [visited] — all local to [v].
