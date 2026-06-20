@@ -1178,6 +1178,81 @@ Section IS_LOW.
     eapply Nat.le_trans; eauto.
   Qed.
 
+  (** [low_forset_inv_expand_child_done]: When [v] is a proper child
+      of [u] ([fa s v = u], [fa s v ≠ v]) and [low s u ≤ low s v],
+      expanding [done] to [done ∪ [v]] preserves [low_forset_inv].
+      The proof uses [min_value_of_subset_nested_update_left_nat]
+      because [children_done] expands by [v] while [back_edges_done]
+      is unchanged (handled separately by the caller). *)
+  Lemma low_forset_inv_expand_child_done (u v: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv u done s ->
+    fa s v = u -> fa s v <> v ->
+    low s u <= low s v ->
+    low_forset_inv u (done ∪ [v]) s.
+  Proof.
+    intros Hinv Hfa_eq Hfa_neq Hlow_le.
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
+    destruct Hinv' as [Hlt [Hiff Hpos]].
+    unfold low_forset_inv. simpl.
+    split; [exact Hsiv |].
+    split; [split; [exact Hlt | split; [exact Hiff | exact Hpos]] |].
+    split; [exact Hvalid |].
+    split; [exact Hfa_vis |].
+    split; [exact Huvis |].
+    pose proof (children_done_add s u v done Hfa_eq Hfa_neq) as Hchild_eq.
+    pose proof (back_edges_done_no_add s u v done (or_intror Hfa_eq)) as Hback_eq.
+    apply Sets_equiv_Sets_included in Hchild_eq. destruct Hchild_eq as [Hchild_new_to_old Hchild_old_to_new].
+    apply Sets_equiv_Sets_included in Hback_eq. destruct Hback_eq as [Hback_new_to_old Hback_old_to_new].
+    pose proof (min_value_of_subset_nested_update_left_nat
+        (A := V) (B := V) (low s) (children_done s u done) v
+        (dfn s) (fun w => back_edges_done s u done w \/ w = u) (low s u)
+        Hmin) as Hmin_new.
+    rewrite (Nat.min_l (low s u) (low s v) Hlow_le) in Hmin_new.
+    unfold id in Hmin_new.
+    eapply min_eq_forward.
+    - typeclasses eauto.
+    - exact Hmin_new.
+    - intros a1 Ha1. exists a1. split.
+      { destruct Ha1 as [Ha1_L | Ha1_R].
+        - left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          + unfold min_object_of_subset. split.
+            * apply Hchild_old_to_new. exact Hw_in.
+            * intros x Hx. apply Hchild_new_to_old in Hx. apply Hw_min. exact Hx.
+          + exact Heq_a1.
+        - right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          + unfold min_object_of_subset. split.
+            * destruct Hw_in as [Hw_back | Hw_u].
+              -- left. apply Hback_old_to_new. exact Hw_back.
+              -- right. exact Hw_u.
+            * intros x Hx. destruct Hx as [Hx_back | Hx_u].
+              -- apply Hw_min. left. apply Hback_new_to_old. exact Hx_back.
+              -- subst x. apply Hw_min. right. reflexivity.
+          + exact Heq_a1. }
+      { apply Nat.le_refl. }
+    - intros a2 Ha2. exists a2. split.
+      { destruct Ha2 as [Ha2_L | Ha2_R].
+        - left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          + unfold min_object_of_subset. split.
+            * apply Hchild_new_to_old. exact Hw_in.
+            * intros x Hx. apply Hchild_old_to_new in Hx. apply Hw_min. exact Hx.
+          + exact Heq_a2.
+        - right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          + unfold min_object_of_subset. split.
+            * destruct Hw_in as [Hw_back | Hw_u].
+              -- left. apply Hback_new_to_old. exact Hw_back.
+              -- right. exact Hw_u.
+            * intros x Hx. destruct Hx as [Hx_back | Hx_u].
+              -- apply Hw_min. left. apply Hback_old_to_new. exact Hx_back.
+              -- subst x. apply Hw_min. right. reflexivity.
+          + exact Heq_a2. }
+      { apply Nat.le_refl. }
+  Qed.
+
   (** [popped_vertex_low_eq_dfn]: If v is visited but not on the stack,
       then v was popped by [pop_scc], which requires [low s v = dfn s v].
       Both values are stable after popping, so the equality persists.
@@ -1380,7 +1455,10 @@ Section IS_LOW.
       destruct Hinv_mid as [Hlt_mid [Hiff_mid Hpos_mid]].
       hoare_auto_s.
       unfold update_low. hoare_auto_s.
-      all: admit.
+      { (* Subgoal 1: low v < low s u → set_low u (low v) *)
+        admit. }
+      { (* Subgoal 2: ~ low v < low s u → skip *)
+        admit. }
     - (* Non-tree edge: v is visited *)
       intro_state. hoare_auto_s.
       + (* v in stack: back edge *)
