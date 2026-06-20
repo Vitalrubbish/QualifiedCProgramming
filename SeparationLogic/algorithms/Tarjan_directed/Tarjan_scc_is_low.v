@@ -1992,7 +1992,8 @@ Section IS_LOW.
           exact Huvis_s0. }
         (* min: children_done/back_edges_done for set_fa_state = same for s0.
            fa change at v doesn't affect done vertices, low/dfn unchanged. *)
-        cbv. exact Hmin_s0.
+        destruct s0 as [vis0 tim0 fa0 dfn0 low0 stk0 sccs0]; simpl.
+        exact Hmin_s0.
       + (* fa s v = u *)
         destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
     - (* Goal 2: W v preserves low_forset_inv u done and fa s v = u *)
