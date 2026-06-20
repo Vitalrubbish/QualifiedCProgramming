@@ -1453,25 +1453,13 @@ Section IS_LOW.
       split; [exact Hvalid |].
       split; [exact Hfa_vis |].
       split; [exact Huvis |].
-      (* min: cbv expands RecordUpdate, revealing only stack differs.
-         children_done uses fa (same as s0); back_edges_done uses
-         stack=rest instead of stack s0.  For w∈done, In w rest ↔ In w(stack s0)
-         because popped contains v and vertices above v, while done vertices
-         were processed before v (below v on stack). *)
+      (* min: after cbv, goal uses 'rest' while Hmin uses 'stack s0'
+         in back_edges_done. children_done/fa/low/dfn identical.
+         For w∈done, In w rest ↔ In w(stack s0) because popped=[v..top]
+         are not in done. Requires lemma: stack_split_at_popped_fresh. *)
       unfold children_done, back_edges_done. cbv. cbv in Hmin.
-      eapply min_eq_forward.
-      - typeclasses eauto.
-      - exact Hmin.
-      - (* forward: elements of Hmin's set are in goal's set.
-           Only difference: back_edges_done uses stack s0 (Hmin) vs rest (goal).
-           stack_split_at_rest_incl gives In w rest -> In w (stack s0).
-           The reverse (In w (stack s0) -> In w rest for w∈done) requires
-           that done vertices are below v on stack.
-           Since both children_done parts are identical, we use the
-           same witness with stack_split_at_rest_incl for the adjust. *)
-        admit.
-      - (* backward: symmetric *)
-        admit.
+      (* TODO: min_eq_forward with Hback_eq set equivalence *)
+      admit.
     - (* fa s v = u: pop_scc doesn't modify fa *)
       exact Hfa_eq.
   Admitted.
@@ -1497,7 +1485,26 @@ Section IS_LOW.
       destruct Hin as [Heq | Hin_tail].
       + subst w. sets_unfold. left. auto.
       + apply Hsiv in Hin_tail. sets_unfold. right. exact Hin_tail.
-    - (* dfn_inv *) admit.
+    - (* dfn_inv: set_dfn v (timer s0), incr_timer, visit v *)
+      destruct Hinv' as [Hlt_s0 [Hiff_s0 Hpos_s0]].
+      split.
+      + intros w Hvis.
+        destruct (classic (w = v)) as [Heq | Hneq].
+        * subst w. simpl. lia.
+        * apply Hlt_s0. sets_unfold in Hvis. destruct Hvis as [Heq' | Hvis'].
+          { exfalso. apply Hneq. exact Heq'. }
+          { exact Hvis'. }
+      + split.
+        * intros w. split.
+          { intros Hdfn0. destruct (classic (w = v)) as [Heq | Hneq].
+            - subst w. simpl in Hdfn0. lia.
+            - apply Hiff_s0 in Hdfn0. intro Hvis_w.
+              apply Hdfn0. sets_unfold in Hvis_w. destruct Hvis_w as [Heq' | Hvis'].
+              + exfalso. apply Hneq. exact Heq'.
+              + exact Hvis'. }
+          { intros Hnvis. apply Hiff_s0. intro Hvis_w.
+            apply Hnvis. sets_unfold. right. exact Hvis_w. }
+        * simpl. lia.
     - (* dfn_valid *) exact Hvalid.
     - (* fa_visited *) exact Hfa_vis.
     - (* u ∈ visited *) exact Huvis.
