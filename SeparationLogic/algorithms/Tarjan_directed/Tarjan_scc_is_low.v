@@ -2125,27 +2125,30 @@ Section IS_LOW.
       with [x ≠ v] doesn't affect [fa v]). *)
   Lemma process_edge_keeps_fa_simple (a x v parent: V)
     (W: V -> program (@SCCSt V) unit)
-    (IH: forall y, Hoare (fun s => fa s v = parent) (W y) (fun _ s => fa s v = parent)):
+    (IH_fa: forall y, Hoare (fun s => fa s v = parent) (W y) (fun _ s => fa s v = parent))
+    (IH_vis: forall y, Hoare (fun s => v ∈ visited s) (W y) (fun _ s => v ∈ visited s)):
     Hoare (fun s => fa s v = parent /\ v ∈ visited s)
           (process_edge a W x)
-          (fun _ s => fa s v = parent).
+          (fun _ s => fa s v = parent /\ v ∈ visited s).
   Proof.
     unfold process_edge, if_else. intro_state. apply Hoare_choice.
     - (* Tree edge *)
       apply Hoare_assume_bind. simpl.
       destruct H as [Hfa Hv_vis].
-      apply (Hoare_bind (fun s => ~ x ∈ visited s /\ s = s0) (set_fa x a) (fun _ s => fa s v = parent) (fun _ => W x ;; lv <- get' (fun s => low s x) ;; update_low a lv) (fun _ s => fa s v = parent)).
+      apply (Hoare_bind (fun s => ~ x ∈ visited s /\ s = s0) (set_fa x a) (fun _ s => fa s v = parent /\ v ∈ visited s) (fun _ => W x ;; lv <- get' (fun s => low s x) ;; update_low a lv) (fun _ s => fa s v = parent /\ v ∈ visited s)).
       + (* set_fa x a *)
         unfold set_fa. intro_state. hoare_auto_s.
         destruct H as [Hnv_x Hs1_eq]. subst s1. subst s. simpl.
         unfold equiv_decb. destruct (equiv_dec v x) as [Heq | Hneq].
         * exfalso. rewrite Heq in Hv_vis. exact (Hnv_x Hv_vis).
-        * exact Hfa.
+        * split; [exact Hfa | exact Hv_vis].
       + intros _. simpl.
-        apply (Hoare_bind (fun s => fa s v = parent) (W x) (fun _ s => fa s v = parent) (fun _ => lv <- get' (fun s => low s x) ;; update_low a lv) (fun _ s => fa s v = parent)).
-        * (* W x *) apply (IH x).
+        apply (Hoare_bind (fun s => fa s v = parent /\ v ∈ visited s) (W x) (fun _ s => fa s v = parent /\ v ∈ visited s) (fun _ => lv <- get' (fun s => low s x) ;; update_low a lv) (fun _ s => fa s v = parent /\ v ∈ visited s)).
+        * (* W x *) apply Hoare_conj.
+          { eapply Hoare_conseq_pre. { intros st [Hfa0 Hvis0]. exact Hfa0. } apply (IH_fa x). }
+          { eapply Hoare_conseq_pre. { intros st [Hfa0 Hvis0]. exact Hvis0. } apply (IH_vis x). }
         * intros _. simpl.
-          apply (Hoare_bind (fun s => fa s v = parent) (get' (fun s => low s x)) (fun lv s => fa s v = parent) (fun lv => update_low a lv) (fun _ s => fa s v = parent)).
+          apply (Hoare_bind (fun s => fa s v = parent /\ v ∈ visited s) (get' (fun s => low s x)) (fun lv s => fa s v = parent /\ v ∈ visited s) (fun lv => update_low a lv) (fun _ s => fa s v = parent /\ v ∈ visited s)).
           -- (* get' *) unfold get'. intro_state. hoare_auto_s. destruct H1. subst s. exact H.
           -- intros lv. simpl. unfold update_low. intro_state. hoare_auto_s.
              ++ (* set_low *) unfold set_low. intro_state. hoare_auto_s. subst s. subst s2. simpl. exact H.
@@ -2154,10 +2157,10 @@ Section IS_LOW.
       intro_state. hoare_auto_s.
       + (* In stack *)
         unfold update_low. intro_state. hoare_auto_s.
-        * (* set_low *) unfold set_low. intro_state. hoare_auto_s. subst s. subst s1. simpl. destruct H as [Hfa _]. exact Hfa.
-        * (* skip *) destruct H1. subst s. destruct H as [Hfa _]. exact Hfa.
+        * (* set_low *) unfold set_low. intro_state. hoare_auto_s. subst s. subst s1. simpl. destruct H as [Hfa0 Hvis0]. split; [exact Hfa0 | exact Hvis0].
+        * (* skip *) destruct H1. subst s. destruct H as [Hfa0 Hvis0]. split; [exact Hfa0 | exact Hvis0].
       + (* Not in stack *)
-        destruct H3. subst s. destruct H as [Hfa Hvis]. subst s1. exact Hfa.
+        destruct H3. subst s. destruct H as [Hfa Hvis]. subst s1. split; [exact Hfa | exact Hvis].
   Qed.
 
 
@@ -2167,20 +2170,27 @@ Section IS_LOW.
 
   Lemma forset_keeps_fa (a v parent: V)
     (W: V -> program (@SCCSt V) unit)
-    (IH: forall y, Hoare (fun s => fa s v = parent) (W y) (fun _ s => fa s v = parent)):
+    (IH_fa: forall y, Hoare (fun s => fa s v = parent) (W y) (fun _ s => fa s v = parent))
+    (IH_vis: forall y, Hoare (fun s => v ∈ visited s) (W y) (fun _ s => v ∈ visited s)):
     Hoare (fun s => fa s v = parent /\ a ∈ visited s /\ v ∈ visited s)
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => fa s v = parent).
   Proof.
-    (* Hoare_forset with P done s := fa s v = parent.
-       Callback: process_edge_keeps_fa_simple needs v ∈ visited in pre,
-       but P done doesn't include it.  Need to either:
-       (a) add v ∈ visited to the forset invariant (requires IH_vis), or
-       (b) prove process_edge_keeps_fa_simple without v ∈ visited pre.
-       For now, this lemma is structurally clear but needs the IH_vis
-       threading through the fixpoint (same pattern as W_preserves_ancestor_inv
-       Part B with Hoare_fix_logicv_conj). *)
-  Admitted.
+    apply (Hoare_conseq
+      (fun s => fa s v = parent /\ a ∈ visited s /\ v ∈ visited s)
+      (fun s => fa s v = parent /\ v ∈ visited s)
+      (forset (fun w => dg_step g a w) (process_edge a W))
+      (fun _ s => fa s v = parent)
+      (fun _ s => fa s v = parent /\ v ∈ visited s)).
+    { intros s [Hfa [Hvis_a Hvis_v]]. split; [exact Hfa | exact Hvis_v]. }
+    { intros _ s [Hfa _]. exact Hfa. }
+    apply (@Hoare_forset SCCSt V
+      (fun done s => fa s v = parent /\ v ∈ visited s)
+      (fun w => dg_step g a w) (process_edge a W)).
+    { unfold Proper, respectful. intros. subst. reflexivity. }
+    { intros todo a0 Hsub Huniv Hnotdone.
+      apply (process_edge_keeps_fa_simple a a0 v parent W IH_fa IH_vis). }
+  Qed.
 
 
 
