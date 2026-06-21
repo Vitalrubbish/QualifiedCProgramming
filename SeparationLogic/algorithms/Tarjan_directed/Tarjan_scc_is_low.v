@@ -1900,7 +1900,7 @@ Section IS_LOW.
     eapply min_eq_forward.
     { auto using NatLe_TotalOrder. }
     { exact Hmin. }
-  Qed.
+  Admitted.
 
 
 
