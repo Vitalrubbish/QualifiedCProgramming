@@ -2796,6 +2796,114 @@ Section IS_LOW.
           destruct H1. subst s. destruct H2. eapply H. split; assumption. } } }
   Qed.
 
+
+  (** [low_forset_inv_to_scc_low_valid]: When [done] is the full set of
+      neighbors [dg_step g u], [low_forset_inv u done s] implies
+      [scc_low_valid_v s u].  The proof uses [min_eq_forward] with the
+      characterizations [state_to_dfs_tree_step_char] and
+      [state_to_dfs_tree_step_char_backward]. *)
+  Lemma low_forset_inv_to_scc_low_valid (u: V) (s: SCCSt):
+    low_forset_inv u (fun v => dg_step g u v) s ->
+    scc_low_valid_v s u.
+  Proof.
+    intros Hinv.
+    unfold low_forset_inv, scc_low_valid_v in *.
+    destruct Hinv as [Hsiv [Hdinv [Hdvalid [Hfav [Huvis Hmin]]]]].
+    set (universe := fun v : V => dg_step g u v) in *.
+    eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+    - (* forward: old min values are <= new min values *)
+      intros a1 Ha1. exists a1. split.
+      { destruct Ha1 as [Ha1L | Ha1R].
+        + (* children_done side *)
+          destruct Ha1L as [w [[Hw_in Hw_min] Heq_a1]].
+          left. exists w. split.
+          { unfold min_object_of_subset. split.
+            { unfold children_done, universe in Hw_in.
+              destruct Hw_in as [Hdg [Hfa_eq Hfa_ne]].
+              eapply state_to_dfs_tree_step_char_backward; eauto.
+              eapply Hfav. exact Hfa_eq. }
+            { intros x Hx. unfold dg_step, state_to_dfs_tree in Hx. simpl in Hx.
+              destruct Hx as [e [Hstep [Hfst_eq Hsnd_eq]]].
+              unfold original_step in Hstep. simpl in Hstep.
+              destruct Hstep as [v [Hvis [Hfa_ne_v [Hfst_fa Hsnd_v]]]].
+              rewrite Hsnd_v in Hsnd_eq. rewrite Hfst_fa in Hfst_eq.
+              simpl in Hfst_eq, Hsnd_eq. subst.
+              apply Hw_min. unfold children_done, universe.
+              split; [| split; [exact Hfst_fa | exact Hfa_ne_v]].
+              exact (Huniv v). } }
+          exact Heq_a1. }
+        + (* back_edges_done + u side *)
+          destruct Ha1R as [w [[Hw_in Hw_min] Heq_a1]].
+          right. exists w. split.
+          { unfold min_object_of_subset. split.
+            { destruct Hw_in as [Hw_back | Hw_u].
+              - left. unfold scc_back_edge.
+                unfold back_edges_done, universe in Hw_back.
+                destruct Hw_back as [Hdg [Hstack Hfa_ne]].
+                split; [exact Hdg | split; [exact Hstack |]].
+                intro Htree. apply state_to_dfs_tree_step_char in Htree.
+                destruct Htree as [Hfa_eq' [_ _]].
+                apply Hfa_ne. exact Hfa_eq'.
+              - right. exact Hw_u. }
+            { intros x Hx. destruct Hx as [Hx_back | Hx_u].
+              - destruct Hx_back as [[Hdg' [Hstack' Hnot_tree]] | Hx_u'].
+                + apply Hw_min. left.
+                  unfold back_edges_done, universe.
+                  split; [exact Hdg' | split; [exact Hstack' |]].
+                  intro Hfa_eq_x. apply Hnot_tree.
+                  eapply state_to_dfs_tree_step_char_backward; eauto.
+                  * admit. (* fa s x <> x — holds because on stack and not tree root *)
+                  * eapply stack_in_visited_inv. exact Hsiv. exact Hstack'.
+                + subst. apply Hw_min. right. reflexivity.
+              - subst. apply Hw_min. right. reflexivity. } }
+          exact Heq_a1. } }
+      apply Nat.le_refl.
+    - (* backward: symmetric *)
+      intros a2 Ha2. exists a2. split.
+      { destruct Ha2 as [Ha2L | Ha2R].
+        + destruct Ha2L as [w [[Hw_in Hw_min] Heq_a2]].
+          left. exists w. split.
+          { unfold min_object_of_subset. split.
+            { unfold children_done, universe.
+              unfold dg_step, state_to_dfs_tree in Hw_in. simpl in Hw_in.
+              destruct Hw_in as [e [Hstep [Hfst_eq Hsnd_eq]]].
+              unfold original_step in Hstep. simpl in Hstep.
+              destruct Hstep as [v [Hvis [Hfa_ne [Hfst_fa Hsnd_v]]]].
+              rewrite Hsnd_v in Hsnd_eq. rewrite Hfst_fa in Hfst_eq.
+              simpl in Hfst_eq, Hsnd_eq. subst.
+              split; [| split; [exact Hfst_fa | exact Hfa_ne]].
+              exact (Huniv v). }
+            { intros x Hx. unfold children_done, universe in Hx.
+              destruct Hx as [Hdg [Hfa_eq Hfa_ne]].
+              apply Hw_min. unfold dg_step, state_to_dfs_tree. simpl.
+              eapply state_to_dfs_tree_step_char_backward; eauto.
+              eapply Hfav. exact Hfa_eq. } }
+          exact Heq_a2. }
+        + destruct Ha2R as [w [[Hw_in Hw_min] Heq_a2]].
+          right. exists w. split.
+          { unfold min_object_of_subset. split.
+            { destruct Hw_in as [Hw_back | Hw_u].
+              - left. unfold back_edges_done, universe.
+                destruct Hw_back as [[Hdg' [Hstack' Hnot_tree]] | Hw_u'].
+                2: { subst. exact Hw_u. }
+                split; [exact Hdg' | split; [exact Hstack' |]].
+                intro Hfa_eq_w. apply Hnot_tree.
+                eapply state_to_dfs_tree_step_char_backward; eauto.
+                * admit. (* fa s w <> w *)
+                * eapply stack_in_visited_inv. exact Hsiv. exact Hstack'.
+              - right. exact Hw_u. }
+            { intros x Hx. destruct Hx as [Hx_back | Hx_u].
+              - destruct Hx_back as [Hdg [Hstack Hfa_ne]].
+                apply Hw_min. left. left. split; [exact Hdg | split; [exact Hstack |]].
+                intro Htree. apply state_to_dfs_tree_step_char in Htree.
+                destruct Htree as [Hfa_eq' [_ _]].
+                apply Hfa_ne. exact Hfa_eq'.
+              - subst. apply Hw_min. right. reflexivity. } }
+          exact Heq_a2. } }
+      apply Nat.le_refl.
+  Admitted.
+
+
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
                      (fun _ s => low_post x s /\ u ∈ visited s)) ->
@@ -2807,7 +2915,66 @@ Section IS_LOW.
     Hoare (fun s => low_forset_inv u ∅ s /\ (forall v, fa s v = u -> v = u))
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
-  Proof. Admitted.
+  Proof.
+    intros HW_low HW_self_vis HW_keep_vis HW_fa_children.
+    set (universe := fun v : V => dg_step g u v).
+    set (P := fun (done: V -> Prop) (s: SCCSt) =>
+      low_forset_inv u done s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
+    eapply Hoare_conseq.
+    3: apply (@Hoare_forset SCCSt V P universe (process_edge u W)).
+    - (* strengthen precondition: original pre -> P empty *)
+      simpl. intros s [Hinv Hfa_u].
+      destruct Hinv as [Hsiv [Hdinv0 [Hdvalid0 [Hfav0 [Huvis0 Hmin0]]]]].
+      unfold P. simpl. split; [| split; [exact Hdvalid0 | split; [exact Hdinv0 | exact Hfav0]]].
+      split; [exact Hsiv | split; [exact Hdinv0 | split; [exact Hdvalid0 | split; [exact Hfav0 | split; [exact Huvis0 | exact Hmin0]]]]].
+    - (* weaken postcondition: P universe -> scc_low_valid_v *)
+      simpl. intros b s [Hlow [Hdvalid [Hdinv Hfav]]].
+      split; [| split; [exact Hdvalid | split; [exact Hdinv | exact Hfav]]].
+      apply low_forset_inv_to_scc_low_valid. exact Hlow.
+    - (* Proper proof for P *)
+      unfold P, Proper, respectful. intros done1 done2 Hequiv s1 s2 Heq. subst s2.
+      split; intros [Hlow [Hdvalid [Hdinv Hfav]]]; split; [| split; [exact Hdvalid | split; [exact Hdinv | exact Hfav]]].
+      + eapply (low_forset_inv_proper u done1 done2 Hequiv s1 s1). reflexivity. exact Hlow.
+      + apply Sets_equiv_Sets_included in Hequiv. destruct Hequiv as [Hincl12 Hincl21].
+        eapply (low_forset_inv_proper u done2 done1).
+        apply Sets_equiv_Sets_included. split; [exact Hincl21 | exact Hincl12].
+        reflexivity. exact Hlow.
+    - (* forset step: Hoare (P done) (process_edge u W a) (P (done ∪ [a])) *)
+      intros done a Hsub Huniv_a Hnotdone.
+      intro_state. destruct H as [[Hsiv [Hdinv0 [Hdvalid0 [Hfav0 [Huvis0 Hmin0]]]]] [Hval [Hdinv' Hfav']]].
+      unfold process_edge, if_else. intro_state. apply Hoare_choice.
+      + (* Tree edge: ~ a ∈ visited *)
+        apply Hoare_assume_bind. simpl. intro_state.
+        destruct H2 as [Hnv_a Hs2_eq]. subst s2. subst s1.
+        rename s0 into s_pre.
+        assert (Hnd_a: ~ done a). { intro Hd. apply Hnv_a. eapply done_visited_visited. apply (conj Hsiv (conj Hdinv0 (conj Hdvalid0 (conj Hfav0 (conj Huvis0 Hmin0))))). exact Hd. }
+        (* set_fa a u *)
+        unfold set_fa. intro_state. hoare_auto_s. subst s0.
+        eapply Hoare_bind with (R := fun _ s => P (done ∪ [a]) s).
+        { (* W a *)
+          apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ ~ a ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
+          { intros st Heq. subst st. simpl.
+            split. { apply (set_fa_preserves_low_forset_inv_for_new_child u u a done s_pre Hnv_a Huvis0 Huvis0 Hnd_a).
+              split; [exact Hsiv | split; [exact Hdinv0 | split; [exact Hdvalid0 | split; [exact Hfav0 | split; [exact Huvis0 | exact Hmin0]]]]]. }
+            split; [exact Hnv_a | split; [exact Hval | split; [exact Hdinv' | exact Hfav']]]. }
+          admit. (* W a preserves low_forset_inv u done + invariants *) }
+        { simpl. intros _. intro_state. hoare_auto_s. destruct H as [Hinv_done [Hnv_a' [Hval' [Hdinv'' Hfav'']]]].
+          unfold update_low. intro_state. hoare_auto_s.
+          - unfold set_low. intro_state. hoare_auto_s. subst s1. subst s.
+            unfold P. simpl.
+            assert (Hmin_eq: low s0 a = Nat.min (low s0 u) (low s0 a)). { symmetry. apply Nat.min_r. lia. }
+            split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u u (low s0 a) (done ∪ [a]) s0).
+              { intro Hda. apply Hnv_a'. eapply done_visited_visited. exact Hinv_done. exact Hda. }
+              exact Hinv_done. }
+            split; [exact Hval' | split; [exact Hdinv'' | exact Hfav'']].
+          - destruct H1. subst s. unfold P. simpl. split; [exact Hinv_done | split; [exact Hval' | split; [exact Hdinv'' | exact Hfav'']]]. }
+      + (* Non-tree edge: a ∈ visited *)
+        intro_state. hoare_auto_s.
+        * (* In stack: back edge *)
+          admit.
+        * (* Not in stack: cross edge *)
+          admit.
+  Admitted.
 
   Theorem tarjan_scc_keep_low_valid (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s)
