@@ -2435,6 +2435,34 @@ Section IS_LOW.
       - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [left; exists w'; split; [unfold min_object_of_subset; split; [apply Hchild_eq; exact Hw_in|intros x Hx; apply Hchild_eq in Hx; apply Hw_min; exact Hx]|exact Heq_a2]|apply Nat.le_refl].
       - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [right; exists w'; split; [unfold min_object_of_subset; split; [destruct Hw_in as [Hw_back|Hw_u]; [left; apply Hback_eq; exact Hw_back|right; exact Hw_u]|intros x Hx; destruct Hx as [Hx_back|Hx_u]; [apply Hw_min; left; apply Hback_eq; exact Hx_back|subst x; apply Hw_min; right; reflexivity]]|exact Heq_a2]|apply Nat.le_refl]. }
   Qed.
+
+  Lemma tarjan_scc_preserves_visited (a w: V):
+    Hoare (fun s => w ∈ visited s) (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a) (fun _ s => w ∈ visited s).
+  Proof.
+    unfold tarjan_scc. hoare_fix_nolv_auto V. intros W IH a0. unfold tarjan_scc_f.
+    apply (Hoare_bind (fun s => w ∈ visited s) (preloop a0) (fun _ s => w ∈ visited s)
+      (fun _ => forset (fun v => dg_step g a0 v) (process_edge a0 W) ;; If (fun s => low s a0 = dfn s a0) (pop_scc a0))
+      (fun _ s => w ∈ visited s)).
+    { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. sets_unfold. left. exact H. }
+    { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (forset (fun v => dg_step g a0 v) (process_edge a0 W)) (fun _ s => w ∈ visited s) (fun _ => If (fun s => low s a0 = dfn s a0) (pop_scc a0)) (fun _ s => w ∈ visited s)).
+      { apply (@Hoare_forset SCCSt V (fun _ s => w ∈ visited s) (fun v => dg_step g a0 v) (process_edge a0 W)). { unfold Proper, respectful. intros. subst. reflexivity. }
+        { intros todo a1 Hsub Huniv Hnotdone. intro_state. rename H into Hwvis. unfold process_edge, if_else. intro_state. apply Hoare_choice.
+          { apply Hoare_assume_bind. simpl. intro_state. destruct H1 as [Hnv_a1 Hs2_eq]. subst s2. subst s1.
+            apply (Hoare_bind (fun s => s = s0) (set_fa a1 a0) (fun _ s => w ∈ visited s) (fun _ => W a1 ;; lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
+            { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. subst s1. exact Hwvis. }
+            { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (W a1) (fun _ s => w ∈ visited s) (fun _ => lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
+              { apply (IH a1). }
+              { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (get' (fun s : SCCSt => low s a1)) (fun _ s => w ∈ visited s) (fun lv => update_low a0 lv) (fun _ s => w ∈ visited s)).
+                { unfold get'. intro_state. hoare_auto_s. destruct H1 as [Hs_eq _]. subst s. exact H. }
+                { simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
+                  { unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact H. }
+                  { destruct H1 as [Hs_eq _]. subst s. exact H. } } } } }
+          { (* non-tree edge: TODO fix variable names after intro_state.hoare_auto_s *)
+            admit. } } }
+      { (* pop_scc: TODO fix variable names after intro_state.hoare_auto_s *)
+        admit. } }
+  Admitted.
+
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
       [fa s v = u]. *)
@@ -2824,30 +2852,4 @@ Section IS_LOW.
     (** [tarjan_scc_preserves_visited]: [tarjan_scc g a] preserves [w ∈ visited s].
       The tree-edge branch proof has been verified interactively via rocq-mcp.
       The non-tree edge and pop_scc branches need variable-name fixes. *)
-  Lemma tarjan_scc_preserves_visited (a w: V):
-    Hoare (fun s => w ∈ visited s) (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a) (fun _ s => w ∈ visited s).
-  Proof.
-    unfold tarjan_scc. hoare_fix_nolv_auto V. intros W IH a0. unfold tarjan_scc_f.
-    apply (Hoare_bind (fun s => w ∈ visited s) (preloop a0) (fun _ s => w ∈ visited s)
-      (fun _ => forset (fun v => dg_step g a0 v) (process_edge a0 W) ;; If (fun s => low s a0 = dfn s a0) (pop_scc a0))
-      (fun _ s => w ∈ visited s)).
-    { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. sets_unfold. left. exact H. }
-    { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (forset (fun v => dg_step g a0 v) (process_edge a0 W)) (fun _ s => w ∈ visited s) (fun _ => If (fun s => low s a0 = dfn s a0) (pop_scc a0)) (fun _ s => w ∈ visited s)).
-      { apply (@Hoare_forset SCCSt V (fun _ s => w ∈ visited s) (fun v => dg_step g a0 v) (process_edge a0 W)). { unfold Proper, respectful. intros. subst. reflexivity. }
-        { intros todo a1 Hsub Huniv Hnotdone. intro_state. rename H into Hwvis. unfold process_edge, if_else. intro_state. apply Hoare_choice.
-          { apply Hoare_assume_bind. simpl. intro_state. destruct H1 as [Hnv_a1 Hs2_eq]. subst s2. subst s1.
-            apply (Hoare_bind (fun s => s = s0) (set_fa a1 a0) (fun _ s => w ∈ visited s) (fun _ => W a1 ;; lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
-            { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. subst s1. exact Hwvis. }
-            { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (W a1) (fun _ s => w ∈ visited s) (fun _ => lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
-              { apply (IH a1). }
-              { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (get' (fun s : SCCSt => low s a1)) (fun _ s => w ∈ visited s) (fun lv => update_low a0 lv) (fun _ s => w ∈ visited s)).
-                { unfold get'. intro_state. hoare_auto_s. destruct H1 as [Hs_eq _]. subst s. exact H. }
-                { simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
-                  { unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact H. }
-                  { destruct H1 as [Hs_eq _]. subst s. exact H. } } } } }
-          { (* non-tree edge: TODO fix variable names after intro_state.hoare_auto_s *)
-            admit. } } }
-      { (* pop_scc: TODO fix variable names after intro_state.hoare_auto_s *)
-        admit. } }
-  Admitted.
 End IS_LOW.
