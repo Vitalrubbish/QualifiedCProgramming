@@ -2821,7 +2821,7 @@ Section IS_LOW.
         apply tarjan_scc_all_keep_dfn_inv.
   Qed.
 
-  (** [tarjan_scc_preserves_visited]: [tarjan_scc g a] preserves [w ∈ visited s].
+    (** [tarjan_scc_preserves_visited]: [tarjan_scc g a] preserves [w ∈ visited s].
       The tree-edge branch proof has been verified interactively via rocq-mcp.
       The non-tree edge and pop_scc branches need variable-name fixes. *)
   Lemma tarjan_scc_preserves_visited (a w: V):
