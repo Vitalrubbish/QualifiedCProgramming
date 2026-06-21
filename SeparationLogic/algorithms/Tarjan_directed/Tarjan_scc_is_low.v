@@ -2443,25 +2443,38 @@ Section IS_LOW.
     apply (Hoare_bind (fun s => w ∈ visited s) (preloop a0) (fun _ s => w ∈ visited s)
       (fun _ => forset (fun v => dg_step g a0 v) (process_edge a0 W) ;; If (fun s => low s a0 = dfn s a0) (pop_scc a0))
       (fun _ s => w ∈ visited s)).
-    { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. sets_unfold. left. exact H. }
-    { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (forset (fun v => dg_step g a0 v) (process_edge a0 W)) (fun _ s => w ∈ visited s) (fun _ => If (fun s => low s a0 = dfn s a0) (pop_scc a0)) (fun _ s => w ∈ visited s)).
-      { apply (@Hoare_forset SCCSt V (fun _ s => w ∈ visited s) (fun v => dg_step g a0 v) (process_edge a0 W)). { unfold Proper, respectful. intros. subst. reflexivity. }
-        { intros todo a1 Hsub Huniv Hnotdone. intro_state. rename H into Hwvis. unfold process_edge, if_else. intro_state. apply Hoare_choice.
-          { apply Hoare_assume_bind. simpl. intro_state. destruct H1 as [Hnv_a1 Hs2_eq]. subst s2. subst s1.
-            apply (Hoare_bind (fun s => s = s0) (set_fa a1 a0) (fun _ s => w ∈ visited s) (fun _ => W a1 ;; lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
-            { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. subst s1. exact Hwvis. }
-            { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (W a1) (fun _ s => w ∈ visited s) (fun _ => lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
-              { apply (IH a1). }
-              { simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (get' (fun s : SCCSt => low s a1)) (fun _ s => w ∈ visited s) (fun lv => update_low a0 lv) (fun _ s => w ∈ visited s)).
-                { unfold get'. intro_state. hoare_auto_s. destruct H1 as [Hs_eq _]. subst s. exact H. }
-                { simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
-                  { unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact H. }
-                  { destruct H1 as [Hs_eq _]. subst s. exact H. } } } } }
-          { (* non-tree edge: TODO fix variable names after intro_state.hoare_auto_s *)
-            admit. } } }
-      { (* pop_scc: TODO fix variable names after intro_state.hoare_auto_s *)
-        admit. } }
-  Admitted.
+    - (* preloop *) unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. sets_unfold. left. exact H.
+    - (* forset + pop_scc *) simpl. intros _.
+      apply (Hoare_bind (fun s => w ∈ visited s) (forset (fun v => dg_step g a0 v) (process_edge a0 W)) (fun _ s => w ∈ visited s) (fun _ => If (fun s => low s a0 = dfn s a0) (pop_scc a0)) (fun _ s => w ∈ visited s)).
+      + (* forset *)
+        apply (@Hoare_forset SCCSt V (fun _ s => w ∈ visited s) (fun v => dg_step g a0 v) (process_edge a0 W)).
+        * unfold Proper, respectful. intros. subst. reflexivity.
+        * intros todo a1 Hsub Huniv Hnotdone. intro_state. rename H into Hwvis. unfold process_edge, if_else. intro_state. apply Hoare_choice.
+          -- (* Tree edge *)
+             apply Hoare_assume_bind. simpl. intro_state. destruct H1 as [Hnv_a1 Hs2_eq]. subst s2. subst s1.
+             apply (Hoare_bind (fun s => s = s0) (set_fa a1 a0) (fun _ s => w ∈ visited s) (fun _ => W a1 ;; lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
+             ++ unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. subst s1. exact Hwvis.
+             ++ simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (W a1) (fun _ s => w ∈ visited s) (fun _ => lv <- get' (fun s : SCCSt => low s a1) ;; update_low a0 lv) (fun _ s => w ∈ visited s)).
+                ** apply (IH a1).
+                ** simpl. intros _. apply (Hoare_bind (fun s => w ∈ visited s) (get' (fun s : SCCSt => low s a1)) (fun _ s => w ∈ visited s) (fun lv => update_low a0 lv) (fun _ s => w ∈ visited s)).
+                   --- unfold get'. intro_state. hoare_auto_s. destruct H1 as [Hs_eq _]. subst s. exact H.
+                   --- simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
+                       +++ unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact H.
+                       +++ destruct H1 as [Hs_eq _]. subst s. exact H.
+          -- (* Non-tree edge *)
+             intro_state. hoare_auto_s.
+             --- (* In stack: back edge, update_low preserves visited *)
+                unfold update_low. intro_state. hoare_auto_s.
+                ---- unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact Hwvis.
+                ---- destruct H. subst s. exact Hwvis.
+             --- (* Not in stack: cross edge, skip *)
+                destruct H3. subst s. subst s2. subst s1. exact Hwvis.
+      + (* pop_scc *)
+        simpl. intros _. intro_state. hoare_auto_s.
+        * (* low = dfn: pop_scc *)
+           unfold pop_scc. intro_state. hoare_auto_s. subst s. subst s1. unfold pop_scc_state. destruct (stack_split_at (stack s0) a0) as [popped rest]. simpl. exact H.
+        * (* low <> dfn: skip *) destruct H1. subst s. exact H.
+  Qed.
 
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
@@ -2504,17 +2517,7 @@ Section IS_LOW.
         destruct (equiv_dec u a) as [Heq_ua | Hneq_ua].
         - (* u = a: requires forset_keep_low_forset_inv, not yet ready *)
           admit.
-        - (* u <> a *)
-          apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s).
-          { intros s Heq. subst s. exact (conj Hinv' (conj Hav' Hdv')). }
-          apply (forset_keeps_low_forset_inv u a done W Hneq_ua).
-          { exact Hnd_a. }
-          { intro x. eapply Hoare_conseq. 3: apply (IH x).
-            { intros s [Hinv_s [Hnv_s [Hnd_s [Hav_s Hdv_s]]]]. exact (conj Hinv_s (conj Hnv_s (conj Hnd_s Hdv_s))). }
-            { intros _ s [Hinv_s Hdv_s]. split; [exact Hinv_s | split; [exact Hav' | exact Hdv_s]]. } }
-          (* after forset, we need low_forset_inv /\ done_visited, forset gives low_forset_inv alone *)
-          (* We need to add done_visited and strip a ∈ visited *)
-          (* This is handled by Hoare_conseq_post at the outer level *)
+        - (* u <> a: needs forset_keeps_low_forset_inv adapted + pop_scc; requires tarjan_scc_preserves_visited Qed *)
           admit. }
     - (* Part B: fa s v = u /\ done_visited done s *)
       apply Hoare_conj with (Q1 := fun _ s => fa s v = u) (Q2 := fun _ s => done_visited done s).
