@@ -1820,11 +1820,12 @@ Section IS_LOW.
       does not shift the minimum over [children_done] or [back_edges_done]
       since [v] appears in neither set. *)
   Lemma update_low_preserves_low_forset_inv_for_other (u v: V) (n: nat) (done: V -> Prop) (s: @SCCSt V):
+    u <> v ->
     ~ done v ->
     low_forset_inv u done s ->
     low_forset_inv u done (RecordSet.set low (fun low0 x => if equiv_decb x v then Nat.min (low s v) n else low0 x) s).
   Proof.
-    intros Hndone Hinv.
+    intros Hneq_uv Hndone Hinv.
     unfold low_forset_inv in Hinv.
     destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
     unfold low_forset_inv. simpl.
@@ -1833,40 +1834,44 @@ Section IS_LOW.
     split; [exact Hvalid |].
     split; [exact Hfa_vis |].
     split; [exact Huvis |].
-    simpl.
-    destruct (equiv_dec u v) as [Heq_uv | Hneq_uv].
-    - (* u = v *)
-      rewrite Heq_uv in *. simpl.
-      destruct (Nat.le_decidable (low s v) n) as [Hle | Hlt].
-      + (* low s v <= n: state unchanged, min condition preserved *)
-        rewrite (Nat.min_l (low s v) n Hle). simpl.
-        assert (Hlow_eq: (fun (x:V) => if equiv_decb x v then low s v else low s x) = low s).
-        { apply FunctionalExtensionality.functional_extensionality. intro x.
-          unfold equiv_decb. destruct (equiv_dec x v) as [Heq_x|Hneq_x].
-          - rewrite Heq_x. reflexivity.
-          - reflexivity. }
-        unfold children_done, back_edges_done. simpl.
-        rewrite Hlow_eq. simpl.
-        fold (children_done s v done). fold (back_edges_done s u done). simpl.
-        unfold equiv_decb. destruct (equiv_dec v v) as [_|Hneq]; [simpl|exfalso; apply Hneq; reflexivity].
-        fold (back_edges_done s u done).
-        exact Hmin.
-      + (* n < low s v: the new target is Nat.min(low s v, n) = n.
-           Proving that n is the min requires n to be in the image of the
-           back-edge component (e.g. n = dfn s v), which is guaranteed at
-           the call sites (line 2278/2288) via Hmin_eq + the DFS invariant
-           low a0 <= low a, but not available as a lemma hypothesis.
-           Admitted pending a refined statement or additional invariant. *)
-        admit.
-    - (* u ≠ v: low s u unchanged.  children_done/back_edges_done
-         sets and their low/dfn values are unchanged because low
-         changes for v only and v ∉ done prevents v from being in
-         either set.  min_eq_forward with Hmin closes the goal. *)
-      simpl. unfold equiv_decb. destruct (equiv_dec u v) as [Heq | Hneq]; [exfalso; apply Hneq_uv; exact Heq |].
-      eapply min_eq_forward.
-      { auto using NatLe_TotalOrder. }
-      { exact Hmin. }
-  Admitted.
+    unfold children_done, back_edges_done in *. simpl.
+    unfold equiv_decb. destruct (equiv_dec u v) as [Heq | Hneq]; [exfalso; apply Hneq_uv; exact Heq |].
+    set (f_new := fun (x: V) => if if equiv_dec x v then true else false then Nat.min (low s v) n else low s x).
+    assert (Hlow_eq_done: forall x, x ∈ done -> f_new x = low s x).
+    { intros x0 Hx0_done. unfold f_new.
+      destruct (equiv_dec x0 v) as [Heq_x0v | Hneq_x0v].
+      - rewrite Heq_x0v in Hx0_done. exfalso. apply Hndone. exact Hx0_done.
+      - reflexivity. }
+    eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+    - (* forward direction *)
+      simpl. intros a1 [Ha1_L | Ha1_R].
+      + (* children: low s → f_new *)
+        exists a1. split.
+        * left. eapply min_eq_forward; [typeclasses eauto | exact Ha1_L | | ].
+          -- intros x (Hx_done & Hx_fa & Hx_neq). exists x. split.
+             ++ exact (conj Hx_done (conj Hx_fa Hx_neq)).
+             ++ rewrite (Hlow_eq_done x Hx_done). apply Nat.le_refl.
+          -- intros y (Hy_done & Hy_fa & Hy_neq). exists y. split.
+             ++ exact (conj Hy_done (conj Hy_fa Hy_neq)).
+             ++ rewrite (Hlow_eq_done y Hy_done). apply Nat.le_refl.
+        * apply Nat.le_refl.
+      + (* back_edges: unchanged *)
+        exists a1. split; [right; exact Ha1_R | apply Nat.le_refl].
+    - (* backward direction *)
+      simpl. intros a2 [Ha2_L | Ha2_R].
+      + (* children: f_new → low s *)
+        exists a2. split.
+        * left. eapply min_eq_forward; [typeclasses eauto | exact Ha2_L | | ].
+          -- intros x (Hx_done & Hx_fa & Hx_neq). exists x. split.
+             ++ exact (conj Hx_done (conj Hx_fa Hx_neq)).
+             ++ rewrite (Hlow_eq_done x Hx_done). apply Nat.le_refl.
+          -- intros y (Hy_done & Hy_fa & Hy_neq). exists y. split.
+             ++ exact (conj Hy_done (conj Hy_fa Hy_neq)).
+             ++ rewrite (Hlow_eq_done y Hy_done). apply Nat.le_refl.
+        * apply Nat.le_refl.
+      + (* back_edges: unchanged *)
+        exists a2. split; [right; exact Ha2_R | apply Nat.le_refl].
+  Qed.
 
 
   (** [set_fa_preserves_low_forset_inv_for_new_child]: When [~ x ∈ visited],
@@ -2280,7 +2285,7 @@ Section IS_LOW.
               unfold P. simpl.
               assert (Hmin_eq: low s0 a0 = Nat.min (low s0 a) (low s0 a0)).
               { symmetry. apply Nat.min_r. lia. }
-              split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u a (low s0 a0) done). { exact Hndone_a. } { exact Hinv'. } }
+              split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u a (low s0 a0) done _ Hneq). { exact Hndone_a. } { exact Hinv'. } }
               split; [exact Hav' | exact Hdv'].
             + destruct H1. subst s. split; [exact Hinv' | split; [exact Hav' | exact Hdv']]. }
         - (* Non-tree edge *)
@@ -2290,7 +2295,7 @@ Section IS_LOW.
             { unfold set_low. intro_state. hoare_auto_s. subst s1. subst s.
               assert (Hmin_eq: dfn s0 a0 = Nat.min (low s0 a) (dfn s0 a0)). { symmetry. apply Nat.min_r. lia. }
               destruct H as [Hinv_s0 [Hav_s0 Hdv_s0]].
-              split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u a (dfn s0 a0) done). { exact Hndone_a. } { exact Hinv_s0. } } split; [exact Hav_s0 | exact Hdv_s0]. }
+              split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u a (dfn s0 a0) done _ Hneq). { exact Hndone_a. } { exact Hinv_s0. } } split; [exact Hav_s0 | exact Hdv_s0]. }
             { destruct H1. subst s. destruct H as [Hinv_s0 [Hav_s0 Hdv_s0]]. split; [exact Hinv_s0 | split; [exact Hav_s0 | exact Hdv_s0]]. }
           + (* Not in stack: cross edge, skip *)
             destruct H4. subst s. subst s2. subst s1.
@@ -2860,19 +2865,69 @@ Section IS_LOW.
   Qed.
 
 
+  (** [children_done_full_eq]: When [done = dg_step g u], the
+      [children_done] set coincides with the DFS-tree children of [u].
+      Requires [done_visited] (neighbors are visited) for the forward
+      direction via [state_to_dfs_tree_step_char_backward], and
+      [fa_children_in_g] (fa-children of u correspond to g-edges) for
+      the backward direction — the tree's [original_step] references
+      edge endpoints from [g] but does not itself require [original_step g e]. *)
+  Lemma children_done_full_eq (u: V) (s: SCCSt):
+    done_visited (fun v => dg_step g u v) s ->
+    (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
+    children_done s u (fun v => dg_step g u v) == dg_step (state_to_dfs_tree g s root) u.
+  Proof.
+    intros Hdv Hfa_g v. unfold children_done, done_visited in *.
+    split.
+    - intros [Hdg [Hfa_eq Hfa_neq]].
+      apply Hdv in Hdg as Hvis.
+      eapply state_to_dfs_tree_step_char_backward; eauto.
+    - intros Htree.
+      apply state_to_dfs_tree_step_char in Htree as [Hfa_eq [Hfa_neq Hvis]].
+      split; [| split; [exact Hfa_eq | exact Hfa_neq]].
+      apply Hfa_g. split; assumption.
+  Qed.
+
+  (** [back_edges_done_full_eq]: When [done = dg_step g u], the
+      [back_edges_done] set coincides with [scc_back_edge s u].
+      Both sides require [dg_step g u v], [In v (stack s)]; the
+      difference is [fa s v <> u] vs [~ dg_step (state_to_dfs_tree) u v].
+      Forward direction uses [state_to_dfs_tree_step_char] (tree edge ⇒
+      fa = u); backward requires [stack_fa_neq_self] for
+      [state_to_dfs_tree_step_char_backward]. *)
+  Lemma back_edges_done_full_eq (u: V) (s: SCCSt):
+    done_visited (fun v => dg_step g u v) s ->
+    (forall v, In v (stack s) -> fa s v <> v) ->
+    back_edges_done s u (fun v => dg_step g u v) == scc_back_edge s u.
+  Proof.
+    intros Hdv Hstack_fa_neq v. unfold back_edges_done, scc_back_edge, done_visited in *.
+    split.
+    - intros [Hdg [Hstack Hfa_neq]].
+      split; [exact Hdg | split; [exact Hstack |]].
+      intro Htree. apply state_to_dfs_tree_step_char in Htree as [Hfa_eq _].
+      apply Hfa_neq. exact Hfa_eq.
+    - intros [Hdg [Hstack Hnot_tree]].
+      apply Hdv in Hdg as Hvis.
+      split; [exact Hdg | split; [exact Hstack |]].
+      destruct (equiv_dec (fa s v) u) as [Hfa_eq | Hfa_neq]; [| exact Hfa_neq].
+      exfalso. apply Hnot_tree.
+      eapply state_to_dfs_tree_step_char_backward; eauto.
+  Qed.
+
   (** [low_forset_inv_to_scc_low_valid]: When [done] is the full set of
       neighbors [dg_step g u], [low_forset_inv u done s] implies
       [scc_low_valid_v s u].  The proof uses [min_eq_forward] with the
       characterizations [state_to_dfs_tree_step_char] and
       [state_to_dfs_tree_step_char_backward]. *)
   Lemma low_forset_inv_to_scc_low_valid (u: V) (s: SCCSt):
+    done_visited (fun v => dg_step g u v) s ->
+    (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
+    (forall v, In v (stack s) -> fa s v <> v) ->
     low_forset_inv u (fun v => dg_step g u v) s ->
     scc_low_valid_v s u.
   Proof.
-    (* Bridge lemma: requires set-theoretic equivalence between
-       children_done s u universe and dg_step (state_to_dfs_tree g s root) u,
-       and between back_edges_done s u universe and scc_back_edge s u.
-       Admitted pending dedicated invariant lemmas for w in visited and fa_self. *)
+    (* Requires bridging [children_done_full_eq] and [back_edges_done_full_eq]
+       via [min_eq_forward].  To be completed in Phase 3. *)
   Admitted.
 
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
