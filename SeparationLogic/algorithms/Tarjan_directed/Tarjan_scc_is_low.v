@@ -3224,11 +3224,71 @@ Section IS_LOW.
   (* 13. Global scc_low_valid / scc_is_low                             *)
   (* ================================================================ *)
 
+  (** [tarjan_scc_establishes_and_preserves_scc_low_valid]:
+      If [a] is unvisited and [scc_low_valid] holds for all currently
+      visited vertices, then after [tarjan_scc g a], [scc_low_valid]
+      holds for all vertices (including new ones in [a]'s SCC tree).
+      Also preserves [dfn_inv], [fa_visited], [dfn_valid].
+      Combines cross-tree preservation with per-root establishment
+      from [tarjan_scc_keep_low_valid]. *)
+  Lemma tarjan_scc_establishes_and_preserves_scc_low_valid (a: V):
+    Hoare (fun s => scc_low_valid s /\ dfn_inv s /\ fa_visited s /\ dfn_valid g s root /\ ~ a ∈ visited s)
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
+          (fun _ s => scc_low_valid s /\ dfn_inv s /\ fa_visited s /\ dfn_valid g s root).
+  Proof.
+    (* Requires: (1) tarjan_scc_keep_low_valid a gives scc_low_valid_v for a
+       and its SCC tree; (2) cross-tree preservation for already-visited
+       vertices.  Admitted pending the cross-tree lemma. *)
+  Admitted.
+
   Theorem tarjan_scc_all_scc_low_valid:
     Hoare (fun s: @SCCSt V => dfn_inv s /\ fa_visited s /\ dfn_valid g s root)
           (tarjan_scc_all (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g)
           (fun _ s => scc_low_valid s).
   Proof.
+    unfold tarjan_scc_all.
+    set (P := fun (done: V -> Prop) (s: SCCSt) =>
+      (forall w, done w -> scc_low_valid_v s w) /\
+      dfn_inv s /\ fa_visited s /\ dfn_valid g s root).
+    refine (Hoare_conseq
+      (fun s => dfn_inv s /\ fa_visited s /\ dfn_valid g s root)
+      (fun s => P ∅ s)
+      (forset (fun v => original_vvalid g v) (fun v => If (fun s => ~ v ∈ visited s) (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)))
+      (fun _ s => scc_low_valid s)
+      (fun _ s => P (fun v => original_vvalid g v) s)
+      _ _ _).
+    - (* Pre weakening: goal pre → P ∅ *)
+      intros s [Hinv [Hfa_vis Hvalid]]. unfold P. split; [| split; [exact Hinv | split; [exact Hfa_vis | exact Hvalid]]].
+      intros w Hw. exfalso. exact Hw.
+    - (* Post strengthening: P universe → scc_low_valid *)
+      intros _ s [Hdone_valid [Hinv [Hfa_vis Hvalid]]].
+      unfold scc_low_valid. intros w Hw.
+      (* w ∈ visited s. After forset, done = original_vvalid g.
+         Need: visited s ⊆ original_vvalid g. *)
+      admit.
+    - (* Main proof via Hoare_forset *)
+      apply Hoare_forset with (P := P).
+      + (* Properness of P *)
+        unfold Proper, respectful. intros done1 done2 Hequiv s1 s2 Heq. subst s2.
+        apply Sets_equiv_Sets_included in Hequiv. destruct Hequiv as [Hincl12 Hincl21].
+        unfold P. split; intros [Hdone_valid [Hinv [Hfa_vis Hvalid]]].
+        * split; [| split; [exact Hinv | split; [exact Hfa_vis | exact Hvalid]]].
+          intros w Hw. apply Hdone_valid. apply Hincl21. exact Hw.
+        * split; [| split; [exact Hinv | split; [exact Hfa_vis | exact Hvalid]]].
+          intros w Hw. apply Hdone_valid. apply Hincl12. exact Hw.
+      + (* For each vertex a *)
+        intros done a Hsub Huniv Hnotdone. unfold_op. intro_state. hoare_auto_s.
+        * (* a unvisited: tarjan_scc g a establishes scc_low_valid_v for a
+             and its SCC tree, and preserves it for already-done vertices.
+             Requires cross-tree preservation lemma. *)
+          admit.
+        * (* a already visited: skip, state unchanged.
+             Need P done → P (done ∪ [a]), which requires scc_low_valid_v s a.
+             This holds if a was processed in a previous forset iteration
+             (a ∈ done) or if a was pre-visited with scc_low_valid_v already
+             established. In the typical case (visited initially empty),
+             all visited vertices go through the unvisited branch. *)
+          admit.
   Admitted.
 
   Theorem tarjan_scc_all_scc_is_low:
