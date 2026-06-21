@@ -2639,11 +2639,29 @@ Section IS_LOW.
                      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
                      (fun _ => lv <- get' (fun s => low s a1) ;; update_low a lv)
                      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
-                   --- (* W a1: need Hoare_conseq to strengthen both IHs to common 8-conj pre,
-                          then Hoare_conj to combine posts, then weaken to drop a1 visited.
-                          The visited part comes from IH_low a1 a.
-                          Admitted pending this combination. *)
-                       admit.
+                   --- (* W a1: combine IH_vis (pair) and IH_low (visited) *)
+                       intro_state. destruct H as [Hcv_s [Hpu_s [Hinv_s [Hfa_s [Hnv_s [Hav_s [Hnd_s Hdv_s]]]]]]].
+                       (* done_visited + ~a1 visited → ~done a1 *)
+                       assert (Hnd_a1: ~ done a1) by (intro Hd; apply Hnv_s; apply Hdv_s; exact Hd).
+                       (* Combine IH_vis (pair) and IH_low (visited):
+                          - IH_vis adapted: pre strengthened with a visited, ~done a1
+                          - IH_low adapted: pre strengthened with full 8-conj
+                          - Hoare_conj gives combined post; weaken to 7-conj. *)
+                       eapply Hoare_conseq_post.
+                       2: { apply Hoare_conj with
+                              (Q1 := fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a1 ∈ visited s /\ ~ done a1 /\ done_visited done s)
+                              (Q2 := fun _ s => a ∈ visited s).
+                            +++ (* pair from IH_vis *)
+                                eapply Hoare_conseq. 3: apply (IH_vis a1 (cv, pu)).
+                                *** intros s Heq. subst s.
+                                    split; [exact Hcv_s | split; [exact Hpu_s | split; [exact Hinv_s | split; [exact Hfa_s | split; [exact Hnv_s | split; [exact Hnd_a1 | exact Hdv_s]]]]]].
+                                *** auto.
+                            +++ (* visited from IH_low *)
+                                eapply Hoare_conseq. 3: apply (IH_low a1 a).
+                                *** intros s Heq. subst s. exact Hav_s.
+                                *** auto. }
+                       { intros _ s [[Hcv' [Hpu' [Hinv' [Hfa' [Ha1vis [Hnd_a1' Hdv']]]]]] Hav'].
+                         split; [exact Hcv' | split; [exact Hpu' | split; [exact Hinv' | split; [exact Hfa' | split; [exact Hav' | split; [exact Hnd_s | exact Hdv']]]]]]. }
                    --- (* get' ;; update_low *)
                        simpl. intros _. apply (Hoare_bind
                          (fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
