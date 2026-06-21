@@ -2082,8 +2082,97 @@ Section IS_LOW.
                      stack_split_at (stack s) a = (popped', rest') -> ~ In w popped'))
           (pop_scc a)
           (fun _ s => low_forset_inv u done s).
-  Proof. Admitted.
-
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) a) as [popped rest] eqn:?.
+    simpl.
+    destruct H as [Hinv [Hin_stack Hdone_not_popped]].
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
+      unfold low_forset_inv. simpl.
+      split.
+      { intros w Hin. apply Hsiv. eapply stack_split_at_rest_incl; eauto. }
+      split; [exact Hinv' |].
+      split; [exact Hvalid |].
+      split; [exact Hfa_vis |].
+      split; [exact Huvis |].
+      eapply min_eq_forward.
+      { typeclasses eauto. }
+      { exact Hmin. }
+      { (* forward: a1 in source set -> exists a2 in target set with a2 <= a1 *)
+        intros a1 Ha1.
+        destruct Ha1 as [Ha1_left | Ha1_right].
+        - exists a1. split; [left; exact Ha1_left | apply Nat.le_refl].
+        - destruct Ha1_right as [a0 [[Hright_in Hright_min] Heq_a0]].
+          destruct Hright_in as [[Hdone [Hin_stk0 Hfa_neq]] | Heq_u].
+          + exists a1. split.
+            { right. unfold min_value_of_subset.
+              exists a0. split.
+              { split.
+                - left. split; [exact Hdone |].
+                  split; [| exact Hfa_neq].
+                  destruct (classic (In a0 rest)) as [Hr | Hnr]; [exact Hr |].
+                  destruct (stack_split_at_covers (stack s0) a popped rest Heqp a0
+                    Hin_stk0) as [Hpop | Hrest]; [| exfalso; apply Hnr; exact Hrest].
+                  exfalso. exact (Hdone_not_popped a0 Hdone popped rest eq_refl Hpop).
+                - intros b0 Hb0.
+                  destruct Hb0 as [[Hdone_b [Hin_rest_b Hfa_neq_b]] | Heq_ub].
+                  + apply Hright_min. left. split; [exact Hdone_b |].
+                    split; [eapply stack_split_at_rest_incl; eauto | exact Hfa_neq_b].
+                  + subst b0. apply Hright_min. right. reflexivity. }
+              { exact Heq_a0. } }
+            { apply Nat.le_refl. }
+          + subst a0. exists a1. split.
+            { right. unfold min_value_of_subset.
+              exists u. split.
+              { split.
+                - right. reflexivity.
+                - intros b0 Hb0.
+                  destruct Hb0 as [[Hdone_b [Hin_rest_b Hfa_neq_b]] | Heq_ub].
+                  + apply Hright_min. left. split; [exact Hdone_b |].
+                    split; [eapply stack_split_at_rest_incl; eauto | exact Hfa_neq_b].
+                  + subst b0. apply Hright_min. right. reflexivity. }
+              { exact Heq_a0. } }
+            { apply Nat.le_refl. } }
+      { (* backward: a2 in target set -> exists a1 in source set with a1 <= a2 *)
+        intros a2 Ha2.
+        destruct Ha2 as [Ha2_left | Ha2_right].
+        - exists a2. split; [left; exact Ha2_left | apply Nat.le_refl].
+        - destruct Ha2_right as [a0 [[Hright_in Hright_min] Heq_a0]].
+          destruct Hright_in as [[Hdone [Hin_rest Hfa_neq]] | Heq_u].
+          + exists a2. split.
+            { right. unfold min_value_of_subset.
+              exists a0. split.
+              { split.
+                - left. split; [exact Hdone |].
+                  split; [eapply stack_split_at_rest_incl; eauto | exact Hfa_neq].
+                - intros b0 Hb0.
+                  destruct Hb0 as [[Hdone_b [Hin_stk0_b Hfa_neq_b]] | Heq_ub].
+                  + apply Hright_min. left. split; [exact Hdone_b |].
+                    split.
+                    { apply (stack_split_at_popped_fresh (stack s0) a popped rest Heqp b0 Hin_stk0_b).
+                      exact (Hdone_not_popped b0 Hdone_b popped rest eq_refl). }
+                    { exact Hfa_neq_b. }
+                  + subst b0. apply Hright_min. right. reflexivity. }
+              { exact Heq_a0. } }
+            { apply Nat.le_refl. }
+          + subst a0. exists a2. split.
+            { right. unfold min_value_of_subset.
+              exists u. split.
+              { split.
+                - right. reflexivity.
+                - intros b0 Hb0.
+                  destruct Hb0 as [[Hdone_b [Hin_stk0_b Hfa_neq_b]] | Heq_ub].
+                  + apply Hright_min. left. split; [exact Hdone_b |].
+                    split.
+                    { apply (stack_split_at_popped_fresh (stack s0) a popped rest Heqp b0 Hin_stk0_b).
+                      exact (Hdone_not_popped b0 Hdone_b popped rest eq_refl). }
+                    { exact Hfa_neq_b. }
+                  + subst b0. apply Hright_min. right. reflexivity. }
+              { exact Heq_a0. } }
+            { apply Nat.le_refl. } }
+  Qed.
 
 
 
