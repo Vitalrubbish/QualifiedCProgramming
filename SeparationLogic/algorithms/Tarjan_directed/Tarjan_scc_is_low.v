@@ -2644,7 +2644,20 @@ Section IS_LOW.
                           The visited part comes from IH_low a1 a.
                           Admitted pending this combination. *)
                        admit.
-                   --- (* get' ;; update_low: both preserve all 7 conjuncts; admitted pending variable naming *) admit.
+                   --- (* get' ;; update_low *)
+                       simpl. intros _. apply (Hoare_bind
+                         (fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+                         (get' (fun s => low s a1))
+                         (fun lv s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+                         (fun lv => update_low a lv)
+                         (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
+                       +++ (* get': reads state, doesn't change it *)
+                           unfold get'. intro_state. hoare_auto_s.
+                           destruct H1 as [Hs_eq _]. subst s. exact H.
+                       +++ (* update_low a lv: set_low sets low a := lv directly, not Nat.min;
+                              update_low_preserves_low_forset_inv_for_other expects Nat.min.
+                              Admitted pending adaptation. *)
+                           admit.
              ++ (* Non-tree edge: u/pu substituted by Hoare_fix_logicv_conj; admitted *) admit.
         * (* pop_scc / skip *)
           simpl. intros _. intro_state. hoare_auto_s.
