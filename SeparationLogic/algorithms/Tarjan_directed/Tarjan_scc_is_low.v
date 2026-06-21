@@ -2654,10 +2654,19 @@ Section IS_LOW.
                        +++ (* get': reads state, doesn't change it *)
                            unfold get'. intro_state. hoare_auto_s.
                            destruct H1 as [Hs_eq _]. subst s. exact H.
-                       +++ (* update_low a lv: set_low sets low a := lv directly, not Nat.min;
-                              update_low_preserves_low_forset_inv_for_other expects Nat.min.
-                              Admitted pending adaptation. *)
-                           admit.
+                       +++ (* update_low a lv *)
+                           simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
+                           *** (* set_low *) unfold set_low. intro_state. hoare_auto_s.
+                               subst s3. subst s. simpl.
+                               destruct H as [Hcv_s [Hpu_s [Hinv_s [Hfa_s [Hav_s [Hnd_s Hdv_s]]]]]].
+                               split; [exact Hcv_s | split; [exact Hpu_s | split; [| split; [exact Hfa_s | split; [exact Hav_s | split; [exact Hnd_s | exact Hdv_s]]]]]].
+                               (* low_forset_inv: use lemma, then rewrite Nat.min (low s2 a) lv = lv *)
+                               assert (Nat.min (low s2 a) lv = lv) as Hmin_eq by (apply Nat.min_r; lia).
+                               pose proof (update_low_preserves_low_forset_inv_for_other (fa s0 v) a lv done s2) as Hlow'.
+                               rewrite Hpu_s in Hlow'. rewrite Hmin_eq in Hlow'.
+                               apply Hlow'; [exact Hneq_ua | exact Hnd_s | exact Hinv_s].
+                           *** (* skip: state unchanged *)
+                               destruct H1 as [Hs_eq _]. subst s. exact H.
              ++ (* Non-tree edge: u/pu substituted by Hoare_fix_logicv_conj; admitted *) admit.
         * (* pop_scc / skip *)
           simpl. intros _. intro_state. hoare_auto_s.
