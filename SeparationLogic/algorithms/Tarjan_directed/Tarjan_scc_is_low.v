@@ -1835,15 +1835,24 @@ Section IS_LOW.
     split; [exact Huvis |].
     simpl.
     destruct (equiv_dec u v) as [Heq_uv | Hneq_uv].
-    - (* u = v: low s u becomes min(low s u, n).  The min set
-         (children_done ∪ back_edges_done) is unchanged, but the
-         candidate value changes.  In the set_low branch (n < low),
-         this temporarily breaks the min condition; it's restored
-         when the back-edge vertex enters done (via forset).
-         This case requires the algorithmic invariant that n comes
-         from a dfn value already present in or about to enter the
-         back_edges_done set.  Left as future work. *)
-      admit.
+    - (* u = v *)
+      rewrite Heq_uv in *. simpl.
+      destruct (Nat.le_decidable (low s v) n) as [Hle | Hlt].
+      + (* low s v <= n: state unchanged, min condition preserved *)
+        rewrite (Nat.min_l (low s v) n Hle). simpl.
+        assert (Hlow_eq: (fun (x:V) => if equiv_decb x v then low s v else low s x) = low s).
+        { apply FunctionalExtensionality.functional_extensionality. intro x.
+          unfold equiv_decb. destruct (equiv_dec x v) as [Heq_x|Hneq_x].
+          - rewrite Heq_x. reflexivity.
+          - reflexivity. }
+        unfold children_done, back_edges_done. simpl.
+        rewrite Hlow_eq. simpl.
+        fold (children_done s v done). fold (back_edges_done s u done). simpl.
+        unfold equiv_decb. destruct (equiv_dec v v) as [_|Hneq]; [simpl|exfalso; apply Hneq; reflexivity].
+        fold (back_edges_done s u done).
+        exact Hmin.
+      + (* n < low s v: min condition temporarily breaks *)
+        admit.
     - (* u ≠ v: low s u unchanged.  children_done/back_edges_done
          sets and their low/dfn values are unchanged because low
          changes for v only and v ∉ done prevents v from being in
