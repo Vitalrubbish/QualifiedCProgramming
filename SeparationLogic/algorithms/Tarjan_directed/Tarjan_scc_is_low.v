@@ -2555,7 +2555,37 @@ Section IS_LOW.
     - (* Part B: fa s v = u /\ done_visited done s *)
       apply Hoare_conj with (Q1 := fun _ s => fa s v = u) (Q2 := fun _ s => done_visited done s).
       + (* fa s v = u *) admit.
-      + (* done_visited done s *) admit.
+      + (* done_visited done s *)
+        apply Hoare_conseq_pre with (P2 := fun s => done_visited done s).
+        { intros s [_ [_ [_ [_ Hdv]]]]. exact Hdv. }
+        unfold tarjan_scc. hoare_fix_nolv_auto V. intros W2 IH2 a2. unfold tarjan_scc_f.
+        apply (Hoare_bind (fun s => done_visited done s) (preloop a2) (fun _ s => done_visited done s)
+          (fun _ => forset (fun v0 => dg_step g a2 v0) (process_edge a2 W2) ;; If (fun s => low s a2 = dfn s a2) (pop_scc a2))
+          (fun _ s => done_visited done s)).
+        1: { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. unfold done_visited. intros w Hw. apply H in Hw. sets_unfold. left. exact Hw. }
+        simpl. intros _.
+        apply (Hoare_bind (fun s => done_visited done s) (forset (fun v0 => dg_step g a2 v0) (process_edge a2 W2)) (fun _ s => done_visited done s) (fun _ => If (fun s => low s a2 = dfn s a2) (pop_scc a2)) (fun _ s => done_visited done s)).
+        1: { apply (@Hoare_forset SCCSt V (fun _ s => done_visited done s) (fun v0 => dg_step g a2 v0) (process_edge a2 W2)).
+             1: { unfold Proper, respectful. intros. subst. reflexivity. }
+             intros todo a1 Hsub Huniv Hnotdone. intro_state. rename H into Hdv. unfold process_edge, if_else. intro_state. apply Hoare_choice.
+             1: { apply Hoare_assume_bind. simpl. intro_state. destruct H1 as [Hnv_a1 Hs2_eq]. subst s2. subst s1.
+                  apply (Hoare_bind (fun s => s = s0) (set_fa a1 a2) (fun _ s => done_visited done s) (fun _ => W2 a1 ;; lv <- get' (fun s => low s a1) ;; update_low a2 lv) (fun _ s => done_visited done s)).
+                  1: { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. subst s1. exact Hdv. }
+                  simpl. intros _. apply (Hoare_bind (fun s => done_visited done s) (W2 a1) (fun _ s => done_visited done s) (fun _ => lv <- get' (fun s => low s a1) ;; update_low a2 lv) (fun _ s => done_visited done s)).
+                  1: { apply (IH2 a1). }
+                  simpl. intros _. apply (Hoare_bind (fun s => done_visited done s) (get' (fun s => low s a1)) (fun _ s => done_visited done s) (fun lv => update_low a2 lv) (fun _ s => done_visited done s)).
+                  1: { unfold get'. intro_state. hoare_auto_s. destruct H1 as [Hs_eq _]. subst s. exact H. }
+                  simpl. intros lv. unfold update_low. intro_state. hoare_auto_s.
+                  1: { unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact H. }
+                  destruct H1 as [Hs_eq _]. subst s. exact H. }
+             intro_state. hoare_auto_s.
+             1: { unfold update_low. intro_state. hoare_auto_s.
+                  1: { unfold set_low. intro_state. hoare_auto_s. subst s1. subst s. simpl. exact Hdv. }
+                  destruct H. subst s. exact Hdv. }
+             destruct H3. subst s. subst s2. subst s1. exact Hdv. }
+        simpl. intros _. intro_state. hoare_auto_s.
+        1: { unfold pop_scc. intro_state. hoare_auto_s. subst s. subst s1. unfold pop_scc_state. destruct (stack_split_at (stack s0) a2) as [popped rest]. simpl. exact H. }
+        destruct H1. subst s. exact H.
   Admitted.
 
 
