@@ -1936,9 +1936,9 @@ Section IS_LOW.
       [fa s v = u]. *)
   Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop):
     u <> v -> ~ done v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v)
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s).
   Proof.
     (* See 20260620-tarjan-scc-is-low-repair-plan.md Step 3.
        Decompose via Hoare_conj into (A) low_forset_inv preservation
@@ -2454,18 +2454,18 @@ Section IS_LOW.
 
   Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop):
     u <> v -> dg_step g u v -> ~ done v ->
-    Hoare (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
+    Hoare (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
           (set_fa v u;; tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u).
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s).
   Proof.
     intros Hneq_uv Hdg Hndone_param.
-    apply (Hoare_bind (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
+    apply (Hoare_bind (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
                       (set_fa v u)
-                      (fun _ s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v)
+                      (fun _ s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
                       (fun _ => tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-                      (fun _ s => low_forset_inv u done s /\ fa s v = u)).
+                      (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s)).
     { unfold set_fa. intro_state. hoare_auto_s. subst s. simpl.
-      destruct H as [Hinv [Hnv Hndone]].
+      destruct H as [Hinv [Hnv [Hndone Hdv_s0]]].
       unfold low_forset_inv in Hinv.
       destruct Hinv as [Hsiv [Hinv' [Hvalid_s0 [Hfa_vis_s0 [Huvis_s0 Hmin_s0]]]]].
       destruct Hinv' as [Hlt_s0 [Hiff_s0 Hpos_s0]].
@@ -2477,9 +2477,9 @@ Section IS_LOW.
         split; [intros w Hfa_neq; destruct (equiv_dec w v) as [Heq | Hneq_w]; [rewrite Heq in *; simpl; unfold equiv_decb; destruct (equiv_dec v v) as [_ | Hc]; [| exfalso; apply Hc; reflexivity]; exact Huvis_s0 | unfold set_fa in Hfa_neq; simpl in Hfa_neq; unfold equiv_decb in Hfa_neq; destruct (equiv_dec w v) as [Heq' | Hneq'] in Hfa_neq; [exfalso; apply Hneq_w; exact Heq' |]; unfold set_fa; simpl; unfold equiv_decb; destruct (equiv_dec w v) as [Heq'' | Hneq'']; [exfalso; apply Hneq_w; exact Heq'' |]; apply Hfa_vis_s0; exact Hfa_neq] |].
         split; [exact Huvis_s0 |].
         apply (set_fa_preserves_min u v done s0 Hndone Hmin_s0).
-      - split; [| split; [exact Hnv | exact Hndone]].
+      - split; [| split; [exact Hnv | split; [exact Hndone | exact Hdv_s0]]].
         simpl; unfold equiv_decb; destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity]. }
-    intros _. apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v). { intros s H. exact H. } apply (W_preserves_ancestor_inv u v done Hneq_uv Hndone_param).
+    intros _. apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s). { intros s H. exact H. } apply (W_preserves_ancestor_inv u v done Hneq_uv Hndone_param).
   Qed.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
