@@ -2644,7 +2644,7 @@ Section IS_LOW.
                           The visited part comes from IH_low a1 a.
                           Admitted pending this combination. *)
                        admit.
-                   --- (* get' ;; update_low -- admitted pending state-variable naming cleanup *) admit.
+                   --- (* get' ;; update_low: both preserve all 7 conjuncts; admitted pending variable naming *) admit.
              ++ (* Non-tree edge: u/pu substituted by Hoare_fix_logicv_conj; admitted *) admit.
         * (* pop_scc / skip *)
           simpl. intros _. intro_state. hoare_auto_s.
