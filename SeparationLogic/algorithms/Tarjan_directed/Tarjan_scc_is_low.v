@@ -2639,15 +2639,22 @@ Section IS_LOW.
                      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
                      (fun _ => lv <- get' (fun s => low s a1) ;; update_low a lv)
                      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
-                   --- (* W a1: combine pair IH (IH_vis) and visited IH (IH_low) *)
+                   --- (* W a1: need Hoare_conseq to strengthen both IHs to common 8-conj pre,
+                          then Hoare_conj to combine posts, then weaken to drop a1 visited.
+                          The visited part comes from IH_low a1 a.
+                          Admitted pending this combination. *)
                        admit.
                    --- (* get' ;; update_low -- admitted pending state-variable naming cleanup *) admit.
-             ++ (* Non-tree edge: pu is substituted by fa s cv during nested intro_state;
-                   need to use u directly or protect the variable differently.  Admitted. *)
-                admit.
-        * (* pop_scc / skip: pop_scc_state changes stack which affects low_forset_inv;
-             needs pop_scc_keeps_low_forset_inv_other lemma.  Admitted. *)
-          admit. }
+             ++ (* Non-tree edge: u/pu substituted by Hoare_fix_logicv_conj; admitted *) admit.
+        * (* pop_scc / skip *)
+          simpl. intros _. intro_state. hoare_auto_s.
+          -- (* pop_scc a: low_forset_inv preserved by pop_scc_keeps_low_forset_inv_other;
+                other conjuncts (fa, visited, done) unchanged by pop_scc which only modifies stack/sccs *)
+             admit.
+          -- (* skip *)
+             destruct H1. subst s.
+             match goal with Hst: (cv = v /\ pu = u /\ _) |- _ => destruct Hst as [Hcv_s [Hpu_s [Hinv_s [Hfa_s [Hav_s [Hnd_s Hdv_s]]]]]] end.
+             split; [exact Hcv_s | split; [exact Hpu_s | split; [exact Hinv_s | split; [exact Hfa_s | split; [exact Hav_s | split; [exact Hnd_s | exact Hdv_s]]]]]]. }
   Admitted.
 
 
