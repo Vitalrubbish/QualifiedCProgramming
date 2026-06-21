@@ -2572,14 +2572,14 @@ Section IS_LOW.
                apply Hpre_dv. }
       { intros _ s [[[[Hinv Hav] Hfa_s] [Hcv_s Hpu_s]] [Hnd_s Hdv_s]].
         split; [exact Hcv_s | split; [exact Hpu_s | split; [exact Hinv | split; [exact Hfa_s | split; [exact Hav | split; [exact Hnd_s | exact Hdv_s]]]]]]. }
-    + simpl. intros _. intro_state.
-      destruct H as [Hcv [Hpu [Hinv' [Hfa' [Hav' [Hnd_a Hdv']]]]]].
+    + { simpl. intros _. intro_state.
+      destruct H as [Hcv_outer [Hpu_outer [Hinv_outer [Hfa_outer [Hav_outer [Hnd_outer Hdv_outer]]]]]].
       destruct (equiv_dec u a) as [Heq_ua | Hneq_ua].
       - (* u = a: requires forset_keep_low_forset_inv, not yet ready *)
         admit.
-      + (* u <> a *)
+      - (* u <> a *)
         apply Hoare_conseq_pre with (P2 := fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s).
-        { intros s Heq. subst s. split; [exact Hcv | split; [exact Hpu | split; [exact Hinv' | split; [exact Hfa' | split; [exact Hav' | split; [exact Hnd_a | exact Hdv']]]]]]. }
+        { intros s Heq. subst s. split; [exact Hcv_outer | split; [exact Hpu_outer | split; [exact Hinv_outer | split; [exact Hfa_outer | split; [exact Hav_outer | split; [exact Hnd_outer | exact Hdv_outer]]]]]]. }
         apply (Hoare_bind
           (fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
           (forset (fun v0 : V => dg_step g a v0) (process_edge a W))
@@ -2619,10 +2619,10 @@ Section IS_LOW.
                          | intros Hdone_a1; apply Hnv_a1; apply Hdv; exact Hdone_a1
                          | exact Hinv].
                    --- (* fa s cv = pu *)
-                       unfold equiv_decb. destruct (equiv_dec cv a1) as [Heq | Hneq].
+                       unfold equiv_decb. destruct (equiv_dec cv a1) as [Heq_cv | Hneq_cv].
                        +++ (* cv = a1: would imply a = u, contradicting u <> a *)
                            exfalso. subst cv.
-                           assert (Ha1_eq_v: a1 = v) by (rewrite <- Hcv; reflexivity).
+                           assert (Ha1_eq_v: a1 = v) by (symmetry; exact Heq_cv).
                            assert (Hvis_v: v ∈ visited s1). {
                              (* v is an ancestor of a on the DFS stack, hence visited *)
                              admit. }
@@ -2639,28 +2639,11 @@ Section IS_LOW.
                      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
                      (fun _ => lv <- get' (fun s => low s a1) ;; update_low a lv)
                      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
-                   --- (* W a1: combine low-forset IH and visited IH *)
-                       intro_state. destruct H as (Hcv_s & Hpu_s & Hinv_s & Hfa_s & Hnv_s & Hav_s & Hnd_s & Hdv_s).
-                       assert (Hcomb:
-                         Hoare
-                           (fun s => cv = v /\ pu = u /\ (low_forset_inv pu done s /\ fa s cv = pu /\ ~ a1 ∈ visited s /\ ~ done a1 /\ done_visited done s) /\ a ∈ visited s)
-                           (W a1)
-                           (fun _ s => cv = v /\ pu = u /\ (low_forset_inv pu done s /\ fa s cv = pu /\ a1 ∈ visited s /\ ~ done a1 /\ done_visited done s) /\ a ∈ visited s)).
-                       { unfold Hoare; sets_unfold; intros s1 b s2 Hpre Hsem.
-                         destruct Hpre as [Hcv_pre [Hpu_pre [Hlow_pre Hvis_pre]]]. split; [exact Hcv_pre | split; [exact Hpu_pre | split; [| exact Hvis_pre]]].
-                         apply (IH_low a1 (cv, pu)); [| exact Hsem].
-                         split; [exact Hcv_pre | split; [exact Hpu_pre | exact Hlow_pre]]. }
-                       eapply Hoare_conseq_post.
-                       2: { eapply Hoare_conseq_pre. 2: exact Hcomb.
-                            intros s Heq. subst s. split; [exact Hcv_s | split; [exact Hpu_s | split; [| exact Hav_s]]].
-                            split; [exact Hinv_s | split; [exact Hfa_s | split; [exact Hnv_s | split; [| exact Hdv_s]]]].
-                            intros Hdone_a1. apply Hnv_s. apply Hdv_s. exact Hdone_a1. }
-                       { intros _ s [Hcv_post [Hpu_post [Hlow_post Hvis_post]]].
-                         destruct Hlow_post as [Hinv' [Hfa' [Ha1vis Hnd1 Hdv']]].
-                         split; [exact Hcv_post | split; [exact Hpu_post | split; [exact Hinv' | split; [exact Hfa' | split; [exact Hvis_post | split; [exact Hnd_s | exact Hdv']]]]]]. }
-                   --- (* get' ;; update_low -- admitted *) admit.
+                   --- (* W a1: combine pair IH (IH_vis) and visited IH (IH_low) *)
+                       admit.
+                   --- (* get' ;; update_low -- admitted pending state-variable naming cleanup *) admit.
              ++ (* Non-tree edge *) admit.
-        * (* pop_scc / skip *) admit.
+        * (* pop_scc / skip *) admit. }
   Admitted.
 
 
