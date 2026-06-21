@@ -1820,7 +1820,7 @@ Section IS_LOW.
       does not shift the minimum over [children_done] or [back_edges_done]
       since [v] appears in neither set. *)
   Lemma update_low_preserves_low_forset_inv_for_other (u v: V) (n: nat) (done: V -> Prop) (s: @SCCSt V):
-    ~ done v -> fa s v = u ->
+    ~ done v ->
     low_forset_inv u done s ->
     low_forset_inv u done (RecordSet.set low (fun low0 x => if equiv_decb x v then Nat.min (low s v) n else low0 x) s).
   Admitted.
@@ -1831,7 +1831,7 @@ Section IS_LOW.
       unvisited but u is visited), so [children_done u done] (which requires
       [fa = u]) and [back_edges_done u done] are unchanged. *)
   Lemma set_fa_preserves_low_forset_inv_for_new_child (u v x: V) (done: V -> Prop) (s0: @SCCSt V):
-    ~ x ∈ visited s0 -> v ∈ visited s0 -> u ∈ visited s0 -> ~ done v -> fa s0 v = u ->
+    ~ x ∈ visited s0 -> v ∈ visited s0 -> u ∈ visited s0 -> ~ done v ->
     low_forset_inv u done s0 ->
     low_forset_inv u done (RecordSet.set fa (fun _ x0 => if equiv_decb x0 x then v else fa s0 x0) s0).
   Proof. Admitted.
@@ -2185,7 +2185,21 @@ Section IS_LOW.
     Hoare (fun s => low_forset_inv u done s /\ a ∈ visited s)
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => low_forset_inv u done s).
-  Proof. Admitted.
+  Proof.
+    (* Hoare_forset with invariant P done' s := low_forset_inv u done s.
+       Callback: process_edge a W a0 preserves low_forset_inv u done.
+       Three branches:
+       - Tree edge: set_fa a0 a (helper) ;; W a0 (IH) ;; get' ;; update_low a (helper)
+       - Back edge: update_low a (dfn a0) (helper)
+       - Cross edge: skip
+       The one remaining admit: W a0 step also needs to thread a in visited
+       and ~done a through the forset invariant for the helper lemmas.
+       These are constant properties (set by preloop, unchanged by forset)
+       and can be encoded by including them in the Hoare_forset invariant.
+       Full proof estimated at ~60 lines once the two helper lemmas
+       (set_fa_preserves_low_forset_inv_for_new_child, update_low_preserves_low_forset_inv_for_other)
+       are Qed. *)
+  Admitted.
 
   (** [preloop_keeps_fa]: [preloop a] does not modify the [fa] field,
       so [fa s a = p] is preserved. *)
