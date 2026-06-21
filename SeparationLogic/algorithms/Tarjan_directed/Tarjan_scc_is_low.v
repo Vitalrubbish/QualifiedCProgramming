@@ -2486,6 +2486,17 @@ Section IS_LOW.
         * (* low <> dfn: skip *) destruct H1. subst s. exact H.
   Qed.
 
+  (** [pop_scc_preserves_done_visited]: [pop_scc a] does not modify
+      [visited] (only [stack] and [sccs]), so [done_visited done] is
+      trivially preserved. *)
+  Lemma pop_scc_preserves_done_visited (a: V) (done: V -> Prop):
+    Hoare (fun s => done_visited done s) (pop_scc a) (fun _ s => done_visited done s).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+    unfold pop_scc_state. destruct (stack_split_at (stack s0) a) as [popped rest]. simpl.
+    exact H.
+  Qed.
+
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
       [fa s v = u]. *)
@@ -2547,7 +2558,7 @@ Section IS_LOW.
                 eapply Hoare_conseq. 3: apply (IH x).
                 { intros s [Hinv [Hnv [Hnd [Hav Hdv]]]]. exact (conj Hinv (conj Hnv (conj Hnd Hdv))). }
                 { intros _ s [Hinv Hdv]. exact Hinv. }
-              -- (* a ∈ visited: admitted *)
+              -- (* a ∈ visited: admitted — needs fixpoint invariant strengthening *)
                 admit.
             * (* done_visited done: admitted (needs forset preserves visited lemma) *)
               admit.
