@@ -2642,8 +2642,12 @@ Section IS_LOW.
                    --- (* W a1: combine pair IH (IH_vis) and visited IH (IH_low) *)
                        admit.
                    --- (* get' ;; update_low -- admitted pending state-variable naming cleanup *) admit.
-             ++ (* Non-tree edge *) admit.
-        * (* pop_scc / skip *) admit. }
+             ++ (* Non-tree edge: pu is substituted by fa s cv during nested intro_state;
+                   need to use u directly or protect the variable differently.  Admitted. *)
+                admit.
+        * (* pop_scc / skip: pop_scc_state changes stack which affects low_forset_inv;
+             needs pop_scc_keeps_low_forset_inv_other lemma.  Admitted. *)
+          admit. }
   Admitted.
 
 
