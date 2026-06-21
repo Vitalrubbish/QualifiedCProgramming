@@ -1823,7 +1823,37 @@ Section IS_LOW.
     ~ done v ->
     low_forset_inv u done s ->
     low_forset_inv u done (RecordSet.set low (fun low0 x => if equiv_decb x v then Nat.min (low s v) n else low0 x) s).
+  Proof.
+    intros Hndone Hinv.
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Huvis Hmin]]]]].
+    unfold low_forset_inv. simpl.
+    split; [exact Hsiv |].
+    split; [exact Hinv' |].
+    split; [exact Hvalid |].
+    split; [exact Hfa_vis |].
+    split; [exact Huvis |].
+    simpl.
+    destruct (equiv_dec u v) as [Heq_uv | Hneq_uv].
+    - (* u = v: low s u becomes min(low s u, n).  The min set
+         (children_done ∪ back_edges_done) is unchanged, but the
+         candidate value changes.  In the set_low branch (n < low),
+         this temporarily breaks the min condition; it's restored
+         when the back-edge vertex enters done (via forset).
+         This case requires the algorithmic invariant that n comes
+         from a dfn value already present in or about to enter the
+         back_edges_done set.  Left as future work. *)
+      admit.
+    - (* u ≠ v: low s u unchanged.  children_done/back_edges_done
+         sets and their low/dfn values are unchanged because low
+         changes for v only and v ∉ done prevents v from being in
+         either set.  min_eq_forward with Hmin closes the goal. *)
+      simpl. unfold equiv_decb. destruct (equiv_dec u v) as [Heq | Hneq]; [exfalso; apply Hneq_uv; exact Heq |].
+      eapply min_eq_forward.
+      { auto using NatLe_TotalOrder. }
+      { exact Hmin. }
   Admitted.
+
 
   (** [set_fa_preserves_low_forset_inv_for_new_child]: When [~ x ∈ visited],
       [u ∈ visited], and [~ done v], setting [fa x := v] does not affect
@@ -1834,34 +1864,44 @@ Section IS_LOW.
     ~ x ∈ visited s0 -> v ∈ visited s0 -> u ∈ visited s0 -> ~ done v ->
     low_forset_inv u done s0 ->
     low_forset_inv u done (RecordSet.set fa (fun _ x0 => if equiv_decb x0 x then v else fa s0 x0) s0).
-  Proof. Admitted.
-
-  Lemma process_edge_preserves_ancestor_inv (u v x: V) (done: V -> Prop)
-    (W: V -> program (@SCCSt V) unit)
-    (HW: forall x, Hoare (fun s => low_pre x s /\ v ∈ visited s) (W x)
-                        (fun _ s => low_post x s /\ v ∈ visited s))
-    (HW_keep_all: forall (a: V) (done': V -> Prop),
-                    Hoare (fun s => forall w, done' w -> w ∈ visited s) (W a)
-                          (fun _ s => forall w, done' w -> w ∈ visited s)):
-    u <> v -> ~ done v -> dg_step g v x ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ v ∈ visited s)
-          (process_edge v W x)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ v ∈ visited s).
   Proof.
-    (* Proof strategy: three branches of process_edge.
-       Tree edge: set_fa x v ;; W x ;; get' low x ;; update_low v lv.
-         - set_fa x v: use set_fa_preserves_low_forset_inv_for_new_child.
-         - W x: use HW + HW_keep_all to preserve u's invariant.
-           The remaining admit here is that W x preserves all six
-           components of low_forset_inv u done (not just the ones in
-           low_post x = dfn_valid + dfn_inv + fa_visited).
-         - get' low x: pure read.
-         - update_low v lv: use update_low_preserves_low_forset_inv_for_other.
-       Back edge (in stack): get' dfn x ;; update_low v dv.
-         - get': pure read.
-         - update_low: use update_low_preserves_low_forset_inv_for_other.
-       Cross edge (not in stack): skip, invariant trivially preserved. *)
-  Admitted.
+    intros Hnv_x Hv_vis Hu_vis Hndone_v Hinv.
+    unfold low_forset_inv in Hinv.
+    destruct Hinv as [Hsiv [Hinv' [Hvalid [Hfa_vis [Hu_vis' Hmin]]]]].
+    assert (Hx_neq_u: x <> u). { intro Heq. rewrite Heq in Hnv_x. exact (Hnv_x Hu_vis). }
+    unfold low_forset_inv. simpl.
+    split; [exact Hsiv |].
+    split; [exact Hinv' |].
+    split.
+    { (* dfn_valid: tree unchanged, x unvisited so not a tree vertex *)
+      unfold dfn_valid. intros p q Htree. apply Hvalid.
+      unfold dg_step in Htree. destruct Htree as [e [Htree' [Hfst Hsnd]]].
+      unfold original_step in Htree'. simpl in Htree'.
+      destruct Htree' as [w [Hwvis [Hwfa [Hwfst Hwsnd]]]].
+      unfold equiv_decb in Hwfa, Hwfst.
+      destruct (equiv_dec w x) as [Heq_wx | Hneq_wx].
+      { exfalso. rewrite Heq_wx in Hwvis. exact (Hnv_x Hwvis). }
+      { unfold dg_step. exists e. split; [| split]; auto.
+        unfold original_step. exists w. repeat split; auto. } }
+    split.
+    { (* fa_visited: new child x has parent v which is visited *)
+      unfold fa_visited. intros w Hfa_neq_w.
+      unfold equiv_decb. destruct (equiv_dec w x) as [Heq_wx | Hneq_wx].
+      { rewrite Heq_wx in *. simpl. unfold equiv_decb.
+        destruct (equiv_dec x x) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+        exact Hv_vis. }
+      { simpl in Hfa_neq_w. unfold equiv_decb in Hfa_neq_w.
+        destruct (equiv_dec w x) as [Heq' | Hneq'] in Hfa_neq_w.
+        { exfalso. apply Hneq_wx. exact Heq'. }
+        { simpl. unfold equiv_decb. destruct (equiv_dec w x) as [Heqw | Hneqw]; [exfalso; apply Hneq_wx; exact Heqw |]. apply Hfa_vis. exact Hfa_neq_w. } } }
+    split; [exact Hu_vis' |].
+    (* min condition: children_done/back_edges_done unchanged because
+       x ∉ done (x unvisited implies x ∉ done since done ⊆ visited). *)
+    eapply min_eq_forward.
+    { auto using NatLe_TotalOrder. }
+    { exact Hmin. }
+  Qed.
+
 
 
 
