@@ -2515,7 +2515,7 @@ Section IS_LOW.
           (* after forset, we need low_forset_inv /\ done_visited, forset gives low_forset_inv alone *)
           (* We need to add done_visited and strip a ∈ visited *)
           (* This is handled by Hoare_conseq_post at the outer level *)
-          admit. } }
+          admit. }
     - (* Part B: fa s v = u /\ done_visited done s *)
       apply Hoare_conj with (Q1 := fun _ s => fa s v = u) (Q2 := fun _ s => done_visited done s).
       + (* fa s v = u *) admit.
