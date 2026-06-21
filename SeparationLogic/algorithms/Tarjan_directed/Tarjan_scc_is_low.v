@@ -1931,22 +1931,6 @@ Section IS_LOW.
 
 
 
-  (** [W_preserves_ancestor_inv]: Combining the above, [W v]
-      ([tarjan_scc g v]) preserves [low_forset_inv u done] and
-      [fa s v = u]. *)
-  Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    u <> v -> ~ done v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
-          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s).
-  Proof.
-    (* See 20260620-tarjan-scc-is-low-repair-plan.md Step 3.
-       Decompose via Hoare_conj into (A) low_forset_inv preservation
-       (Hoare_fix with P a s := low_forset_inv u done /\ ~a in visited /\ ~done a)
-       and (B) fa s v = u preservation
-       (Hoare_fix with P a s := fa s v = u).
-       Each uses 6 helper lemmas for preloop/forset/pop_scc steps. *)
-  Admitted.
 
   (** [preloop_keeps_low_forset_inv_other]: [preloop a] preserves
       [low_forset_inv u done] when [~a in visited].  Extracted from the
@@ -2451,6 +2435,23 @@ Section IS_LOW.
       - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [left; exists w'; split; [unfold min_object_of_subset; split; [apply Hchild_eq; exact Hw_in|intros x Hx; apply Hchild_eq in Hx; apply Hw_min; exact Hx]|exact Heq_a2]|apply Nat.le_refl].
       - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [right; exists w'; split; [unfold min_object_of_subset; split; [destruct Hw_in as [Hw_back|Hw_u]; [left; apply Hback_eq; exact Hw_back|right; exact Hw_u]|intros x Hx; destruct Hx as [Hx_back|Hx_u]; [apply Hw_min; left; apply Hback_eq; exact Hx_back|subst x; apply Hw_min; right; reflexivity]]|exact Heq_a2]|apply Nat.le_refl]. }
   Qed.
+  (** [W_preserves_ancestor_inv]: Combining the above, [W v]
+      ([tarjan_scc g v]) preserves [low_forset_inv u done] and
+      [fa s v = u]. *)
+  Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop):
+    u <> v -> ~ done v ->
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s).
+  Proof.
+    (* See 20260620-tarjan-scc-is-low-repair-plan.md Step 3.
+       Decompose via Hoare_conj into (A) low_forset_inv preservation
+       (Hoare_fix with P a s := low_forset_inv u done /\ ~a in visited /\ ~done a)
+       and (B) fa s v = u preservation
+       (Hoare_fix with P a s := fa s v = u).
+       Each uses 6 helper lemmas for preloop/forset/pop_scc steps. *)
+  Admitted.
+
 
   Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop):
     u <> v -> dg_step g u v -> ~ done v ->
