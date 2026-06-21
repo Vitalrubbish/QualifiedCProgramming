@@ -2508,71 +2508,92 @@ Section IS_LOW.
   Proof.
     intros Hneq Hndone.
     unfold tarjan_scc.
-    apply (@Hoare_fix_logicv SCCSt V unit V
+    apply Hoare_conseq with
+      (P2 := fun (s: SCCSt) =>
+               v = v /\ u = u /\ low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s)
+      (Q2 := fun (_: unit) (s: SCCSt) =>
+               v = v /\ u = u /\ low_forset_inv u done s /\ fa s v = u /\ v ∈ visited s /\ ~ done v /\ done_visited done s).
+    { intros s H. split; [reflexivity | split; [reflexivity | exact H]]. }
+    - intros _ s0 H. destruct H as [Hv1 [Hv2 [Hinv [Hfa [Hvis [Hnd Hdv]]]]]].
+      exact (conj Hinv (conj Hfa Hdv)).
+    -
+    apply (@Hoare_fix_logicv_conj SCCSt V unit (V * V)
       (tarjan_scc_f g)
-      (fun (a: V) (cv: V) (s: SCCSt) =>
-        low_forset_inv u done s /\ fa s cv = u /\ ~ a ∈ visited s /\ ~ done a /\ done_visited done s)
-      (fun (a: V) (cv: V) (_: unit) (s: SCCSt) =>
-        low_forset_inv u done s /\ fa s cv = u /\ done_visited done s)
-      v v).
-    intros W IH a c. unfold tarjan_scc_f.
+      (fun (a: V) (cp: V * V) (s: SCCSt) =>
+         let (cv, pu) := cp in
+         cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ ~ a ∈ visited s /\ ~ done a /\ done_visited done s)
+      (fun (a: V) (cp: V * V) (_: unit) (s: SCCSt) =>
+         let (cv, pu) := cp in
+         cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+      v (v, u)
+      V
+      (fun (a: V) (w: V) (s: SCCSt) => w ∈ visited s)
+      (fun (a: V) (w: V) (_: unit) (s: SCCSt) => w ∈ visited s)).
+    { apply tarjan_scc_preserves_visited. }
+    intros W IH_low IH_vis a c. destruct c as [cv pu]. unfold tarjan_scc_f.
     apply (Hoare_bind
-      (fun s => low_forset_inv u done s /\ fa s c = u /\ ~ a ∈ visited s /\ ~ done a /\ done_visited done s)
+      (fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ ~ a ∈ visited s /\ ~ done a /\ done_visited done s)
       (preloop a)
-      (fun _ s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
       (fun _ => forset (fun v0 : V => dg_step g a v0) (process_edge a W) ;; If (fun s : SCCSt => low s a = dfn s a) (pop_scc a))
-      (fun _ s => low_forset_inv u done s /\ fa s c = u /\ done_visited done s)).
-    - (* preloop a *)
-      assert (Hpre_low: Hoare (fun s => low_forset_inv u done s /\ ~ a ∈ visited s /\ ~ done a) (preloop a) (fun _ s => low_forset_inv u done s /\ a ∈ visited s)) by
-        apply (preloop_keeps_low_forset_inv_other u a done).
+      (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
+    + (* preloop a *)
+      assert (Hpre_low: Hoare (fun s => low_forset_inv pu done s /\ ~ a ∈ visited s /\ ~ done a) (preloop a) (fun _ s => low_forset_inv pu done s /\ a ∈ visited s)) by
+        apply (preloop_keeps_low_forset_inv_other pu a done).
       assert (Hpre_nd: Hoare (fun s => ~ done a) (preloop a) (fun _ s => ~ done a)) by
         (unfold preloop; unfold_op; intro_state; hoare_auto_s; destruct H; exact H).
       assert (Hpre_dv: Hoare (fun s => done_visited done s) (preloop a) (fun _ s => done_visited done s)) by
         (unfold preloop; unfold_op; intro_state; hoare_auto_s; subst s; simpl;
          unfold done_visited in *; intros w Hw; apply H in Hw; sets_unfold; left; exact Hw).
-      assert (Hpre_fa: Hoare (fun s => fa s c = u) (preloop a) (fun _ s => fa s c = u)) by
+      assert (Hpre_fa: Hoare (fun s => fa s cv = pu) (preloop a) (fun _ s => fa s cv = pu)) by
         (unfold preloop; unfold_op; intro_state; hoare_auto_s; subst s; simpl; reflexivity).
-      (* Nest Hoare_conj: (low & a visited) + fa + ~done a + done_visited *)
+      assert (Hpre_eq: Hoare (fun s => cv = v /\ pu = u) (preloop a) (fun _ s => cv = v /\ pu = u)) by
+        (unfold Hoare; sets_unfold; intros; exact H).
+      (* Nest Hoare_conj: (low & a visited) + fa + cv/pu eq + ~done a + done_visited *)
       eapply Hoare_conseq_post.
-      2: { apply Hoare_conj with (Q1 := fun _ s => (low_forset_inv u done s /\ a ∈ visited s) /\ fa s c = u) (Q2 := fun _ s => ~ done a /\ done_visited done s).
-           - apply Hoare_conj with (Q1 := fun _ s => low_forset_inv u done s /\ a ∈ visited s) (Q2 := fun _ s => fa s c = u).
-             + apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ ~ a ∈ visited s /\ ~ done a).
-               { intros s [Hinv [Hfa [Hnv [Hnd Hdv]]]]. exact (conj Hinv (conj Hnv Hnd)). }
-               apply Hpre_low.
-             + apply Hoare_conseq_pre with (P2 := fun s => fa s c = u).
-               { intros s [Hinv [Hfa [Hnv [Hnd Hdv]]]]. exact Hfa. }
-               apply Hpre_fa.
+      2: { apply Hoare_conj with (Q1 := fun _ s => ((low_forset_inv pu done s /\ a ∈ visited s) /\ fa s cv = pu) /\ cv = v /\ pu = u) (Q2 := fun _ s => ~ done a /\ done_visited done s).
+           - apply Hoare_conj with (Q1 := fun _ s => (low_forset_inv pu done s /\ a ∈ visited s) /\ fa s cv = pu) (Q2 := fun _ s => cv = v /\ pu = u).
+             + apply Hoare_conj with (Q1 := fun _ s => low_forset_inv pu done s /\ a ∈ visited s) (Q2 := fun _ s => fa s cv = pu).
+               * apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv pu done s /\ ~ a ∈ visited s /\ ~ done a).
+                 { intros s [Hcv [Hpu [Hinv [Hfa [Hnv [Hnd Hdv]]]]]]. exact (conj Hinv (conj Hnv Hnd)). }
+                 apply Hpre_low.
+               * apply Hoare_conseq_pre with (P2 := fun s => fa s cv = pu).
+                 { intros s [Hcv [Hpu [Hinv [Hfa [Hnv [Hnd Hdv]]]]]]. exact Hfa. }
+                 apply Hpre_fa.
+             + apply Hoare_conseq_pre with (P2 := fun s => cv = v /\ pu = u).
+               { intros s [Hcv [Hpu [Hinv [Hfa [Hnv [Hnd Hdv]]]]]]. exact (conj Hcv Hpu). }
+               apply Hpre_eq.
            - apply Hoare_conj with (Q1 := fun _ s => ~ done a) (Q2 := fun _ s => done_visited done s).
              + apply Hoare_conseq_pre with (P2 := fun s => ~ done a).
-               { intros s [Hinv [Hfa [Hnv [Hnd Hdv]]]]. exact Hnd. }
+               { intros s [Hcv [Hpu [Hinv [Hfa [Hnv [Hnd Hdv]]]]]]. exact Hnd. }
                apply Hpre_nd.
              + apply Hoare_conseq_pre with (P2 := fun s => done_visited done s).
-               { intros s [Hinv [Hfa [Hnv [Hnd Hdv]]]]. exact Hdv. }
+               { intros s [Hcv [Hpu [Hinv [Hfa [Hnv [Hnd Hdv]]]]]]. exact Hdv. }
                apply Hpre_dv. }
-      { intros _ s [[[Hinv Hav] Hfa_s] [Hnd_s Hdv_s]].
-        split; [exact Hinv | split; [exact Hfa_s | split; [exact Hav | split; [exact Hnd_s | exact Hdv_s]]]]. }
-    - simpl. intros _. intro_state.
-      destruct H as [Hinv' [Hfa' [Hav' [Hnd_a Hdv']]]].
+      { intros _ s [[[[Hinv Hav] Hfa_s] [Hcv_s Hpu_s]] [Hnd_s Hdv_s]].
+        split; [exact Hcv_s | split; [exact Hpu_s | split; [exact Hinv | split; [exact Hfa_s | split; [exact Hav | split; [exact Hnd_s | exact Hdv_s]]]]]]. }
+    + simpl. intros _. intro_state.
+      destruct H as [Hcv [Hpu [Hinv' [Hfa' [Hav' [Hnd_a Hdv']]]]]].
       destruct (equiv_dec u a) as [Heq_ua | Hneq_ua].
-      + (* u = a: requires forset_keep_low_forset_inv, not yet ready *)
+      - (* u = a: requires forset_keep_low_forset_inv, not yet ready *)
         admit.
       + (* u <> a *)
-        apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s).
-        { intros s Heq. subst s. split; [exact Hinv' | split; [exact Hfa' | split; [exact Hav' | split; [exact Hnd_a | exact Hdv']]]]. }
+        apply Hoare_conseq_pre with (P2 := fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s).
+        { intros s Heq. subst s. split; [exact Hcv | split; [exact Hpu | split; [exact Hinv' | split; [exact Hfa' | split; [exact Hav' | split; [exact Hnd_a | exact Hdv']]]]]]. }
         apply (Hoare_bind
-          (fun s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+          (fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
           (forset (fun v0 : V => dg_step g a v0) (process_edge a W))
-          (fun _ s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+          (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
           (fun _ => If (fun s : SCCSt => low s a = dfn s a) (pop_scc a))
-          (fun _ s => low_forset_inv u done s /\ fa s c = u /\ done_visited done s)).
+          (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
         * (* forset with unified invariant *)
           apply (@Hoare_forset SCCSt V
             (fun (_: V -> Prop) (s: SCCSt) =>
-              low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+              cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
             (fun v0 => dg_step g a v0) (process_edge a W)).
           -- unfold Proper, respectful. intros. subst. reflexivity.
           -- intros todo a1 Hsub Huniv Hnotdone. intro_state.
-             destruct H as [Hinv [Hfa [Hav [Hnd_a' Hdv]]]].
+             destruct H as [Hcv [Hpu [Hinv [Hfa [Hav [Hnd_a' Hdv]]]]]].
              unfold process_edge, if_else. intro_state. apply Hoare_choice.
              ++ (* Tree edge *)
                 apply Hoare_assume_bind. simpl. intro_state.
@@ -2580,24 +2601,32 @@ Section IS_LOW.
                 apply (Hoare_bind
                   (fun s => s = s1)
                   (set_fa a1 a)
-                  (fun _ s => low_forset_inv u done s /\ fa s c = u /\ ~ a1 ∈ visited s /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+                  (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ ~ a1 ∈ visited s /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
                   (fun _ => W a1 ;; lv <- get' (fun s => low s a1) ;; update_low a lv)
-                  (fun _ s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
+                  (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
                 ** (* set_fa a1 a *)
                    unfold set_fa. intro_state. hoare_auto_s. subst s; simpl.
                    subst s2. unfold RecordSet.set; simpl.
                    assert (Hfa_saved := Hfa). clear Hfa.
-                   split; [| split; [| split; [| split; [| split; [|]]]]].
+                   split; [| split; [| split; [| split; [| split; [| split; [| split; [|]]]]]]].
+                   --- (* cv = v *) exact Hcv.
+                   --- (* pu = u *) exact Hpu.
                    --- (* low_forset_inv *)
                        eapply set_fa_preserves_low_forset_inv_for_new_child;
                          [exact Hnv_a1 | exact Hav
                          | unfold low_forset_inv in Hinv; destruct Hinv as [? [? [? [? [? _]]]]]; auto
                          | exact Hnd_a'
-                         | (* ~ done a1 *) admit
+                         | intros Hdone_a1; apply Hnv_a1; apply Hdv; exact Hdone_a1
                          | exact Hinv].
-                   --- (* fa s c = u *)
-                       unfold equiv_decb. destruct (equiv_dec c a1).
-                       +++ (* c = a1 *) admit.
+                   --- (* fa s cv = pu *)
+                       unfold equiv_decb. destruct (equiv_dec cv a1) as [Heq | Hneq].
+                       +++ (* cv = a1: would imply a = u, contradicting u <> a *)
+                           exfalso. subst cv.
+                           assert (Ha1_eq_v: a1 = v) by (rewrite <- Hcv; reflexivity).
+                           assert (Hvis_v: v ∈ visited s1). {
+                             (* v is an ancestor of a on the DFS stack, hence visited *)
+                             admit. }
+                           rewrite Ha1_eq_v in Hnv_a1. contradiction.
                        +++ exact Hfa_saved.
                    --- (* ~ a1 ∈ visited *) exact Hnv_a1.
                    --- (* a ∈ visited *) exact Hav.
@@ -2605,25 +2634,30 @@ Section IS_LOW.
                    --- (* done_visited *) exact Hdv.
                 ** (* W a1 ;; get' ;; update_low *)
                    simpl. intros _. apply (Hoare_bind
-                     (fun s => low_forset_inv u done s /\ fa s c = u /\ ~ a1 ∈ visited s /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+                     (fun s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ ~ a1 ∈ visited s /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
                      (W a1)
-                     (fun _ s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
+                     (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
                      (fun _ => lv <- get' (fun s => low s a1) ;; update_low a lv)
-                     (fun _ s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
-                   --- (* W a1: strengthen pre from s=s2 to 6-conj, then to IH pre; weaken post *)
-                       intro_state. destruct H as (Hinv_s & Hfa_s & Hnv_s & Hav_s & Hnd_s & Hdv_s).
-                       refine (Hoare_conseq
-                         (fun s => s = s2)
-                         (fun s => low_forset_inv u done s /\ fa s c = u /\ ~ a1 ∈ visited s /\ ~ done a1 /\ done_visited done s)
-                         (W a1)
-                         (fun _ s => low_forset_inv u done s /\ fa s c = u /\ a ∈ visited s /\ ~ done a /\ done_visited done s)
-                         (fun _ s => low_forset_inv u done s /\ fa s c = u /\ done_visited done s)
-                         _ _ _).
-                       +++ (* P1 -> P2 *) intros st Heq; subst st.
-                           split; [exact Hinv_s | split; [exact Hfa_s | split; [exact Hnv_s | split; [| exact Hdv_s]]]].
-                           admit.  (* ~ done a1 *)
-                       +++ (* Q2 -> Q1: a visited and ~done a are preserved by W a1 *) admit.
-                       +++ apply (IH a1 c).
+                     (fun _ s => cv = v /\ pu = u /\ low_forset_inv pu done s /\ fa s cv = pu /\ a ∈ visited s /\ ~ done a /\ done_visited done s)).
+                   --- (* W a1: combine low-forset IH and visited IH *)
+                       intro_state. destruct H as (Hcv_s & Hpu_s & Hinv_s & Hfa_s & Hnv_s & Hav_s & Hnd_s & Hdv_s).
+                       assert (Hcomb:
+                         Hoare
+                           (fun s => cv = v /\ pu = u /\ (low_forset_inv pu done s /\ fa s cv = pu /\ ~ a1 ∈ visited s /\ ~ done a1 /\ done_visited done s) /\ a ∈ visited s)
+                           (W a1)
+                           (fun _ s => cv = v /\ pu = u /\ (low_forset_inv pu done s /\ fa s cv = pu /\ a1 ∈ visited s /\ ~ done a1 /\ done_visited done s) /\ a ∈ visited s)).
+                       { unfold Hoare; sets_unfold; intros s1 b s2 Hpre Hsem.
+                         destruct Hpre as [Hcv_pre [Hpu_pre [Hlow_pre Hvis_pre]]]. split; [exact Hcv_pre | split; [exact Hpu_pre | split; [| exact Hvis_pre]]].
+                         apply (IH_low a1 (cv, pu)); [| exact Hsem].
+                         split; [exact Hcv_pre | split; [exact Hpu_pre | exact Hlow_pre]]. }
+                       eapply Hoare_conseq_post.
+                       2: { eapply Hoare_conseq_pre. 2: exact Hcomb.
+                            intros s Heq. subst s. split; [exact Hcv_s | split; [exact Hpu_s | split; [| exact Hav_s]]].
+                            split; [exact Hinv_s | split; [exact Hfa_s | split; [exact Hnv_s | split; [| exact Hdv_s]]]].
+                            intros Hdone_a1. apply Hnv_s. apply Hdv_s. exact Hdone_a1. }
+                       { intros _ s [Hcv_post [Hpu_post [Hlow_post Hvis_post]]].
+                         destruct Hlow_post as [Hinv' [Hfa' [Ha1vis Hnd1 Hdv']]].
+                         split; [exact Hcv_post | split; [exact Hpu_post | split; [exact Hinv' | split; [exact Hfa' | split; [exact Hvis_post | split; [exact Hnd_s | exact Hdv']]]]]]. }
                    --- (* get' ;; update_low -- admitted *) admit.
              ++ (* Non-tree edge *) admit.
         * (* pop_scc / skip *) admit.
