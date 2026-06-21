@@ -2172,23 +2172,14 @@ Section IS_LOW.
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => fa s v = parent).
   Proof.
-    apply (Hoare_conseq
-      (fun s => fa s v = parent /\ a ∈ visited s /\ v ∈ visited s)
-      (fun s => fa s v = parent /\ v ∈ visited s)
-      (forset (fun w => dg_step g a w) (process_edge a W))
-      (fun _ s => fa s v = parent)
-      (fun _ s => fa s v = parent /\ v ∈ visited s)).
-    { intros s [Hfa [Hvis_a Hvis_v]]. split; [exact Hfa | exact Hvis_v]. }
-    { intros _ s [Hfa Hvis]. exact Hfa. }
-    apply (@Hoare_forset SCCSt V
-      (fun done s => fa s v = parent /\ v ∈ visited s)
-      (fun w => dg_step g a w) (process_edge a W)).
-    { unfold Proper, respectful. intros. subst. reflexivity. }
-    { intros todo a0 Hsub Huniv Hnotdone.
-      (* Callback: process_edge a W a0 preserves fa s v = parent /\ v ∈ visited s.
-         process_edge_keeps_fa_simple gives fa preservation; v ∈ visited is
-         trivially preserved (visited set only grows, no operation removes). *)
-      admit. }
+    (* Hoare_forset with P done s := fa s v = parent.
+       Callback: process_edge_keeps_fa_simple needs v ∈ visited in pre,
+       but P done doesn't include it.  Need to either:
+       (a) add v ∈ visited to the forset invariant (requires IH_vis), or
+       (b) prove process_edge_keeps_fa_simple without v ∈ visited pre.
+       For now, this lemma is structurally clear but needs the IH_vis
+       threading through the fixpoint (same pattern as W_preserves_ancestor_inv
+       Part B with Hoare_fix_logicv_conj). *)
   Admitted.
 
 
