@@ -73,7 +73,7 @@
 | `low_forset_inv_to_scc_low_valid` | Phase 3 |
 | `forset_keep_low_forset_inv` → `tarjan_scc_all_scc_low_valid` | Phase 3 |
 
-### 3.2.1 `W_preserves_ancestor_inv` 的解决思路
+#### 3.2.1 `W_preserves_ancestor_inv` 的解决思路
 
 **核心方案：使用 `Hoare_fix_logicv` 手工指定 `P`/`Q`，将 `v` 作为独立逻辑变量捕获。**
 
@@ -114,7 +114,66 @@ eapply Hoare_fix_logicv with (C := V) (c := v)
 
 **预期改动范围**：`W_preserves_ancestor_inv` 证明骨架约 90 行，主要集中在 fixpoint 引入、`preloop` 后状态拆分、以及 forset 循环体的 `IH` 调用方式。
 
-**结论**：定理本身正确，但 5 处 `W_preserves_ancestor_inv` 内部 admit 中的 3 处（`a ∈ visited`、`done_visited`、`fa s v = u`）必须通过上述显式 `Hoare_fix_logicv` 方案来关闭；剩余 2 处（`u = a` 分支、`pop_scc` 分支）分别依赖 `forset_keep_low_forset_inv` 和栈顺序不变式。
+#### 3.2.2 处理 `u` 被统一为 `fa s c` 的参数统一问题
+
+**新发现**：在 `Hoare_fix_logicv` 框架下，`P`/`Q` 和循环不变式中都包含 `fa s c = u`。当进入 forset 循环体、tree-edge、non-tree edge 或 `pop_scc` 等深层分支并尝试 `apply`/`refine`/`eapply` 某个以 `u` 为参数的辅助 lemma（如 `set_fa_preserves_low_forset_inv_for_new_child`、`update_low_preserves_low_forset_inv_for_other`、`pop_scc_keeps_low_forset_inv_other`）时，Coq 8.20.1 的 unification 会把 lemma 参数 `u` 错误实例化为 `fa s0 c`，导致后续分支中 `u` 变量消失，无法继续引用 `u`。
+
+**根本原因**：当前上下文存在等式 `fa s0 c = u`。当 lemma 的结论或前提中出现与 `fa s0 c` 匹配的位置时，unifier 倾向于把参数 `u` 直接折叠为 `fa s0 c`，而不是保持 `u` 为独立变量。
+
+**解决方案（按推荐顺序）**：
+
+1. **在 apply 前把目标与相关假设中的 `fa s c` 统一替换为 `u`**（最推荐）：
+   在进入需要引用 `u` 的深层分支后、调用辅助 lemma 之前，先执行：
+   ```coq
+   change (fa s c) with u in *.
+   ```
+   或等价的 rewrite：
+   ```coq
+   rewrite <- Hfa in *.
+   ```
+   这样上下文和目标中不再出现 `fa s c`，只剩下 `u`。随后 `apply`/`refine` 辅助 lemma 时，Coq 没有理由把 `u` 反向替换为 `fa s c`，`u` 将保持为独立参数。
+
+2. **如果 `change`/`rewrite` 范围过大**，可以只针对包含 `fa s c` 的关键假设和当前目标进行替换：
+   ```coq
+   change (fa s c) with u in Hinv, Hfa, |-.
+   ```
+   注意：替换后 `Hfa` 可能变成 `u = u`，此时可以直接 `clear Hfa` 或保留不影响后续证明。
+
+3. **备选：改变等式方向**：
+   在进入深层分支前将 `Hfa: fa s c = u` 对称化为 `u = fa s c`：
+   ```coq
+   symmetry in Hfa.
+   ```
+   在某些情况下，等式方向会影响 unifier 的选择，使其更倾向于保持 `u` 不变。若该方案单独有效，改动最小。
+
+4. **备选：使用 `remember` 隔离 `u`**：
+   ```coq
+   remember u as u0 eqn:Hu0.
+   ```
+   这样当前上下文中 `u` 的所有出现都变为新变量 `u0`，而 `Hu0: u0 = u` 作为等式存在。调用辅助 lemma 时传入 `u0`：
+   ```coq
+   apply (update_low_preserves_low_forset_inv_for_other u0 ...).
+   ```
+   如果 unifier 仍然尝试替换，可以在 apply 前再执行 `change (fa s c) with u0 in *`。
+
+5. **备选：在 apply 时使用 `@` 全显式语法并显式锁定 `u`**：
+   ```coq
+   refine (@update_low_preserves_low_forset_inv_for_other V E equiv0 H0 g u _ _ _ _ _ _ _).
+   ```
+   若 `u` 仍被替换，说明问题不在参数推断而在目标形态，应回到方案 1 先做 `change`/`rewrite`。
+
+**被阻塞分支的具体处理建议**：
+
+| 行号 | 内容 | 处理建议 |
+|------|------|----------|
+| 2558 | `u = a` 分支 | 依赖 `forset_keep_low_forset_inv`（Phase 3 第 10 步），暂保留 admit |
+| 2587–2588 | Tree-edge `set_fa+W` | 在 `set_fa` 后、调用 `set_fa_preserves_low_forset_inv_for_new_child` 或 `IH` 前，执行 `change (fa s c) with u in *`，保持 `u` 为参数 |
+| 2590 | Non-tree edge | 在调用 `update_low_preserves_low_forset_inv_for_other` 前执行 `change (fa s c) with u in *`，确保 `u` 不被折叠 |
+| 2592 | `pop_scc` | 在调用 `pop_scc_keeps_low_forset_inv_other` 前执行 `change (fa s c) with u in *`；`fa s c = u` 的保持由 `pop_scc` 不修改 `fa` 直接得出 |
+
+**结论**：`Hoare_fix_logicv` 方案本身正确，`preloop` 和 `IH` 类型也已验证。当前阻塞 purely 是 Coq unification 在等式 `fa s c = u` 存在时的方向选择问题。通过在深层分支中主动把 `fa s c` 替换为 `u`（方案 1），可以关闭 tree-edge、non-tree edge、`pop_scc` 三处 admit；`u = a` 分支仍依赖 `forset_keep_low_forset_inv`（Phase 3）。
+
+**结论**：定理本身正确，但 5 处 `W_preserves_ancestor_inv` 内部 admit 中的 3 处（`a ∈ visited`、`done_visited`、`fa s v = u`）必须通过上述显式 `Hoare_fix_logicv` 方案来关闭；`fa s c = u` 导致的参数统一问题需用 `change`/`rewrite` 技巧处理；剩余 `u = a` 分支依赖 `forset_keep_low_forset_inv`，`pop_scc` 分支在解决统一问题后用栈顺序引理即可关闭。
 
 ### 3.3 `low_forset_inv_to_scc_low_valid` — 缺 `done_visited` 前提
 
@@ -180,6 +239,7 @@ eapply Hoare_fix_logicv with (C := V) (c := v)
      ```
    - 用 `Hoare_bind` 把 `preloop a` 与 `forset+pop_scc` 分开：`preloop` 负责建立 `a ∈ visited` 和 `v ∈ visited`；`forset+pop_scc` 在包含这些事实的局部不变式下保持 `Q`。
    - 在 forset 循环体中直接调用 `IH x`，因为 `P x v s` 已经包含 `low_forset_inv u done`、`fa s v = u`、`done_visited done` 等所需前提；局部循环不变式额外提供 `a ∈ visited`。
+   - **处理 `u` 被统一为 `fa s c` 的问题**：在 tree-edge、non-tree edge、`pop_scc` 等深层分支中，调用以 `u` 为参数的辅助 lemma 前，先执行 `change (fa s c) with u in *`（或 `rewrite <- Hfa in *`），强制把上下文和目标中的 `fa s c` 替换为 `u`，避免 Coq unifier 把 lemma 参数 `u` 折叠为 `fa s c`。
    - 工作量估算：预计需重写约 90 行的证明骨架，主要是 fixpoint 引入、`preloop` 后状态拆分、以及 forset 循环体的 `IH` 调用方式。
 
 4. **`pop_scc_keeps_low_forset_inv_other`**
@@ -205,11 +265,12 @@ eapply Hoare_fix_logicv with (C := V) (c := v)
 
 9. **补完 `W_preserves_ancestor_inv`**
    - 在 Phase 2 显式 `Hoare_fix_logicv` 框架下，逐分支关闭 5 处 admit：
-     - `u = a` 分支：依赖 `forset_keep_low_forset_inv`（Phase 3 第 10 步）提供所需上下文；
+     - `u = a` 分支：依赖 `forset_keep_low_forset_inv`（Phase 3 第 10 步）提供所需上下文，暂保留 admit；
      - `a ∈ visited` 分支：由 `preloop a` 建立后进入 forset 局部循环不变式，循环体调用 `IH x` 时直接拥有该事实；
      - `done_visited done` 分支：由 `P`/`Q` 显式包含 `done_visited done`，forset 与 pop_scc 直接保持；
-     - `pop_scc` 分支：用 `pop_scc_keeps_low_forset_inv_other` + `pop_scc_preserves_done_visited` + `done_vertices_not_popped_in_subtree` 组合证明；`fa s v = u` 由 `pop_scc` 不修改 `fa` 直接保持；
-     - `fa s v = u` 分支：由 `P`/`Q` 显式包含 `fa s v = u`（`v` 作为自由逻辑变量）直接可得。
+     - `pop_scc` 分支：在调用 `pop_scc_keeps_low_forset_inv_other` 前先用 `change (fa s c) with u in *` 解决参数统一问题，再用 `pop_scc_keeps_low_forset_inv_other` + `pop_scc_preserves_done_visited` + `done_vertices_not_popped_in_subtree` 组合证明；`fa s v = u` 由 `pop_scc` 不修改 `fa` 直接保持；
+     - `fa s v = u` 分支：由 `P`/`Q` 显式包含 `fa s v = u`（`v` 作为自由逻辑变量）直接可得；
+     - **tree-edge / non-tree edge 分支**：在调用 `set_fa_preserves_low_forset_inv_for_new_child`、`update_low_preserves_low_forset_inv_for_other` 等辅助 lemma 前，先用 `change (fa s c) with u in *`（或 `rewrite <- Hfa in *`）消除目标中的 `fa s c`，防止 lemma 参数 `u` 被折叠为 `fa s c`。
    - 最后去掉顶层 `Admitted`。
 
 10. **证明 `forset_keep_low_forset_inv`**
@@ -242,6 +303,7 @@ eapply Hoare_fix_logicv with (C := V) (c := v)
   - `fa s v = u` 以自由逻辑变量捕获后，需要确保在递归调用和 forset 循环体中都能保持；
   - `P` 不能包含 `a ∈ visited` 或 `v ∈ visited`（初始调用不满足），但 `Q` 需要包含 `v ∈ visited`，这对 `preloop` 与 `forset` 之间的状态拆分提出了精确要求；
   - 重写约 90 行证明骨架期间，可能暴露当前 theorem statement 缺少的必要前提（例如 `v` 与 `a` 的关系、或 `done` 的额外约束）。
+  **当前进展**：`Hoare_fix_logicv` 调用本身成功，`IH` 类型正确，`preloop` 证明已编译通过；`fa s c = u` 导致的参数统一问题已有明确解决方案（`change`/`rewrite` 技巧），不再是结构性阻塞。
   这是 Phase 2 的前置阻塞项，必须在其余 admit 之前完成。
 - **次大风险**：`done_vertices_not_popped_in_subtree` 这类栈顺序不变式需要诉诸 Tarjan 实现的全局不变式（如 `stack_in_visited`、`dfn_inv`、`dfn_valid` 的相互作用）。如果实现中某些不变式尚未在 `Tarjan_scc_basics.v` / `Tarjan_scc_is_dfn.v` 中建立，可能需要先补那些引理。
 - **表述修正影响面小**：Phase 1 的两处修改只影响本文件，且调用点都有现成假设可填。
