@@ -2447,13 +2447,35 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
           (fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
   Proof.
-    (* 证明思路：对 tarjan_scc g a 做不动点归纳（hoare_fix_nolv_auto），保持全称 fa-孩子性质。
-       tarjan_scc_f 体中：preloop 不修改 fa；forset 对每条邻接边 a0 用
-       process_edge_keep_fa_children，其中树边所需的 dg_step g a a0 由 forset 的 universe
-       条件给出；递归调用 W 的保持性由归纳假设给出；最后的 If/pop_scc 不修改 fa。
-       关键引理：hoare_fix_nolv_auto, Hoare_forset, process_edge_keep_fa_children,
-       preloop, pop_scc。 *)
-    Admitted.
+    unfold tarjan_scc. hoare_fix_nolv_auto V. clear a. intros W IH a. unfold tarjan_scc_f.
+    eapply Hoare_bind with (R := fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+    { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+      instantiate (1 := fun (_:unit) (s:SCCSt) => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+      exact H. }
+    { simpl. intros _. eapply Hoare_bind with (R := fun _ s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v).
+      { apply (@Hoare_forset SCCSt V
+          (fun done s => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
+          (fun v => dg_step g a v) (process_edge a W)).
+        { unfold Proper, respectful. intros. subst. reflexivity. }
+        { intros todo a0 Hsub Huniv Hnotdone.
+          apply process_edge_keep_fa_children.
+          { exact Huniv. }
+          { intros x. apply IH. } } }
+      { simpl. intros _. intro_state. hoare_auto_s.
+        { (* pop_scc a branch: low a = dfn a *)
+          unfold pop_scc.
+          pose (f := fun st : SCCSt => pop_scc_state st a).
+          assert (Hpop_scc: Hoare (fun st => st = s0) (update' f) (fun _ st => st = f s0)).
+          { apply Hoare_update'. }
+          eapply Hoare_conseq_post; [| exact Hpop_scc].
+          unfold f. intros _ st Heq. subst st. intros v Hfa_v.
+          apply H. unfold pop_scc_state in Hfa_v.
+          destruct (stack_split_at (stack s0) a) as [popped rest]. simpl in Hfa_v.
+          exact Hfa_v. }
+        { (* skip branch: low a <> dfn a *)
+          destruct H1 as [Heq _]. subst s. destruct H2 as [Hfa_eq Hfa_neq].
+          eapply H. split; eauto. } } }
+  Qed.
 
 
   (** [children_done_full_eq]: When [done = dg_step g u], the
