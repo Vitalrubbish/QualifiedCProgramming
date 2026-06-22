@@ -993,15 +993,51 @@ Section IS_LOW.
           (process_edge a W x)
           (fun _ s => fa s v = parent /\ v ∈ visited s).
   Proof.
-    (* The orig proof uses intro_state; hoare_auto_s with Hoare_choice,
-       Hoare_assume_bind, Hoare_bind. The non-tree edge branch has a
-       naming conflict (H0 shadowed by EqDec V eq) that needs debugging. *)
-  Admitted.
-
-
-
-
-
+    unfold process_edge, if_else. intro_state. apply Hoare_choice.
+    - (* Tree edge *)
+      apply Hoare_assume_bind. simpl.
+      destruct H as [Hfa Hv_vis].
+      apply (Hoare_bind (fun s => ~ x ∈ visited s /\ s = s0) (set_fa x a)
+        (fun _ s => fa s v = parent /\ v ∈ visited s)
+        (fun _ => W x ;; lv <- get' (fun s => low s x) ;; update_low a lv)
+        (fun _ s => fa s v = parent /\ v ∈ visited s)).
+      + unfold set_fa. intro_state. hoare_auto_s.
+        destruct H as [Hnv_x Hs1_eq]. subst s1. subst s. simpl.
+        unfold equiv_decb. destruct (equiv_dec v x) as [Heq | Hneq].
+        * exfalso. rewrite Heq in Hv_vis. exact (Hnv_x Hv_vis).
+        * split; [exact Hfa | exact Hv_vis].
+      + intros _. simpl.
+        apply (Hoare_bind (fun s => fa s v = parent /\ v ∈ visited s) (W x)
+          (fun _ s => fa s v = parent /\ v ∈ visited s)
+          (fun _ => lv <- get' (fun s => low s x) ;; update_low a lv)
+          (fun _ s => fa s v = parent /\ v ∈ visited s)).
+        * apply Hoare_conj.
+          { eapply Hoare_conseq_pre. { intros st [Hfa0 Hvis0]. exact Hfa0. } apply (IH_fa x). }
+          { eapply Hoare_conseq_pre. { intros st [Hfa0 Hvis0]. exact Hvis0. } apply (IH_vis x). }
+        * intros _. simpl.
+          apply (Hoare_bind (fun s => fa s v = parent /\ v ∈ visited s)
+            (get' (fun s => low s x))
+            (fun lv s => fa s v = parent /\ v ∈ visited s)
+            (fun lv => update_low a lv)
+            (fun _ s => fa s v = parent /\ v ∈ visited s)).
+          -- unfold get'. intro_state. hoare_auto_s. destruct H1. subst s. exact H.
+          -- intros lv. simpl. unfold update_low. intro_state. hoare_auto_s.
+             ++ unfold set_low. intro_state. hoare_auto_s. subst s. subst s2. simpl. exact H.
+             ++ destruct H1. subst s. exact H.
+    - (* Non-tree edge *)
+      apply Hoare_assume_bind. simpl.
+      destruct H as [Hfa Hv_vis]. intro_state. hoare_auto_s.
+      + (* In stack: back edge *)
+        destruct H as [Hx_vis Hs1_eq]. subst s1.
+        unfold update_low. intro_state. hoare_auto_s.
+        * unfold set_low. intro_state. hoare_auto_s. subst s. simpl. rewrite H2. split.
+          -- reflexivity.
+          -- exact Hv_vis. 
+        * destruct H. subst s. auto.
+      + (* Not in stack: cross edge *)
+        destruct H1 as [Heq _]. subst s.
+        destruct H as [Hx_vis Hs1_eq]. subst s1. auto.
+  Qed.
 
   Lemma forset_keeps_fa (a v parent: V)
     (W: V -> program (@SCCSt V) unit)
@@ -1013,17 +1049,6 @@ Section IS_LOW.
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
-
-
-
-
-
-
-
-
-
-
-
 
   (** [set_fa_W_preserves_low_forset_inv]: key lemma for the tree edge
       branch of [process_edge_keep_low_forset_inv].  After [set_fa v u]
