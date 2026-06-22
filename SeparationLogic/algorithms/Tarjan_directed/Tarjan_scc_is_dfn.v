@@ -1379,4 +1379,175 @@ Proof.
       apply Hdfn_y_nonzero. rewrite <- Heq. exact Hdfn_x_zero.
 Qed.
 
+(* ================================================================ *)
+(* stack_dfn_order — Stack ordered by dfn (non-increasing top→bottom) *)
+(* ================================================================ *)
+
+(** The stack is ordered by discovery time: vertices closer to the top
+    were discovered later, hence have larger dfn.  Formally, for any
+    [x], [y] on the stack, if [x] appears before [y] (scanning from
+    the top), then [dfn s y <= dfn s x]. *)
+Definition stack_dfn_order (s: @SCCSt V) : Prop :=
+  forall x y, In x (stack s) -> In y (stack s) ->
+    (exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2) ->
+    dfn s y <= dfn s x.
+
+Lemma stack_dfn_order_init: stack_dfn_order initSt.
+Proof.
+  unfold stack_dfn_order, initSt. simpl.
+  intros x y Hx Hy. destruct Hx.
+Qed.
+
+(* ---------------------------------------------------------------- *)
+(* Stack-split decomposition lemmas                                  *)
+(* ---------------------------------------------------------------- *)
+
+Lemma stack_split_at_decomp (stk: list V) (u: V):
+  In u stk ->
+  forall popped rest,
+    stack_split_at stk u = (popped, rest) ->
+    exists prefix, stk = prefix ++ u :: rest.
+Proof.
+  induction stk as [| x xs IH] in u |- *; intros Hu_in popped rest Hsplit.
+  { destruct Hu_in. }
+  { simpl in Hsplit. destruct (equiv_decb x u) eqn:Heq_xu.
+    - inversion Hsplit. subst popped rest. clear Hsplit.
+      unfold equiv_decb in Heq_xu. destruct (equiv_dec x u) as [Heq | Hneq];
+        [| discriminate Heq_xu].
+      rewrite Heq. exists (@nil V). reflexivity.
+    - destruct (stack_split_at xs u) as (popped', rest') eqn:Hsplit_inner.
+      inversion Hsplit. subst popped rest. clear Hsplit.
+      destruct Hu_in as [Hx_eq_u | Hu_in_xs].
+      + exfalso. unfold equiv_decb in Heq_xu.
+        destruct (equiv_dec x u) as [Heq' | Hneq]; [discriminate Heq_xu | apply Hneq; exact Hx_eq_u].
+      + destruct (IH u Hu_in_xs popped' rest' Hsplit_inner) as (prefix & ->).
+        exists (x :: prefix). reflexivity. }
+Qed.
+
+Lemma stack_split_at_rest_before (stk: list V) (u: V):
+  In u stk ->
+  forall popped rest,
+    stack_split_at stk u = (popped, rest) ->
+    forall x y, (exists l1 l2, rest = l1 ++ x :: l2 /\ In y l2) ->
+    (exists l1 l2, stk = l1 ++ x :: l2 /\ In y l2).
+Proof.
+  intros Hu_in popped rest Hsplit x y [l1 [l2 [Hrest_eq Hy_in]]].
+  destruct (stack_split_at_decomp stk u Hu_in popped rest Hsplit) as (prefix & Hstk_eq).
+  exists (prefix ++ u :: l1). exists l2. split.
+  { rewrite Hstk_eq, Hrest_eq. rewrite <- app_assoc. reflexivity. }
+  { exact Hy_in. }
+Qed.
+
+(* ---------------------------------------------------------------- *)
+(* Preservation lemmas                                               *)
+(* ---------------------------------------------------------------- *)
+
+Lemma preloop_preserves_stack_dfn_order (u: V):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ u ∈ visited s)
+        (preloop u)
+        (fun _ s => stack_dfn_order s).
+Proof.
+  unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+  destruct H as [Horder [Hinv [Hsiv Hnu_vis]]]. destruct Hinv as [Hlt [Hiff Hpos]].
+  unfold stack_dfn_order. simpl.
+  intros x y Hx_in Hy_in [l1 [l2 [Hstk_eq Hy_in_l2]]].
+  simpl in Hstk_eq.
+  assert (Hnu_stack: ~ In u (stack s0)). { intro Hu_stk. apply Hsiv in Hu_stk. exact (Hnu_vis Hu_stk). }
+  destruct Hx_in as [Hx_eq_u | Hx_in_s0].
+  { (* Case 1: x = u (new head). RHS = timer s0. *)
+    rewrite <- Hx_eq_u. simpl. unfold equiv_decb.
+    destruct (equiv_dec x x) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+    destruct l1 as [| a l1'].
+    { simpl in Hstk_eq. injection Hstk_eq as ->.
+      destruct Hy_in as [Hy_eq_x | Hy_in_s0].
+      { rewrite <- Hy_eq_x. simpl. unfold equiv_decb.
+        destruct (equiv_dec x x) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+        reflexivity. }
+      { assert (Hy_vis: y ∈ visited s0) by (apply Hsiv; exact Hy_in_s0).
+        assert (Hy_lt: dfn s0 y < timer s0) by (apply Hlt; exact Hy_vis).
+        unfold equiv_decb. destruct (equiv_dec y x) as [Hy_eq_x' | _].
+        { rewrite Hy_eq_x' in Hy_vis. exfalso. apply Hnu_vis. exact Hy_vis. }
+        { unfold equiv_decb. destruct (equiv_dec x x) as [_ | Hc]; [| exfalso; apply Hc; reflexivity]. lia. } } }
+    { simpl in Hstk_eq. injection Hstk_eq as [= -> Hrest].
+      exfalso. apply Hnu_stack. rewrite Hrest.
+      rewrite List.in_app_iff. right. simpl. left. symmetry. exact Hx_eq_u. } }
+  { (* Case 2: x ∈ stack s0. *)
+    destruct l1 as [| a l1'].
+    { simpl in Hstk_eq. injection Hstk_eq as [= -> _]. exfalso. apply Hnu_stack. exact Hx_in_s0. }
+    { simpl in Hstk_eq. injection Hstk_eq as [= -> Hstk_eq'].
+      assert (Hy_in_s0: In y (stack s0)). {
+        destruct Hy_in as [Hy_eq_a | Hy_in_s0'].
+        { rewrite <- Hy_eq_a. exfalso. apply Hnu_stack. rewrite Hstk_eq'.
+          rewrite List.in_app_iff. right. simpl. right.
+          rewrite <- Hy_eq_a in Hy_in_l2. exact Hy_in_l2. }
+        { exact Hy_in_s0'. } }
+      simpl. unfold equiv_decb.
+      destruct (equiv_dec x a) as [Hx_eq_a' | _].
+      { rewrite Hx_eq_a' in Hx_in_s0. exfalso. apply Hnu_stack. exact Hx_in_s0. }
+      destruct (equiv_dec y a) as [Hy_eq_a' | _].
+      { rewrite Hy_eq_a' in Hy_in_s0. exfalso. apply Hnu_stack. exact Hy_in_s0. }
+      apply (Horder x y).
+      { rewrite Hstk_eq'. rewrite List.in_app_iff. right. simpl. left. reflexivity. }
+      { exact Hy_in_s0. }
+      { exists l1'. exists l2. split; [exact Hstk_eq' | exact Hy_in_l2]. } } }
+Qed.
+
+Lemma pop_scc_preserves_stack_dfn_order (u: V):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s /\ In u (stack s))
+        (pop_scc u)
+        (fun _ s => stack_dfn_order s).
+Proof.
+  unfold pop_scc. intro_state. hoare_auto_s.
+  subst s. unfold pop_scc_state.
+  destruct (stack_split_at (stack s0) u) as (popped, rest) eqn:Hsplit. simpl.
+  destruct H as [Horder Hu_in].
+  unfold stack_dfn_order. simpl.
+  intros x y Hx_in Hy_in [l1 [l2 [Hrest_eq Hy_in_l2]]].
+  destruct (stack_split_at_decomp (stack s0) u Hu_in popped rest Hsplit) as (prefix & Hstk_eq).
+  apply (Horder x y).
+  - rewrite Hstk_eq, List.in_app_iff. right. simpl. right. exact Hx_in.
+  - rewrite Hstk_eq, List.in_app_iff. right. simpl. right. exact Hy_in.
+  - exists (prefix ++ u :: l1). exists l2. split.
+    { rewrite Hstk_eq, Hrest_eq. rewrite <- app_assoc. reflexivity. }
+    { exact Hy_in_l2. }
+Qed.
+
+(** Operations that don't modify the stack or dfn trivially preserve
+    [stack_dfn_order].  [set_dfn] and [push_stack] are handled inside
+    [preloop_preserves_stack_dfn_order] because they DO modify dfn/stack. *)
+
+Lemma set_fa_keep_stack_dfn_order (v p: V):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (set_fa v p)
+        (fun _ s => stack_dfn_order s).
+Proof.
+  unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. exact H.
+Qed.
+
+Lemma set_low_keep_stack_dfn_order (v: V) (n: nat):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (set_low v n)
+        (fun _ s => stack_dfn_order s).
+Proof.
+  unfold set_low. intro_state. hoare_auto_s. subst s. simpl. exact H.
+Qed.
+
+Lemma incr_timer_keep_stack_dfn_order:
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (incr_timer)
+        (fun _ s => stack_dfn_order s).
+Proof.
+  unfold incr_timer. intro_state. hoare_auto_s. subst s. simpl. exact H.
+Qed.
+
+Lemma update_low_keep_stack_dfn_order (u: V) (n: nat):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (update_low u n)
+        (fun _ s => stack_dfn_order s).
+Proof.
+  unfold update_low. intro_state. hoare_auto_s.
+  - unfold set_low. intro_state. hoare_auto_s. subst s1 s. simpl. exact H.
+  - destruct H1 as [Heq _]. subst s. exact H.
+Qed.
+
 End IS_DFN.
