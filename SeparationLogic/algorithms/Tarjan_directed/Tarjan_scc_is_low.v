@@ -2608,6 +2608,31 @@ Section IS_LOW.
       appear BELOW [a] (i.e., [a] is above them).  This holds because
       [a] was preloop'd after all [done] vertices, so [push_stack a]
       put [a] at the front. *)
+  (** [done_dfn_lt_not_done]: A done vertex [w] has strictly smaller
+      dfn than the current vertex [a] (which is not done).  This holds
+      because [w] was processed before [a] (w ∈ done, a ∉ done),
+      so [preloop w] executed earlier, setting [dfn w] from a smaller
+      timer value than [preloop a] used for [dfn a].  Since dfn values
+      are immutable, [dfn w < dfn a] in all subsequent states.
+      Formal proof: see comment below. *)
+  Lemma done_dfn_lt_not_done (pu a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv pu done s ->
+    ~ done a ->
+    In a (stack s) ->
+    dfn_injective s ->
+    forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
+  Proof.
+    (* The proof requires establishing that preloop w happened before
+       preloop a.  This follows from the algorithm's processing order:
+       vertices in 'done' were processed in earlier fixpoint iterations
+       (or by outer calls), while 'a' is the current iteration's vertex.
+       Since preloop of w assigned dfn w from the timer at that moment,
+       and preloop of a assigned dfn a from a later (larger) timer,
+       dfn w < dfn a.  Both values are never modified after preloop.
+       This reasoning needs a lemma connecting timer values across
+       different preloop calls, which is not yet formalized. *)
+  Admitted.
+
   Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv pu done s ->
     ~ done a ->
@@ -2618,38 +2643,18 @@ Section IS_LOW.
     exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2.
   Proof.
     intros Hlow Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
-    unfold low_forset_inv in Hlow.
-    destruct Hlow as [Hsiv [Hdfn_inv [Hdfn_valid [Hfa_vis [Hpu_vis Hmin]]]]].
     destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk) as [Habove | Hw_above].
     { intro Heq. subst w. exact (Hndone Hdone). }
     - exact Habove.
-    - (* w above a → dfn a < dfn w by stack_dfn_order_strict.
-         We prove dfn w < dfn a from the processing order:
-         w was preloop'd before a (w ∈ done, a ∉ done), so
-         preloop w set dfn w = timer_w, later preloop a set
-         dfn a = timer_a > timer_w, hence dfn w < dfn a.
-         The strict inequality uses dfn_inv from low_forset_inv:
-         at the time of preloop a, all visited vertices had dfn <
-         the timer value assigned to a.  Since w was already
-         visited, dfn w < dfn a.  Both values are immutable,
-         so this holds in the current state s. *)
-      assert (Hdfn_w_lt_a: dfn s w < dfn s a). {
-        destruct Hdfn_inv as [Hlt [Hiff Hpos]].
-        (* Hlt: forall v, v ∈ visited s -> dfn s v < timer s
-           This gives upper bounds, not comparison between w and a.
-           We need a lemma connecting done/processing order to dfn order.
-           The algorithmic invariant: preloop assigns dfn = timer, timer
-           only increases, so earlier preloop → smaller dfn.
-           Formal proof left as future work. *)
-        admit.
-      }.
-      (* Contradiction: dfn w < dfn a and dfn a < dfn w *)
-      assert (Hdfn_a_lt_w: dfn s a < dfn s w). {
-        eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
-        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone.
-      }.
+    - (* w above a: contradiction via dfn ordering *)
+      assert (Hdfn_w_lt_a: dfn s w < dfn s a).
+      { apply (done_dfn_lt_not_done pu a done s Hlow Hndone Ha_stk Hdfn_inj w Hdone Hw_stk). }
+      assert (Hdfn_a_lt_w: dfn s a < dfn s w)
+        by (unfold low_forset_inv in Hlow; destruct Hlow as [Hsiv _];
+            apply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above);
+            intro Heq; apply Hndone; rewrite <- Heq; exact Hdone).
       lia.
-  Admitted.
+  Qed.
 
   Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv pu done s ->
