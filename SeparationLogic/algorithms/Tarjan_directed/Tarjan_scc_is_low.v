@@ -1337,8 +1337,21 @@ Section IS_LOW.
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => fa s v = parent).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    apply (Hoare_conseq
+      (fun s => fa s v = parent /\ a ∈ visited s /\ v ∈ visited s)
+      (fun s => fa s v = parent /\ v ∈ visited s)
+      (forset (fun w => dg_step g a w) (process_edge a W))
+      (fun _ s => fa s v = parent)
+      (fun _ s => fa s v = parent /\ v ∈ visited s)).
+    { intros s [Hfa [Hvis_a Hvis_v]]. split; [exact Hfa | exact Hvis_v]. }
+    { intros _ s [Hfa _]. exact Hfa. }
+    apply (@Hoare_forset SCCSt V
+      (fun done s => fa s v = parent /\ v ∈ visited s)
+      (fun w => dg_step g a w) (process_edge a W)).
+    { unfold Proper, respectful. intros. subst. reflexivity. }
+    { intros todo a0 Hsub Huniv Hnotdone.
+      apply (process_edge_keeps_fa_simple a a0 v parent W IH_fa IH_vis). }
+  Qed.
 
   (** [set_fa_W_preserves_low_forset_inv]: key lemma for the tree edge
       branch of [process_edge_keep_low_forset_inv].  After [set_fa v u]
