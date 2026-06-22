@@ -186,8 +186,38 @@ Section IS_LOW.
       dg_step (state_to_dfs_tree g s root) u v /\
       scc_low_tree s v w).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Huvis.
+    hnf. intro a. hnf. split.
+    - intros H. unfold scc_low_tree, scc_low_reachable in H.
+      destruct H as [z [Hz_reach Hz_end]].
+      apply dg_reachable_first_step in Hz_reach as [Hu_eq_z | [v [Hstep Hreach]]].
+      + subst z.
+        destruct Hz_end as [Heq | Hback].
+        * subst a. left. left. sets_unfold. reflexivity.
+        * left. right. exact Hback.
+      + right. exists v. split; [exact Hstep |].
+        unfold scc_low_tree, scc_low_reachable.
+        exists z. split; [exact Hreach | exact Hz_end].
+    - intros H. destruct H as [[Hu_case | Hbe_case] | Hchild_case].
+      + sets_unfold in Hu_case. subst a.
+        unfold scc_low_tree, scc_low_reachable.
+        exists u. split.
+        * apply Coq.Relations.Relation_Operators.rt_refl.
+        * left. reflexivity.
+      + unfold scc_low_tree, scc_low_reachable.
+        exists u. split.
+        * apply Coq.Relations.Relation_Operators.rt_refl.
+        * right. exact Hbe_case.
+      + destruct Hchild_case as [v [Hstep Hvw]].
+        unfold scc_low_tree, scc_low_reachable in Hvw.
+        destruct Hvw as [z [Hz_reach Hz_end]].
+        unfold scc_low_tree, scc_low_reachable.
+        exists z. split.
+        * eapply Coq.Relations.Relation_Operators.rt_trans.
+          -- apply Coq.Relations.Relation_Operators.rt_step. exact Hstep.
+          -- exact Hz_reach.
+        * exact Hz_end.
+  Qed.
 
   (* ================================================================ *)
   (* 5. SCC Low Induction Lemmas                                      *)
@@ -205,8 +235,37 @@ Section IS_LOW.
         scc_low_tree s v w))
       (dfn s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    split; intros.
+    - apply min_eq_forward with
+        (f1 := low s) (P1 := dg_step (state_to_dfs_tree g s root) u);
+        auto using NatLe_TotalOrder.
+      + intros v Hson.
+        pose proof (IHu v Hson) as Hlow_v.
+        apply scc_low_witness in Hlow_v as [x [Hx Heq]].
+        exists x. split.
+        * exists v. split; auto.
+        * rewrite Heq. apply Nat.le_refl.
+      + intros w [v [Hson Hlow]].
+        exists v. split; auto.
+        pose proof (IHu v Hson) as Hlow_v.
+        apply scc_low_bound with (x := w) in Hlow_v; auto.
+    - apply min_eq_forward with
+        (f1 := dfn s)
+        (P1 := (fun w => exists v,
+          dg_step (state_to_dfs_tree g s root) u v /\
+          scc_low_tree s v w));
+        auto using NatLe_TotalOrder.
+      + intros w [v [Hson Hlow]].
+        exists v. split; auto.
+        pose proof (IHu v Hson) as Hlow_v.
+        apply scc_low_bound with (x := w) in Hlow_v; auto.
+      + intros v Hson.
+        pose proof (IHu v Hson) as Hlow_v.
+        apply scc_low_witness in Hlow_v as [x [Hx Heq]].
+        exists x. split.
+        * exists v. split; auto.
+        * rewrite Heq. apply Nat.le_refl.
+  Qed.
 
   Lemma scc_low_valid_induction_is_low (s: @SCCSt V) (u: V)
     (Hu: u ∈ visited s)
@@ -215,15 +274,42 @@ Section IS_LOW.
       scc_is_low_v_val s v (low s v)):
     scc_low_valid_v s u -> scc_is_low_v s u.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hvalid.
+    unfold scc_low_valid_v in Hvalid.
+    rewrite scc_low_valid_induction in Hvalid; auto.
+    apply min_union_iff in Hvalid.
+    unfold scc_is_low_v, scc_is_low_v_val.
+    rewrite scc_low_tree_decompose; auto.
+    rewrite (Sets_union_comm [u] (scc_back_edge s u)).
+    rewrite Sets_union_comm.
+    exact Hvalid.
+  Qed.
 
   Lemma scc_low_valid_implies_is_low (s: @SCCSt V):
     dfn_valid g s root -> dfn_inv s ->
     scc_low_valid s -> scc_is_low s.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hvalid Hinv Hlow.
+    destruct Hinv as [Hdfn_lt [Hdfn_zero Hpos]].
+    unfold scc_is_low.
+    cut (forall n u, u ∈ visited s -> timer s - dfn s u = n -> scc_is_low_v s u).
+    { intros H u Hu. apply H with (n := timer s - dfn s u); auto. }
+    induction n as [n IH] using (well_founded_induction (Nat.lt_wf 0)).
+    intros u Hu Hn.
+    apply (scc_low_valid_induction_is_low s u Hu).
+    - intros v Hson_orig.
+      pose proof Hson_orig as Hson_for_step.
+      apply state_to_dfs_tree_step_char in Hson_for_step.
+      destruct Hson_for_step as [_ [_ Hvis_v]].
+      apply Hvalid in Hson_orig.
+      pose proof (Hdfn_lt u Hu) as Hdfn_u_lt.
+      pose proof (Hdfn_lt v Hvis_v) as Hdfn_v_lt.
+      apply (IH (timer s - dfn s v)).
+      + lia.
+      + exact Hvis_v.
+      + reflexivity.
+    - apply Hlow. exact Hu.
+  Qed.
   (** * Well-formed SCC state abstraction
 
       We bundle the four global invariants that are preserved by every
