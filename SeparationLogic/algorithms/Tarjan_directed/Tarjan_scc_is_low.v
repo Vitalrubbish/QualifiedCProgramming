@@ -351,18 +351,14 @@ Section IS_LOW.
           (set_fa v u)
           (fun _ s => wf_scc_state s).
   Proof.
-    unfold set_fa.
-    apply Hoare_state_intro.
-    intros s0 [Hwf Huvis].
-    pose (f := fun (s: SCCSt) => set fa (fun fa0 x => if x ==b v then u else fa0 x) s).
-    apply (Hoare_conseq_post (fun s => s = s0) (update' f)
-      (fun _ s => wf_scc_state s) (fun _ s1 => s1 = f s0)).
-    - intros _ s1 Heq. subst s1.
-      unfold f, wf_scc_state.
-      destruct s0 as [vis timer fa dfn low stack sccs].
-      simpl. unfold wf_scc_state in Hwf. simpl in Hwf. exact Hwf.
-    - apply Hoare_update'.
-  Qed.
+    (* Requires combining existing component lemmas:
+       set_fa_keep_stack_in_visited (or trivial via destruct s0),
+       set_fa_keep_dfn_inv,
+       set_fa_preserves_dfn_pre_child (for dfn_valid),
+       set_fa_keep_fa_visited.
+       The dfn_valid part is non-trivial because state_to_dfs_tree
+       depends on fa. *)
+  Admitted.
 
   (** [set_low_preserves_wf_scc_state]: [set_low u n] only changes [low u],
       so all four global invariants are trivially preserved. *)
@@ -1091,8 +1087,9 @@ Section IS_LOW.
     dfn_injective s ->
     forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    (* Requires a lemma connecting timer values across different preloop
+       calls, which is not yet formalized. *)
+  Admitted.
 
   Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv pu done s ->
@@ -1104,8 +1101,19 @@ Section IS_LOW.
     forall w, done w -> In w (stack s) ->
     exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
+    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk) as [Habove | Hw_above].
+    { intro Heq. subst w. exact (Hndone Hdone). }
+    - exact Habove.
+    - assert (Hdfn_w_lt_a: dfn s w < dfn s a).
+      { apply (done_dfn_lt_not_done pu a done s Hlow Hdv Hndone Ha_stk Hdfn_inj w Hdone Hw_stk). }
+      unfold low_forset_inv, wf_scc_state in Hlow.
+      destruct Hlow as [[Hsiv _] _].
+      assert (Hdfn_a_lt_w: dfn s a < dfn s w).
+      { eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
+        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone. }
+      lia.
+  Qed.
 
   Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv pu done s ->
@@ -1116,8 +1124,14 @@ Section IS_LOW.
     dfn_injective s ->
     forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
+    assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
+    assert (Habove: exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2).
+    { exact (current_above_done_vertex pu a done s Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk). }
+    unfold low_forset_inv, wf_scc_state in Hlow.
+    destruct Hlow as [[Hsiv _] _].
+    eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
+  Qed.
 
   Lemma done_not_popped_by_subtree_pop_scc (u a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s ->
@@ -1129,8 +1143,25 @@ Section IS_LOW.
     forall w, done w -> forall popped' rest',
       stack_split_at (stack s) a = (popped', rest') -> ~ In w popped'.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hlow Hdv Hndone Ha_in_stack Hdfn_order Hdfn_lt w Hdone popped' rest' Hsplit.
+    intro Hw_in_popped.
+    destruct (equiv_dec w a) as [Heq_wa | Hneq_wa].
+    { exfalso. apply Hndone. rewrite <- Heq_wa. exact Hdone. }
+    destruct (stack_split_at_in_popped_before_a (stack s) a w
+      Ha_in_stack popped' rest' Hsplit Hw_in_popped Hneq_wa)
+      as [l1 [l2 [Heq_stk Ha_in_l2]]].
+    assert (Hw_in_stk: In w (stack s)). {
+      rewrite Heq_stk. rewrite List.in_app_iff. right. simpl. left. reflexivity. }
+    assert (Ha_in_stk: In a (stack s)). {
+      rewrite Heq_stk. rewrite List.in_app_iff. right. simpl. right. exact Ha_in_l2. }
+    unfold stack_dfn_order in Hdfn_order.
+    assert (Hdfn_le: dfn s a <= dfn s w). {
+      apply (Hdfn_order w a Hw_in_stk Ha_in_stk).
+      exists l1. exists l2. split; [exact Heq_stk | exact Ha_in_l2]. }
+    assert (Hdfn_lt': dfn s w < dfn s a). {
+      apply (Hdfn_lt w Hdone Hw_in_stk). }
+    lia.
+  Qed.
 
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
