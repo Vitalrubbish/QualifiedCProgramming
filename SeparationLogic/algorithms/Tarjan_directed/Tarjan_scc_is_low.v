@@ -432,8 +432,16 @@ Section IS_LOW.
   Lemma low_pre_fa_eq_u_implies_eq_u (u v: V) (s: @SCCSt V):
     low_pre u s -> fa s v = u -> v = u.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold low_pre, wf_scc_state.
+    intros [[Hsiv [Hinv [Hvalid Hfa_vis]]] Hnuvis] Hfa_eq.
+    destruct (classic (v = u)) as [Heq | Hneq]; [exact Heq |].
+    exfalso.
+    assert (Htemp: fa s v <> v).
+    { rewrite Hfa_eq. intro Heq2. apply Hneq. symmetry; exact Heq2. }
+    apply Hfa_vis in Htemp.
+    rewrite Hfa_eq in Htemp.
+    exact (Hnuvis Htemp).
+  Qed.
 
   (* ================================================================ *)
   (* 7. Preloop Establishes Low Forset Invariant                      *)
@@ -521,8 +529,36 @@ Section IS_LOW.
     (forall w, In w stk -> ~ In w popped -> In w rest) /\
     (forall w, In w stk -> In w popped \/ In w rest).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    (* Rename to avoid naming conflicts *)
+    rename popped into pp, rest into rr.
+    intros Hsplit.
+    induction stk as [| x xs IH] in v, pp, rr, Hsplit |- *; simpl in Hsplit.
+    - apply pair_equal_spec in Hsplit. destruct Hsplit; subst. simpl. auto.
+    - destruct (equiv_decb x v) eqn:Heq_xv.
+      + apply pair_equal_spec in Hsplit. destruct Hsplit as [Hpop Hrest]; subst.
+        simpl. split; [| split]; intros w Hw; simpl in Hw.
+        * right. exact Hw.
+        * destruct Hw as [Heq|Hw_xs].
+          { subst w. intros Hfalse. simpl in Hfalse. tauto. }
+          { auto. }
+        * destruct Hw as [Heq|Hw_xs].
+          { left. left. auto. }
+          { right. exact Hw_xs. }
+      + destruct (stack_split_at xs v) as (pxs, rxs) eqn:Hinner.
+        apply pair_equal_spec in Hsplit. destruct Hsplit as [Hpop Hrest]; subst.
+        destruct (IH v pxs rr Hinner) as [H1 [H2 H3]].
+        simpl. split; [| split]; intros w Hw; simpl in Hw.
+        * apply H1 in Hw. right; exact Hw.
+        * destruct Hw as [Heq|Hw_xs].
+          { subst w. intros Hfalse. simpl in Hfalse.
+            exfalso. apply Hfalse. left. reflexivity. }
+          { intros Hfalse.
+            apply H2; [exact Hw_xs | intro Hp; apply Hfalse; right; exact Hp]. }
+        * destruct Hw as [Heq|Hw_xs].
+          { left. left. auto. }
+          { destruct (H3 w Hw_xs) as [Hp|Hr];
+            [left; right; exact Hp|right; exact Hr]. }
+  Qed.
 
   Lemma scc_low_valid_v_low_eq_dfn_implies_dfn_le_back_edge_dfn (s: @SCCSt V) (u w: V):
     scc_low_valid_v s u ->
@@ -530,8 +566,26 @@ Section IS_LOW.
     scc_back_edge s u w ->
     dfn s u <= dfn s w.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hvalid Heq_low Hback.
+    unfold scc_low_valid_v in Hvalid.
+    destruct Hvalid as [a_min [[Ha_in Ha_min] Ha_eq]].
+    rewrite Heq_low in Ha_eq.
+    subst a_min.
+    assert (Hright_nonempty: exists a, (scc_back_edge s u ∪ [u]) a).
+    { exists u. sets_unfold. right. reflexivity. }
+    pose proof (min_nonempty_exists (dfn s) (scc_back_edge s u ∪ [u]) Hright_nonempty)
+      as [m_right Hright].
+    assert (Houter_bound: dfn s u <= m_right). {
+      apply Ha_min.
+      sets_unfold. right. exact Hright.
+    }
+    destruct Hright as [w_min [[_ Hw_min] Heq_wmin]].
+    assert (Hinner_bound: m_right <= dfn s w). {
+      rewrite <- Heq_wmin.
+      apply Hw_min. left. exact Hback.
+    }
+    exact (Nat.le_trans _ _ _ Houter_bound Hinner_bound).
+  Qed.
 
   Lemma pop_scc_keep_scc_low_valid_v (u: V):
     Hoare (fun s: @SCCSt V =>
@@ -550,29 +604,63 @@ Section IS_LOW.
     fa s v = u -> fa s v <> v ->
     children_done s u (done ∪ [v]) == children_done s u done ∪ [v].
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hfa_eq Hfa_neq.
+    unfold children_done.
+    apply Sets_equiv_Sets_included. split.
+    - sets_unfold. intros w [[Hw_done | Hw_v] [Hw_fa Hw_neq]].
+      + left. split; [exact Hw_done | split; [exact Hw_fa | exact Hw_neq]].
+      + subst w. right. reflexivity.
+    - sets_unfold. intros w [Hw_child | Hw_v].
+      + destruct Hw_child as [Hw_done [Hw_fa Hw_neq]].
+        split; [left; exact Hw_done | split; [exact Hw_fa | exact Hw_neq]].
+      + subst w. split; [right; reflexivity | split; [exact Hfa_eq | exact Hfa_neq]].
+  Qed.
 
   Lemma children_done_no_add (s: @SCCSt V) (u v: V) (done: V -> Prop):
     fa s v <> u ->
     children_done s u (done ∪ [v]) == children_done s u done.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hfa_neq.
+    unfold children_done.
+    apply Sets_equiv_Sets_included. split.
+    - sets_unfold. intros w [[Hw_done | Hw_v] [Hw_fa Hw_neq]].
+      + split; [exact Hw_done | split; [exact Hw_fa | exact Hw_neq]].
+      + subst w. exfalso. apply Hfa_neq. exact Hw_fa.
+    - sets_unfold. intros w [Hw_done [Hw_fa Hw_neq]].
+      split; [left; exact Hw_done | split; [exact Hw_fa | exact Hw_neq]].
+  Qed.
 
   Lemma back_edges_done_add (s: @SCCSt V) (u v: V) (done: V -> Prop):
     In v (stack s) -> fa s v <> u ->
     back_edges_done s u (done ∪ [v]) == back_edges_done s u done ∪ [v].
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hinstack Hfa_neq.
+    unfold back_edges_done.
+    apply Sets_equiv_Sets_included. split.
+    - sets_unfold. intros w [[Hw_done | Hw_v] [Hw_stack Hw_fa]].
+      + left. split; [exact Hw_done | split; [exact Hw_stack | exact Hw_fa]].
+      + subst w. right. reflexivity.
+    - sets_unfold. intros w [Hw_back | Hw_v].
+      + destruct Hw_back as [Hw_done [Hw_stack Hw_fa]].
+        split; [left; exact Hw_done | split; [exact Hw_stack | exact Hw_fa]].
+      + subst w. split; [right; reflexivity | split; [exact Hinstack | exact Hfa_neq]].
+  Qed.
 
   Lemma back_edges_done_no_add (s: @SCCSt V) (u v: V) (done: V -> Prop):
     ~ In v (stack s) \/ fa s v = u ->
     back_edges_done s u (done ∪ [v]) == back_edges_done s u done.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hnot.
+    unfold back_edges_done.
+    apply Sets_equiv_Sets_included. split.
+    - sets_unfold. intros w [[Hw_done | Hw_v] [Hw_stack Hw_fa]].
+      + split; [exact Hw_done | split; [exact Hw_stack | exact Hw_fa]].
+      + subst w. destruct Hnot as [Hnstack | Hfa_eq].
+        * exfalso. apply Hnstack. exact Hw_stack.
+        * exfalso. apply Hw_fa. exact Hfa_eq.
+    - sets_unfold. intros w [Hw_done [Hw_stack Hw_fa]].
+      split; [left; exact Hw_done | split; [exact Hw_stack | exact Hw_fa]].
+  Qed.
 
   (* ================================================================ *)
   (* 10. process_edge Preserves low_forset_inv                         *)
@@ -892,8 +980,34 @@ Section IS_LOW.
       In w popped -> w <> a ->
       exists l1 l2, stk = l1 ++ w :: l2 /\ In a l2.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    induction stk as [| x xs IH] in a, w |- *;
+      intros Ha_in popped rest Hsplit Hw_in Hw_ne_a.
+    { destruct Ha_in. }
+    { simpl in Hsplit.
+      destruct (equiv_decb x a) eqn:Heq_xa.
+      { apply pair_equal_spec in Hsplit. destruct Hsplit as [Hpop Hrest]; subst popped rest.
+        simpl in Hw_in. destruct Hw_in as [Heq_wx | []].
+        exfalso. apply Hw_ne_a. rewrite <- Heq_wx.
+        unfold equiv_decb in Heq_xa. destruct (equiv_dec x a) as [Heq' | Hneq];
+          [exact Heq' | discriminate Heq_xa]. }
+      { destruct (stack_split_at xs a) as (popped_inner, rest_inner) eqn:Hsplit_inner.
+        apply pair_equal_spec in Hsplit. destruct Hsplit as [Hpop Hrest]; subst popped rest.
+        simpl in Hw_in. destruct Hw_in as [Heq_wx | Hw_in_inner].
+        { subst w. destruct Ha_in as [Heq_ax | Ha_in_xs].
+          { exfalso. unfold equiv_decb in Heq_xa.
+            rewrite Heq_ax in Heq_xa. destruct (equiv_dec a a) as [_ | Hc];
+              [discriminate Heq_xa | exfalso; apply Hc; reflexivity]. }
+          { exists (@nil V). exists xs. split; [reflexivity | exact Ha_in_xs]. } }
+        { destruct Ha_in as [Heq_ax | Ha_in_xs].
+          { exfalso. unfold equiv_decb in Heq_xa.
+            rewrite Heq_ax in Heq_xa. destruct (equiv_dec a a) as [_ | Hc];
+              [discriminate Heq_xa | exfalso; apply Hc; reflexivity]. }
+          { destruct (IH a w Ha_in_xs popped_inner rest_inner Hsplit_inner Hw_in_inner Hw_ne_a)
+              as (l1 & l2 & Heq & Ha_in_l2).
+            exists (x :: l1). exists l2. split.
+            { rewrite Heq. reflexivity. }
+            { exact Ha_in_l2. } } } } }
+  Qed.
 
   (** [in_list_one_above_other]: If two distinct elements [x] and [y] are
       both in a list, then either [x] appears before [y] or [y] appears
@@ -903,8 +1017,18 @@ Section IS_LOW.
     (exists l1 l2, l = l1 ++ x :: l2 /\ In y l2) \/
     (exists l1 l2, l = l1 ++ y :: l2 /\ In x l2).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    induction l as [| z zs IH] in x, y |- *; intros Hx_in Hy_in Hneq.
+    { destruct Hx_in. }
+    { destruct Hx_in as [Hx_eq_z | Hx_in_zs].
+      { subst z. simpl in Hy_in. destruct Hy_in as [Hy_eq_x | Hy_in_zs].
+        { exfalso. apply Hneq. exact Hy_eq_x. }
+        { left. exists (@nil A). exists zs. split; [reflexivity | exact Hy_in_zs]. } }
+      { destruct Hy_in as [Hy_eq_z | Hy_in_zs].
+        { subst z. right. exists (@nil A). exists zs. split; [reflexivity | exact Hx_in_zs]. }
+        { destruct (IH x y Hx_in_zs Hy_in_zs Hneq) as [[l1 [l2 [Heq Hiny]]] | [l1 [l2 [Heq Hinx]]]].
+          { left. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hiny]. }
+          { right. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hinx]. } } } }
+  Qed.
 
   (** [done_vertex_dfn_lt]: For the current vertex [a] (with [~ done a],
       [In a (stack s)]) and any [done] vertex [w] still on the stack,
@@ -923,8 +1047,9 @@ Section IS_LOW.
           (preloop x)
           (fun _ s => exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
+  Qed.
 
   (** [current_above_done_vertex]: In the state after preloop and forset
       for vertex [a], all [done] vertices that are still on the stack
