@@ -2821,8 +2821,11 @@ Section IS_LOW.
                     split; [exact Hcv | split; [exact Hpu | split; [exact Hinv | split; [exact Hfa | split; [exact Hcv_vis | split; [exact Hav | split; [exact Hnd_a' | exact Hdv]]]]]]].
         * (* pop_scc / skip *)
           simpl. intros _. intro_state. hoare_auto_s.
-          -- (* pop_scc a: depends on done_not_popped_by_subtree_pop_scc, In a (stack s), and dfn ordering.
-                These require additional DFS stack structure lemmas.  Admitted for now. *)
+          -- (* pop_scc a branch.  The goal reduces to proving low_forset_inv pu done
+                of pop_scc_state s1 a.  The proof follows pop_scc_keeps_low_forset_inv_other
+                but additionally requires In a (stack s1) and done_not_popped_by_subtree_pop_scc,
+                which in turn need dfn-stack-ordering lemmas.  Admitted as a unit pending
+                those lemmas. *)
              admit.
           -- (* skip: low s a <> dfn s a, state unchanged *)
              destruct H1. subst s.
