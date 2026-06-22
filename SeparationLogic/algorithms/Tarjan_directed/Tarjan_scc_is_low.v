@@ -468,8 +468,11 @@ Section IS_LOW.
           (preloop u)
           (fun _ s => low s u = dfn s u).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    unfold equiv_decb. destruct (equiv_dec u u) as [Heq|Hneq]; simpl;
+      [reflexivity | exfalso; apply Hneq; reflexivity].
+  Qed.
 
   Lemma children_done_empty (s: @SCCSt V) (u: V):
     children_done s u ∅ == ∅.
@@ -860,8 +863,9 @@ Section IS_LOW.
           (preloop a)
           (fun _ s => fa s a = p /\ a ∈ visited s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    split. { reflexivity. } { sets_unfold. right. reflexivity. }
+  Qed.
 
   (** [forset_keeps_fa]: [forset (process_edge a W)] preserves
       [fa s v = parent] given the fixpoint IH. *)
@@ -938,8 +942,10 @@ Section IS_LOW.
   Lemma pop_scc_preserves_done_visited (a: V) (done: V -> Prop):
     Hoare (fun s => done_visited done s) (pop_scc a) (fun _ s => done_visited done s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+    unfold pop_scc_state. destruct (stack_split_at (stack s0) a) as [popped rest]. simpl.
+    exact H.
+  Qed.
 
   (* ================================================================ *)
   (* 10.5. Ancestor Invariant Preservation Lemmas                      *)
