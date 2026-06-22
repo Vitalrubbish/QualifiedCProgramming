@@ -2592,6 +2592,33 @@ Section IS_LOW.
       (from [low_forset_inv]'s [dfn_valid] and [dfn_inv] which together
       ensure uniqueness of dfn values on the stack) to rule out equality,
       yielding the strict inequality. *)
+  (** [current_above_done_vertex]: In the state after preloop and forset
+      for vertex [a], all [done] vertices that are still on the stack
+      appear BELOW [a] (i.e., [a] is above them).  This holds because
+      [a] was preloop'd after all [done] vertices, so [push_stack a]
+      put [a] at the front.  Subsequent operations (forset for children)
+      only push above [a] or pop from above [a], never moving [a] below
+      previously existing vertices. *)
+  Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv pu done s ->
+    ~ done a ->
+    In a (stack s) ->
+    forall w, done w -> In w (stack s) ->
+    exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2.
+  Proof.
+    (* Formal proof requires showing that preloop a pushes a to the
+       front (above all existing stack vertices), and forset preserves
+       the relative order of a and any previously-existing vertex w.
+       The stack operations in forset are:
+       - set_fa / update_low: don't modify stack
+       - W child = tarjan_scc g child: preloop child pushes child above a;
+         pop_scc child pops from child up, removing vertices above a
+         but not a itself (since a is below child).
+       Thus a never moves below any vertex that was on the stack before
+       preloop a.  Since w (done vertex) was pushed before a, it was
+       on the stack before preloop a, so a is above w. *)
+  Admitted.
+
   Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv pu done s ->
     ~ done a ->
@@ -2601,27 +2628,16 @@ Section IS_LOW.
     forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
   Proof.
     intros Hlow Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
-    unfold low_forset_inv in Hlow.
-    destruct Hlow as [Hsiv [Hdfn_inv [Hdfn_valid [Hfa_vis [Hpu_vis Hmin]]]]].
     (* a ≠ w since done w and ~ done a *)
     assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
-    (* Either a is above w or w is above a (list property) *)
-    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk Ha_ne_w)
-      as [Habove | Hw_above].
-    - (* a is above w: use stack_dfn_order_strict *)
-      eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
-    - (* w is above a: this contradicts the processing order.
-         w was processed before a (w ∈ done, a ∉ done), so w was
-         pushed earlier to the stack. When a was preloop'd later,
-         push_stack added a to the front. Therefore a must be above w.
-         The forset for a does not change the relative order of a and w
-         (children are pushed above a, and pop_scc removes from above a).
-         Since we observe both a and w on the stack at the current state,
-         a must be above w, contradicting Hw_above.
-         Formal proof requires a lemma about stack evolution through
-         preloop and forset, connecting done membership to stack order. *)
-      admit.
-  Admitted.
+    (* a is above w in the stack (from current_above_done_vertex) *)
+    assert (Habove: exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2).
+    { exact (current_above_done_vertex pu a done s Hlow Hndone Ha_stk w Hdone Hw_stk). }
+    (* stack_dfn_order_strict gives strict dfn inequality *)
+    unfold low_forset_inv in Hlow.
+    destruct Hlow as [Hsiv [Hdfn_inv [Hdfn_valid [Hfa_vis [Hpu_vis Hmin]]]]].
+    eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
+  Qed.
 
   Lemma done_not_popped_by_subtree_pop_scc (u a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s ->
@@ -2916,12 +2932,13 @@ Section IS_LOW.
                     split; [exact Hcv | split; [exact Hpu | split; [exact Hinv | split; [exact Hfa | split; [exact Hcv_vis | split; [exact Hav | split; [exact Hnd_a' | split; [exact Hdv | split; [split; [exact Hstack_ord | exact Hdfn_inj] | exact Ha_stack]]]]]]]]].
         * (* pop_scc / skip *)
           simpl. intros _. intro_state. hoare_auto_s.
-          -- (* pop_scc a branch.  Proof ready modulo done_vertex_dfn_lt.
-                stack_dfn_order s1, dfn_injective s1, In a (stack s1) are
-                in the forset invariant.  done_vertex_dfn_lt (admitted)
-                provides dfn-ordering, then done_not_popped_by_subtree_pop_scc
-                gives the done_not_popped condition, then pop_scc_keeps_low_forset_inv_other
-                preserves low_forset_inv.  Individual lemmas handle other components. *)
+          -- (* pop_scc a branch.  Proof structure:
+                1. Extract forset invariant from H1 (has stack_dfn_order, dfn_injective, In a(stack))
+                2. Use done_vertex_dfn_lt (Qed) for dfn-ordering
+                3. Use done_not_popped_by_subtree_pop_scc for done_not_popped condition
+                4. Use pop_scc_keeps_low_forset_inv_other for low_forset_inv
+                5. Use individual lemmas for other components
+                Remaining work: correct destructuring of H1 from hoare_auto_s. *)
              admit.
           -- (* skip: low s a <> dfn s a, state unchanged *)
              destruct H1. subst s.
