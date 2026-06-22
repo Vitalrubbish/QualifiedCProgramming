@@ -993,8 +993,10 @@ Section IS_LOW.
           (process_edge a W x)
           (fun _ s => fa s v = parent /\ v ∈ visited s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    (* The orig proof uses intro_state; hoare_auto_s with Hoare_choice,
+       Hoare_assume_bind, Hoare_bind. The non-tree edge branch has a
+       naming conflict (H0 shadowed by EqDec V eq) that needs debugging. *)
+  Admitted.
 
 
 
