@@ -816,8 +816,82 @@ Section IS_LOW.
           (set_low v n)
           (fun _ s => low_forset_inv u done s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hne Hndone.
+    unfold set_low. intro_state. hoare_auto_s. subst s.
+    destruct s0 as [vis timer fa dfn low stack sccs].
+    simpl.
+    unfold low_forset_inv, low_forset_inv_core in *.
+    destruct H as [Hwf [Huvis Hmin]].
+    simpl in Hwf, Huvis, Hmin.
+    split; [exact Hwf |].
+    split; [exact Huvis |].
+    simpl in Hmin |- *.
+    (* The outer low value: u <> v so it's unchanged *)
+    unfold equiv_decb. destruct (equiv_dec u v) as [Heq_uv | Hneq_uv].
+    { exfalso. apply Hne. exact Heq_uv. }
+    (* Key: ~ done v, so v is not in children_done or back_edges_done.
+       The changed low function agrees with low on all elements of these sets.
+       The sets themselves are identical (they depend on fa, not low). *)
+    assert (Hchild_set_eq: children_done {| visited := vis; timer := timer; fa := fa; dfn := dfn; low := (fun x => if equiv_decb x v then n else low x); stack := stack; sccs := sccs |} u done == children_done {| visited := vis; timer := timer; fa := fa; dfn := dfn; low := low; stack := stack; sccs := sccs |} u done). {
+      unfold children_done. simpl. reflexivity. }
+    assert (Hback_set_eq: back_edges_done {| visited := vis; timer := timer; fa := fa; dfn := dfn; low := (fun x => if equiv_decb x v then n else low x); stack := stack; sccs := sccs |} u done == back_edges_done {| visited := vis; timer := timer; fa := fa; dfn := dfn; low := low; stack := stack; sccs := sccs |} u done). {
+      unfold back_edges_done. simpl. reflexivity. }
+    assert (Hlow_agree: forall w, done w ->
+      (fun x => if equiv_decb x v then n else low x) w = low w). {
+      intros w Hw_done.
+      unfold equiv_decb. destruct (equiv_dec w v) as [Heq_wv | Hneq_wv]; [| reflexivity].
+      assert (w = v). { rewrite Heq_wv. reflexivity. }
+      subst w. exfalso. exact (Hndone Hw_done). }
+    (* Unfold equiv_decb in Hlow_agree to match the simpl'd goal *)
+    unfold equiv_decb in Hlow_agree.
+    eapply min_eq_forward; [auto using NatLe_TotalOrder | exact Hmin | | ].
+    - intros a1 Ha1. exists a1. split; [| apply Nat.le_refl].
+      destruct Ha1 as [Ha1 | Ha2].
+      + left. destruct Ha1 as [w [[Hw_in Hw_min] Heq_a1]].
+        exists w. split.
+        * unfold min_object_of_subset. split.
+          -- apply Hchild_set_eq. exact Hw_in.
+          -- intros x Hx. apply Hchild_set_eq in Hx.
+             destruct Hw_in as [Hw_done _].
+             assert (Hx_done: x ∈ done) by (destruct Hx as [Hd _]; exact Hd).
+             rewrite (Hlow_agree w Hw_done). rewrite (Hlow_agree x Hx_done).
+             apply Hw_min. exact Hx.
+        * destruct Hw_in as [Hw_done _]. rewrite (Hlow_agree w Hw_done). exact Heq_a1.
+      + right. destruct Ha2 as [w [[Hw_in Hw_min] Heq_a1]].
+        exists w. split.
+        * unfold min_object_of_subset. split.
+          -- destruct Hw_in as [Hw_back | Hw_u].
+             ++ left. apply Hback_set_eq. exact Hw_back.
+             ++ right. exact Hw_u.
+          -- intros x Hx. destruct Hx as [Hx_back | Hx_u].
+             ++ apply Hw_min. left. apply Hback_set_eq. exact Hx_back.
+             ++ subst x. apply Hw_min. right. reflexivity.
+        * exact Heq_a1.
+    - intros a2 Ha2. exists a2. split; [| apply Nat.le_refl].
+      destruct Ha2 as [Ha2 | Ha2'].
+      + left. destruct Ha2 as [w [[Hw_in Hw_min] Heq_a2]].
+        exists w. split.
+        * unfold min_object_of_subset. split.
+          -- apply Hchild_set_eq. exact Hw_in.
+          -- intros x Hx.
+             destruct Hw_in as [Hw_done _].
+             assert (Hx_done: x ∈ done) by (destruct Hx as [Hd _]; exact Hd).
+             pose proof (Hw_min x Hx) as Hle.
+             rewrite (Hlow_agree w Hw_done) in Hle.
+             rewrite (Hlow_agree x Hx_done) in Hle.
+             exact Hle.
+        * destruct Hw_in as [Hw_done _]. rewrite (Hlow_agree w Hw_done) in Heq_a2. exact Heq_a2.
+      + right. destruct Ha2' as [w [[Hw_in Hw_min] Heq_a2]].
+        exists w. split.
+        * unfold min_object_of_subset. split.
+          -- destruct Hw_in as [Hw_back | Hw_u].
+             ++ left. apply Hback_set_eq. exact Hw_back.
+             ++ right. exact Hw_u.
+          -- intros x Hx. destruct Hx as [Hx_back | Hx_u].
+             ++ apply Hw_min. left. apply Hback_set_eq. exact Hx_back.
+             ++ subst x. apply Hw_min. right. reflexivity.
+        * exact Heq_a2.
+  Qed.
 
   (** [update_low_tree_edge]: specialized lemma for the tree-edge case.
       After [get' low v], we call [update_low u (low v)]. This lemma
@@ -977,8 +1051,55 @@ Section IS_LOW.
     low_forset_inv u done s ->
     low_forset_inv u done (RecordSet.set low (fun low0 x => if equiv_decb x v then Nat.min (low s v) n else low0 x) s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hneq_uv Hndone Hinv.
+    unfold low_forset_inv, low_forset_inv_core in *.
+    destruct Hinv as [Hwf [Huvis Hmin]].
+    unfold low_forset_inv, low_forset_inv_core.
+    split; [| split; [|]].
+    - (* wf_scc_state: set_low doesn't affect stack_in_visited, dfn_inv, dfn_valid, fa_visited *)
+      unfold wf_scc_state in *. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
+      unfold wf_scc_state. simpl. split; [exact Hsiv | split; [exact Hinv' | split; [exact Hvalid | exact Hfa_vis]]].
+    - (* u ∈ visited: set_low doesn't change visited *)
+      simpl. exact Huvis.
+    - (* low_forset_inv_core: min condition preserved *)
+      unfold children_done, back_edges_done in *. simpl.
+      unfold equiv_decb. destruct (equiv_dec u v) as [Heq | Hneq]; [exfalso; apply Hneq_uv; exact Heq |].
+      set (f_new := fun (x: V) => if if equiv_dec x v then true else false then Nat.min (low s v) n else low s x).
+      assert (Hlow_eq_done: forall x, x ∈ done -> f_new x = low s x).
+      { intros x0 Hx0_done. unfold f_new.
+        destruct (equiv_dec x0 v) as [Heq_x0v | Hneq_x0v].
+        - rewrite Heq_x0v in Hx0_done. exfalso. apply Hndone. exact Hx0_done.
+        - reflexivity. }
+      eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+      + (* forward direction *)
+        simpl. intros a1 [Ha1_L | Ha1_R].
+        * (* children: low s → f_new *)
+          exists a1. split.
+          -- left. eapply min_eq_forward; [typeclasses eauto | exact Ha1_L | | ].
+             ++ intros x (Hx_done & Hx_fa & Hx_neq). exists x. split.
+                ** exact (conj Hx_done (conj Hx_fa Hx_neq)).
+                ** rewrite (Hlow_eq_done x Hx_done). apply Nat.le_refl.
+             ++ intros y (Hy_done & Hy_fa & Hy_neq). exists y. split.
+                ** exact (conj Hy_done (conj Hy_fa Hy_neq)).
+                ** rewrite (Hlow_eq_done y Hy_done). apply Nat.le_refl.
+          -- apply Nat.le_refl.
+        * (* back_edges: unchanged *)
+          exists a1. split; [right; exact Ha1_R | apply Nat.le_refl].
+      + (* backward direction *)
+        simpl. intros a2 [Ha2_L | Ha2_R].
+        * (* children: f_new → low s *)
+          exists a2. split.
+          -- left. eapply min_eq_forward; [typeclasses eauto | exact Ha2_L | | ].
+             ++ intros x (Hx_done & Hx_fa & Hx_neq). exists x. split.
+                ** exact (conj Hx_done (conj Hx_fa Hx_neq)).
+                ** rewrite (Hlow_eq_done x Hx_done). apply Nat.le_refl.
+             ++ intros y (Hy_done & Hy_fa & Hy_neq). exists y. split.
+                ** exact (conj Hy_done (conj Hy_fa Hy_neq)).
+                ** rewrite (Hlow_eq_done y Hy_done). apply Nat.le_refl.
+          -- apply Nat.le_refl.
+        * (* back_edges: unchanged *)
+          exists a2. split; [right; exact Ha2_R | apply Nat.le_refl].
+  Qed.
 
 
   (** [set_fa_preserves_low_forset_inv_for_new_child]: When [~ x ∈ visited],
@@ -991,8 +1112,67 @@ Section IS_LOW.
     low_forset_inv u done s0 ->
     low_forset_inv u done (RecordSet.set fa (fun _ x0 => if equiv_decb x0 x then v else fa s0 x0) s0).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Hnv_x Hv_vis Hu_vis Hndone_v Hndone_x Hinv.
+    unfold low_forset_inv, low_forset_inv_core in *.
+    destruct Hinv as [Hwf [Hu_vis' Hmin]].
+    unfold wf_scc_state in Hwf. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
+    unfold low_forset_inv, low_forset_inv_core. simpl.
+    split; [| split; [simpl; exact Hu_vis' |]].
+    - (* wf_scc_state: set_fa only changes fa x, which is unvisited *)
+      unfold wf_scc_state. simpl. split; [exact Hsiv | split; [exact Hinv' |]].
+      split.
+      + (* dfn_valid: tree edges unchanged since x is unvisited *)
+        unfold dfn_valid. intros p q Htree. apply Hvalid.
+        unfold dg_step in Htree. destruct Htree as [e [Htree' [Hfst Hsnd]]].
+        unfold original_step in Htree'. simpl in Htree'.
+        destruct Htree' as [w [Hwvis [Hwfa [Hwfst Hwsnd]]]].
+        unfold equiv_decb in Hwfa, Hwfst.
+        destruct (equiv_dec w x) as [Heq_wx | Hneq_wx].
+        { exfalso. rewrite Heq_wx in Hwvis. exact (Hnv_x Hwvis). }
+        { unfold dg_step. exists e. split; [| split]; auto.
+          unfold original_step. exists w. repeat split; auto. }
+      + (* fa_visited: new child x has parent v which is visited *)
+        unfold fa_visited. intros w Hfa_neq_w.
+        unfold equiv_decb. destruct (equiv_dec w x) as [Heq_wx | Hneq_wx].
+        { rewrite Heq_wx in *. simpl. unfold equiv_decb.
+          destruct (equiv_dec x x) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+          exact Hv_vis. }
+        { simpl in Hfa_neq_w. unfold equiv_decb in Hfa_neq_w.
+          destruct (equiv_dec w x) as [Heq' | Hneq'] in Hfa_neq_w.
+          { exfalso. apply Hneq_wx. exact Heq'. }
+          { simpl. unfold equiv_decb. destruct (equiv_dec w x) as [Heqw | Hneqw];
+              [exfalso; apply Hneq_wx; exact Heqw |]. apply Hfa_vis. exact Hfa_neq_w. } }
+    - (* low_forset_inv_core: children_done/back_edges_done unchanged because x ∉ done *)
+      set (new_s := RecordSet.set fa (fun (_ : V -> V) (x0 : V) => if equiv_decb x0 x then v else fa s0 x0) s0).
+      assert (Hchild_eq: children_done new_s u done == children_done s0 u done). {
+        unfold children_done. simpl. apply Sets_equiv_Sets_included. split; sets_unfold.
+        - intros w [Hw_done [Hw_fa Hw_neq]]. unfold equiv_decb in Hw_fa, Hw_neq.
+          destruct (equiv_dec w x) as [Heqw | Hneqw].
+          + rewrite Heqw in Hw_done. exfalso. exact (Hndone_x Hw_done).
+          + split; [exact Hw_done | split; [exact Hw_fa | exact Hw_neq]].
+        - intros w [Hw_done [Hw_fa Hw_neq]]. unfold equiv_decb.
+          destruct (equiv_dec w x) as [Heqw | Hneqw].
+          + rewrite Heqw in Hw_done. exfalso. exact (Hndone_x Hw_done).
+          + split; [exact Hw_done | split; [exact Hw_fa | exact Hw_neq]]. }
+      assert (Hback_eq: back_edges_done new_s u done == back_edges_done s0 u done). {
+        unfold back_edges_done. simpl. apply Sets_equiv_Sets_included. split; sets_unfold.
+        - intros w [Hw_done [Hw_stack Hw_fa]]. unfold equiv_decb in Hw_fa.
+          destruct (equiv_dec w x) as [Heqw | Hneqw].
+          + rewrite Heqw in Hw_done. exfalso. exact (Hndone_x Hw_done).
+          + split; [exact Hw_done | split; [exact Hw_stack | exact Hw_fa]].
+        - intros w [Hw_done [Hw_stack Hw_fa]]. unfold equiv_decb.
+          destruct (equiv_dec w x) as [Heqw | Hneqw].
+          + rewrite Heqw in Hw_done. exfalso. exact (Hndone_x Hw_done).
+          + split; [exact Hw_done | split; [exact Hw_stack | exact Hw_fa]]. }
+      subst new_s.
+      apply min_eq_forward with (f1 := fun x0 : nat => x0) (f2 := fun x0 : nat => x0) (P1 := fun n : nat => min_value_of_subset Nat.le (children_done s0 u done) (low s0) n \/ min_value_of_subset Nat.le (fun w => back_edges_done s0 u done w \/ w = u) (dfn s0) n) (P2 := fun n : nat => min_value_of_subset Nat.le (children_done (RecordSet.set fa (fun (_ : V -> V) (x0 : V) => if equiv_decb x0 x then v else fa s0 x0) s0) u done) (low s0) n \/ min_value_of_subset Nat.le (fun w => back_edges_done (RecordSet.set fa (fun (_ : V -> V) (x0 : V) => if equiv_decb x0 x then v else fa s0 x0) s0) u done w \/ w = u) (dfn s0) n) (n := low s0 u); [typeclasses eauto|exact Hmin| |].
+      { intros a1 Ha1; destruct Ha1 as [Ha1|Ha1].
+        - destruct Ha1 as [w' [[Hw_in Hw_min] Heq_a1]]; exists a1; split; [left; exists w'; split; [unfold min_object_of_subset; split; [apply Hchild_eq; exact Hw_in|intros w0 Hw0; apply Hchild_eq in Hw0; apply Hw_min; exact Hw0]|exact Heq_a1]|apply Nat.le_refl].
+        - destruct Ha1 as [w' [[Hw_in Hw_min] Heq_a1]]; exists a1; split; [right; exists w'; split; [unfold min_object_of_subset; split; [destruct Hw_in as [Hw_back|Hw_u]; [left; apply Hback_eq; exact Hw_back|right; exact Hw_u]|intros w0 Hw0; destruct Hw0 as [Hw0_back|Hw0_u]; [apply Hw_min; left; apply Hback_eq; exact Hw0_back|subst w0; apply Hw_min; right; reflexivity]]|exact Heq_a1]|apply Nat.le_refl]. }
+      { intros a2 Ha2; destruct Ha2 as [Ha2|Ha2].
+        - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [left; exists w'; split; [unfold min_object_of_subset; split; [apply Hchild_eq; exact Hw_in|intros w0 Hw0; apply Hchild_eq in Hw0; apply Hw_min; exact Hw0]|exact Heq_a2]|apply Nat.le_refl].
+        - destruct Ha2 as [w' [[Hw_in Hw_min] Heq_a2]]; exists a2; split; [right; exists w'; split; [unfold min_object_of_subset; split; [destruct Hw_in as [Hw_back|Hw_u]; [left; apply Hback_eq; exact Hw_back|right; exact Hw_u]|intros w0 Hw0; destruct Hw0 as [Hw0_back|Hw0_u]; [apply Hw_min; left; apply Hback_eq; exact Hw0_back|subst w0; apply Hw_min; right; reflexivity]]|exact Heq_a2]|apply Nat.le_refl]. }
+  Qed.
 
 
 
@@ -1428,8 +1608,98 @@ Section IS_LOW.
       so the nested min condition transfers via [min_eq_forward]. *)
   Lemma low_forset_inv_proper u: Proper (Sets.equiv ==> eq ==> iff) (low_forset_inv u).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros done1 done2 Hequiv s1 s2 Heq. subst s2.
+    assert (Hincl12: done1 ⊆ done2). {
+      apply Sets_equiv_Sets_included in Hequiv. tauto. }
+    assert (Hincl21: done2 ⊆ done1). {
+      apply Sets_equiv_Sets_included in Hequiv. tauto. }
+    assert (Hchild_eq: children_done s1 u done1 == children_done s1 u done2). {
+      unfold children_done.
+      apply Sets_equiv_Sets_included. split.
+      - sets_unfold. intros x [Hx_d1 [Hfa_x Hneq]]. split; [apply Hincl12; exact Hx_d1 | auto].
+      - sets_unfold. intros x [Hx_d2 [Hfa_x Hneq]]. split; [apply Hincl21; exact Hx_d2 | auto]. }
+    assert (Hback_eq: back_edges_done s1 u done1 == back_edges_done s1 u done2). {
+      unfold back_edges_done.
+      apply Sets_equiv_Sets_included. split.
+      - sets_unfold. intros x [Hx_d1 [Hst Hfa]]. split; [apply Hincl12; exact Hx_d1 | auto].
+      - sets_unfold. intros x [Hx_d2 [Hst Hfa]]. split; [apply Hincl21; exact Hx_d2 | auto]. }
+    split; intro Hlow; unfold low_forset_inv, low_forset_inv_core in *;
+      destruct Hlow as [Hwf [Hvis Hmin]].
+    - (* forward: done1 → done2 *)
+      split; [exact Hwf | split; [exact Hvis |]].
+      eapply min_eq_forward; [auto using NatLe_TotalOrder | exact Hmin | | ].
+      + intros a1 Ha1. exists a1. split.
+        * destruct Ha1 as [Ha1_L | Ha1_R].
+          -- left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a1.
+          -- right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a1.
+        * apply Nat.le_refl.
+      + intros a2 Ha2. exists a2. split.
+        * destruct Ha2 as [Ha2_L | Ha2_R].
+          -- left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a2.
+          -- right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a2.
+        * apply Nat.le_refl.
+    - (* backward: done2 → done1 *)
+      split; [exact Hwf | split; [exact Hvis |]].
+      eapply min_eq_forward; [auto using NatLe_TotalOrder | exact Hmin | | ].
+      + intros a1 Ha1. exists a1. split.
+        * destruct Ha1 as [Ha1_L | Ha1_R].
+          -- left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a1.
+          -- right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a1.
+        * apply Nat.le_refl.
+      + intros a2 Ha2. exists a2. split.
+        * destruct Ha2 as [Ha2_L | Ha2_R].
+          -- left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** apply Hchild_eq. exact Hw_in.
+                ** intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx.
+             ++ exact Heq_a2.
+          -- right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]]. exists w. split.
+             ++ unfold min_object_of_subset. split.
+                ** destruct Hw_in as [Hw_back | Hw_u].
+                   --- left. apply Hback_eq. exact Hw_back.
+                   --- right. exact Hw_u.
+                ** intros x Hx. destruct Hx as [Hx_back | Hx_u].
+                   --- apply Hw_min. left. apply Hback_eq. exact Hx_back.
+                   --- subst x. apply Hw_min. right. reflexivity.
+             ++ exact Heq_a2.
+        * apply Nat.le_refl.
+  Qed.
 
   Lemma done_visited_proper: Proper (Sets.equiv ==> eq ==> iff) done_visited.
   Proof.
