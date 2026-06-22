@@ -1256,8 +1256,56 @@ Section IS_LOW.
           (pop_scc a)
           (fun _ s => low_forset_inv u done s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) a) as [popped rest] eqn:Hsplit. simpl.
+    destruct H as [Hinv [Hin_stack Hdone_not_popped]].
+    unfold low_forset_inv, low_forset_inv_core in *.
+    destruct Hinv as [Hwf [Huvis Hmin]].
+    destruct (stack_split_at_partition (stack s0) a popped rest Hsplit) as [Hrest_incl [Hfresh Hcover]].
+    unfold low_forset_inv, low_forset_inv_core. simpl.
+    split; [| split; [simpl; exact Huvis |]].
+    - (* wf_scc_state *)
+      destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
+      unfold wf_scc_state. simpl. split; [| split; [exact Hinv' | split; [exact Hvalid | exact Hfa_vis]]].
+      unfold stack_in_visited. intros w Hw. apply Hrest_incl in Hw. apply Hsiv. exact Hw.
+    - (* min condition: children_done unchanged (depends on fa), back_edges_done unchanged
+         because all done vertices are NOT in popped, hence remain on rest ⊆ stack *)
+      unfold children_done, back_edges_done in *. simpl.
+      assert (Hback_eq: (fun w => (w ∈ done /\ In w rest /\ fa s0 w <> u) \/ w = u) ==
+                        (fun w => (w ∈ done /\ In w (stack s0) /\ fa s0 w <> u) \/ w = u)).
+      { apply Sets_equiv_Sets_included. split; sets_unfold.
+        - intros w [[Hdone [Hin_rest Hfa_neq]] | Heq_w].
+          + left. split; [exact Hdone | split; [apply Hrest_incl; exact Hin_rest | exact Hfa_neq]].
+          + right. exact Heq_w.
+        - intros w [[Hdone [Hin_stk Hfa_neq]] | Heq_w].
+          + left. split; [exact Hdone |].
+            split; [| exact Hfa_neq].
+            assert (Hin_rest_or_popped: In w rest \/ In w popped).
+            { apply Hcover in Hin_stk. destruct Hin_stk as [Hp | Hr]; [right; exact Hp | left; exact Hr]. }
+            destruct Hin_rest_or_popped as [Hr | Hp]; [exact Hr |].
+            exfalso. exact (Hdone_not_popped w Hdone popped rest eq_refl Hp).
+          + right. exact Heq_w. }
+      eapply min_eq_forward; [auto using NatLe_TotalOrder | exact Hmin | | ].
+      + intros a1 Ha1. exists a1. split; [| apply Nat.le_refl].
+        destruct Ha1 as [Ha1_L | Ha1_R].
+        * left. exact Ha1_L.
+        * right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          -- unfold min_object_of_subset. split.
+             ++ apply Hback_eq. exact Hw_in.
+             ++ intros x Hx. apply Hback_eq in Hx. apply Hw_min. exact Hx.
+          -- exact Heq_a1.
+      + intros a2 Ha2. exists a2. split; [| apply Nat.le_refl].
+        destruct Ha2 as [Ha2_L | Ha2_R].
+        * left. exact Ha2_L.
+        * right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          -- unfold min_object_of_subset. split.
+             ++ apply Hback_eq. exact Hw_in.
+             ++ intros x Hx. apply Hback_eq in Hx. apply Hw_min. exact Hx.
+          -- exact Heq_a2.
+  Qed.
 
   (** [preloop_keeps_fa]: [preloop a] does not modify the [fa] field,
       so [fa s a = p] is preserved. *)
