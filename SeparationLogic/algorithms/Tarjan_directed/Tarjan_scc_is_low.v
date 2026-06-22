@@ -468,8 +468,19 @@ Section IS_LOW.
           (update_low u n)
           (fun _ s => wf_scc_state s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold update_low. intro_state. hoare_auto_s.
+    - (* n < low s0 u: set_low branch *)
+      destruct H as [Hwf Huvis].
+      pose (f := fun (s: SCCSt) => set low (fun low0 x => if x ==b u then n else low0 x) s).
+      apply (Hoare_conseq_post (fun s => s = s0) (update' f)
+        (fun _ s => wf_scc_state s) (fun _ s1 => s1 = f s0)).
+      intros _ s1 Heq. subst s1. unfold f, wf_scc_state.
+      destruct s0 as [vis timer fa dfn low stack sccs]. simpl.
+      unfold wf_scc_state in Hwf. simpl in Hwf. exact Hwf.
+      apply Hoare_update'.
+    - (* ~ n < low s0 u: skip branch *)
+      destruct H1 as [Heq _]. subst s. destruct H as [Hwf _]. exact Hwf.
+  Qed.
 
 
   (* ================================================================ *)
