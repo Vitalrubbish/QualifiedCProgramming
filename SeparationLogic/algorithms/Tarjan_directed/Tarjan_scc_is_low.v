@@ -733,8 +733,62 @@ Section IS_LOW.
           (pop_scc u)
           (fun _ s => wf_scc_state s /\ scc_low_valid_v s u).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold pop_scc. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit. simpl.
+    destruct H as [Hwf [Hlow_valid Heq_low]].
+    destruct (stack_split_at_partition (stack s0) u popped rest Hsplit) as [Hrest_incl [Hfresh Hcover]].
+    assert (Hwf_post: wf_scc_state
+      {| visited := visited s0; timer := timer s0;
+         dfn := dfn s0; low := low s0; fa := fa s0;
+         stack := rest; sccs := (fun v => In v popped) :: sccs s0 |}).
+    { destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+      unfold wf_scc_state. simpl. split; [| split; [| split]]; auto.
+      (* stack_in_visited: rest ⊆ original stack ⊆ visited *)
+      unfold stack_in_visited. intros w Hw. simpl in Hw.
+      apply Hrest_incl in Hw. apply Hsiv. exact Hw. }
+    assert (Hlow_valid_post: scc_low_valid_v
+      {| visited := visited s0; timer := timer s0;
+         dfn := dfn s0; low := low s0; fa := fa s0;
+         stack := rest; sccs := (fun v => In v popped) :: sccs s0 |} u).
+    { unfold scc_low_valid_v. simpl. rewrite Heq_low.
+      exists (dfn s0 u). split.
+      - split.
+        + sets_unfold. right.
+          exists u. split.
+          * split.
+            -- sets_unfold. right. reflexivity.
+            -- intros v Hv. sets_unfold in Hv.
+               destruct Hv as [Hback_post | Heq_v].
+               ++ destruct Hback_post as [Hstep [Hin_rest Hnot_tree]].
+                  assert (Hv_in_stack0: In v (stack s0)). { apply Hrest_incl. exact Hin_rest. }
+                  assert (Hback_pre: scc_back_edge s0 u v). {
+                    unfold scc_back_edge. split; [exact Hstep | split; [exact Hv_in_stack0 | exact Hnot_tree]]. }
+                  eapply scc_low_valid_v_low_eq_dfn_implies_dfn_le_back_edge_dfn;
+                    [exact Hlow_valid | exact Heq_low | exact Hback_pre].
+               ++ subst v. apply Nat.le_refl.
+          * reflexivity.
+        + intros n Hn. sets_unfold in Hn.
+          destruct Hn as [Hn_left | Hn_right].
+          * unfold scc_low_valid_v in Hlow_valid.
+            destruct Hlow_valid as [a_pre [[_ Ha_pre_min] Ha_pre_eq]].
+            rewrite Heq_low in Ha_pre_eq.
+            rewrite <- Ha_pre_eq.
+            apply Ha_pre_min. sets_unfold. left. exact Hn_left.
+          * destruct Hn_right as [v [[Hv_in Hv_min] Heq_v]].
+            rewrite <- Heq_v.
+            sets_unfold in Hv_in.
+            destruct Hv_in as [Hback_post | Heq_vin].
+            -- destruct Hback_post as [Hstep [Hin_rest Hnot_tree]].
+               assert (Hv_in_stack0: In v (stack s0)). { apply Hrest_incl. exact Hin_rest. }
+               assert (Hback_pre: scc_back_edge s0 u v). {
+                 unfold scc_back_edge. split; [exact Hstep | split; [exact Hv_in_stack0 | exact Hnot_tree]]. }
+               eapply scc_low_valid_v_low_eq_dfn_implies_dfn_le_back_edge_dfn;
+                 [exact Hlow_valid | exact Heq_low | exact Hback_pre].
+            -- subst v. apply Nat.le_refl.
+      - reflexivity. }
+    split; [exact Hwf_post | exact Hlow_valid_post].
+  Qed.
 
   (* ================================================================ *)
   (* 9. Set Decomposition Lemmas (needed for process_edge)            *)
