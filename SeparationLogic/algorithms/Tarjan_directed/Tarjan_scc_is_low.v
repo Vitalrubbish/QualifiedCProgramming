@@ -139,16 +139,20 @@ Section IS_LOW.
     scc_is_low_v_val s w n ->
     exists x, scc_low_tree s w x /\ dfn s x = n.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold scc_is_low_v_val.
+    intros H. destruct H as [x [[Hin Hmin] Heq]].
+    exists x; auto.
+  Qed.
 
   Lemma scc_low_bound (s: @SCCSt V) (w: V) (n: nat) (x: V):
     scc_is_low_v_val s w n ->
     scc_low_tree s w x ->
     n <= dfn s x.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold scc_is_low_v_val.
+    intros H Hx. destruct H as [y [[Hin Hmin] Heq]].
+    subst. apply Hmin. auto.
+  Qed.
 
   (* ================================================================ *)
   (* 3. Helper Lemma: First Step Decomposition                        *)
@@ -158,8 +162,17 @@ Section IS_LOW.
     dg_reachable T u z ->
     u = z \/ exists v, dg_step T u v /\ dg_reachable T v z.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    induction 1.
+    - right. exists y. split; [exact H |].
+      apply Coq.Relations.Relation_Operators.rt_refl.
+    - left. reflexivity.
+    - destruct IHclos_refl_trans1 as [Heq | [v [Hstep_uv Hreach_vy]]].
+      + subst y. exact IHclos_refl_trans2.
+      + right. exists v. split; [exact Hstep_uv |].
+        eapply Coq.Relations.Relation_Operators.rt_trans.
+        * exact Hreach_vy.
+        * exact H1.
+  Qed.
 
   (* ================================================================ *)
   (* 4. SCC Low Tree Decomposition                                    *)
@@ -217,12 +230,60 @@ Section IS_LOW.
       primitive operation.  This makes later Hoare triples more compact
       and emphasizes that the four predicates are maintained together. *)
 
+  (** [wf_scc_state]: global well-formedness predicate preserved by every
+      primitive operation of the Tarjan algorithm. *)
   Definition wf_scc_state (s: @SCCSt V): Prop :=
     stack_in_visited s /\ dfn_inv s /\ dfn_valid g s root /\ fa_visited s.
 
+  (** [pop_scc_preserves_wf_scc_state]: [pop_scc] only removes vertices from
+      the stack and adds an SCC record; it does not modify [visited], [dfn],
+      [fa], or the low/dfn values of remaining vertices. *)
   Lemma pop_scc_preserves_wf_scc_state (u: V):
     Hoare (fun s: @SCCSt V => wf_scc_state s)
           (pop_scc u)
+          (fun _ s => wf_scc_state s).
+  Proof.
+    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
+    Admitted.
+
+  (** [preloop_preserves_wf_scc_state]: [preloop u] assigns [dfn u], [low u],
+      pushes [u] onto the stack, and marks [u] visited. Under [~ u ∈ visited]
+      and [wf_scc_state], these updates preserve the four global invariants. *)
+  Lemma preloop_preserves_wf_scc_state (u: V):
+    Hoare (fun s: @SCCSt V => wf_scc_state s /\ ~ u ∈ visited s)
+          (preloop u)
+          (fun _ s => wf_scc_state s).
+  Proof.
+    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
+    Admitted.
+
+  (** [set_fa_preserves_wf_scc_state]: [set_fa v u] only changes [fa v].
+      It preserves [wf_scc_state] as long as the new parent [u] is visited,
+      which maintains [fa_visited]. *)
+  Lemma set_fa_preserves_wf_scc_state (v u: V):
+    Hoare (fun s: @SCCSt V => wf_scc_state s /\ u ∈ visited s)
+          (set_fa v u)
+          (fun _ s => wf_scc_state s).
+  Proof.
+    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
+    Admitted.
+
+  (** [set_low_preserves_wf_scc_state]: [set_low u n] only changes [low u],
+      so all four global invariants are trivially preserved. *)
+  Lemma set_low_preserves_wf_scc_state (u: V) (n: nat):
+    Hoare (fun s: @SCCSt V => wf_scc_state s)
+          (set_low u n)
+          (fun _ s => wf_scc_state s).
+  Proof.
+    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
+    Admitted.
+
+  (** [update_low_preserves_wf_scc_state]: [update_low u n] is a read of
+      [low u] followed by [set_low u (min (low u) n)], so it preserves
+      [wf_scc_state] (requires [u] visited so that [low u] is defined). *)
+  Lemma update_low_preserves_wf_scc_state (u: V) (n: nat):
+    Hoare (fun s: @SCCSt V => wf_scc_state s /\ u ∈ visited s)
+          (update_low u n)
           (fun _ s => wf_scc_state s).
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
@@ -240,32 +301,38 @@ Section IS_LOW.
   Definition children_done (s: @SCCSt V) (u: V) (done: V -> Prop) (v: V): Prop :=
     v ∈ done /\ fa s v = u /\ fa s v <> v.
 
-  Definition children_done_visited (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
-    forall v, children_done s u done v -> v ∈ visited s.
-
   Definition done_visited (done: V -> Prop) (s: @SCCSt V): Prop :=
     forall w, done w -> w ∈ visited s.
 
   Definition back_edges_done (s: @SCCSt V) (u: V) (done: V -> Prop) (v: V): Prop :=
     v ∈ done /\ In v (stack s) /\ fa s v <> u.
 
-  Definition low_forset_inv (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
-    stack_in_visited s /\
-    dfn_inv s /\
-    dfn_valid g s root /\
-    fa_visited s /\
-    u ∈ visited s /\
+  (** [low_forset_inv_core]: the part of [low_forset_inv] that actually
+      depends on the processed-child set [done].  It states that [low s u]
+      is the minimum of (low values of proper children in [done]) and
+      (dfn values of back-edge targets in [done], plus [u] itself). *)
+  Definition low_forset_inv_core (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
     min_value_of_subset Nat.le
       (min_value_of_subset Nat.le (children_done s u done) (low s) ∪
        min_value_of_subset Nat.le
          (fun w => back_edges_done s u done w \/ w = u) (dfn s))
       (fun x => x) (low s u).
 
-  Definition low_pre (u: V) (s: @SCCSt V): Prop :=
-    stack_in_visited s /\ ~ u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s.
+  (** [low_forset_inv]: local low-link invariant for vertex [u] after
+      processing the child set [done].  It combines the global well-formedness
+      predicate, the fact that [u] is visited, and the core min condition. *)
+  Definition low_forset_inv (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
+    wf_scc_state s /\ u ∈ visited s /\ low_forset_inv_core u done s.
 
+  (** [low_pre]: pre-condition for [tarjan_scc g u].  Only requires global
+      well-formedness and that [u] has not been visited yet. *)
+  Definition low_pre (u: V) (s: @SCCSt V): Prop :=
+    wf_scc_state s /\ ~ u ∈ visited s.
+
+  (** [low_post]: post-condition for [tarjan_scc g u].  Requires global
+      well-formedness and that [u]'s low-link value is correct. *)
   Definition low_post (u: V) (s: @SCCSt V): Prop :=
-    scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s.
+    wf_scc_state s /\ scc_low_valid_v s u.
 
   (* ================================================================ *)
   (* 6.5. Fa Constraint Lemmas (Phase 1)                               *)
@@ -278,12 +345,6 @@ Section IS_LOW.
       equal [u] when [v ≠ u]. *)
   Lemma low_pre_fa_eq_u_implies_eq_u (u v: V) (s: @SCCSt V):
     low_pre u s -> fa s v = u -> v = u.
-  Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
-
-  Lemma low_pre_no_fa_child_of_u (u v: V) (s: @SCCSt V):
-    low_pre u s -> ~ (fa s v = u /\ fa s v <> v).
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
@@ -303,14 +364,21 @@ Section IS_LOW.
   Lemma children_done_empty (s: @SCCSt V) (u: V):
     children_done s u ∅ == ∅.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold children_done.
+    hnf. intro v. hnf. split; intros H; [destruct H as [Hemp _] | destruct H].
+    sets_unfold in Hemp. destruct Hemp.
+  Qed.
 
   Lemma back_edges_done_empty_char (s: @SCCSt V) (u: V):
     (fun w => back_edges_done s u ∅ w \/ w = u) == [u].
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    hnf. intro w. hnf. split; intros H.
+    - destruct H as [Hbed | Heq].
+      + unfold back_edges_done in Hbed. destruct Hbed as [Hemp _].
+        sets_unfold in Hemp. destruct Hemp.
+      + sets_unfold. symmetry. exact Heq.
+    - sets_unfold in H. subst w. right. reflexivity.
+  Qed.
 
   Lemma low_eq_dfn_to_min_empty (u: V) (s: @SCCSt V):
     low s u = dfn s u ->
@@ -319,8 +387,30 @@ Section IS_LOW.
        min_value_of_subset Nat.le (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
       (fun x => x) (low s u).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros Heq. rewrite Heq.
+    exists (dfn s u). split.
+    - split.
+      + sets_unfold. right.
+        exists u. split.
+        * split.
+          -- unfold back_edges_done. sets_unfold. right. reflexivity.
+          -- intros v Hv_back. unfold back_edges_done in Hv_back. compute in Hv_back.
+             destruct Hv_back as [[Hfalse_v _] | Heq_v].
+             ++ destruct Hfalse_v.
+             ++ subst v. apply Nat.le_refl.
+        * reflexivity.
+      + intros b Hb. sets_unfold in Hb.
+        destruct Hb as [Hb_left | Hb_right].
+        * destruct Hb_left as [v [[Hv_in _] Heq_v]].
+          unfold children_done in Hv_in. sets_unfold in Hv_in.
+          destruct Hv_in as [Hfalse_v _]. destruct Hfalse_v.
+        * destruct Hb_right as [v [[Hv_in Hv_min] Heq_v]].
+          unfold back_edges_done in Hv_in. compute in Hv_in.
+          destruct Hv_in as [[Hfalse_in _] | Heq_vin].
+          -- destruct Hfalse_in.
+          -- subst v. rewrite Heq_v. apply Nat.le_refl.
+    - reflexivity.
+  Qed.
 
   Lemma preloop_establishes_low_forset_inv (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s)
@@ -359,10 +449,9 @@ Section IS_LOW.
 
   Lemma pop_scc_keep_scc_low_valid_v (u: V):
     Hoare (fun s: @SCCSt V =>
-      scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s /\
-      low s u = dfn s u)
+      wf_scc_state s /\ scc_low_valid_v s u /\ low s u = dfn s u)
           (pop_scc u)
-          (fun _ s => scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
+          (fun _ s => wf_scc_state s /\ scc_low_valid_v s u).
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
@@ -411,16 +500,10 @@ Section IS_LOW.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
 
-  (** [set_low_keep_low_forset_inv_components]: [set_low u n] only
-      modifies [low]; all other fields are unchanged. *)
-  Lemma set_low_keep_low_forset_inv_components (u: V) (n: nat):
-    Hoare (fun s: @SCCSt V => dfn_inv s /\ dfn_valid g s root /\ fa_visited s /\ u ∈ visited s)
-          (set_low u n)
-          (fun _ s => dfn_inv s /\ dfn_valid g s root /\ fa_visited s /\ u ∈ visited s).
-  Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
-
+  (** [set_low_preserves_low_forset_inv]: changing [low v] does not affect
+      [low_forset_inv u done] when [u <> v] and [~ done v], because [v] is not
+      in [children_done u done] and not in [back_edges_done u done].
+      [wf_scc_state] is preserved by [set_low_preserves_wf_scc_state]. *)
   Lemma set_low_preserves_low_forset_inv (u v: V) (done: V -> Prop) (n: nat):
     u <> v -> ~ done v ->
     Hoare (fun s: @SCCSt V => low_forset_inv u done s)
@@ -445,8 +528,21 @@ Section IS_LOW.
   Lemma low_forset_inv_implies_low_le_dfn (u: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s -> low s u <= dfn s u.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold low_forset_inv, low_forset_inv_core.
+    intros [[_ [_ [_ Hfa]]] [Huvis Hmin] ].
+    destruct Hmin as [m [[Hm_in Hm_min] Heq_m]].
+    rewrite <- Heq_m.
+    assert (Hright: exists r, min_value_of_subset Nat.le (fun w => back_edges_done s u done w \/ w = u) (dfn s) r). {
+      apply min_nonempty_exists. exists u. sets_unfold. right. reflexivity. }
+    destruct Hright as [r Hr].
+    assert (Hr_le_u: r <= dfn s u). {
+      destruct Hr as [w [[Hw_in Hw_min] Hr_eq]].
+      rewrite <- Hr_eq.
+      apply Hw_min. sets_unfold. right. reflexivity. }
+    assert (Hm_le_r: m <= r). {
+      apply Hm_min. sets_unfold. right. exact Hr. }
+    apply Nat.le_trans with (m := r); auto.
+  Qed.
 
   Lemma update_low_back_edge (u v: V) (done: V -> Prop) (s: @SCCSt V):
     dg_step g u v ->
@@ -466,8 +562,24 @@ Section IS_LOW.
     children_done s u done v ->
     low s u <= low s v.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold low_forset_inv, low_forset_inv_core.
+    intros [_ [Huvis Hmin]] Hchild.
+    destruct Hmin as [m [[Hm_in Hm_min] Heq_m]].
+    rewrite <- Heq_m.
+    assert (Hchild_min_exists: exists cmin,
+      min_value_of_subset Nat.le (children_done s u done) (low s) cmin). {
+      apply min_nonempty_exists. exists v. exact Hchild. }
+    destruct Hchild_min_exists as [cmin Hcmin].
+    assert (Hcmin_in_union: cmin ∈ (min_value_of_subset Nat.le (children_done s u done) (low s) ∪
+      min_value_of_subset Nat.le (fun w => back_edges_done s u done w \/ w = u) (dfn s))). {
+      sets_unfold. left. exact Hcmin. }
+    assert (Hm_le_cmin: m <= cmin). {
+      apply Hm_min. exact Hcmin_in_union. }
+    destruct Hcmin as [w [[Hw_in Hw_min] Heq_cmin]].
+    assert (Hcmin_le_lowv: cmin <= low s v). {
+      rewrite <- Heq_cmin. apply Hw_min. exact Hchild. }
+    eapply Nat.le_trans; eauto.
+  Qed.
 
   (** [low_forset_inv_expand_child_done]: When [v] is a proper child
       of [u] ([fa s v = u], [fa s v ≠ v]) and [low s u ≤ low s v],
@@ -820,33 +932,10 @@ Section IS_LOW.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
 
-  Lemma children_done_visited_proper u: Proper (Sets.equiv ==> eq ==> iff) (children_done_visited u).
-  Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
-
   Lemma done_visited_proper: Proper (Sets.equiv ==> eq ==> iff) done_visited.
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
-
-  Inductive visited_tag :=
-    | VSelf | VKeep (w: V) | VKeepAll (done: V -> Prop)
-    | VKeepFaChildren (parent: V).
-
-  Definition visited_tag_pre (x: V) (t: visited_tag) (s: @SCCSt V): Prop :=
-    match t with
-    | VSelf => True | VKeep w => w ∈ visited s
-    | VKeepAll done => forall w, done w -> w ∈ visited s
-    | VKeepFaChildren parent => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v
-    end.
-
-  Definition visited_tag_post (x: V) (t: visited_tag) (_: unit) (s: @SCCSt V): Prop :=
-    match t with
-    | VSelf => x ∈ visited s | VKeep w => w ∈ visited s
-    | VKeepAll done => forall w, done w -> w ∈ visited s
-    | VKeepFaChildren parent => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v
-    end.
 
   (** [process_edge_keep_fa_children]: preserves the forall fa-children
       property.  Requires [dg_step g u v] (the edge being processed)
@@ -932,6 +1021,25 @@ Section IS_LOW.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
 
+  (** [forset_end_implies_scc_low_valid_v]: explicit two-stage closing lemma.
+      When [u]'s forset over all children has finished, [done = dg_step g u]
+      and the global/fa conditions needed by [low_forset_inv_to_scc_low_valid]
+      are available, so [scc_low_valid_v s u] holds.
+
+      This lemma makes the transition from the forset invariant to the target
+      property explicit, which is especially useful for cross-tree preservation:
+      an ancestor [u] only obtains [scc_low_valid_v s u] after its own forset
+      ends, not immediately when a child subtree returns. *)
+  Lemma forset_end_implies_scc_low_valid_v (u: V) (s: SCCSt):
+    low_forset_inv u (fun v => dg_step g u v) s ->
+    done_visited (fun v => dg_step g u v) s ->
+    (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
+    (forall v, In v (stack s) -> fa s v <> v) ->
+    scc_low_valid_v s u.
+  Proof.
+    (* Proof idea: direct application of [low_forset_inv_to_scc_low_valid]. *)
+    Admitted.
+
 
 
   (** [forset_keeps_low_forset_inv]: [forset (process_edge a W)] preserves
@@ -945,7 +1053,9 @@ Section IS_LOW.
         * Tree edge ([~ x ∈ visited]): [set_fa x a] preserves [low_forset_inv]
           by [set_fa_preserves_low_forset_inv_for_new_child]; the recursive
           [W x] preserves it by the IH; [update_low a (low x)] preserves it
-          by [update_low_tree_edge].
+          by [update_low_preserves_low_forset_inv_for_other] (since [u <> a]
+          and [a ∉ done] ensure [a] is not in [children_done] or
+          [back_edges_done] for [u]).
         * Non-tree edge ([x ∈ visited]):
           - If [x] is on the stack, it is a back edge; use [update_low_back_edge].
           - If [x] is not on the stack, it is a cross edge; adding [x] to [done]
@@ -957,7 +1067,7 @@ Section IS_LOW.
       - [low_forset_inv_proper]
       - [done_visited_proper]
       - [set_fa_preserves_low_forset_inv_for_new_child]
-      - [update_low_tree_edge]
+      - [update_low_preserves_low_forset_inv_for_other]
       - [update_low_back_edge] *)
   Lemma forset_keeps_low_forset_inv (u a: V) (done: V -> Prop)
     (W: V -> program (@SCCSt V) unit)
@@ -973,35 +1083,39 @@ Section IS_LOW.
     Admitted.
 
   (** [forset_keep_low_forset_inv]: after iterating over all children of [u],
-      [low_forset_inv u ∅] is turned into [scc_low_valid_v s u].
+      [low_forset_inv u ∅] is turned into [low_post u s].
 
       Proof plan: define the forset invariant
-        [P(done) := low_forset_inv u done s /\ dfn_valid g s root /\ dfn_inv s
-                    /\ fa_visited s /\ done_visited done s
+        [P(done) := wf_scc_state s /\ low_forset_inv_core u done s
+                    /\ done_visited done s
                     /\ (forall v, fa s v = u /\ fa s v <> v -> v ∈ done)].
+      - [wf_scc_state s] is preserved by every primitive operation; use the
+        [wf_scc_state] preservation lemmas (e.g. [set_fa_preserves_wf_scc_state],
+        [set_low_preserves_wf_scc_state], [update_low_preserves_wf_scc_state]).
       - Apply [Hoare_forset]; properness follows from [low_forset_inv_proper]
-        and [done_visited_proper].
+        (now only about the core) and [done_visited_proper].
       - For each neighbor [a0]:
         * Tree edge: after [set_fa a0 u], use [set_fa_W_preserves_low_forset_inv]
-          to run the recursive [W a0] while preserving [low_forset_inv u done]
+          to run the recursive [W a0] while preserving [low_forset_inv_core u done]
           and establishing [fa a0 = u]. Then [low_forset_inv_expand_child_done]
           moves from [done] to [done ∪ [a0]] (since [a0] is now a proper child
           and [low u ≤ low a0] holds after the recursive call).
         * Non-tree edge: back edge uses [update_low_back_edge]; cross edge uses
           set equivalence as in [forset_keeps_low_forset_inv].
-      - After the loop [done = dg_step g u]; the fa-child condition together
-        with [done_visited] gives the premises of [low_forset_inv_to_scc_low_valid],
-        yielding [scc_low_valid_v s u].
+      - After the loop [done = dg_step g u]; apply [forset_end_implies_scc_low_valid_v]
+        (a wrapper around [low_forset_inv_to_scc_low_valid]) to obtain
+        [scc_low_valid_v s u]. Together with [wf_scc_state s] this is [low_post u s].
 
       Required previous lemmas:
       - [Hoare_forset]
       - [low_forset_inv_proper]
       - [done_visited_proper]
+      - [wf_scc_state] preservation lemmas
       - [set_fa_W_preserves_low_forset_inv]
       - [update_low_tree_edge]
       - [update_low_back_edge]
       - [low_forset_inv_expand_child_done]
-      - [low_forset_inv_to_scc_low_valid] *)
+      - [forset_end_implies_scc_low_valid_v] *)
   Lemma forset_keep_low_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s) (W x)
                      (fun _ s => low_post x s /\ u ∈ visited s)) ->
@@ -1012,7 +1126,7 @@ Section IS_LOW.
                     (fun _ s => forall v, fa s v = u /\ fa s v <> v -> dg_step g u v)) ->
     Hoare (fun s => low_forset_inv u ∅ s /\ (forall v, fa s v = u -> v = u))
           (forset (fun v => dg_step g u v) (process_edge u W))
-          (fun _ s => scc_low_valid_v s u /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s).
+          (fun _ s => low_post u s).
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
@@ -1026,31 +1140,37 @@ Section IS_LOW.
       1. The auxiliary visitedness goal is discharged by the external lemma
          [tarjan_scc_keep_visited] from [Tarjan_scc_basics].
       2. In the body:
-         - [preloop u] establishes [low_forset_inv u ∅] by
-           [preloop_establishes_low_forset_inv]. [preloop_keeps_fa] gives
+         - [preloop u] preserves [wf_scc_state] by
+           [preloop_preserves_wf_scc_state] and establishes [low_forset_inv u ∅]
+           by [preloop_establishes_low_forset_inv]. [preloop_keeps_fa] gives
            [fa v = u -> v = u] for all [v].
          - The [forset] over children uses [forset_keep_low_forset_inv].
            Its four W-assumptions come from the induction hypotheses:
            * [HW_pre_post] from the low-link IH;
            * [HW_vis] from the visited IH;
-           * [HW_done_vis] by lifting the visited IH to arbitrary [done'];
+           * [HW_done_vis] from the forall version of the visited IH,
+             [tarjan_scc_keep_visited_forall] in [Tarjan_scc_basics];
            * [HW_fa_children] from [process_edge_keep_fa_children] and
              [tarjan_scc_keep_fa_children_in_universe] applied to the IH.
-           Result: [scc_low_valid_v s u /\ dfn_valid /\ dfn_inv /\ fa_visited].
+           Result: [low_post u s], i.e. [wf_scc_state s /\ scc_low_valid_v s u].
          - The final [If (low u = dfn u) (pop_scc u)]:
-           * If [low u = dfn u], apply [pop_scc_keep_scc_low_valid_v] to keep
+           * If [low u = dfn u], [pop_scc_preserves_wf_scc_state] preserves
+             [wf_scc_state]; apply [pop_scc_keep_scc_low_valid_v] to keep
              [scc_low_valid_v u].
-           * If not, the state is unchanged and [scc_low_valid_v u] still holds.
+           * If not, the state is unchanged and [low_post u] still holds.
       3. The postcondition is exactly [low_post u].
 
       Required previous lemmas:
       - [Hoare_fix_logicv_conj]
       - [tarjan_scc_keep_visited] (from Tarjan_scc_basics)
+      - [tarjan_scc_keep_visited_forall] (from Tarjan_scc_basics)
+      - [preloop_preserves_wf_scc_state]
       - [preloop_establishes_low_forset_inv]
       - [preloop_keeps_fa]
       - [forset_keep_low_forset_inv]
       - [process_edge_keep_fa_children]
       - [tarjan_scc_keep_fa_children_in_universe]
+      - [pop_scc_preserves_wf_scc_state]
       - [pop_scc_keep_scc_low_valid_v] *)
   Theorem tarjan_scc_keep_low_valid (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s)
@@ -1068,35 +1188,41 @@ Section IS_LOW.
       If [a] is unvisited and [scc_low_valid] holds for all currently
       visited vertices, then after [tarjan_scc g a], [scc_low_valid]
       holds for all vertices (including new ones in [a]'s SCC tree).
-      Also preserves [dfn_inv], [fa_visited], [dfn_valid].
+      Also preserves [wf_scc_state].
 
-      Proof plan:
+      Proof plan (two-stage cross-tree argument):
       1. From [tarjan_scc_keep_low_valid], after [tarjan_scc g a] we have
          [low_post a], in particular [scc_low_valid_v s a]. Thus [a] and the
          vertices in its DFS subtree satisfy [scc_low_valid_v].
-      2. Cross-tree preservation: for any already-visited vertex [u] that is an
-         ancestor of [a] in the DFS tree, [W_preserves_ancestor_inv] (or the
-         more specific [set_fa_W_preserves_low_forset_inv] for the tree-edge
-         step) preserves [low_forset_inv u done] for the growing [done] set.
-         When [a]'s subtree finishes, [done] contains all neighbors of [u];
-         apply [low_forset_inv_to_scc_low_valid] to obtain [scc_low_valid_v s u].
-      3. Vertices outside [a]'s subtree and not on its ancestor chain are not
-         affected by the state changes local to [a]'s subtree (their stack/dfn/
-         low/fa values remain unchanged), so their [scc_low_valid_v] is preserved.
-      4. [dfn_inv], [fa_visited], [dfn_valid] are preserved by the basic
-         primitive-operation invariants.
+      2. Stage one — ancestors keep [low_forset_inv]:
+         For any already-visited vertex [u] that is an ancestor of [a] in the
+         DFS tree, [W_preserves_ancestor_inv] (or the more specific
+         [set_fa_W_preserves_low_forset_inv] for the tree-edge step) preserves
+         [low_forset_inv u done] as [a]'s subtree executes. At the moment [a]'s
+         subtree returns, [done] has been expanded to include [a] (and possibly
+         other processed children of [u]), but it need not yet be all of
+         [dg_step g u].
+      3. Stage two — ancestors obtain [scc_low_valid_v] only after their own
+         forset ends: when [u]'s forset over all children eventually finishes,
+         [done = dg_step g u]. The fa-child condition and [done_visited] then
+         satisfy the premises of [forset_end_implies_scc_low_valid_v], yielding
+         [scc_low_valid_v s u].
+      4. Vertices outside [a]'s subtree and not on its ancestor chain are not
+         affected by the state changes local to [a]'s subtree, so their
+         [scc_low_valid_v] is preserved.
+      5. [wf_scc_state] is preserved by the [wf_scc_state] preservation lemmas
+         for every primitive operation.
 
       Required previous lemmas:
       - [tarjan_scc_keep_low_valid]
       - [W_preserves_ancestor_inv]
       - [set_fa_W_preserves_low_forset_inv]
-      - [low_forset_inv_to_scc_low_valid]
-      - Basic primitive invariants (e.g. [pop_scc_keep_dfn_inv],
-        [pop_scc_keep_fa_visited], [pop_scc_keep_dfn_valid]) *)
+      - [forset_end_implies_scc_low_valid_v]
+      - [wf_scc_state] preservation lemmas *)
   Lemma tarjan_scc_establishes_and_preserves_scc_low_valid (a: V):
-    Hoare (fun s => scc_low_valid s /\ dfn_inv s /\ fa_visited s /\ dfn_valid g s root /\ ~ a ∈ visited s)
+    Hoare (fun s => scc_low_valid s /\ wf_scc_state s /\ ~ a ∈ visited s)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
-          (fun _ s => scc_low_valid s /\ dfn_inv s /\ fa_visited s /\ dfn_valid g s root).
+          (fun _ s => scc_low_valid s /\ wf_scc_state s).
   Proof.
     (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
     Admitted.
@@ -1106,29 +1232,31 @@ Section IS_LOW.
 
       Proof plan: [tarjan_scc_all] is a [forset] over all vertices
       [v] of [If (~ v ∈ visited) (tarjan_scc g v)]. Apply [Hoare_forset]
-      with invariant
-        [P(done) := (forall w, done w -> scc_low_valid_v s w)
-                    /\ dfn_inv s /\ fa_visited s /\ dfn_valid g s root].
-      - Properness of [P] follows from set-equivalence on [done].
+      with the constant invariant
+        [P(done) := scc_low_valid s /\ wf_scc_state s].
+      - Properness of [P] is trivial because [P] does not depend on [done].
       - For each vertex [a]:
         * If [~ a ∈ visited], use [tarjan_scc_establishes_and_preserves_scc_low_valid]
-          to establish [scc_low_valid_v s a] and preserve the invariant for
-          all already-done vertices.
-        * If [a ∈ visited], the command is a no-op. We need [P done -> P (done ∪ [a])],
-          i.e. [scc_low_valid_v s a] already holds. In the standard execution
-          (starting with empty visited) this is true because [a] was processed
-          in a previous iteration, so [a ∈ done].
-      - After the loop, [done] is the full vertex universe [original_vvalid g].
-        Since [visited s ⊆ original_vvalid g] is a basic invariant of Tarjan,
-        [scc_low_valid] follows.
+          to establish [scc_low_valid] for the enlarged [visited] set and preserve
+          [wf_scc_state]. Because [a] is unvisited before the call and a top-level
+          [tarjan_scc g a] finishes by popping [a]'s SCC, all vertices newly visited
+          by the call satisfy [scc_low_valid_v].
+        * If [a ∈ visited], the command is a no-op. [scc_low_valid s /\ wf_scc_state s]
+          is unchanged; in particular the invariant already guarantees
+          [scc_low_valid_v s a].
+      - After the loop, [P universe] gives [scc_low_valid s /\ wf_scc_state s].
+
+      Note: the original proof attempted a [done]-indexed invariant
+      [(forall w, done w -> scc_low_valid_v s w)]; the constant
+      [visited]-indexed invariant above is simpler and avoids the mismatch
+      between [done] and [visited] for already-seen vertices.
 
       Required previous lemmas:
       - [Hoare_forset]
       - [tarjan_scc_establishes_and_preserves_scc_low_valid]
-      - Basic invariant [visited s ⊆ original_vvalid g]
-        (available from Tarjan_scc / Tarjan_scc_basics) *)
+      - [wf_scc_state] preservation lemmas *)
   Theorem tarjan_scc_all_scc_low_valid:
-    Hoare (fun s: @SCCSt V => dfn_inv s /\ fa_visited s /\ dfn_valid g s root)
+    Hoare (fun s: @SCCSt V => wf_scc_state s)
           (tarjan_scc_all (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g)
           (fun _ s => scc_low_valid s).
   Proof.
@@ -1142,12 +1270,13 @@ Section IS_LOW.
       1. Use [Hoare_conseq_post] to strengthen the postcondition from
          [scc_low_valid s] to [scc_is_low s].
       2. Apply [scc_low_valid_implies_is_low], which requires [dfn_valid g s root]
-         and [dfn_inv s]. These are already part of the postcondition of
-         [tarjan_scc_all_scc_low_valid].
-      3. Combine [tarjan_scc_all_scc_low_valid] with the dfn invariants via
-         [Hoare_conj]. If needed, [dfn_valid] and [dfn_inv] for the full
-         algorithm are given by the external lemmas [tarjan_scc_all_dfn_valid]
-         and [tarjan_scc_all_keep_dfn_inv] from [Tarjan_scc_is_dfn].
+         and [dfn_inv s]. These are part of [wf_scc_state s], which is already
+         in the postcondition of [tarjan_scc_all_scc_low_valid].
+      3. Combine [tarjan_scc_all_scc_low_valid] with [wf_scc_state] via
+         [Hoare_conj]. If needed, [wf_scc_state] for the full algorithm is given
+         by the external lemmas [tarjan_scc_all_dfn_valid],
+         [tarjan_scc_all_keep_dfn_inv], and basic [fa_visited] preservation
+         from [Tarjan_scc_is_dfn].
 
       Required previous lemmas:
       - [tarjan_scc_all_scc_low_valid]
@@ -1156,7 +1285,7 @@ Section IS_LOW.
       - [tarjan_scc_all_keep_dfn_inv] (from Tarjan_scc_is_dfn)
       - [Hoare_conseq_post] / [Hoare_conj] *)
   Theorem tarjan_scc_all_scc_is_low:
-    Hoare (fun s: @SCCSt V => dfn_inv s /\ fa_visited s /\ dfn_valid g s root)
+    Hoare (fun s: @SCCSt V => wf_scc_state s)
           (tarjan_scc_all (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g)
           (fun _ s => scc_is_low s).
   Proof.
