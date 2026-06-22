@@ -2000,13 +2000,14 @@ Section IS_LOW.
           (pop_scc v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof.
-    (* 证明思路：pop_scc v 不修改 fa/low/dfn/visited，仅修改 stack/sccs。
-       fa s v = u 保持。对 low_forset_inv，back_edges_done 要求目标点仍在剩余栈 rest。
-       用 stack_split_at_partition 及前提“done 中点不在 popped 中”证明 back_edges_done
-       集合等价；再对嵌套 min 用 min_eq_forward 双向映射。
-       关键引理：stack_split_at_partition, stack_split_at_rest_incl,
-       stack_split_at_covers, stack_split_at_popped_fresh, min_eq_forward。 *)
-    Admitted.
+    intro_state. destruct H as [Hinv [Hfa_eq [Hndone_v [Hstep [Hin_stack Hdone_not_popped]]]]].
+    apply Hoare_conj.
+    - eapply Hoare_conseq_pre. 2: apply (pop_scc_keeps_low_forset_inv_other u v done).
+      intros s1 Hs1. subst s1. split; [exact Hinv | split; [exact Hin_stack | exact Hdone_not_popped]].
+    - unfold pop_scc. unfold_op. intro_state. hoare_auto_s. subst s.
+      subst s1. unfold pop_scc_state.
+      destruct (stack_split_at (stack s0) v) as [p r]. simpl. exact Hfa_eq.
+  Qed.
 
   (** [preloop_preserves_ancestor_inv]: [preloop v] modifies [dfn v],
       [low v], [timer], [stack], [visited] — all local to [v].
@@ -2016,14 +2017,21 @@ Section IS_LOW.
           (preloop v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u).
   Proof.
-    (* 证明思路：preloop v 不修改 fa，故 fa s v = u 保持。
-       对 low_forset_inv u done，思路同 preloop_keeps_low_forset_inv_other：
-       显式写出 preloop 后状态，证明 children_done/back_edges_done 与 low/dfn 不变，
-       用 min_eq_forward 保持 min 条件；反复利用 v∉done 与 u 已访问推出 u≠v。
-       关键引理：preloop_keeps_low_forset_inv_other, preloop_keeps_fa,
-       min_eq_forward, preloop_keep_stack_in_visited, preloop_keep_dfn_inv,
-       preloop_preserves_dfn_valid, preloop_keep_fa_visited, preloop_keep_visited。 *)
-    Admitted.
+    intro_state. destruct H as [Hinv [Hfa_eq [Hnv Hndone_v]]].
+    apply Hoare_conj.
+    - refine (Hoare_conseq_post (fun s => s = s0) (preloop v)
+               (fun _ s => low_forset_inv u done s)
+               (fun _ s => low_forset_inv u done s /\ v ∈ visited s) _ _).
+      { intros _ s [Hinv' _]. exact Hinv'. }
+      eapply Hoare_conseq_pre. 2: apply (preloop_keeps_low_forset_inv_other u v done).
+      intros s1 Hs1. subst s1. split; [exact Hinv | split; [exact Hnv | exact Hndone_v]].
+    - refine (Hoare_conseq_post (fun s => s = s0) (preloop v)
+               (fun _ s => fa s v = u)
+               (fun _ s => fa s v = u /\ v ∈ visited s) _ _).
+      { intros _ s [Hfa_eq' _]. exact Hfa_eq'. }
+      eapply Hoare_conseq_pre. 2: apply (preloop_keeps_fa v u).
+      intros s1 Hs1. subst s1. exact Hfa_eq.
+  Qed.
 
   (** [done_not_popped_by_subtree_pop_scc]: Under [low_forset_inv u done s]
       with [done_visited done s] and [~ done a], when [pop_scc a] splits
