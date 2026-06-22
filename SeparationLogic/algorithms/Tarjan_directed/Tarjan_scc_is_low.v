@@ -2508,20 +2508,88 @@ Section IS_LOW.
       [forall w, done w -> In w (stack s) -> dfn s w < dfn s a]
       (done vertices that are on the stack have smaller dfn than a,
       hence are below a). *)
+  (** [stack_split_at_in_popped_before_a]: If [w] is in [popped] from
+      [stack_split_at stk a], and [w ≠ a], then [w] appears strictly
+      before [a] in the list [stk].  This is a purely structural lemma
+      about [stack_split_at], independent of DFS invariants. *)
+  Lemma stack_split_at_in_popped_before_a (stk: list V) (a w: V):
+    In a stk ->
+    forall popped rest,
+      stack_split_at stk a = (popped, rest) ->
+      In w popped -> w <> a ->
+      exists l1 l2, stk = l1 ++ w :: l2 /\ In a l2.
+  Proof.
+    (* Proceed by induction on stk, keeping a, w general *)
+    induction stk as [| x xs IH] in a, w |- *;
+      intros Ha_in popped rest Hsplit Hw_in Hw_ne_a.
+    { destruct Ha_in. }
+    { simpl in Hsplit.
+      destruct (equiv_decb x a) eqn:Heq_xa.
+      (* Case: x = a. split returns (x::nil, xs). *)
+      { apply pair_equal_spec in Hsplit. destruct Hsplit as [Hpop Hrest]; subst popped rest.
+        simpl in Hw_in. destruct Hw_in as [Heq_wx | []].
+        exfalso. apply Hw_ne_a. rewrite <- Heq_wx.
+        unfold equiv_decb in Heq_xa. destruct (equiv_dec x a) as [Heq' | Hneq];
+          [exact Heq' | discriminate Heq_xa]. }
+      (* Case: x ≠ a. Split recurses, popped = x :: popped_inner. *)
+      { destruct (stack_split_at xs a) as (popped_inner, rest_inner) eqn:Hsplit_inner.
+        apply pair_equal_spec in Hsplit. destruct Hsplit as [Hpop Hrest]; subst popped rest.
+        simpl in Hw_in. destruct Hw_in as [Heq_wx | Hw_in_inner].
+        (* Subcase: w = x *)
+        { subst w. destruct Ha_in as [Heq_ax | Ha_in_xs].
+          { (* x = a contradicts x ≠ a *)
+            exfalso. unfold equiv_decb in Heq_xa.
+            rewrite Heq_ax in Heq_xa. destruct (equiv_dec a a) as [_ | Hc];
+              [discriminate Heq_xa | exfalso; apply Hc; reflexivity]. }
+          { (* a ∈ xs: x appears before a *)
+            exists (@nil V). exists xs. split; [reflexivity | exact Ha_in_xs]. } }
+        (* Subcase: w ∈ popped_inner *)
+        { destruct Ha_in as [Heq_ax | Ha_in_xs].
+          { (* x = a contradicts x ≠ a *)
+            exfalso. unfold equiv_decb in Heq_xa.
+            rewrite Heq_ax in Heq_xa. destruct (equiv_dec a a) as [_ | Hc];
+              [discriminate Heq_xa | exfalso; apply Hc; reflexivity]. }
+          { destruct (IH a w Ha_in_xs popped_inner rest_inner Hsplit_inner Hw_in_inner Hw_ne_a)
+              as (l1 & l2 & Heq & Ha_in_l2).
+            exists (x :: l1). exists l2. split.
+            { rewrite Heq. reflexivity. }
+            { exact Ha_in_l2. } } } }
+    }
+  Qed.
+
   Lemma done_not_popped_by_subtree_pop_scc (u a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s ->
     done_visited done s ->
     ~ done a ->
     In a (stack s) ->
+    (forall x y, In x (stack s) -> In y (stack s) ->
+      (exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2) -> dfn s y <= dfn s x) ->
     (forall w, done w -> In w (stack s) -> dfn s w < dfn s a) ->
     forall w, done w -> forall popped' rest',
       stack_split_at (stack s) a = (popped', rest') -> ~ In w popped'.
   Proof.
-    (* The dfn ordering hypothesis ensures that done vertices on the stack
-       have smaller dfn than a.  Since the stack is ordered by decreasing dfn
-       (newest vertex has largest dfn), vertices with smaller dfn are below a,
-       hence in rest' not popped'. *)
-  Admitted.
+    intros Hlow Hdv Hndone Ha_in_stack Hdfn_stack_order Hdfn_lt w Hdone popped' rest' Hsplit.
+    intro Hw_in_popped.
+    (* If w = a, contradiction with ~done a and done w *)
+    destruct (equiv_dec w a) as [Heq_wa | Hneq_wa].
+    { exfalso. apply Hndone. rewrite <- Heq_wa. exact Hdone. }
+    (* w ≠ a: use structural lemma to get w appears before a in the stack *)
+    destruct (stack_split_at_in_popped_before_a (stack s) a w
+      Ha_in_stack popped' rest' Hsplit Hw_in_popped Hneq_wa)
+      as [l1 [l2 [Heq_stk Ha_in_l2]]].
+    assert (Hw_in_stk: In w (stack s)). {
+      rewrite Heq_stk. apply in_or_app. right. simpl. left. reflexivity. }
+    assert (Ha_in_stk: In a (stack s)). {
+      rewrite Heq_stk. apply in_or_app. right. simpl. right. exact Ha_in_l2. }
+    (* dfn-stack-ordering: w appears before a, so dfn a <= dfn w *)
+    assert (Hdfn_le: dfn s a <= dfn s w). {
+      apply (Hdfn_stack_order w a Hw_in_stk Ha_in_stk).
+      exists l1. exists l2. split; [exact Heq_stk | exact Ha_in_l2]. }
+    (* But for done vertices on the stack, dfn w < dfn a *)
+    assert (Hdfn_lt': dfn s w < dfn s a). {
+      apply (Hdfn_lt w Hdone Hw_in_stk). }
+    lia.
+  Qed.
 
   (** [W_preserves_ancestor_inv]: Combining the above, [W v]
       ([tarjan_scc g v]) preserves [low_forset_inv u done] and
