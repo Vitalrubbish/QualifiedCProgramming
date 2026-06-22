@@ -340,8 +340,11 @@ Section IS_LOW.
           (preloop u)
           (fun _ s => wf_scc_state s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    (* Requires combining preloop_keep_stack_in_visited, preloop_keep_dfn_inv,
+       preloop_preserves_dfn_valid, preloop_keep_fa_visited using Hoare_conj
+       with precondition weakening. The individual lemmas have different
+       preconditions that need to be unified. *)
+  Admitted.
 
   (** [set_fa_preserves_wf_scc_state]: [set_fa v u] only changes [fa v].
       It preserves [wf_scc_state] as long as the new parent [u] is visited,
