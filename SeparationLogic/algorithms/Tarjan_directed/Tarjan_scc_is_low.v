@@ -2392,10 +2392,8 @@ Section IS_LOW.
           (process_edge u W v)
           (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
   Proof.
-    (* 证明思路：参照 process_edge_keeps_fa_simple 的结构：
-       树边分支 set_fa v u 后新 fa-child v 由 Hstep 处理，其余保持；
-       W 递归调用 IH 保持；get'/update_low 不修改 fa。
-       非树边不修改 fa。 *)
+    (* 证明策略正确（参照 process_edge_keeps_fa_simple），但 hoare_auto_s
+       引入的变量名在交互式与批处理间不一致，需要逐分支调试。 *)
     Admitted.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
