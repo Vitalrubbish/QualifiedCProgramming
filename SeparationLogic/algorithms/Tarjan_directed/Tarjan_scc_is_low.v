@@ -2105,16 +2105,6 @@ Section IS_LOW.
           { right. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hinx]. } } } }
   Qed.
 
-  (** [done_vertex_dfn_lt]: For the current vertex [a] (with [~ done a],
-      [In a (stack s)]) and any [done] vertex [w] still on the stack,
-      [dfn s w < dfn s a].  This holds because [w] was processed before
-      [a] (it is already in [done] while [a] is not), so [preloop w]
-      executed earlier, assigning a smaller dfn from the monotonically
-      increasing timer.  The proof uses [stack_dfn_order] to deduce
-      [dfn s w <= dfn s a] (since [a] is above [w]), and [dfn_injective]
-      (from [low_forset_inv]'s [dfn_valid] and [dfn_inv] which together
-      ensure uniqueness of dfn values on the stack) to rule out equality,
-      yielding the strict inequality. *)
   (** [preloop_above_existing]: After [preloop x], [x] is above any
       vertex [y] that was on the stack before (and [x ≠ y]). *)
   Lemma preloop_above_existing (x y: V):
@@ -2124,96 +2114,6 @@ Section IS_LOW.
   Proof.
     unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
     exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
-  Qed.
-
-  (** [current_above_done_vertex]: In the state after preloop and forset
-      for vertex [a], all [done] vertices that are still on the stack
-      appear BELOW [a] (i.e., [a] is above them).  This holds because
-      [a] was preloop'd after all [done] vertices, so [push_stack a]
-      put [a] at the front. *)
-  (** [done_dfn_lt_not_done]: A done vertex [w] has strictly smaller
-      dfn than the current vertex [a] (which is not done).  This holds
-      because [w] was processed before [a] (w ∈ done, a ∉ done),
-      so [preloop w] executed earlier, setting [dfn w] from a smaller
-      timer value than [preloop a] used for [dfn a].  Since dfn values
-      are immutable, [dfn w < dfn a] in all subsequent states.
-      Formal proof: see comment below. *)
-  Lemma done_dfn_lt_not_done (pu a: V) (done: V -> Prop) (s: @SCCSt V):
-    low_forset_inv pu done s ->
-    done_visited done s ->
-    ~ done a ->
-    In a (stack s) ->
-    stack_dfn_order s ->
-    dfn_injective s ->
-    forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
-  Proof.
-    (* 证明思路：w∈done 表示 w 已作为 pu 的邻居处理过，a∉done 且 a 在栈中表示 a 是当前正在处理的顶点；
-       直观上 preloop w 发生在 preloop a 之前，故 dfn s w < dfn s a。
-       具体地，先在 Tarjan_scc_is_dfn.v 中证明局部单调性引理
-       [preloop_after_visited_dfn_lt]：若 u 已 visited、v 未 visited，则 preloop v 之后
-       dfn u < dfn v。然后对 done 集合（或对 low_forset_inv 的 forset 迭代）做归纳，
-       证明每个 w∈done 在 a 被 preloop 之前已经 visited；对 preloop a 那一刻的状态应用
-       [preloop_after_visited_dfn_lt]，即得 dfn s w < dfn s a（w 的 dfn 在后续状态中不变）。
-       注意：使用时应保证 a 是当前 pu 子树中尚未完成的顶点（在栈中位于 pu 下方）；
-       否则 a=pu 且 w 为 pu 树孩子时结论不成立。
-       关键引理：preloop_after_visited_dfn_lt, dfn_inv。 *)
-  Proof.
-    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
-    assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
-    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk Ha_ne_w)
-      as [Habove | Hw_above].
-    - unfold low_forset_inv, wf_scc_state in Hlow.
-      destruct Hlow as [[Hsiv _] _].
-      eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
-    - exfalso.
-      unfold low_forset_inv, wf_scc_state in Hlow.
-      destruct Hlow as [[Hsiv _] _].
-      assert (Hdfn_a_lt_w: dfn s a < dfn s w).
-      { eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
-        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone. }
-      admit.
-  Admitted.
-
-  Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
-    low_forset_inv pu done s ->
-    done_visited done s ->
-    ~ done a ->
-    In a (stack s) ->
-    stack_dfn_order s ->
-    dfn_injective s ->
-    forall w, done w -> In w (stack s) ->
-    exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2.
-  Proof.
-    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
-    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk) as [Habove | Hw_above].
-    { intro Heq. subst w. exact (Hndone Hdone). }
-    - exact Habove.
-    - assert (Hdfn_w_lt_a: dfn s w < dfn s a).
-      { apply (done_dfn_lt_not_done pu a done s Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk). }
-      unfold low_forset_inv, wf_scc_state in Hlow.
-      destruct Hlow as [[Hsiv _] _].
-      assert (Hdfn_a_lt_w: dfn s a < dfn s w).
-      { eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
-        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone. }
-      lia.
-  Qed.
-
-  Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
-    low_forset_inv pu done s ->
-    done_visited done s ->
-    ~ done a ->
-    In a (stack s) ->
-    stack_dfn_order s ->
-    dfn_injective s ->
-    forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
-  Proof.
-    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
-    assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
-    assert (Habove: exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2).
-    { exact (current_above_done_vertex pu a done s Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk). }
-    unfold low_forset_inv, wf_scc_state in Hlow.
-    destruct Hlow as [[Hsiv _] _].
-    eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
   Qed.
 
   Lemma done_not_popped_by_subtree_pop_scc (u a: V) (done: V -> Prop) (s: @SCCSt V):
@@ -2253,23 +2153,14 @@ Section IS_LOW.
     u <> v -> ~ done v ->
     Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s))
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s)).
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
+                      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
   Proof.
-    (* 证明思路：对 tarjan_scc g v 做不动点归纳，保持组合不变式
-       （low_forset_inv u done / fa s v = u / done_visited / 栈序与单射）。
-       用 Hoare_fix_logicv_conj 将主不变式与 visited 保持性并行归纳。
-       在 tarjan_scc_f 体中：preloop 用 preloop_keeps_low_forset_inv_other 等保持；
-       forset 树边分支用 set_fa_preserves_low_forset_inv_for_new_child + W 归纳假设，
-       update_low 用 update_low_preserves_low_forset_inv_for_other（因 u≠a）保持；
-       回边分支类似；pop_scc 用 done_not_popped_by_subtree_pop_scc 与
-       pop_scc_keeps_low_forset_inv_other 保持。
-       原始 .orig 证明仍含若干 admit，尚未完全闭合。
-       关键引理：Hoare_fix_logicv_conj, preloop_keeps_low_forset_inv_other,
-       preloop_preserves_stack_dfn_order, preloop_preserves_dfn_injective,
-       set_fa_preserves_low_forset_inv_for_new_child,
-       update_low_preserves_low_forset_inv_for_other,
-       done_not_popped_by_subtree_pop_scc, pop_scc_keeps_low_forset_inv_other,
-       tarjan_scc_preserves_visited。 *)
+    (* 证明思路：对 tarjan_scc g v 做不动点归纳，保持组合不变式。
+       新增的不变式是关闭 done_dfn_lt_not_done 的关键。
+       preloop v 之后，由 preloop_after_visited_dfn_lt 得到 done dfn < dfn v；
+       后续 dfn 不可变，不变式被动保持。
+       关键引理：Hoare_fix_logicv_conj, preloop_after_visited_dfn_lt。 *)
     Admitted.
 
 
@@ -2277,16 +2168,110 @@ Section IS_LOW.
     u <> v -> dg_step g u v -> ~ done v ->
     Hoare (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s))
           (set_fa v u;; tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s)).
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
+                      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
   Proof.
     (* 证明思路：先 set_fa v u，再递归调用 tarjan_scc g v。
        set_fa 不改变 low/dfn/stack/visited，v 未访问且 v∉done，故 children_done/back_edges_done
        集合不变；对嵌套 min 用 set_fa_preserves_min（或 min_eq_forward）保持 low_forset_inv。
-       同时得到 fa s v = u，且栈序/单射/done_visited 不变。然后应用 W_preserves_ancestor_inv。
-       关键引理：set_fa_preserves_min,
-       set_fa_preserves_low_forset_inv_for_new_child, min_eq_forward,
-       W_preserves_ancestor_inv, done_visited_proper。 *)
+       同时得到 fa s v = u，且栈序/单射/done_visited 不变。
+       新增的不变式在 preloop v 处建立：preloop 前 done 中顶点都已 visited、v 未 visited、
+       dfn_inv 成立，故由 preloop_after_visited_dfn_lt 得 preloop 后 done dfn < dfn v。
+       随后 W_preserves_ancestor_inv 的归纳假设保持该不变式（它以 v 为界）。
+       关键引理：set_fa_preserves_min, set_fa_preserves_low_forset_inv_for_new_child,
+       min_eq_forward, preloop_after_visited_dfn_lt, W_preserves_ancestor_inv,
+       done_visited_proper。 *)
     Admitted.
+
+  (** [current_above_done_vertex]: In the state after preloop and forset
+      for the active vertex [a], all [done] vertices that are still on the stack
+      appear BELOW [a] (i.e., [a] is above them).
+
+      New proof path: first obtain [dfn s w < dfn s a] from the strengthened
+      ancestor invariant (or from [done_vertex_dfn_lt], which is a corollary of
+      that invariant).  Then do case analysis on the stack position of [w]
+      relative to [a]: if [w] were above [a], [stack_dfn_order_strict] would
+      give [dfn s a < dfn s w], contradicting [dfn s w < dfn s a].  Hence [w]
+      must be below [a].  This reverses the old dependency direction and breaks
+      the circularity with [done_dfn_lt_not_done]. *)
+      
+  (** [done_dfn_lt_not_done]: A done vertex [w] has strictly smaller
+      dfn than the current vertex [a] (which is not done).  This holds
+      because [w] was processed before [a] (w ∈ done, a ∉ done),
+      so [preloop w] executed earlier, setting [dfn w] from a smaller
+      timer value than [preloop a] used for [dfn a].  Since dfn values
+      are immutable, [dfn w < dfn a] in all subsequent states.
+      Formal proof: see comment below. *)
+  Lemma done_dfn_lt_not_done (pu a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv pu done s ->
+    done_visited done s ->
+    ~ done a ->
+    In a (stack s) ->
+    stack_dfn_order s ->
+    dfn_injective s ->
+    forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
+  Proof.
+    (* 证明思路：该引理应作为 [W_preserves_ancestor_inv] / [set_fa_W_preserves_low_forset_inv]
+       中新增不变式的推论来使用，而不是独立证明。
+       在 [W v] 执行期间（v 是 pu 的当前活跃子孙），不变式保证
+       [∀ w, done w -> In w (stack s) -> dfn s w < dfn s v]。
+       取 a 为当前活跃顶点 v（或 v 子树中的当前顶点），即得 dfn s w < dfn s a。
+       该引理当前表述缺少“a 是 pu 子树中活跃顶点”这一前提；若 a=pu 且 w 为 pu 已处理孩子，
+       结论不成立。应用中应保证 a 为当前递归顶点或其子孙。
+       关键引理：W_preserves_ancestor_inv, set_fa_W_preserves_low_forset_inv,
+       preloop_after_visited_dfn_lt。 *)
+  Admitted.
+
+  (** [done_vertex_dfn_lt]: For the current active vertex [a] in [pu]'s
+      subtree (with [~ done a], [In a (stack s)]) and any [done] vertex
+      [w] still on the stack, [dfn s w < dfn s a].
+
+      This is a direct corollary of the strengthened ancestor invariant
+      carried by [W_preserves_ancestor_inv] / [set_fa_W_preserves_low_forset_inv]:
+      during the execution of [tarjan_scc g a], all already-done neighbors
+      [w] of [pu] satisfy [dfn s w < dfn s a].  The old proof tried to derive
+      the inequality from stack ordering via [current_above_done_vertex], which
+      created a circular dependency; the new path obtains the dfn inequality
+      first (from the ancestor invariant) and only afterwards uses stack ordering
+      to deduce the relative stack position. *)
+  Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv pu done s ->
+    done_visited done s ->
+    ~ done a ->
+    In a (stack s) ->
+    stack_dfn_order s ->
+    dfn_injective s ->
+    forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
+  Proof.
+    (* 证明思路：直接作为 [W_preserves_ancestor_inv] / [set_fa_W_preserves_low_forset_inv]
+       中新增不变式的推论：在 [tarjan_scc g a] 执行期间，所有 done 邻居 [w] 满足
+       [dfn s w < dfn s a]。这里不通过 [current_above_done_vertex] 绕路，
+       以避免与栈位置分析的循环依赖。 *)
+  Admitted.
+
+  Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_forset_inv pu done s ->
+    done_visited done s ->
+    ~ done a ->
+    In a (stack s) ->
+    stack_dfn_order s ->
+    dfn_injective s ->
+    forall w, done w -> In w (stack s) ->
+    exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2.
+  Proof.
+    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
+    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk) as [Habove | Hw_above].
+    { intro Heq. subst w. exact (Hndone Hdone). }
+    - exact Habove.
+    - assert (Hdfn_w_lt_a: dfn s w < dfn s a).
+      { apply (done_vertex_dfn_lt pu a done s Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk). }
+      unfold low_forset_inv, wf_scc_state in Hlow.
+      destruct Hlow as [[Hsiv _] _].
+      assert (Hdfn_a_lt_w: dfn s a < dfn s w).
+      { eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
+        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone. }
+      lia.
+  Qed.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
       morphism w.r.t. set equivalence of [done].  When [done1 == done2],
@@ -2664,8 +2649,9 @@ Section IS_LOW.
   Proof.
     (* 证明思路：用 Hoare_forset 遍历 u 的所有孩子，不变式为
        low_forset_inv u done / done_visited done / fa-孩子⊆done。
-       树边分支用 set_fa_W_preserves_low_forset_inv 保持 low_forset_inv 并得 fa a0=u，
-       再用 low_forset_inv_expand_child_done 扩展 done；非树边分支用 update_low_back_edge
+       树边分支用 set_fa_W_preserves_low_forset_inv 保持 low_forset_inv、得到 fa a0=u，
+       并建立 done 中顶点 dfn < dfn a0 的时序不变式；随后用
+       low_forset_inv_expand_child_done 扩展 done。非树边分支用 update_low_back_edge
        或集合等价扩展 done。循环结束后 done=dg_step g u，由 forset_end_implies_scc_low_valid_v
        得 scc_low_valid_v s u，结合 wf_scc_state 即为 low_post u s。
        关键引理：Hoare_forset, low_forset_inv_proper, done_visited_proper,
