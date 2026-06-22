@@ -2392,11 +2392,10 @@ Section IS_LOW.
           (process_edge u W v)
           (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
   Proof.
-    (* 证明思路：process_edge 保持“parent 的所有 fa-孩子都是 g 中 neighbor”的全称性质。
-       树边分支 set_fa v u：若 w=v，则新出现 fa s v=u=parent，由 dg_step g u v 可得；
-       若 w≠v，fa s w 不变，直接用前置全称性质。随后递归调用 W 由归纳假设保持；
-       get'/update_low 不改变 fa。非树边分支不修改 fa，直接保持。
-       关键引理：set_get (RecordSet), equiv_dec, process_edge, set_fa, update_low, get'。 *)
+    (* 证明思路：参照 process_edge_keeps_fa_simple 的结构：
+       树边分支 set_fa v u 后新 fa-child v 由 Hstep 处理，其余保持；
+       W 递归调用 IH 保持；get'/update_low 不修改 fa。
+       非树边不修改 fa。 *)
     Admitted.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
