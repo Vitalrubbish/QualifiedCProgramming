@@ -1205,8 +1205,12 @@ Section IS_LOW.
 
   Lemma done_visited_proper: Proper (Sets.equiv ==> eq ==> iff) done_visited.
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    intros done1 done2 Hequiv s1 s2 Heq. subst s2.
+    unfold done_visited.
+    split; intros H w Hw.
+    - apply H. apply Hequiv. exact Hw.
+    - apply H. apply Hequiv. exact Hw.
+  Qed.
 
   (** [process_edge_keep_fa_children]: preserves the forall fa-children
       property.  Requires [dg_step g u v] (the edge being processed)
