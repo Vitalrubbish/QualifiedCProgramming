@@ -351,8 +351,18 @@ Section IS_LOW.
           (set_fa v u)
           (fun _ s => wf_scc_state s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold set_fa.
+    apply Hoare_state_intro.
+    intros s0 [Hwf Huvis].
+    pose (f := fun (s: SCCSt) => set fa (fun fa0 x => if x ==b v then u else fa0 x) s).
+    apply (Hoare_conseq_post (fun s => s = s0) (update' f)
+      (fun _ s => wf_scc_state s) (fun _ s1 => s1 = f s0)).
+    - intros _ s1 Heq. subst s1.
+      unfold f, wf_scc_state.
+      destruct s0 as [vis timer fa dfn low stack sccs].
+      simpl. unfold wf_scc_state in Hwf. simpl in Hwf. exact Hwf.
+    - apply Hoare_update'.
+  Qed.
 
   (** [set_low_preserves_wf_scc_state]: [set_low u n] only changes [low u],
       so all four global invariants are trivially preserved. *)
@@ -361,8 +371,18 @@ Section IS_LOW.
           (set_low u n)
           (fun _ s => wf_scc_state s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold set_low.
+    apply Hoare_state_intro.
+    intros s0 Hwf.
+    pose (f := fun (s: SCCSt) => set low (fun low0 x => if x ==b u then n else low0 x) s).
+    apply (Hoare_conseq_post (fun s => s = s0) (update' f)
+      (fun _ s => wf_scc_state s) (fun _ s1 => s1 = f s0)).
+    - intros _ s1 Heq. subst s1.
+      unfold f, wf_scc_state.
+      destruct s0 as [vis timer fa dfn low stack sccs].
+      simpl. unfold wf_scc_state in Hwf. simpl in Hwf. exact Hwf.
+    - apply Hoare_update'.
+  Qed.
 
   (** [update_low_preserves_wf_scc_state]: [update_low u n] is a read of
       [low u] followed by [set_low u (min (low u) n)], so it preserves
