@@ -1555,6 +1555,26 @@ Proof.
     subst x. subst y. exfalso. apply Hneq. reflexivity.
 Qed.
 
+(** [preloop_after_visited_dfn_lt]: If [u] is already visited and we then
+    execute [preloop v], the dfn of [u] is strictly smaller than the newly
+    assigned dfn of [v].  This captures the timer/dfn monotonicity:
+    when [preloop v] runs the timer is already larger than the timer value
+    that was assigned to [u]. *)
+Lemma preloop_after_visited_dfn_lt (u v: V):
+  Hoare (fun s: @SCCSt V => u ∈ visited s /\ ~ v ∈ visited s /\ dfn_inv s)
+        (preloop v)
+        (fun _ s => dfn s u < dfn s v).
+Proof.
+  intro_state. destruct H as [Hu_vis [Hv_nvis Hinv]].
+  destruct Hinv as [Hlt Hiff Hpos].
+  unfold preloop. unfold_op. hoare_auto_s. subst s. simpl.
+  unfold equiv_decb.
+  destruct (equiv_dec u v) as [Heq | Hneq].
+  - exfalso. rewrite Heq in Hu_vis. apply Hv_nvis. exact Hu_vis.
+  - destruct (equiv_dec v v) as [Heqvv | Hneqq];
+      [simpl; apply Hlt; exact Hu_vis | exfalso; apply Hneqq; reflexivity].
+Qed.
+
 (** [stack_dfn_order_strict]: With [dfn_injective] and
     [stack_in_visited], two distinct stack vertices at different
     positions have strictly different dfn values: if [x] is above

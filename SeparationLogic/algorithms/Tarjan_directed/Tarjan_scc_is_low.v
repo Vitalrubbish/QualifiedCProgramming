@@ -2143,16 +2143,35 @@ Section IS_LOW.
     done_visited done s ->
     ~ done a ->
     In a (stack s) ->
+    stack_dfn_order s ->
     dfn_injective s ->
     forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
   Proof.
-    (* 证明思路：直观上 w∈done 表示 w 已处理，a∉done 且 a 在栈中表示 a 是当前正在处理的顶点，
-       因此 preloop w 发生在 preloop a 之前，timer 更小，故 dfn s w < dfn s a。
-       形式化需要补充一个跨 preloop 调用的 timer 单调性引理：若顶点 x 先于 y 被 preloop，
-       则 dfn s x < dfn s y（或至少不增且配合单射得到严格小于）。
-       current_above_done_vertex 只用 stack_dfn_order 给出栈中下方点 dfn 更小，其方向
-       与目标结论相反，不能单独使用。
-       关键引理：需补充“preloop 调用的 timer/dfn 单调性”引理。 *)
+    (* 证明思路：w∈done 表示 w 已作为 pu 的邻居处理过，a∉done 且 a 在栈中表示 a 是当前正在处理的顶点；
+       直观上 preloop w 发生在 preloop a 之前，故 dfn s w < dfn s a。
+       具体地，先在 Tarjan_scc_is_dfn.v 中证明局部单调性引理
+       [preloop_after_visited_dfn_lt]：若 u 已 visited、v 未 visited，则 preloop v 之后
+       dfn u < dfn v。然后对 done 集合（或对 low_forset_inv 的 forset 迭代）做归纳，
+       证明每个 w∈done 在 a 被 preloop 之前已经 visited；对 preloop a 那一刻的状态应用
+       [preloop_after_visited_dfn_lt]，即得 dfn s w < dfn s a（w 的 dfn 在后续状态中不变）。
+       注意：使用时应保证 a 是当前 pu 子树中尚未完成的顶点（在栈中位于 pu 下方）；
+       否则 a=pu 且 w 为 pu 树孩子时结论不成立。
+       关键引理：preloop_after_visited_dfn_lt, dfn_inv。 *)
+  Proof.
+    intros Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
+    assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
+    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk Ha_ne_w)
+      as [Habove | Hw_above].
+    - unfold low_forset_inv, wf_scc_state in Hlow.
+      destruct Hlow as [[Hsiv _] _].
+      eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
+    - exfalso.
+      unfold low_forset_inv, wf_scc_state in Hlow.
+      destruct Hlow as [[Hsiv _] _].
+      assert (Hdfn_a_lt_w: dfn s a < dfn s w).
+      { eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
+        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone. }
+      admit.
   Admitted.
 
   Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
@@ -2170,7 +2189,7 @@ Section IS_LOW.
     { intro Heq. subst w. exact (Hndone Hdone). }
     - exact Habove.
     - assert (Hdfn_w_lt_a: dfn s w < dfn s a).
-      { apply (done_dfn_lt_not_done pu a done s Hlow Hdv Hndone Ha_stk Hdfn_inj w Hdone Hw_stk). }
+      { apply (done_dfn_lt_not_done pu a done s Hlow Hdv Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk). }
       unfold low_forset_inv, wf_scc_state in Hlow.
       destruct Hlow as [[Hsiv _] _].
       assert (Hdfn_a_lt_w: dfn s a < dfn s w).
