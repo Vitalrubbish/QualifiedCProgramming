@@ -2623,13 +2623,32 @@ Section IS_LOW.
     destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk) as [Habove | Hw_above].
     { intro Heq. subst w. exact (Hndone Hdone). }
     - exact Habove.
-    - (* w above a: impossible. stack_dfn_order w a gives dfn a <= dfn w.
-         With dfn_injective, dfn a < dfn w. But w was preloop'd before a
-         (w ∈ done, a ∉ done), so dfn w < dfn a. Contradiction.
-         The dfn ordering follows from timer monotonicity: preloop sets
-         dfn = timer, timer only increases. Formal proof requires a lemma
-         connecting done membership to dfn processing order. *)
-      admit.
+    - (* w above a → dfn a < dfn w by stack_dfn_order_strict.
+         We prove dfn w < dfn a from the processing order:
+         w was preloop'd before a (w ∈ done, a ∉ done), so
+         preloop w set dfn w = timer_w, later preloop a set
+         dfn a = timer_a > timer_w, hence dfn w < dfn a.
+         The strict inequality uses dfn_inv from low_forset_inv:
+         at the time of preloop a, all visited vertices had dfn <
+         the timer value assigned to a.  Since w was already
+         visited, dfn w < dfn a.  Both values are immutable,
+         so this holds in the current state s. *)
+      assert (Hdfn_w_lt_a: dfn s w < dfn s a). {
+        destruct Hdfn_inv as [Hlt [Hiff Hpos]].
+        (* Hlt: forall v, v ∈ visited s -> dfn s v < timer s
+           This gives upper bounds, not comparison between w and a.
+           We need a lemma connecting done/processing order to dfn order.
+           The algorithmic invariant: preloop assigns dfn = timer, timer
+           only increases, so earlier preloop → smaller dfn.
+           Formal proof left as future work. *)
+        admit.
+      }.
+      (* Contradiction: dfn w < dfn a and dfn a < dfn w *)
+      assert (Hdfn_a_lt_w: dfn s a < dfn s w). {
+        eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj w a Hw_stk Ha_stk Hw_above).
+        intro Heq. apply Hndone. rewrite <- Heq. exact Hdone.
+      }.
+      lia.
   Admitted.
 
   Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
