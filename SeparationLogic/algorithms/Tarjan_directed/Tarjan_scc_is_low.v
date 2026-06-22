@@ -2392,9 +2392,55 @@ Section IS_LOW.
           (process_edge u W v)
           (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w).
   Proof.
-    (* 证明策略正确（参照 process_edge_keeps_fa_simple），但 hoare_auto_s
-       引入的变量名在交互式与批处理间不一致，需要逐分支调试。 *)
-    Admitted.
+    intros Hstep IH.
+    unfold process_edge, if_else. intro_state. apply Hoare_choice.
+    - (* Tree edge *) apply Hoare_assume_bind. simpl.
+      rename H into Hfa_all.
+      apply (Hoare_bind (fun s => ~ v ∈ visited s /\ s = s0) (set_fa v u)
+               (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
+               (fun _ => W v ;; lv <- get' (fun s => low s v) ;; update_low u lv)
+               (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)).
+      + (* set_fa v u *) unfold set_fa. intro_state. hoare_auto_s.
+        destruct H as [Hnv' Hs1_eq]. subst s1. subst s. simpl.
+        unfold equiv_decb. destruct (equiv_dec w v) as [Heq | Hneq].
+        * (* w = v, fa_new w = u *) rewrite Heq in H2 |- *. simpl in H2.
+          unfold equiv_decb in H2. destruct (equiv_dec v v) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+          destruct H2 as [Hfa_eq _]. rewrite Hfa_eq in Hstep. exact Hstep.
+        * (* w ≠ v, fa_new w unchanged *) simpl in H2.
+          unfold equiv_decb in H2. destruct (equiv_dec w v) as [Heq' | Hneq']; [exfalso; apply Hneq; exact Heq'|].
+          destruct H2 as [Hfa_eq Hfa_neq]. apply Hfa_all. exact (conj Hfa_eq Hfa_neq).
+      + intros _. simpl.
+        apply (Hoare_bind (fun s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
+                 (W v) (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
+                 (fun _ => lv <- get' (fun s => low s v) ;; update_low u lv)
+                 (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)).
+        * apply IH.
+        * intros _. simpl.
+          apply (Hoare_bind (fun s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
+                   (get' (fun s => low s v))
+                   (fun lv s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)
+                   (fun lv => update_low u lv)
+                   (fun _ s => forall w, fa s w = parent /\ fa s w <> w -> dg_step g parent w)).
+          -- unfold get'. intro_state. hoare_auto_s.
+             apply H. destruct H1 as [Hs1 _]. rewrite <- Hs1. assumption.
+          -- intros lv. simpl. unfold update_low. intro_state. hoare_auto_s.
+             ++ unfold set_low. intro_state. hoare_auto_s. subst s. subst s2. simpl.
+                apply H. destruct H4 as [Hfa Hneq]. split.
+                ** exact Hfa.
+                ** exact Hneq.
+             ++ apply H. destruct H1 as [Hs1 _]. rewrite <- Hs1. exact H2.
+    - (* Non-tree edge *) apply Hoare_assume_bind. simpl.
+      rename H into Hfa_all. intro_state. hoare_auto_s.
+      + (* In stack *) destruct H as [Hx_vis Hs1_eq]. subst s1.
+        unfold update_low. intro_state. hoare_auto_s.
+        * unfold set_low. intro_state. hoare_auto_s. subst s. simpl.
+          apply Hfa_all. destruct H4 as [Hfa Hneq]. split.
+          ** rewrite H2 in Hfa. exact Hfa.
+          ** rewrite H2 in Hneq. exact Hneq.
+        * destruct H. subst s. apply Hfa_all. exact H2.
+      + (* Not in stack *) destruct H1 as [Heq _]. subst s.
+        destruct H as [Hx_vis Hs1_eq]. subst s1. apply Hfa_all. exact H2.
+  Qed.
 
   Lemma tarjan_scc_keep_fa_children_in_universe (parent a: V):
     Hoare (fun s: @SCCSt V => forall v, fa s v = parent /\ fa s v <> v -> dg_step g parent v)
