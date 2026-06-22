@@ -86,7 +86,7 @@ Section IS_LOW.
        [low_forset_inv].
 
     4. [set_fa / set_low helpers]
-       ([set_fa_preserves_low_pre_rich], [set_low_preserves_low_forset_inv])
+       ([set_fa_preserves_wf_scc_state_pre], [set_low_preserves_low_forset_inv])
        Hoare lemmas for the two assignment primitives.
 
     5. [update_low concrete cases]
@@ -321,6 +321,16 @@ Section IS_LOW.
   Definition wf_scc_state (s: @SCCSt V): Prop :=
     stack_in_visited s /\ dfn_inv s /\ dfn_valid g s root /\ fa_visited s.
 
+  (** [wf_scc_state_pre u s]: "pre-state" for an unvisited vertex [u].
+      The global invariants hold, but [u] itself is not yet visited.
+      This is the state right before [preloop u] and right after
+      [set_fa u p] (when [u] has been assigned a parent [p] but not yet
+      visited).  In the latter case [dfn_valid g s root] is still globally
+      meaningful because the pending tree edge [p -> u] does not yet need
+      to satisfy the dfn order (it will after [preloop u]). *)
+  Definition wf_scc_state_pre (u: V) (s: @SCCSt V): Prop :=
+    wf_scc_state s /\ ~ u ∈ visited s.
+
   (** [pop_scc_preserves_wf_scc_state]: [pop_scc] only removes vertices from
       the stack and adds an SCC record; it does not modify [visited], [dfn],
       [fa], or the low/dfn values of remaining vertices. *)
@@ -329,38 +339,90 @@ Section IS_LOW.
           (pop_scc u)
           (fun _ s => wf_scc_state s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    (* pop_scc only modifies stack and sccs, not visited/dfn/timer/fa.
+       wf_scc_state components are all preserved.
+       stack_in_visited: use pop_scc_keep_stack_in_visited.
+       dfn_inv, dfn_valid, fa_visited: intro_state + hoare_auto_s. *)
+    unfold wf_scc_state.
+    apply Hoare_conj with (Q1 := fun _ s => stack_in_visited s).
+    - apply (Hoare_conseq_pre (fun s => wf_scc_state s) (fun s => stack_in_visited s) (pop_scc u) (fun _ s => stack_in_visited s)).
+      intros s [Hsiv _]. exact Hsiv.
+      apply (pop_scc_keep_stack_in_visited u).
+    - apply Hoare_conj with (Q1 := fun _ s => dfn_inv s).
+      apply (Hoare_conseq_pre (fun s => wf_scc_state s) (fun s => dfn_inv s) (pop_scc u) (fun _ s => dfn_inv s)).
+      intros s [_ [Hinv _]]. exact Hinv.
+      unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+      unfold pop_scc_state. destruct (stack_split_at (stack s0) u) as [popped rest]. simpl.
+      exact H.
+      apply Hoare_conj with (Q1 := fun _ s => dfn_valid g s root).
+      * apply (Hoare_conseq_pre (fun s => wf_scc_state s) (fun s => dfn_valid g s root) (pop_scc u) (fun _ s => dfn_valid g s root)).
+        intros s [_ [_ [Hvalid _]]]. exact Hvalid.
+        unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+        unfold pop_scc_state. destruct (stack_split_at (stack s0) u) as [popped rest]. simpl.
+        exact H.
+      * apply (Hoare_conseq_pre (fun s => wf_scc_state s) (fun s => fa_visited s) (pop_scc u) (fun _ s => fa_visited s)).
+        intros s [_ [_ [_ Hfa]]]. exact Hfa.
+        unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+        unfold pop_scc_state. destruct (stack_split_at (stack s0) u) as [popped rest]. simpl.
+        exact H.
+  Qed.
 
   (** [preloop_preserves_wf_scc_state]: [preloop u] assigns [dfn u], [low u],
-      pushes [u] onto the stack, and marks [u] visited. Under [~ u ∈ visited]
-      and [wf_scc_state], these updates preserve the four global invariants. *)
+      pushes [u] onto the stack, and marks [u] visited. Starting from
+      [wf_scc_state_pre u], it restores full [wf_scc_state]. *)
   Lemma preloop_preserves_wf_scc_state (u: V):
-    Hoare (fun s: @SCCSt V => wf_scc_state s /\ ~ u ∈ visited s)
+    Hoare (fun s: @SCCSt V => wf_scc_state_pre u s)
           (preloop u)
           (fun _ s => wf_scc_state s).
   Proof.
-    (* Requires combining preloop_keep_stack_in_visited, preloop_keep_dfn_inv,
-       preloop_preserves_dfn_valid, preloop_keep_fa_visited using Hoare_conj
-       with precondition weakening. The individual lemmas have different
-       preconditions that need to be unified. *)
-  Admitted.
+    unfold wf_scc_state_pre, wf_scc_state.
+    apply Hoare_conj with (Q1 := fun _ s => stack_in_visited s).
+    - apply (Hoare_conseq_pre (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+        (fun s => stack_in_visited s) (preloop u) (fun _ s => stack_in_visited s)).
+      intros s [[Hsiv _] _]. exact Hsiv.
+      apply (preloop_keep_stack_in_visited u).
+    - apply Hoare_conj with (Q1 := fun _ s => dfn_inv s).
+      apply (Hoare_conseq_pre (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+        (fun s => dfn_inv s) (preloop u) (fun _ s => dfn_inv s)).
+      intros s [[_ [Hinv _]] _]. exact Hinv.
+      apply (preloop_keep_dfn_inv u).
+      apply Hoare_conj with (Q1 := fun _ s => dfn_valid g s root).
+      * apply (Hoare_conseq_pre
+          (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+          (fun s => ~ u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s)
+          (preloop u) (fun _ s => dfn_valid g s root)).
+        intros s [[Hsiv [Hinv [Hvalid Hfa]]] Hnuvis].
+        split. exact Hnuvis. split. exact Hvalid. split. exact Hinv. exact Hfa.
+        apply (Hoare_conseq_post
+          (fun s => ~ u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s /\ fa_visited s)
+          (preloop u)
+          (fun _ s => dfn_valid g s root)
+          (fun _ s => u ∈ visited s /\ dfn_valid g s root /\ dfn_inv s)).
+        intros _ s [Huvis [Hvalid Hinv]]. exact Hvalid.
+        apply (preloop_preserves_dfn_valid g root u).
+      * apply (Hoare_conseq_pre
+          (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+          (fun s => fa_visited s) (preloop u) (fun _ s => fa_visited s)).
+        intros s [[_ [_ [_ Hfa]]] _]. exact Hfa.
+        apply (preloop_keep_fa_visited u).
+  Qed.
 
-  (** [set_fa_preserves_wf_scc_state]: [set_fa v u] only changes [fa v].
-      It preserves [wf_scc_state] as long as the new parent [u] is visited,
-      which maintains [fa_visited]. *)
-  Lemma set_fa_preserves_wf_scc_state (v u: V):
-    Hoare (fun s: @SCCSt V => wf_scc_state s /\ u ∈ visited s)
+  (** [set_fa_preserves_wf_scc_state_pre]: [set_fa v u] assigns a parent
+      [u] to an unvisited vertex [v]. It does NOT preserve full
+      [wf_scc_state] globally, because the new tree edge [u -> v] does not
+      yet satisfy the dfn order (v is unvisited). It does preserve the
+      "pre-state" [wf_scc_state_pre v] as long as [u] is visited.
+      This is the exact analogue of [set_fa_preserves_dfn_pre_child]
+      in [Tarjan_scc_is_dfn.v]. *)
+  Lemma set_fa_preserves_wf_scc_state_pre (v u: V):
+    Hoare (fun s: @SCCSt V => wf_scc_state s /\ u ∈ visited s /\ ~ v ∈ visited s)
           (set_fa v u)
-          (fun _ s => wf_scc_state s).
+          (fun _ s => wf_scc_state_pre v s /\ u ∈ visited s).
   Proof.
-    (* Requires combining existing component lemmas:
-       set_fa_keep_stack_in_visited (or trivial via destruct s0),
-       set_fa_keep_dfn_inv,
-       set_fa_preserves_dfn_pre_child (for dfn_valid),
-       set_fa_keep_fa_visited.
-       The dfn_valid part is non-trivial because state_to_dfs_tree
-       depends on fa. *)
+    (* stack_in_visited and u∈visited are trivial (set_fa does not touch
+       stack/visited/dfn/timer). dfn_inv, dfn_valid, fa_visited, ~v∈visited
+       come from set_fa_preserves_dfn_pre_child. The Hoare_conj nesting
+       requires careful precondition weakening; proof deferred. *)
   Admitted.
 
   (** [set_low_preserves_wf_scc_state]: [set_low u n] only changes [low u],
@@ -429,10 +491,11 @@ Section IS_LOW.
   Definition low_forset_inv (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
     wf_scc_state s /\ u ∈ visited s /\ low_forset_inv_core u done s.
 
-  (** [low_pre]: pre-condition for [tarjan_scc g u].  Only requires global
-      well-formedness and that [u] has not been visited yet. *)
+  (** [low_pre]: pre-condition for [tarjan_scc g u].  It is exactly the
+      "pre-state" [wf_scc_state_pre u]: global well-formedness plus [u]
+      not yet visited. *)
   Definition low_pre (u: V) (s: @SCCSt V): Prop :=
-    wf_scc_state s /\ ~ u ∈ visited s.
+    wf_scc_state_pre u s.
 
   (** [low_post]: post-condition for [tarjan_scc g u].  Requires global
       well-formedness and that [u]'s low-link value is correct. *)
@@ -451,7 +514,7 @@ Section IS_LOW.
   Lemma low_pre_fa_eq_u_implies_eq_u (u v: V) (s: @SCCSt V):
     low_pre u s -> fa s v = u -> v = u.
   Proof.
-    unfold low_pre, wf_scc_state.
+    unfold low_pre, wf_scc_state_pre, wf_scc_state.
     intros [[Hsiv [Hinv [Hvalid Hfa_vis]]] Hnuvis] Hfa_eq.
     destruct (classic (v = u)) as [Heq | Hneq]; [exact Heq |].
     exfalso.
@@ -688,14 +751,6 @@ Section IS_LOW.
   (* 10. process_edge Preserves low_forset_inv                         *)
   (* ================================================================ *)
 
-  Lemma set_fa_preserves_low_pre_rich (v u: V):
-    Hoare (fun s: @SCCSt V => low_pre v s /\ u ∈ visited s)
-          (set_fa v u)
-          (fun _ s => low_pre v s /\ u ∈ visited s).
-  Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
-
   (** [set_low_preserves_low_forset_inv]: changing [low v] does not affect
       [low_forset_inv u done] when [u <> v] and [~ done v], because [v] is not
       in [children_done u done] and not in [back_edges_done u done].
@@ -919,16 +974,20 @@ Section IS_LOW.
       (which is [tarjan_scc g v]), both [low_forset_inv u done] and
       [fa s v = u] are preserved.
 
-      Proof sketch (requires 2 sub-lemmas):
-      1. [set_fa_preserves_low_forset_inv]: set_fa v u does not change
-         children_done/back_edges_done (v ∉ done), fa_visited preserved
-         via u ∈ visited, stack/dfn/low unchanged.
-      2. [W_preserves_low_forset_inv_and_fa]: W v (tarjan_scc g v) does
+      Proof sketch (requires 3 sub-lemmas):
+      1. [set_fa_preserves_wf_scc_state_pre]: after [set_fa v u] the state
+         satisfies [low_pre v] (i.e. [wf_scc_state_pre v]) as long as [u]
+         is visited and [v] is unvisited. This is the exact precondition
+         needed by the recursive call [W v].
+      2. [set_fa_preserves_low_forset_inv_for_new_child]: [set_fa v u] does
+         not change children_done/back_edges_done for [u] (v ∉ done), and
+         preserves [low_forset_inv u done].
+      3. [W_preserves_low_forset_inv_and_fa]: [W v] (tarjan_scc g v) does
          not modify fa v (only sets fa for v's descendants), does not
          modify low u (only update_low on v/descendants), children_done
          and back_edges_done for done vertices unchanged (done vertices
          are not descendants of v). Proved by fixpoint induction on
-         tarjan_scc, adding a new visited_tag constructor. *)
+         tarjan_scc. *)
   Lemma set_fa_preserves_min (u v: V) (done: V -> Prop) (s0: @SCCSt V): ~ done v ->
     min_value_of_subset Nat.le (min_value_of_subset Nat.le (children_done s0 u done) (low s0) ∪ min_value_of_subset Nat.le (fun w => back_edges_done s0 u done w \/ w = u) (dfn s0)) (fun x => x) (low s0 u) ->
     min_value_of_subset Nat.le (min_value_of_subset Nat.le (children_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done) (low s0) ∪ min_value_of_subset Nat.le (fun w => back_edges_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done w \/ w = u) (dfn s0)) (fun x => x) (low s0 u).
@@ -1364,15 +1423,19 @@ Section IS_LOW.
         [P(done) := wf_scc_state s /\ low_forset_inv_core u done s
                     /\ done_visited done s
                     /\ (forall v, fa s v = u /\ fa s v <> v -> v ∈ done)].
-      - [wf_scc_state s] is preserved by every primitive operation; use the
-        [wf_scc_state] preservation lemmas (e.g. [set_fa_preserves_wf_scc_state],
-        [set_low_preserves_wf_scc_state], [update_low_preserves_wf_scc_state]).
+      - [wf_scc_state s] is preserved by every primitive operation that keeps
+        all vertices either visited or without pending parents. The critical
+        exception is [set_fa a0 u], which creates a pending tree edge to the
+        unvisited child [a0]; here use [set_fa_preserves_wf_scc_state_pre] to
+        obtain [low_pre a0 s] (i.e. [wf_scc_state_pre a0 s]).
       - Apply [Hoare_forset]; properness follows from [low_forset_inv_proper]
         (now only about the core) and [done_visited_proper].
       - For each neighbor [a0]:
-        * Tree edge: after [set_fa a0 u], use [set_fa_W_preserves_low_forset_inv]
-          to run the recursive [W a0] while preserving [low_forset_inv_core u done]
-          and establishing [fa a0 = u]. Then [low_forset_inv_expand_child_done]
+        * Tree edge: after [set_fa a0 u], [set_fa_preserves_wf_scc_state_pre]
+          gives [low_pre a0 s], which is exactly the precondition for the
+          recursive call [W a0]. Use [set_fa_W_preserves_low_forset_inv] to
+          run [W a0] while preserving [low_forset_inv_core u done] and
+          establishing [fa a0 = u]. Then [low_forset_inv_expand_child_done]
           moves from [done] to [done ∪ [a0]] (since [a0] is now a proper child
           and [low u ≤ low a0] holds after the recursive call).
         * Non-tree edge: back edge uses [update_low_back_edge]; cross edge uses
@@ -1415,10 +1478,10 @@ Section IS_LOW.
       1. The auxiliary visitedness goal is discharged by the external lemma
          [tarjan_scc_keep_visited] from [Tarjan_scc_basics].
       2. In the body:
-         - [preloop u] preserves [wf_scc_state] by
-           [preloop_preserves_wf_scc_state] and establishes [low_forset_inv u ∅]
-           by [preloop_establishes_low_forset_inv]. [preloop_keeps_fa] gives
-           [fa v = u -> v = u] for all [v].
+         - [preloop u] takes the initial [low_pre u] (= [wf_scc_state_pre u])
+           to full [wf_scc_state] by [preloop_preserves_wf_scc_state], and
+           establishes [low_forset_inv u ∅] by [preloop_establishes_low_forset_inv].
+           [preloop_keeps_fa] gives [fa v = u -> v = u] for all [v].
          - The [forset] over children uses [forset_keep_low_forset_inv].
            Its four W-assumptions come from the induction hypotheses:
            * [HW_pre_post] from the low-link IH;
