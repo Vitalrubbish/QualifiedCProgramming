@@ -1512,9 +1512,65 @@ Proof.
     { exact Hy_in_l2. }
 Qed.
 
-(** Operations that don't modify the stack or dfn trivially preserve
-    [stack_dfn_order].  [set_dfn] and [push_stack] are handled inside
-    [preloop_preserves_stack_dfn_order] because they DO modify dfn/stack. *)
+(** [preloop_preserves_dfn_injective]: [preloop u] preserves
+    [dfn_injective].  The new vertex [u] gets [dfn s u = timer s]
+    (the largest dfn value so far, from [dfn_inv]), so its dfn
+    is unique among visited vertices.  Previously visited vertices
+    keep their dfn values. *)
+Lemma preloop_preserves_dfn_injective (u: V):
+  Hoare (fun s: @SCCSt V => dfn_injective s /\ dfn_inv s /\ ~ u ∈ visited s)
+        (preloop u)
+        (fun _ s => dfn_injective s).
+Proof.
+  intro_state. destruct H as [Hinj [Hinv Hnu_vis]].
+  destruct Hinv as [Hlt [Hiff Hpos]].
+  unfold preloop. unfold_op. hoare_auto_s. subst s. simpl.
+  assert (Hdfn_u0: dfn s0 u = 0) by (apply (proj2 (Hiff u)); exact Hnu_vis).
+  unfold dfn_injective. intros x y Hneq Hx_vis Hy_vis.
+  sets_unfold in Hx_vis. sets_unfold in Hy_vis.
+  destruct Hx_vis as [Hx_vis_s0 | Hx_eq_u]; destruct Hy_vis as [Hy_vis_s0 | Hy_eq_u].
+  - (* both were already visited: dfn unchanged, use Hinj *)
+    simpl. unfold equiv_decb.
+    destruct (equiv_dec x u) as [Hx_eq_u' | Hx_ne_u']; [exfalso; apply Hnu_vis; rewrite <- Hx_eq_u'; exact Hx_vis_s0 |].
+    destruct (equiv_dec y u) as [Hy_eq_u' | Hy_ne_u']; [exfalso; apply Hnu_vis; rewrite <- Hy_eq_u'; exact Hy_vis_s0 |].
+    apply (Hinj x y Hneq Hx_vis_s0 Hy_vis_s0).
+  - (* x visited, y = u *)
+    subst y. simpl. unfold equiv_decb.
+    assert (Hx_lt: dfn s0 x < timer s0) by (apply Hlt; exact Hx_vis_s0).
+    rewrite Hdfn_u0.
+    destruct (equiv_dec x u) as [Hx_eq_u2 | Hx_ne_u2]; simpl.
+    { destruct (equiv_dec u u) as [_ | Hc]; simpl; [| exfalso; apply Hc; reflexivity].
+      intro Heq. exfalso. apply Hnu_vis. rewrite <- Hx_eq_u2. exact Hx_vis_s0. }
+    { destruct (equiv_dec u u) as [_ | Hc]; simpl; [| exfalso; apply Hc; reflexivity].
+      intro Heq. rewrite Heq in Hx_lt. lia. }
+  - (* x = u, y visited *)
+    subst x. simpl. unfold equiv_decb.
+    assert (Hy_lt: dfn s0 y < timer s0) by (apply Hlt; exact Hy_vis_s0).
+    rewrite Hdfn_u0.
+    destruct (equiv_dec u u) as [_ | Hc]; simpl; [| exfalso; apply Hc; reflexivity].
+    destruct (equiv_dec y u) as [Hy_eq_u2 | Hy_ne_u2]; simpl.
+    { intro Heq. exfalso. apply Hnu_vis. rewrite <- Hy_eq_u2. exact Hy_vis_s0. }
+    { intro Heq. rewrite Heq in Hy_lt. lia. }
+  - (* both x and y equal u → contradiction *)
+    subst x. subst y. exfalso. apply Hneq. reflexivity.
+Qed.
+
+(** [stack_dfn_order_strict]: With [dfn_injective] and
+    [stack_in_visited], two distinct stack vertices at different
+    positions have strictly different dfn values: if [x] is above
+    [y] then [dfn s y < dfn s x]. *)
+Lemma stack_dfn_order_strict (s: @SCCSt V):
+  stack_in_visited s -> stack_dfn_order s -> dfn_injective s ->
+  forall x y, In x (stack s) -> In y (stack s) ->
+    (exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2) ->
+    x <> y -> dfn s y < dfn s x.
+Proof.
+  intros Hsiv Hord Hinj x y Hx_stk Hy_stk Habove Hneq.
+  assert (Hle: dfn s y <= dfn s x) by (apply (Hord x y Hx_stk Hy_stk Habove)).
+  assert (Hneq_dfns: dfn s x <> dfn s y).
+  { apply (Hinj x y Hneq); apply Hsiv; assumption. }
+  lia.
+Qed.
 
 Lemma set_fa_keep_stack_dfn_order (v p: V):
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
