@@ -2592,31 +2592,44 @@ Section IS_LOW.
       (from [low_forset_inv]'s [dfn_valid] and [dfn_inv] which together
       ensure uniqueness of dfn values on the stack) to rule out equality,
       yielding the strict inequality. *)
+  (** [preloop_above_existing]: After [preloop x], [x] is above any
+      vertex [y] that was on the stack before (and [x ≠ y]). *)
+  Lemma preloop_above_existing (x y: V):
+    Hoare (fun s => In y (stack s))
+          (preloop x)
+          (fun _ s => exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
+  Qed.
+
   (** [current_above_done_vertex]: In the state after preloop and forset
       for vertex [a], all [done] vertices that are still on the stack
       appear BELOW [a] (i.e., [a] is above them).  This holds because
       [a] was preloop'd after all [done] vertices, so [push_stack a]
-      put [a] at the front.  Subsequent operations (forset for children)
-      only push above [a] or pop from above [a], never moving [a] below
-      previously existing vertices. *)
+      put [a] at the front. *)
   Lemma current_above_done_vertex (pu a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv pu done s ->
     ~ done a ->
     In a (stack s) ->
+    stack_dfn_order s ->
+    dfn_injective s ->
     forall w, done w -> In w (stack s) ->
     exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2.
   Proof.
-    (* Formal proof requires showing that preloop a pushes a to the
-       front (above all existing stack vertices), and forset preserves
-       the relative order of a and any previously-existing vertex w.
-       The stack operations in forset are:
-       - set_fa / update_low: don't modify stack
-       - W child = tarjan_scc g child: preloop child pushes child above a;
-         pop_scc child pops from child up, removing vertices above a
-         but not a itself (since a is below child).
-       Thus a never moves below any vertex that was on the stack before
-       preloop a.  Since w (done vertex) was pushed before a, it was
-       on the stack before preloop a, so a is above w. *)
+    intros Hlow Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
+    unfold low_forset_inv in Hlow.
+    destruct Hlow as [Hsiv [Hdfn_inv [Hdfn_valid [Hfa_vis [Hpu_vis Hmin]]]]].
+    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk) as [Habove | Hw_above].
+    { intro Heq. subst w. exact (Hndone Hdone). }
+    - exact Habove.
+    - (* w above a: impossible. stack_dfn_order w a gives dfn a <= dfn w.
+         With dfn_injective, dfn a < dfn w. But w was preloop'd before a
+         (w ∈ done, a ∉ done), so dfn w < dfn a. Contradiction.
+         The dfn ordering follows from timer monotonicity: preloop sets
+         dfn = timer, timer only increases. Formal proof requires a lemma
+         connecting done membership to dfn processing order. *)
+      admit.
   Admitted.
 
   Lemma done_vertex_dfn_lt (pu a: V) (done: V -> Prop) (s: @SCCSt V):
@@ -2632,7 +2645,7 @@ Section IS_LOW.
     assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
     (* a is above w in the stack (from current_above_done_vertex) *)
     assert (Habove: exists l1 l2, stack s = l1 ++ a :: l2 /\ In w l2).
-    { exact (current_above_done_vertex pu a done s Hlow Hndone Ha_stk w Hdone Hw_stk). }
+    { exact (current_above_done_vertex pu a done s Hlow Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk). }
     (* stack_dfn_order_strict gives strict dfn inequality *)
     unfold low_forset_inv in Hlow.
     destruct Hlow as [Hsiv [Hdfn_inv [Hdfn_valid [Hfa_vis [Hpu_vis Hmin]]]]].
