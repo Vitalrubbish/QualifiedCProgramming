@@ -419,11 +419,26 @@ Section IS_LOW.
           (set_fa v u)
           (fun _ s => wf_scc_state_pre v s /\ u ∈ visited s).
   Proof.
-    (* stack_in_visited and u∈visited are trivial (set_fa does not touch
-       stack/visited/dfn/timer). dfn_inv, dfn_valid, fa_visited, ~v∈visited
-       come from set_fa_preserves_dfn_pre_child. The Hoare_conj nesting
-       requires careful precondition weakening; proof deferred. *)
-  Admitted.
+    unfold wf_scc_state_pre, wf_scc_state.
+    eapply Hoare_conseq_post.
+    2: { apply Hoare_conj with (Q1 := fun _ s => dfn_pre g v s root /\ u ∈ visited s).
+      - apply (Hoare_conseq_pre
+          (fun s => wf_scc_state s /\ u ∈ visited s /\ ~ v ∈ visited s)
+          (fun s => dfn_pre g v s root /\ u ∈ visited s)
+          (set_fa v u) (fun _ s => dfn_pre g v s root /\ u ∈ visited s)).
+        { intros s [[Hsiv [Hinv [Hvalid Hfa]]] [Huvis Hnv]].
+          unfold dfn_pre. split. { split. exact Hnv. split. exact Hvalid.
+          split. exact Hinv. exact Hfa. } exact Huvis. }
+        apply (set_fa_preserves_dfn_pre_child_rich g root v u).
+      - apply (Hoare_conseq_pre
+          (fun s => wf_scc_state s /\ u ∈ visited s /\ ~ v ∈ visited s)
+          (fun s => stack_in_visited s)
+          (set_fa v u) (fun _ s => stack_in_visited s)).
+        { intros s [[Hsiv _] _]. exact Hsiv. }
+        unfold set_fa. intro_state. hoare_auto_s. subst s. simpl. exact H. }
+    intros _ s [[[Hnv [Hvalid [Hinv Hfa]]] Huvis] Hsiv].
+    split; [| exact Huvis]. split; [| exact Hnv]. split; [exact Hsiv | split; [exact Hinv | split; [exact Hvalid | exact Hfa]]].
+  Qed.
 
   (** [set_low_preserves_wf_scc_state]: [set_low u n] only changes [low u],
       so all four global invariants are trivially preserved. *)
