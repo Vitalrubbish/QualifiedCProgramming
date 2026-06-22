@@ -2562,13 +2562,12 @@ Section IS_LOW.
     done_visited done s ->
     ~ done a ->
     In a (stack s) ->
-    (forall x y, In x (stack s) -> In y (stack s) ->
-      (exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2) -> dfn s y <= dfn s x) ->
+    stack_dfn_order s ->
     (forall w, done w -> In w (stack s) -> dfn s w < dfn s a) ->
     forall w, done w -> forall popped' rest',
       stack_split_at (stack s) a = (popped', rest') -> ~ In w popped'.
   Proof.
-    intros Hlow Hdv Hndone Ha_in_stack Hdfn_stack_order Hdfn_lt w Hdone popped' rest' Hsplit.
+    intros Hlow Hdv Hndone Ha_in_stack Hdfn_order Hdfn_lt w Hdone popped' rest' Hsplit.
     intro Hw_in_popped.
     (* If w = a, contradiction with ~done a and done w *)
     destruct (equiv_dec w a) as [Heq_wa | Hneq_wa].
@@ -2578,14 +2577,13 @@ Section IS_LOW.
       Ha_in_stack popped' rest' Hsplit Hw_in_popped Hneq_wa)
       as [l1 [l2 [Heq_stk Ha_in_l2]]].
     assert (Hw_in_stk: In w (stack s)). {
-      rewrite Heq_stk. apply in_or_app. right. simpl. left. reflexivity. }
+      rewrite Heq_stk. rewrite List.in_app_iff. right. simpl. left. reflexivity. }
     assert (Ha_in_stk: In a (stack s)). {
-      rewrite Heq_stk. apply in_or_app. right. simpl. right. exact Ha_in_l2. }
-    (* dfn-stack-ordering: w appears before a, so dfn a <= dfn w *)
+      rewrite Heq_stk. rewrite List.in_app_iff. right. simpl. right. exact Ha_in_l2. }
+    unfold stack_dfn_order in Hdfn_order.
     assert (Hdfn_le: dfn s a <= dfn s w). {
-      apply (Hdfn_stack_order w a Hw_in_stk Ha_in_stk).
+      apply (Hdfn_order w a Hw_in_stk Ha_in_stk).
       exists l1. exists l2. split; [exact Heq_stk | exact Ha_in_l2]. }
-    (* But for done vertices on the stack, dfn w < dfn a *)
     assert (Hdfn_lt': dfn s w < dfn s a). {
       apply (Hdfn_lt w Hdone Hw_in_stk). }
     lia.
