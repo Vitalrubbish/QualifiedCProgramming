@@ -2557,6 +2557,31 @@ Section IS_LOW.
     }
   Qed.
 
+  (** [in_list_one_above_other]: If two distinct elements [x] and [y] are
+      both in a list, then either [x] appears before [y] or [y] appears
+      before [x] (i.e., one is above the other). *)
+  Lemma in_list_one_above_other {A: Type} (l: list A) (x y: A):
+    In x l -> In y l -> x <> y ->
+    (exists l1 l2, l = l1 ++ x :: l2 /\ In y l2) \/
+    (exists l1 l2, l = l1 ++ y :: l2 /\ In x l2).
+  Proof.
+    induction l as [| z zs IH] in x, y |- *; intros Hx_in Hy_in Hneq.
+    { destruct Hx_in. }
+    { destruct Hx_in as [Hx_eq_z | Hx_in_zs].
+      { (* x = z *)
+        subst z. simpl in Hy_in. destruct Hy_in as [Hy_eq_x | Hy_in_zs].
+        { exfalso. apply Hneq. exact Hy_eq_x. }
+        { left. exists (@nil A). exists zs. split; [reflexivity | exact Hy_in_zs]. } }
+      { (* x in zs *)
+        destruct Hy_in as [Hy_eq_z | Hy_in_zs].
+        { (* y = z *)
+          subst z. right. exists (@nil A). exists zs. split; [reflexivity | exact Hx_in_zs]. }
+        { (* both x and y in zs *)
+          destruct (IH x y Hx_in_zs Hy_in_zs Hneq) as [[l1 [l2 [Heq Hiny]]] | [l1 [l2 [Heq Hinx]]]].
+          { left. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hiny]. }
+          { right. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hinx]. } } } }
+  Qed.
+
   (** [done_vertex_dfn_lt]: For the current vertex [a] (with [~ done a],
       [In a (stack s)]) and any [done] vertex [w] still on the stack,
       [dfn s w < dfn s a].  This holds because [w] was processed before
@@ -2575,15 +2600,27 @@ Section IS_LOW.
     dfn_injective s ->
     forall w, done w -> In w (stack s) -> dfn s w < dfn s a.
   Proof.
-    (* w was processed before a (w ∈ done, a ∉ done).
-       preloop w occurred earlier, assigning dfn(w) = timer_at_w.
-       preloop a occurred later, assigning dfn(a) = timer_at_a.
-       Since timer is monotonic, dfn(w) < dfn(a).
-       Formal proof requires a lemma connecting done membership to
-       the processing order and timer values, or a lemma that
-       stack_dfn_order_strict can be applied because a is above w
-       (a was pushed later, so it's closer to the top).
-       Both require formalizing stack evolution, left as future work. *)
+    intros Hlow Hndone Ha_stk Hstack_ord Hdfn_inj w Hdone Hw_stk.
+    unfold low_forset_inv in Hlow.
+    destruct Hlow as [Hsiv [Hdfn_inv [Hdfn_valid [Hfa_vis [Hpu_vis Hmin]]]]].
+    (* a ≠ w since done w and ~ done a *)
+    assert (Ha_ne_w: a <> w) by (intro Heq; apply Hndone; rewrite Heq; exact Hdone).
+    (* Either a is above w or w is above a (list property) *)
+    destruct (in_list_one_above_other (stack s) a w Ha_stk Hw_stk Ha_ne_w)
+      as [Habove | Hw_above].
+    - (* a is above w: use stack_dfn_order_strict *)
+      eapply (stack_dfn_order_strict s Hsiv Hstack_ord Hdfn_inj a w Ha_stk Hw_stk Habove Ha_ne_w).
+    - (* w is above a: this contradicts the processing order.
+         w was processed before a (w ∈ done, a ∉ done), so w was
+         pushed earlier to the stack. When a was preloop'd later,
+         push_stack added a to the front. Therefore a must be above w.
+         The forset for a does not change the relative order of a and w
+         (children are pushed above a, and pop_scc removes from above a).
+         Since we observe both a and w on the stack at the current state,
+         a must be above w, contradicting Hw_above.
+         Formal proof requires a lemma about stack evolution through
+         preloop and forset, connecting done membership to stack order. *)
+      admit.
   Admitted.
 
   Lemma done_not_popped_by_subtree_pop_scc (u a: V) (done: V -> Prop) (s: @SCCSt V):
