@@ -611,8 +611,37 @@ Section IS_LOW.
           (preloop u)
           (fun _ s => low_forset_inv u ∅ s).
   Proof.
-    (* Proof idea: original proof preserved in Tarjan_scc_is_low.v.orig. *)
-    Admitted.
+    unfold low_pre, low_forset_inv, low_forset_inv_core.
+    apply Hoare_conj with (Q1 := fun _ s => wf_scc_state s).
+    - (* wf_scc_state: from preloop_preserves_wf_scc_state *)
+      apply (Hoare_conseq_pre (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+        (fun s => wf_scc_state_pre u s) (preloop u) (fun _ s => wf_scc_state s)).
+      intros s H. unfold wf_scc_state_pre. exact H.
+      apply preloop_preserves_wf_scc_state.
+    - apply Hoare_conj with (Q1 := fun _ s => u ∈ visited s).
+      + (* u ∈ visited: from preloop_self_visited *)
+        apply (Hoare_conseq_pre (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+          (fun _ => True) (preloop u) (fun _ s => u ∈ visited s)).
+        intros s _. exact I.
+        apply (preloop_self_visited u).
+      + (* low_forset_inv_core: from preloop_low_eq_dfn + low_eq_dfn_to_min_empty *)
+        apply (Hoare_conseq_pre (fun s => wf_scc_state s /\ ~ u ∈ visited s)
+          (fun _ => True) (preloop u)
+          (fun _ s => min_value_of_subset Nat.le
+            (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
+             min_value_of_subset Nat.le (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
+            (fun x => x) (low s u))).
+        intros s _. exact I.
+        apply Hoare_conseq with
+          (P2 := fun _ => True) (Q2 := fun _ s => low s u = dfn s u)
+          (Q1 := fun _ s => min_value_of_subset Nat.le
+            (min_value_of_subset Nat.le (children_done s u ∅) (low s) ∪
+             min_value_of_subset Nat.le (fun w => back_edges_done s u ∅ w \/ w = u) (dfn s))
+            (fun x => x) (low s u)).
+        intros s _. exact I.
+        intros _ s Hlow_eq. apply low_eq_dfn_to_min_empty. exact Hlow_eq.
+        apply preloop_low_eq_dfn.
+  Qed.
 
   (* ================================================================ *)
   (* 8. pop_scc Preserves Low Valid                                   *)
