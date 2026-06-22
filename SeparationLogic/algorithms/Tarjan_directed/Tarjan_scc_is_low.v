@@ -2650,17 +2650,83 @@ Section IS_LOW.
           (forset (fun w => dg_step g a w) (process_edge a W))
           (fun _ s => low_forset_inv u done s).
   Proof.
-    (* 证明思路：对 a 的邻接点用 Hoare_forset 迭代，不变式为
-       low_forset_inv u done / a∈visited / done_visited done。
-       树边分支：set_fa a0 a 后用 set_fa_preserves_low_forset_inv_for_new_child 保持，
-       递归调用 W a0 由 IH 保持，update_low a (low a0) 因 u≠a 用
-       update_low_preserves_low_forset_inv_for_other 保持。
-       非树边分支：a0 在栈中用 update_low_back_edge；不在栈中集合不变。
-       关键引理：Hoare_forset, low_forset_inv_proper, done_visited_proper,
-       set_fa_preserves_low_forset_inv_for_new_child,
-       update_low_preserves_low_forset_inv_for_other, update_low_back_edge。
-       详见上方 [forset_keeps_low_forset_inv] 的完整 proof plan。 *)
-    Admitted.
+  Proof.
+    set (P := fun (_: V -> Prop) (s: SCCSt) =>
+      low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s).
+    apply (Hoare_conseq
+      (fun s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s)
+      (P (fun _ => False))
+      (forset (fun w => dg_step g a w) (process_edge a W))
+      (fun _ s => low_forset_inv u done s)
+      (fun _ s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s)).
+    { intros s [Hinv [Hav Hdv]]. unfold P. simpl. exact (conj Hinv (conj Hav Hdv)). }
+    { intros _ s [Hinv _]. exact Hinv. }
+    { apply (@Hoare_forset SCCSt V P (fun w => dg_step g a w) (process_edge a W)).
+      { unfold P, Proper, respectful. intros. subst. reflexivity. }
+      { intros todo a0 Hsub Huniv Hnotdone.
+        intro_state. destruct H as [[Hwf [Huvis Hmin]] [Hav Hdv]].
+        unfold wf_scc_state in Hwf. destruct Hwf as [Hsiv [Hdinv [Hdvalid Hfav]]].
+        unfold process_edge, if_else. intro_state. apply Hoare_choice.
+        - (* Tree edge *)
+          apply Hoare_assume_bind. simpl. intro_state.
+          destruct H1 as [Hnv_a0 Hs2_eq]. subst s2. subst s1.
+          assert (Hnd_a0: ~ done a0). { intro Hd. apply Hnv_a0. apply Hdv. exact Hd. }
+          rename s0 into s_pre.
+          unfold set_fa. intro_state. hoare_auto_s. subst s0.
+          eapply Hoare_bind with
+            (Q := fun _ s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s)
+            (R := fun _ s => P (todo ∪ [a0]) s).
+          { (* W a0 *)
+            apply Hoare_conseq_pre with
+              (P2 := fun s => low_forset_inv u done s /\ ~ a0 ∈ visited s /\ ~ done a0 /\ a ∈ visited s /\ done_visited done s).
+            { simpl. intros s' Heq. subst s'.
+              assert (Hs_pre_wf: wf_scc_state s_pre). {
+                unfold wf_scc_state. split; [exact Hsiv | split; [exact Hdinv | split; [exact Hdvalid | exact Hfav]]]. }
+              split.
+              { apply (set_fa_preserves_low_forset_inv_for_new_child u a a0 done s_pre).
+                { exact Hnv_a0. } { exact Hav. } { exact Huvis. } { exact Hndone_a. } { exact Hnd_a0. }
+                { exact (conj Hs_pre_wf (conj Huvis Hmin)). } }
+              split. { exact Hnv_a0. } split. { exact Hnd_a0. } split. { exact Hav. } exact Hdv. }
+            apply (IH a0). }
+          { simpl. intros _. intro_state. hoare_auto_s. destruct H as [Hinv' [Hav' Hdv']].
+            unfold update_low. intro_state. hoare_auto_s.
+            + (* set_low branch *)
+              unfold set_low. intro_state. hoare_auto_s.
+              subst s. subst s0. unfold P. simpl.
+              assert (Hmin_eq: low s1 a0 = Nat.min (low s1 a) (low s1 a0)).
+              { symmetry. apply Nat.min_r. lia. }
+              split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u a (low s1 a0) done s1 Hneq Hndone_a Hinv'). }
+              split; [exact Hav' | exact Hdv'].
+            + (* skip *)
+              destruct H. subst s. split; [exact Hinv' | split; [exact Hav' | exact Hdv']]. }
+        - (* Non-tree edge *)
+          intro_state. hoare_auto_s.
+          + (* In stack: back edge *)
+            unfold update_low. intro_state. hoare_auto_s.
+            { (* set_low branch *)
+              unfold set_low. intro_state. hoare_auto_s. subst s0. subst s.
+              unfold P. simpl.
+              assert (Hinv: low_forset_inv u done s1). {
+                unfold low_forset_inv.
+                split. { unfold wf_scc_state. split; [exact Hsiv | split; [exact Hdinv | split; [exact Hdvalid | exact Hfav]]]. }
+                split; [exact Huvis | exact Hmin]. }
+              assert (Hmin_eq: dfn s1 a0 = Nat.min (low s1 a) (dfn s1 a0)).
+              { symmetry. apply Nat.min_r. lia. }
+              split. { rewrite Hmin_eq. apply (update_low_preserves_low_forset_inv_for_other u a (dfn s1 a0) done s1 Hneq Hndone_a Hinv). }
+              split; [exact Hav | exact Hdv]. }
+            { (* skip *) destruct H. subst s.
+              split. { unfold low_forset_inv. split. {
+                unfold wf_scc_state. split; [exact Hsiv | split; [exact Hdinv | split; [exact Hdvalid | exact Hfav]]]. }
+                split; [exact Huvis | exact Hmin]. }
+              split; [exact Hav | exact Hdv]. }
+          + (* Not in stack: cross edge, skip *)
+            subst s1. destruct H3 as [Hs_eq _]. subst s. subst s2.
+            unfold P. simpl.
+            split. { unfold low_forset_inv. split. {
+              unfold wf_scc_state. split; [exact Hsiv | split; [exact Hdinv | split; [exact Hdvalid | exact Hfav]]]. }
+              split; [exact Huvis | exact Hmin]. }
+            split; [exact Hav | exact Hdv]. } }
+  Qed.
 
   (** [forset_keep_low_forset_inv]: after iterating over all children of [u],
       [low_forset_inv u ∅] is turned into [low_post u s].
