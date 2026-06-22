@@ -3134,4 +3134,118 @@ Proof.
       split; [exact Hvisited2 | exact (fun u v => Hcorrect u v (Hvisited2 u) (Hvisited2 v))].
 Qed.
 
+Definition AntiTopo (s : St) : Prop :=
+  forall a b, visited2 s a -> visited2 s b ->
+    reachable_rev a b -> ~reachable_rev b a ->
+    scc_id s a < scc_id s b.
+
+Lemma kosaraju_anti_topological :
+  Hoare (fun st => st = init_st) kosaraju
+    (fun _ s' =>
+       (forall v, visited2 s' v) /\
+       (forall u v, scc_id s' u = scc_id s' v <-> mutually_reachable u v) /\
+       AntiTopo s').
+Proof.
+  unfold kosaraju.
+  eapply Hoare_bind.
+  - apply Hoare_conj.
+    + apply kosaraju_finish_R.
+    + apply (kosaraju_finish_preserves_visited2 init_st).
+  - intro junk. apply Hoare_normalize.
+    intros s1 [HR Hv2_eq].
+    assert (HAT0 : AntiTopo s1).
+    { unfold AntiTopo. intros a b Ha. exfalso. revert Ha. rewrite Hv2_eq. cbn. auto. }
+    eapply Hoare_imp_post.
+    + apply Hoare_conj.
+      * apply Hoare_conj.
+        -- apply kosaraju_scc_all_visited.
+        -- apply (kosaraju_scc_preserves_R s1 HR).
+      * unfold kosaraju_scc.
+        apply Hoare_normal_LFix_closed with
+          (R := fun s => R s /\ AntiTopo s)
+          (Q := fun _ _ _ s' => AntiTopo s').
+        2: { exact (conj HR HAT0). }
+        intros W IH s0' u0 [HR' HAT'].
+        destruct HR' as [HFC [Hphase [Hvis1 [Hscclt Hcorrect]]]].
+        unfold kosaraju_scc_f.
+        apply Hoare_choice.
+        { apply Hoare_bind with (Q := fun (u:V) (s':St) =>
+            s' = s0' /\ ~visited2 s' u /\
+            (forall w, ~visited2 s' w -> finish s' u >= finish s' w)).
+          { unfold Hoare, pick_unvisited2, get.
+            intros ss uu ss2 Hss Hprog. rewrite Hss in *.
+            destruct Hprog as [[Hn Hm] Hsame].
+            rewrite Hsame in *; repeat split; auto. }
+          intro root. apply Hoare_normalize.
+          intros sx [Hsx [Hnot_root Hmax]]; subst sx.
+          assert (HR_full : R s0') by exact (conj HFC (conj Hphase (conj Hvis1 (conj Hscclt Hcorrect)))).
+          eapply Hoare_bind.
+          { exact (set_scc_root_id_R s0' root HR_full Hnot_root). }
+          { intro jk. apply Hoare_normalize.
+            intros sx2 [Hv2_eq2 [_ [Hfin_eq2 [HR1 [Hroot_id1 [Hscc_next1 Hother1]]]]]].
+            assert (Hnr : ~visited2 sx2 root) by (rewrite Hv2_eq2; exact Hnot_root).
+            assert (Hmx : forall w, ~visited2 sx2 w -> finish sx2 root >= finish sx2 w)
+              by (intros w Hw; rewrite Hv2_eq2 in Hw; rewrite Hfin_eq2; exact (Hmax w Hw)).
+            assert (Hlt_root : forall v0, visited2 sx2 v0 -> scc_id sx2 v0 < scc_id sx2 root).
+            { intros v0 Hv0. rewrite Hv2_eq2 in Hv0.
+              destruct (classic (v0 = root)) as [->|Hne];
+                [exfalso; exact (Hnot_root Hv0)|].
+              rewrite (Hother1 v0 Hne), Hroot_id1. exact (Hscclt v0 Hv0). }
+            assert (Hroot_lt : scc_id sx2 root < scc_next sx2)
+              by (rewrite Hroot_id1, Hscc_next1; lia).
+            eapply Hoare_bind.
+            { apply Hoare_conj.
+              - exact (DFS_scc_R sx2 root HR1 Hnr Hmx Hlt_root Hroot_lt).
+              - apply Hoare_conj.
+                + apply Hoare_conj.
+                  * exact (DFS_scc_same_root_id sx2 root root).
+                  * assert (HFC2 : ForwardReachClosed sx2)
+                      by (intros x0 y0 Hv; rewrite Hv2_eq2 in Hv;
+                          intros Hr; rewrite Hv2_eq2; exact (HFC x0 y0 Hv Hr)).
+                    assert (Hphase2 : Phase1_Order sx2).
+                    { intros aa bb Hrr Hnrr.
+                      destruct (Hphase aa bb Hrr Hnrr) as [c [Hm Hf]].
+                      exists c; split; [exact Hm|rewrite Hfin_eq2; exact Hf]. }
+                    exact (DFS_scc_mutually_reachable_root sx2 root HFC2 Hphase2 Hnr Hmx).
+                + exact (DFS_scc_preserves_scc_next sx2 root root). }
+            { intro jk2. apply Hoare_normalize.
+              intros s2 [HR2 [[Hid_props Hmut_root] Hscc_next_eq]].
+              destruct Hid_props as [Hsame_id [Hpres_id [Hroot_id2 Hsub2]]].
+              assert (HAT2 : AntiTopo s2).
+              { unfold AntiTopo. intros a b Ha Hb Hrev Hnrev.
+                destruct (classic (visited2 sx2 a)) as [Ha0|Ha1];
+                destruct (classic (visited2 sx2 b)) as [Hb0|Hb1].
+                - assert (Ha_ne : a <> root) by (intro; subst; exact (Hnr Ha0)).
+                  assert (Hb_ne : b <> root) by (intro; subst; exact (Hnr Hb0)).
+                  rewrite (Hpres_id a Ha0 Ha_ne), (Hpres_id b Hb0 Hb_ne),
+                         (Hother1 a Ha_ne), (Hother1 b Hb_ne).
+                  apply HAT'; try (rewrite <- Hv2_eq2; assumption). exact Hrev. exact Hnrev.
+                - assert (Ha_ne : a <> root) by (intro; subst; exact (Hnr Ha0)).
+                  rewrite (Hpres_id a Ha0 Ha_ne), (Hsame_id b Hb Hb1),
+                         Hroot_id2, Hroot_id1, (Hother1 a Ha_ne).
+                  apply Hscclt. rewrite <- Hv2_eq2. exact Ha0.
+                - exfalso. apply Ha1. rewrite Hv2_eq2.
+                  apply (HFC b a). { rewrite <- Hv2_eq2; exact Hb0. }
+                  apply reachable_iff_reachable_rev. exact Hrev.
+                - exfalso. apply Hnrev.
+                  pose proof (Hmut_root a Ha Ha1) as [Hra Har].
+                  pose proof (Hmut_root b Hb Hb1) as [Hrb Hbr].
+                  apply reachable_iff_reachable_rev.
+                  unfold reachable; etransitivity; [exact Har | exact Hrb]. }
+              eapply Hoare_imp_post.
+              { exact (IH s2 tt (conj HR2 HAT2)). }
+              { intros jk4 s' H; exact H. } } } }
+        { apply Hoare_normal_assume_bind with
+            (P := fun st => forall v, visited2 st v)
+            (f := skip)
+            (Q := fun _ s' => AntiTopo s')
+            (s0 := s0').
+          intros _. apply Hoare_ret'; intros s Hs; subst; exact HAT'. }
+    + intros _ s' [[Hvisited HR'] HAT'].
+      destruct HR' as [_ [_ [_ [_ Hcorrect']]]].
+      split; [exact Hvisited|split].
+      * exact (fun u v => Hcorrect' u v (Hvisited u) (Hvisited v)).
+      * exact HAT'.
+Qed.
+
 End Kosaraju.
