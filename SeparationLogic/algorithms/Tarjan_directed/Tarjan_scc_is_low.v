@@ -2278,18 +2278,12 @@ Section IS_LOW.
           + (* fa_visited: only new fa entry is v→u, and u ∈ visited *)
             unfold fa_visited. intros w Hfa_neq_w.
             simpl in Hfa_neq_w. unfold equiv_decb in Hfa_neq_w.
-            destruct (equiv_dec w v) as [Heqw | Hneqw].
-            { (* w = v *) rewrite Heqw. simpl. unfold equiv_decb. destruct (equiv_dec v v); [exact Hu_vis | exfalso; apply c; reflexivity]. }
-            { (* w ≠ v: fa w unchanged — use case analysis on the decidable equality
-                 in the goal, which is inside a nested if. *)
-              destruct (equiv_dec w v) as [Heqw' | Hneqw'].
-              { exfalso; exact (Hneqw Heqw'). }
-              { clear Hneqw'. simpl. (* equiv_decb w v = false now *)
-                destruct (equiv_dec w v) in Hfa_neq_w; [exfalso; auto |].
-                apply Hfa_vis. exact Hfa_neq_w. } }
+            destruct (equiv_dec w v) as [Heqw | Hneqw];
+            [ (* w = v *) rewrite Heqw; simpl; unfold equiv_decb; destruct (equiv_dec v v); [exact Hu_vis | exfalso; apply c; reflexivity]
+            | (* w ≠ v *) simpl; unfold equiv_decb; destruct (equiv_dec w v) as [Heqw' | Hneqw']; [exfalso; exact (Hneqw Heqw') |]; simpl; apply (Hfa_vis w); exact Hfa_neq_w ].
         - (* low_forset_inv_core *) apply (set_fa_preserves_min u v done s0 Hndone_v). exact Hmin. }
       split. { (* fa s v = u *)
-        simpl. unfold equiv_decb. destruct (equiv_dec v v); [| exfalso; auto]. reflexivity. }
+        simpl. unfold equiv_decb. destruct (equiv_dec v v); [| exfalso; auto]. reflexivity. apply c. reflexivity. }
       split. { simpl. exact Hnv. }
       split. { exact Hndone_v'. }
       split. { simpl. exact Hdv. }
