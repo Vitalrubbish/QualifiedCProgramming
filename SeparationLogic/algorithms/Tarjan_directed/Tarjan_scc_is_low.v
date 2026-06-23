@@ -2025,138 +2025,6 @@ Section IS_LOW.
       [low_forset_inv u done] and [fa s v = u] for an ancestor [u].
       These are the building blocks for [W_preserves_ancestor_inv]. *)
 
-  (** [pop_scc_preserves_ancestor_inv]: [pop_scc v] only modifies
-      [stack] and [sccs]; [fa], [low], [dfn], [visited] are unchanged.
-      For an ancestor [u] of [v] that stays on the stack, the ancestor
-      invariant is preserved, including the new stack-ordering conjuncts. *)
-  Lemma pop_scc_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    u <> v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ In v (stack s) /\ In u (stack s) /\
-                   stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
-          (pop_scc v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ In u (stack s) /\
-                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
-  Proof.
-    intros Hneq.
-    apply Hoare_conj. (* low_forset_inv *)
-    - apply (Hoare_conseq_pre _ (fun s => low_forset_inv u done s /\ u <> v)
-        (pop_scc v) (fun _ s => low_forset_inv u done s)).
-      { intros s [Hlow _]. split; [exact Hlow | exact Hneq]. }
-      apply pop_scc_keeps_low_forset_inv_other.
-    - apply Hoare_conj. (* fa s v = u *)
-      + (* fa unchanged by pop_scc *)
-        unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
-        unfold pop_scc_state.
-        destruct (stack_split_at (stack s0) v) as [popped rest]. simpl.
-        destruct H as [_ [Hfa _]]. exact Hfa.
-      + apply Hoare_conj. (* In u (stack s) *)
-        * (* u stays on stack: the post-state stack is 'rest' from stack_split_at;
-             u is below v on the stack (ancestor) so it's in 'rest' *)
-          unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
-          unfold pop_scc_state.
-          destruct (stack_split_at (stack s0) v) as [popped rest] eqn:Hsplit. simpl.
-          destruct H as [_ [_ [Hinv_stk [Hinu_stk _]]]].
-          destruct (stack_split_at_partition (stack s0) v popped rest Hsplit)
-            as [_ [_ Hcover]].
-          destruct (Hcover u Hinu_stk) as [Hpop | Hrest].
-          { (* u ∈ popped: must lead to contradiction.
-               Since fa s0 v = u and u ≠ v, we have dfn s0 u < dfn s0 v.
-               By stack_dfn_order, u must be below v, hence in rest not popped.
-               This is a known property: ancestor stays when child is popped. *)
-            exfalso. apply Hneq.
-            (* TODO: full proof requires dfn ordering chain.
-               u ∈ popped from stack_split_at means u is at or above v.
-               But fa s0 v = u with dfn_valid gives dfn s0 u < dfn s0 v.
-               stack_dfn_order then forces u to be below v, a contradiction.
-               We leave a short admit for now since this is a leaf property
-               that needs the dfn ordering lemma. *)
-            admit. }
-          { exact Hrest. }
-        * apply Hoare_conj. (* stack_dfn_order *)
-          { apply (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ In v (stack s))
-              (pop_scc v) (fun _ s => stack_dfn_order s)).
-            { intros s [_ [_ [Hinv [Hinu [Horder _]]]]]. split; [exact Horder | exact Hinv]. }
-            apply pop_scc_preserves_stack_dfn_order. }
-          apply Hoare_conj. (* dfn_injective *)
-          { apply (Hoare_conseq_pre _ (fun s => dfn_injective s)
-              (pop_scc v) (fun _ s => dfn_injective s)).
-            { intros s [_ [_ [_ [_ [_ [Hinj _]]]]]]. exact Hinj. }
-            apply pop_scc_preserves_dfn_injective. }
-          (* done_visited *)
-          apply (Hoare_conseq_pre _ (fun s => done_visited done s)
-            (pop_scc v) (fun _ s => done_visited done s)).
-          { intros s [_ [_ [_ [_ [_ [_ Hdv]]]]]]. exact Hdv. }
-          apply pop_scc_preserves_done_visited.
-  Admitted.
-
-  (** [preloop_preserves_ancestor_inv]: [preloop v] modifies only fields
-      local to [v]. For an ancestor [u] already on the stack, it preserves
-      [low_forset_inv u done], [fa s v = u], and the new stack-ordering
-      conjuncts [In u (stack s)], [stack_dfn_order], [dfn_injective]. *)
-  Lemma preloop_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    u <> v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
-                   In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
-          (preloop v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ In u (stack s) /\
-                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
-  Proof.
-    intros Hneq.
-    apply Hoare_conj. (* low_forset_inv *)
-    - apply (Hoare_conseq_pre _ (fun s => low_forset_inv u done s /\ u <> v /\ ~ done v)
-        (preloop v) (fun _ s => low_forset_inv u done s)).
-      { intros s [Hlow [_ [_ [Hndone _]]]]. split; [exact Hlow | split; [exact Hneq | exact Hndone]]. }
-      apply preloop_keeps_low_forset_inv_other.
-    - apply Hoare_conj. (* fa s v = u *)
-      + (* preloop preserves fa v = u *)
-        apply (Hoare_conseq_pre _ (fun s => fa s v = u)
-          (preloop v) (fun _ s => fa s v = u)).
-        { intros s [_ [Hfa _]]. exact Hfa. }
-        eapply Hoare_conseq_post.
-        { intros _ s [Hfa _]. exact Hfa. }
-        apply (preloop_keeps_fa v u).
-      + apply Hoare_conj. (* In u (stack s) *)
-        * (* u stays on stack, preloop pushes v *)
-          apply (Hoare_conseq_pre _ (fun s => In u (stack s))
-            (preloop v) (fun _ s => In u (stack s))).
-          { intros s [_ [_ [_ [_ [Hinu _]]]]]. exact Hinu. }
-          unfold preloop, push_stack.
-          intro_state. hoare_auto_s. subst s. simpl.
-          destruct H0 as [Hinu _]. simpl. right. exact Hinu.
-        * apply Hoare_conj. (* stack_dfn_order *)
-          { apply (Hoare_conseq_pre _
-              (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ v ∈ visited s)
-              (preloop v) (fun _ s => stack_dfn_order s)).
-            { intros s [[Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]] _].
-              destruct Hlow as [[Hsiv [Hinv _]] _].
-              split; [exact Horder | split; [exact Hinv | split; [exact Hsiv | exact Hnv]]]. }
-            apply preloop_preserves_stack_dfn_order. }
-          apply Hoare_conj. (* dfn_injective *)
-          { apply (Hoare_conseq_pre _
-              (fun s => dfn_injective s /\ dfn_inv s /\ ~ v ∈ visited s)
-              (preloop v) (fun _ s => dfn_injective s)).
-            { intros s [[Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]] _].
-              destruct Hlow as [[Hsiv [Hinv _]] _].
-              split; [exact Hinj | split; [exact Hinv | exact Hnv]]. }
-            apply preloop_preserves_dfn_injective. }
-          (* done_visited *)
-          apply (Hoare_conseq_pre _ (fun s => done_visited done s)
-            (preloop v) (fun _ s => done_visited done s)).
-          { intros s [[Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]] _]. exact Hdv. }
-          apply (preloop_keep_visited_forall v done).
-  Qed.
-
-  (** [done_not_popped_by_subtree_pop_scc]: Under [low_forset_inv u done s]
-      with [done_visited done s] and [~ done a], when [pop_scc a] splits
-      the stack at [a], no vertex from [done] appears in the popped
-      portion.  This holds because [done] vertices are ancestors processed
-      before the current DFS subtree, hence are below [a] on the stack
-      or already removed.
-
-      Strengthened with [In a (stack s)] (a is on the stack) and
-      [forall w, done w -> In w (stack s) -> dfn s w < dfn s a]
-      (done vertices that are on the stack have smaller dfn than a,
-      hence are below a). *)
   (** [stack_split_at_in_popped_before_a]: If [w] is in [popped] from
       [stack_split_at stk a], and [w ≠ a], then [w] appears strictly
       before [a] in the list [stk].  This is a purely structural lemma
@@ -2197,38 +2065,17 @@ Section IS_LOW.
             { exact Ha_in_l2. } } } } }
   Qed.
 
-  (** [in_list_one_above_other]: If two distinct elements [x] and [y] are
-      both in a list, then either [x] appears before [y] or [y] appears
-      before [x] (i.e., one is above the other). *)
-  Lemma in_list_one_above_other {A: Type} (l: list A) (x y: A):
-    In x l -> In y l -> x <> y ->
-    (exists l1 l2, l = l1 ++ x :: l2 /\ In y l2) \/
-    (exists l1 l2, l = l1 ++ y :: l2 /\ In x l2).
-  Proof.
-    induction l as [| z zs IH] in x, y |- *; intros Hx_in Hy_in Hneq.
-    { destruct Hx_in. }
-    { destruct Hx_in as [Hx_eq_z | Hx_in_zs].
-      { subst z. simpl in Hy_in. destruct Hy_in as [Hy_eq_x | Hy_in_zs].
-        { exfalso. apply Hneq. exact Hy_eq_x. }
-        { left. exists (@nil A). exists zs. split; [reflexivity | exact Hy_in_zs]. } }
-      { destruct Hy_in as [Hy_eq_z | Hy_in_zs].
-        { subst z. right. exists (@nil A). exists zs. split; [reflexivity | exact Hx_in_zs]. }
-        { destruct (IH x y Hx_in_zs Hy_in_zs Hneq) as [[l1 [l2 [Heq Hiny]]] | [l1 [l2 [Heq Hinx]]]].
-          { left. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hiny]. }
-          { right. exists (z :: l1). exists l2. split; [rewrite Heq; reflexivity | exact Hinx]. } } } }
-  Qed.
+  (** [done_not_popped_by_subtree_pop_scc]: Under [low_forset_inv u done s]
+      with [done_visited done s] and [~ done a], when [pop_scc a] splits
+      the stack at [a], no vertex from [done] appears in the popped
+      portion.  This holds because [done] vertices are ancestors processed
+      before the current DFS subtree, hence are below [a] on the stack
+      or already removed.
 
-  (** [preloop_above_existing]: After [preloop x], [x] is above any
-      vertex [y] that was on the stack before (and [x ≠ y]). *)
-  Lemma preloop_above_existing (x y: V):
-    Hoare (fun s => In y (stack s))
-          (preloop x)
-          (fun _ s => exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2).
-  Proof.
-    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
-    exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
-  Qed.
-
+      Strengthened with [In a (stack s)] (a is on the stack) and
+      [forall w, done w -> In w (stack s) -> dfn s w < dfn s a]
+      (done vertices that are on the stack have smaller dfn than a,
+      hence are below a). *)
   Lemma done_not_popped_by_subtree_pop_scc (u a: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s ->
     done_visited done s ->
@@ -2257,6 +2104,192 @@ Section IS_LOW.
     assert (Hdfn_lt': dfn s w < dfn s a). {
       apply (Hdfn_lt w Hdone Hw_in_stk). }
     lia.
+  Qed.
+
+  (** [pop_scc_preserves_ancestor_inv]: [pop_scc v] only modifies
+      [stack] and [sccs]; [fa], [low], [dfn], [visited] are unchanged.
+      For an ancestor [u] of [v] that stays on the stack, the ancestor
+      invariant is preserved, including the new stack-ordering conjuncts.
+
+      The precondition additionally requires:
+      - [~ done v]: [v] has not yet been moved into [done] (it is the
+        currently active vertex whose SCC is being popped).
+      - [forall w, done w -> In w (stack s) -> dfn s w < dfn s v]: any
+        already-done neighbor of [u] that is still on the stack lies below
+        [v], so it is not removed by [pop_scc v].  This is needed to apply
+        [pop_scc_keeps_low_forset_inv_other] / [done_not_popped_by_subtree_pop_scc]. *)
+  Lemma pop_scc_preserves_ancestor_inv (u v: V) (done: V -> Prop):
+    u <> v -> dg_step g u v ->
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ done v /\
+                   In v (stack s) /\ In u (stack s) /\ stack_dfn_order s /\
+                   dfn_injective s /\ done_visited done s /\
+                   (forall w, done w -> In w (stack s) -> dfn s w < dfn s v))
+          (pop_scc v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ In u (stack s) /\
+                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
+  Proof.
+    intros Hneq Hdg.
+    apply Hoare_conj. (* low_forset_inv u done *)
+    - apply (Hoare_conseq_pre _
+        (fun s => low_forset_inv u done s /\
+                  In v (stack s) /\
+                  (forall w, done w -> forall popped' rest',
+                    stack_split_at (stack s) v = (popped', rest') -> ~ In w popped'))
+        (pop_scc v) (fun _ s => low_forset_inv u done s)).
+      { intros s [Hlow [Hfa [Hndone [Hinv [Hinu [Horder [Hinj [Hdv Hdfn_lt]]]]]]]].
+        split; [exact Hlow | split; [exact Hinv |]].
+        eapply done_not_popped_by_subtree_pop_scc; eauto. }
+      apply pop_scc_keeps_low_forset_inv_other.
+    - apply Hoare_conj. (* fa s v = u *)
+      + (* fa unchanged by pop_scc *)
+        unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+        unfold pop_scc_state.
+        destruct (stack_split_at (stack s0) v) as [popped rest]. simpl.
+        destruct H as [_ [Hfa _]]. exact Hfa.
+      + apply Hoare_conj. (* In u (stack s) *)
+        * (* u stays on stack: u is v's parent, so u is below v on stack.
+             With dfn_valid, dfn s0 u < dfn s0 v, so u ∈ rest by stack_dfn_order. *)
+          unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+          unfold pop_scc_state.
+          destruct (stack_split_at (stack s0) v) as [popped rest] eqn:Hsplit. simpl.
+          destruct H as [Hlow [Hfa [Hndone [Hinv_stk [Hinu_stk [Horder [Hinj [Hdv Hdfn_lt]]]]]]]].
+          destruct (stack_split_at_partition (stack s0) v popped rest Hsplit)
+            as [_ [_ Hcover]].
+          destruct (Hcover u Hinu_stk) as [Hpop | Hrest].
+          { (* u ∈ popped: contradiction via dfn_valid *)
+            destruct Hlow as [[Hsiv [Hinv' [Hvalid Hfa_vis]]] [Huvis _]].
+            assert (Hvis_v: v ∈ visited s0). {
+              apply Hsiv. exact Hinv_stk. }
+            assert (Hfa_v_neq_v: fa s0 v <> v). {
+              rewrite Hfa. exact Hneq. }
+            assert (Htree: dg_step (state_to_dfs_tree g s0 root) u v). {
+              eapply state_to_dfs_tree_step_char_backward;
+                [exact Hdg | exact Hfa | exact Hfa_v_neq_v | exact Hvis_v]. }
+            apply Hvalid in Htree. (* gives dfn s0 u < dfn s0 v *)
+            assert (Hdfn_u_lt_v: dfn s0 u < dfn s0 v) by exact Htree.
+            (* u ∈ popped means u is at/past v in stack; stack_dfn_order
+               would give dfn s0 v ≤ dfn s0 u, contradiction *)
+            destruct (stack_split_at_in_popped_before_a (stack s0) v u
+              Hinv_stk popped rest Hsplit Hpop Hneq)
+              as [l1 [l2 [Hstk_eq Hv_in_l2]]].
+            assert (Hu_in_stk: In u (stack s0)). {
+              rewrite Hstk_eq. apply List.in_or_app. right. simpl. left. reflexivity. }
+            assert (Hv_in_stk: In v (stack s0)). {
+              rewrite Hstk_eq. apply List.in_or_app. right. simpl. right. exact Hv_in_l2. }
+            (* From stack_split_at_in_popped_before_a, we got:
+               stack s0 = l1 ++ u :: l2 /\ In v l2, i.e., v is after u.
+               stack_dfn_order with this gives dfn s0 v ≤ dfn s0 u.
+               With dfn s0 u < dfn s0 v from Hvalid, contradiction. *)
+            assert (Horder_result: exists l1' l2', stack s0 = l1' ++ u :: l2' /\ In v l2').
+            { exists l1. exists l2. split; [exact Hstk_eq | exact Hv_in_l2]. }
+            pose proof (Horder u v Hu_in_stk Hv_in_stk Horder_result) as Hdfn_v_le_u.
+            lia. }
+          { exact Hrest. }
+        * apply Hoare_conj. (* stack_dfn_order *)
+          { apply (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ In v (stack s))
+              (pop_scc v) (fun _ s => stack_dfn_order s)).
+            { intros s [_ [_ [_ [Hinv [Hinu [Horder _]]]]]]. split; [exact Horder | exact Hinv]. }
+            apply pop_scc_preserves_stack_dfn_order. }
+          apply Hoare_conj. (* dfn_injective *)
+          { apply (Hoare_conseq_pre _ (fun s => dfn_injective s)
+              (pop_scc v) (fun _ s => dfn_injective s)).
+            { intros s [_ [_ [_ [_ [_ [_ [Hinj _]]]]]]]. exact Hinj. }
+            apply pop_scc_preserves_dfn_injective. }
+          (* done_visited *)
+          apply (Hoare_conseq_pre _ (fun s => done_visited done s)
+            (pop_scc v) (fun _ s => done_visited done s)).
+          { intros s [_ [_ [_ [_ [_ [_ [_ [Hdv _]]]]]]]]. exact Hdv. }
+          apply pop_scc_preserves_done_visited.
+  Qed.
+
+  (** [preloop_preserves_ancestor_inv]: [preloop v] modifies only fields
+      local to [v]. For an ancestor [u] already on the stack, it preserves
+      [low_forset_inv u done], [fa s v = u], and the new stack-ordering
+      conjuncts [In u (stack s)], [stack_dfn_order], [dfn_injective]. *)
+  Lemma preloop_preserves_ancestor_inv (u v: V) (done: V -> Prop):
+    u <> v ->
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
+                   In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+          (preloop v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ In u (stack s) /\
+                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
+  Proof.
+    intros Hneq.
+    apply Hoare_conj. (* low_forset_inv u done *)
+    - apply (Hoare_conseq_pre _
+        (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
+        (preloop v) (fun _ s => low_forset_inv u done s)).
+      { intros s [Hlow [Hfa [Hnv [Hndone _]]]]. split; [exact Hlow | split; [exact Hnv | exact Hndone]]. }
+      apply (Hoare_conseq_post
+        (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
+        (preloop v)
+        (fun _ s => low_forset_inv u done s)
+        (fun _ s => low_forset_inv u done s /\ v ∈ visited s)).
+      { intros _ s [Hlow _]. exact Hlow. }
+      apply preloop_keeps_low_forset_inv_other.
+    - apply Hoare_conj. (* fa s v = u *)
+      + apply (Hoare_conseq_pre _ (fun s => fa s v = u)
+          (preloop v) (fun _ s => fa s v = u)).
+        { intros s [_ [Hfa _]]. exact Hfa. }
+        apply (Hoare_conseq_post
+          (fun s => fa s v = u) (preloop v)
+          (fun _ s => fa s v = u)
+          (fun _ s => fa s v = u /\ v ∈ visited s)).
+        { intros _ s [Hfa _]. exact Hfa. }
+        apply (preloop_keeps_fa v u).
+      + apply Hoare_conj. (* In u (stack s) *)
+        * (* preloop pushes v; u stays on stack *)
+          apply (Hoare_conseq_pre _ (fun s => In u (stack s))
+            (preloop v) (fun _ s => In u (stack s))).
+          { intros s [_ [_ [_ [_ [Hinu _]]]]]. exact Hinu. }
+          unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
+          intro_state. hoare_auto_s. subst. simpl. auto.
+        * apply Hoare_conj. (* stack_dfn_order *)
+          { apply (Hoare_conseq_pre _
+              (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ v ∈ visited s)
+              (preloop v) (fun _ s => stack_dfn_order s)).
+            { intros s [Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]].
+              destruct Hlow as [[Hsiv [Hinv _]] _].
+              split; [exact Horder | split; [exact Hinv | split; [exact Hsiv | exact Hnv]]]. }
+            apply preloop_preserves_stack_dfn_order. }
+          apply Hoare_conj. (* dfn_injective *)
+          { apply (Hoare_conseq_pre _
+              (fun s => dfn_injective s /\ dfn_inv s /\ ~ v ∈ visited s)
+              (preloop v) (fun _ s => dfn_injective s)).
+            { intros s [Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]].
+              destruct Hlow as [[_ [Hinv _]] _].
+              split; [exact Hinj | split; [exact Hinv | exact Hnv]]. }
+            apply preloop_preserves_dfn_injective. }
+          (* done_visited done s *)
+          apply (Hoare_conseq_pre _ (fun s => done_visited done s)
+            (preloop v) (fun _ s => done_visited done s)).
+          { intros s [Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]]. exact Hdv. }
+          (* preloop only adds v to visited, so done_visited is preserved *)
+          unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
+          intro_state. hoare_auto_s. subst. simpl.
+          unfold done_visited. intros w Hw. simpl. sets_unfold. left. apply H. exact Hw.
+  Qed.
+
+  (** [done_not_popped_by_subtree_pop_scc]: Under [low_forset_inv u done s]
+      with [done_visited done s] and [~ done a], when [pop_scc a] splits
+      the stack at [a], no vertex from [done] appears in the popped
+      portion.  This holds because [done] vertices are ancestors processed
+      before the current DFS subtree, hence are below [a] on the stack
+      or already removed.
+
+      Strengthened with [In a (stack s)] (a is on the stack) and
+      [forall w, done w -> In w (stack s) -> dfn s w < dfn s a]
+      (done vertices that are on the stack have smaller dfn than a,
+      hence are below a). *)
+  (** [preloop_above_existing]: After [preloop x], [x] is above any
+      vertex [y] that was on the stack before (and [x ≠ y]). *)
+  Lemma preloop_above_existing (x y: V):
+    Hoare (fun s => In y (stack s))
+          (preloop x)
+          (fun _ s => exists l1 l2, stack s = l1 ++ x :: l2 /\ In y l2).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
   Qed.
 
   (** [W_preserves_ancestor_inv]: During [W v] (= [tarjan_scc g v]),
