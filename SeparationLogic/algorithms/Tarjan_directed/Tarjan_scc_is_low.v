@@ -1903,6 +1903,20 @@ Section IS_LOW.
     exact H.
   Qed.
 
+  (** [pop_scc_preserves_dfn_injective]: [pop_scc u] does not modify
+      [dfn] or [visited] (only [stack] and [sccs]), so [dfn_injective]
+      is trivially preserved. *)
+  Lemma pop_scc_preserves_dfn_injective (u: V):
+    Hoare (fun s: @SCCSt V => dfn_injective s)
+          (pop_scc u)
+          (fun _ s => dfn_injective s).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) u) as [popped rest]. simpl.
+    exact H.
+  Qed.
+
   (* ================================================================ *)
   (* 10.5. Ancestor Invariant Preservation Lemmas                      *)
   (* ================================================================ *)
