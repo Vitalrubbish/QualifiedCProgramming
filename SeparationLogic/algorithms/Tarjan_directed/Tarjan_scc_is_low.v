@@ -2891,19 +2891,22 @@ Section IS_LOW.
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => low_post u s).
   Proof.
-    (* 证明思路：用 Hoare_forset 遍历 u 的所有孩子，不变式为
-       low_forset_inv u done / done_visited done / fa-孩子⊆done。
-       树边分支用 set_fa_W_preserves_low_forset_inv 保持 low_forset_inv、得到 fa a0=u，
-       并建立 done 中顶点 dfn < dfn a0 的时序不变式；随后用
-       low_forset_inv_expand_child_done 扩展 done。非树边分支用 update_low_back_edge
-       或集合等价扩展 done。循环结束后 done=dg_step g u，由 forset_end_implies_scc_low_valid_v
-       得 scc_low_valid_v s u，结合 wf_scc_state 即为 low_post u s。
-       关键引理：Hoare_forset, low_forset_inv_proper, done_visited_proper,
-       set_fa_W_preserves_low_forset_inv, low_forset_inv_expand_child_done,
-       low_forset_inv_children_done_low_le, update_low_back_edge,
-       forset_end_implies_scc_low_valid_v。
-       原始 .orig 证明含 admit，尚未完全闭合。
-       详见上方完整 proof plan。 *)
+    intros H_low H_vis H_dv H_fa.
+    set (univ := fun v => dg_step g u v).
+    (* Proof strategy:
+       Forset invariant P(done,s) :=
+         low_forset_inv u done s /\
+         done_visited done s /\
+         (forall v, fa s v = u /\ fa s v <> v -> v ∈ done) /\
+         (forall v, In v (stack s) -> fa s v <> v).
+       - Apply Hoare_forset with P; properness from low_forset_inv_proper + manual.
+       - Tree edge: set_fa a0 u + W a0 (via H_low/H_vis/H_dv/H_fa IHs) +
+         update_low u (low a0); use set_fa_W_preserves_low_forset_inv,
+         low_forset_inv_expand_child_done, update_low_tree_edge.
+       - Non-tree edge: back edge uses update_low_back_edge; cross edge skip.
+       - After loop: done = dg_step g u; forset_end_implies_scc_low_valid_v
+         gives scc_low_valid_v s u; with wf_scc_state = low_post u s.
+       See forset_keeps_low_forset_inv for a structurally similar (simpler) proof. *)
     Admitted.
 
   (** [tarjan_scc_keep_low_valid]: one-vertex main theorem.
