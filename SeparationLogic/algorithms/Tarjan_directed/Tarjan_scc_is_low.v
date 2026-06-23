@@ -2431,15 +2431,36 @@ Section IS_LOW.
     done_visited (fun v => dg_step g u v) s ->
     back_edges_done s u (fun v => dg_step g u v) ∪ [u] == scc_back_edge s u ∪ [u].
   Proof.
-    (* 证明思路：双向集合包含。
-       正向：back_edges_done 中的元素 v 满足 dg_step g u v、v 在栈上、fa v ≠ u；
-       由 done_visited 知 v 已访问。若 v 是 u 则归入 [u]；否则需证 v 不是 u 的 DFS 树孩子，
-       这由 fa v ≠ u 及 state_to_dfs_tree_step_char 可得。
-       反向：scc_back_edge 中的元素 v 满足 dg_step g u v、v 在栈上、不是 u 的 DFS 树孩子。
-       若 v = u 则归入 [u]；否则由 state_to_dfs_tree_step_char_backward 的逆否知 fa v ≠ u，
-       故 v ∈ back_edges_done。
-       当前实现中的 subst v 失败（v 为引入变量），暂不修复证明。 *)
-  Admitted.
+    intros Hdv v. unfold done_visited in Hdv.
+    unfold back_edges_done, scc_back_edge.
+    split.
+    - (* forward: back_edges_done ∪ [u] ⊆ scc_back_edge ∪ [u] *)
+      intros H. sets_unfold in H. destruct H as [[Hv_dg [Hv_stack Hfa_neq]] | Heq_vu].
+      + (* v ∈ back_edges_done *)
+        sets_unfold. left. split; [exact Hv_dg | split; [exact Hv_stack |]].
+        intro Htree.
+        apply state_to_dfs_tree_step_char in Htree as [Hfa_eq _].
+        exact (Hfa_neq Hfa_eq).
+      + (* v = u *)
+        sets_unfold. subst v. right. reflexivity.
+    - (* backward: scc_back_edge ∪ [u] ⊆ back_edges_done ∪ [u] *)
+      intros H. sets_unfold in H. destruct H as [[Hv_dg [Hv_stack Hnot_tree]] | Heq_vu].
+      + (* v ∈ scc_back_edge *)
+        apply Hdv in Hv_dg as Hv_vis.
+        destruct (classic (v = u)) as [Heq_uv | Hneq_uv].
+        * (* v = u: use [u] singleton *)
+          sets_unfold. subst v. right. reflexivity.
+        * (* v ≠ u: prove fa s v ≠ u via contrapositive *)
+          sets_unfold. left. split; [exact Hv_dg | split; [exact Hv_stack |]].
+          intro Hfa_eq.
+          assert (Hfa_neq_self: fa s v <> v). {
+            rewrite Hfa_eq. intro Heq. apply Hneq_uv. symmetry. exact Heq. }
+          apply Hnot_tree.
+          eapply state_to_dfs_tree_step_char_backward;
+            [exact Hv_dg | exact Hfa_eq | exact Hfa_neq_self | exact Hv_vis].
+      + (* v = u *)
+        sets_unfold. subst v. right. reflexivity.
+  Qed.
 
   (** [low_forset_inv_to_scc_low_valid]: When [done] is the full set of
       neighbors [dg_step g u], [low_forset_inv u done s] implies
