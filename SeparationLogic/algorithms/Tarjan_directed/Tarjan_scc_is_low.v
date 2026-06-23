@@ -2351,19 +2351,73 @@ Section IS_LOW.
       invariant. After [set_fa v u] and the recursive call [W v], the
       parent [u] keeps [low_forset_inv u done], [fa s v = u], and all
       new stack-ordering conjuncts. *)
-  Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop):
+  Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop) (W: V -> program (@SCCSt V) unit):
     u <> v -> dg_step g u v -> ~ done v ->
+    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
+                    done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+          (W v)
+          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\
+                      In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
+                      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)) ->
     Hoare (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v /\
                     done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
-          (set_fa v u;; tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
+          (set_fa v u;; W v)
           (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\
                       In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
                       (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
   Proof.
-    (* 证明思路：先证 set_fa v u 保持 low_forset_inv u done、In u (stack s)、
-       stack_dfn_order、dfn_injective、done_visited，并建立 fa s v = u。
-       再对 W v 应用 W_preserves_ancestor_inv 得到完整后置。 *)
-  Admitted.
+    intros Hneq Hdg Hndone HW.
+    pose (P := fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v /\
+                        done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
+    pose (Qmid := fun (_: unit) (s: SCCSt) =>
+      low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
+      done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
+    pose (R := fun (_: unit) (s: SCCSt) =>
+      low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\
+      In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
+      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
+    apply (@Hoare_bind SCCSt unit unit P (set_fa v u) Qmid (fun _ => W v) R).
+    - (* first part: set_fa v u *)
+      unfold P, Qmid, set_fa. intro_state. hoare_auto_s.
+      destruct H as [Hlow [Hnv [Hndone' [Hdv [Hinu [Horder Hinj]]]]]].
+      unfold low_forset_inv, low_forset_inv_core.
+      destruct Hlow as [Hwf [Huvis Hmin]].
+      subst s. simpl.
+      (* Goal: Qmid tt (post_state) = (low_forset_inv /\ fa = u /\ ...) *)
+      split.  (* low_forset_inv *)
+      { unfold low_forset_inv, low_forset_inv_core. simpl. split.
+        - (* wf_scc_state *)
+          unfold wf_scc_state in *. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
+          unfold wf_scc_state. simpl. split; [exact Hsiv | split; [exact Hinv' |]].
+          split.
+          { (* dfn_valid: use set_fa_state_preserves_dg_step *)
+            unfold dfn_valid. intros x y Htree.
+            eapply Hvalid. eapply (set_fa_state_preserves_dg_step v u root s0 Hnv); eauto. }
+          (* fa_visited *)
+          unfold fa_visited. simpl. intros w Hfa_w.
+          unfold equiv_decb. unfold equiv_decb in Hfa_w.
+          destruct (equiv_dec w v) as [Heq_wv | Hneq_wv].
+          + simpl. exact Huvis.
+          + simpl in Hfa_w. simpl. apply Hfa_vis. exact Hfa_w.
+        - split; [exact Huvis |].
+          eapply (set_fa_preserves_min u v done s0 Hndone' Hmin). }
+      (* fa s v = u *)
+      split. { unfold equiv_decb. destruct (equiv_dec v v) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity]. }
+      (* ~ v ∈ visited *)
+      split; [exact Hnv |].
+      (* ~ done v *)
+      split; [exact Hndone' |].
+      (* done_visited done *)
+      split; [unfold done_visited; simpl; exact Hdv |].
+      (* In u (stack s) *)
+      split; [exact Hinu |].
+      (* stack_dfn_order *)
+      split; [exact Horder |].
+      (* dfn_injective *)
+      exact Hinj.
+    - (* second part: W v *)
+      intros a. destruct a. apply HW.
+  Qed.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
       morphism w.r.t. set equivalence of [done].  When [done1 == done2],
