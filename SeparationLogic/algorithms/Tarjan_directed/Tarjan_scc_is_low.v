@@ -1379,13 +1379,54 @@ Section IS_LOW.
     low_forset_inv u done s ->
     low_forset_inv u (done ∪ [v]) s.
   Proof.
-    (* 证明思路：展开 low_forset_inv 与 low_forset_inv_core。
-       由于 cross-edge 顶点 v 不满足 children_done 的 fa s v = u 条件，
-       也不满足 back_edges_done 的 In v (stack s) 条件，
-       因此 children_done s u (done ∪ [v]) == children_done s u done，
-       back_edges_done s u (done ∪ [v]) == back_edges_done s u done。
-       状态 s 不变，low/dfn 不变，故 min 条件不变。 *)
-  Admitted.
+    unfold low_forset_inv, low_forset_inv_core.
+    intros Hdg Hvis Hnstack Hfa_neq Hinv.
+    destruct Hinv as [Hwf [Huvis Hmin]].
+    split; [exact Hwf | split; [exact Huvis |]].
+    assert (Hchild_eq: children_done s u (done ∪ [v]) == children_done s u done).
+    { apply children_done_no_add; exact Hfa_neq. }
+    assert (Hback_eq: back_edges_done s u (done ∪ [v]) == back_edges_done s u done).
+    { apply back_edges_done_no_add; left; exact Hnstack. }
+    eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+    - intros a1 Ha1. exists a1. split.
+      { destruct Ha1 as [Ha1_L | Ha1_R].
+        - left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - apply Hchild_eq. exact Hw_in.
+            - intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx. }
+          { exact Heq_a1. }
+        - right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - destruct Hw_in as [Hw_back | Hw_u].
+              + left. apply Hback_eq. exact Hw_back.
+              + right. exact Hw_u.
+            - intros x Hx. destruct Hx as [Hx_back | Hx_u].
+              + apply Hw_min. left. apply Hback_eq. exact Hx_back.
+              + subst x. apply Hw_min. right. reflexivity. }
+          { exact Heq_a1. } }
+      { apply Nat.le_refl. }
+    - intros a2 Ha2. exists a2. split.
+      { destruct Ha2 as [Ha2_L | Ha2_R].
+        - left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - apply Hchild_eq. exact Hw_in.
+            - intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx. }
+          { exact Heq_a2. }
+        - right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - destruct Hw_in as [Hw_back | Hw_u].
+              + left. apply Hback_eq. exact Hw_back.
+              + right. exact Hw_u.
+            - intros x Hx. destruct Hx as [Hx_back | Hx_u].
+              + apply Hw_min. left. apply Hback_eq. exact Hx_back.
+              + subst x. apply Hw_min. right. reflexivity. }
+          { exact Heq_a2. } }
+      { apply Nat.le_refl. }
+  Qed.
 
   Lemma low_forset_inv_children_done_low_le (u v: V) (done: V -> Prop) (s: @SCCSt V):
     low_forset_inv u done s ->
