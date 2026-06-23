@@ -158,6 +158,15 @@ Proof.
   subst s. simpl. sets_unfold. tauto.
 Qed.
 
+Lemma set_fa_keep_stack_in_visited (v p: V):
+  Hoare (fun s: @SCCSt V => stack_in_visited s)
+        (set_fa v p)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold set_fa. intro_state. hoare_auto_s.
+  subst s. simpl. auto.
+Qed.
+
 Lemma set_fa_new_fa (v: V) (p: V):
   Hoare (fun s: @SCCSt V => True)
         (set_fa v p)
@@ -1161,7 +1170,6 @@ Proof.
     + destruct H1. subst s. destruct H; split; auto.
 Qed.
 
-(* ================================================================ *)
 (* Self-visitation and forall-preservation theorems                  *)
 (* ================================================================ *)
 
