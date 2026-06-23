@@ -2354,26 +2354,18 @@ Section IS_LOW.
                       (forall w, done w -> In w (stack s) -> dfn s w < dfn s cur) /\
                       dfn s ancestor < dfn s cur).
   Proof.
-    (* Proof plan: fixpoint induction on [tarjan_scc g cur].  The induction
-       hypothesis is exactly the same property, but with [cur] replaced by a
-       child [x] and [parent] replaced by [cur].
-       - [preloop cur] preserves the invariant by
-         [preloop_preserves_ancestor_inv].
-       - The [forset] body (process_edge cur W) preserves the invariant:
-         * tree edge to [x]: [set_fa x cur] establishes [fa x = cur] and
-           preserves [low_forset_inv ancestor done] because [x] is unvisited
-           and not a child of [ancestor]; the IH on [W x] preserves it;
-           [update_low cur (low x)] preserves it because [cur <> ancestor].
-           The new dfn-ordering precondition for the IH is obtained from
-           [dfn s ancestor < dfn s cur] and [dfn s cur < dfn s x]
-           (the latter holds after [preloop x] inside [W x]).
-         * back edge: [update_low cur (low x)] preserves it because
-           [cur <> ancestor].
-         * cross edge: skip / no update preserves it.
-       - The final [If (low cur = dfn cur) (pop_scc cur)] uses
-         [pop_scc_preserves_ancestor_inv], which now requires
-         [dfn s ancestor < dfn s cur] in addition to the done-vertex
-         dfn ordering. *)
+    (* Fixpoint induction using Hoare_fix_logicv. The property is:
+         P(a, (anc,par,d), s) = ancestor invariant (without dfn ordering)
+         Q(a, (anc,par,d), s) = ancestor invariant (with dfn ordering)
+       The body proof requires:
+         1. preloop_preserves_ancestor_inv (needs anc <> a, par <> a)
+         2. forset + process_edge body that:
+            - tree edge: uses set_fa_W_preserves_low_forset_inv with the IH
+            - back edge: uses update_low_back_edge
+            - cross edge: uses cross_edge_preserves_low_forset_inv
+         3. If (low a = dfn a) (pop_scc a) using pop_scc_preserves_ancestor_inv
+       The anc <> a condition for recursive calls must come from the forset
+       context (the child is distinct from the ancestor). *)
   Admitted.
 
 
