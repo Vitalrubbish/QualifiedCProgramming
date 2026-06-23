@@ -2542,18 +2542,74 @@ Section IS_LOW.
       - [children_done_full_eq]
       - [back_edges_done_full_eq]
       - [min_eq_forward] (from MaxMinLib) *)
+  Lemma back_edges_done_union_beta (u: V) (s: SCCSt) (w: V):
+    (back_edges_done s u (fun v => dg_step g u v) ∪ [u]) w <->
+    (w ∈ (fun w0 => back_edges_done s u (fun v => dg_step g u v) w0 \/ w0 = u)).
+  Proof.
+    sets_unfold. split.
+    - intros [H|H]; [left; exact H | right; symmetry; exact H].
+    - intros [H|H]; [left; exact H | right; symmetry; exact H].
+  Qed.
+
   Lemma low_forset_inv_to_scc_low_valid (u: V) (s: SCCSt):
     done_visited (fun v => dg_step g u v) s ->
     (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
     low_forset_inv u (fun v => dg_step g u v) s ->
     scc_low_valid_v s u.
   Proof.
-    (* 证明思路：将 low_forset_inv_core 中的 children_done 与 back_edges_done
-       分别用 children_done_full_eq 与 back_edges_done_full_eq 替换成
-       DFS 树孩子集与 scc_back_edge s u ∪ [u]，再用 min_eq_forward 保持最小值。
-       当前证明依赖 back_edges_done_full_eq 的集合等价具体形态；该引理已 Admitted，
-       故本证明也先 Admitted。 *)
-  Admitted.
+    intros Hdv Hfa_g Hlow.
+    unfold low_forset_inv, low_forset_inv_core in Hlow.
+    destruct Hlow as [Hwf [Huvis Hmin]].
+    unfold scc_low_valid_v.
+    pose proof (children_done_full_eq u s Hdv Hfa_g) as Hchild_eq.
+    pose proof (back_edges_done_full_eq u s Hdv) as Hback_eq.
+    eapply min_eq_forward; [typeclasses eauto | exact Hmin | | ].
+    - (* forward *)
+      intros a1 Ha1. exists a1. split.
+      { destruct Ha1 as [Ha1_L | Ha1_R].
+        - left. destruct Ha1_L as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - apply Hchild_eq. exact Hw_in.
+            - intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx. }
+          { exact Heq_a1. }
+        - right. destruct Ha1_R as [w [[Hw_in Hw_min] Heq_a1]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - (* w ∈ scc_back_edge ∪ [u] from w ∈ (fun ... ) *)
+              destruct (Hback_eq w) as [Hfwd _]. apply Hfwd.
+              apply (proj2 (back_edges_done_union_beta u s w)). exact Hw_in.
+            - (* minimality: x ∈ scc_back_edge ∪ [u] -> dfn s w <= dfn s x *)
+              intros x Hx.
+              destruct (Hback_eq x) as [_ Hbwd].
+              apply Hw_min.
+              apply (proj1 (back_edges_done_union_beta u s x)).
+              apply Hbwd. exact Hx. }
+          { exact Heq_a1. } }
+      { apply Nat.le_refl. }
+    - (* backward *)
+      intros a2 Ha2. exists a2. split.
+      { destruct Ha2 as [Ha2_L | Ha2_R].
+        - left. destruct Ha2_L as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - apply Hchild_eq. exact Hw_in.
+            - intros x Hx. apply Hchild_eq in Hx. apply Hw_min. exact Hx. }
+          { exact Heq_a2. }
+        - right. destruct Ha2_R as [w [[Hw_in Hw_min] Heq_a2]].
+          exists w. split.
+          { unfold min_object_of_subset. split.
+            - (* w ∈ (fun ... ) from w ∈ scc_back_edge ∪ [u] *)
+              apply (proj1 (back_edges_done_union_beta u s w)).
+              destruct (Hback_eq w) as [_ Hbwd]. apply Hbwd. exact Hw_in.
+            - (* minimality: x ∈ (fun ... ) -> dfn s w <= dfn s x *)
+              intros x Hx.
+              apply Hw_min.
+              destruct (Hback_eq x) as [Hfwd _]. apply Hfwd.
+              apply (proj2 (back_edges_done_union_beta u s x)). exact Hx. }
+          { exact Heq_a2. } }
+      { apply Nat.le_refl. }
+  Qed.
 
   (** [forset_end_implies_scc_low_valid_v]: explicit two-stage closing lemma.
       When [u]'s forset over all children has finished, [done = dg_step g u]
