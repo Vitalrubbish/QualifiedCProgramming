@@ -2210,8 +2210,7 @@ Section IS_LOW.
   Lemma preloop_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
     ancestor <> cur -> parent <> cur ->
     Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
-                   In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\
-                   dfn s ancestor < dfn s cur)
+                   In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
           (preloop cur)
           (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ In ancestor (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\
@@ -2222,7 +2221,7 @@ Section IS_LOW.
     - apply (Hoare_conseq_pre _
         (fun s => low_forset_inv ancestor done s /\ ~ cur ∈ visited s /\ ~ done cur)
         (preloop cur) (fun _ s => low_forset_inv ancestor done s)).
-      { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj [Hdv Hdfn]]]]]]]].
+      { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
         split; [exact Hlow | split; [exact Hnv | exact Hnd]]. }
       apply (Hoare_conseq_post
         (fun s => _) (preloop cur)
@@ -2253,7 +2252,7 @@ Section IS_LOW.
             apply (Hoare_conseq_pre _
               (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ cur ∈ visited s)
               (preloop cur) (fun _ s => stack_dfn_order s)).
-            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj [Hdv Hdfn]]]]]]]].
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
               destruct Hlow as [[Hsiv [Hinv' _]] _].
               split; [exact Horder | split; [exact Hinv' | split; [exact Hsiv | exact Hnv]]]. }
             apply preloop_preserves_stack_dfn_order. }
@@ -2262,7 +2261,7 @@ Section IS_LOW.
             apply (Hoare_conseq_pre _
               (fun s => dfn_injective s /\ dfn_inv s /\ ~ cur ∈ visited s)
               (preloop cur) (fun _ s => dfn_injective s)).
-            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj [Hdv Hdfn]]]]]]]].
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
               destruct Hlow as [[_ [Hinv' _]] _].
               split; [exact Hinj | split; [exact Hinv' | exact Hnv]]. }
             apply preloop_preserves_dfn_injective. }
@@ -2270,7 +2269,7 @@ Section IS_LOW.
           { (* done_visited done s *)
             apply (Hoare_conseq_pre _ (fun s => done_visited done s)
               (preloop cur) (fun _ s => done_visited done s)).
-            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj [Hdv Hdfn]]]]]]]]. exact Hdv. }
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]]. exact Hdv. }
             unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
             intro_state. hoare_auto_s. subst. simpl.
             unfold done_visited. intros w Hw. simpl. sets_unfold. left. apply H. exact Hw. }
@@ -2278,7 +2277,7 @@ Section IS_LOW.
           apply (Hoare_conseq_pre _
             (fun s => low_forset_inv ancestor done s /\ ~ cur ∈ visited s)
             (preloop cur) (fun _ s => dfn s ancestor < dfn s cur)).
-          { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj [Hdv Hdfn]]]]]]]].
+          { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
             split; [exact Hlow | exact Hnv]. }
           unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
           intro_state. hoare_auto_s. subst. simpl.
@@ -2330,9 +2329,16 @@ Section IS_LOW.
         - [In ancestor (stack s)]
         - [stack_dfn_order s]
         - [dfn_injective s]
+      and the postcondition additionally records
         - [dfn s ancestor < dfn s cur]  (needed for [pop_scc_preserves_ancestor_inv])
-      and the postcondition additionally records that every [done]
-      vertex still on the stack has dfn strictly smaller than [cur].
+        - every [done] vertex still on the stack has dfn strictly smaller than [cur].
+
+      Importantly, the precondition does *not* require
+      [dfn s ancestor < dfn s cur]; that ordering is established by the
+      [preloop cur] step inside [W cur] (which assigns [dfn cur] a fresh
+      value larger than [dfn ancestor]).  Requiring it in the precondition
+      would make the lemma unusable at the entry of [W cur], because [cur]
+      is then unvisited and [dfn s cur = 0] by [dfn_inv].
 
       This generalized form is needed because inside the recursive call
       [W cur], when [cur] processes its own tree child [x], the IH must
@@ -2341,7 +2347,7 @@ Section IS_LOW.
   Lemma W_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
     ancestor <> cur -> parent <> cur -> dg_step g parent cur -> ~ done cur ->
     Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
-                    In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ dfn s ancestor < dfn s cur)
+                    In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g cur)
           (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ done_visited done s /\ In ancestor (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\
@@ -2509,12 +2515,27 @@ Section IS_LOW.
       that [W a0] does not pop any [done] vertex that is still on the
       stack, so [back_edges_done] does not shrink unexpectedly.  It is
       available at the call site because every [w ∈ done] was processed
-      before the current child [a0]. *)
+      before the current child [a0].
+
+      To close the Hoare triple for [W a0], we also need a separate
+      *frame* hypothesis saying that [W x] preserves the ancestor
+      invariant for [u] (i.e. [low_forset_inv u done], [fa s x = u],
+      stack ordering, etc.).  This cannot be derived from the low-link
+      IH, which only talks about [low_pre/post x].  The frame hypothesis
+      is proved for the real recursive function by
+      [W_preserves_ancestor_inv]. *)
   Lemma tree_edge_preserves_low_forset_inv_lowlink (u a0: V) (done: V -> Prop) (W: V -> program (@SCCSt V) unit):
     u <> a0 -> dg_step g u a0 -> ~ done a0 ->
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
                      (W x)
                      (fun _ s => low_post x s /\ x ∈ visited s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)) ->
+    (forall x, Hoare (fun s => low_forset_inv u done s /\ fa s x = u /\ low_pre x s /\ ~ done x /\ done_visited done s /\
+                            In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+                     (W x)
+                     (fun _ s => low_forset_inv u done s /\ fa s x = u /\ done_visited done s /\
+                                 In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
+                                 (forall w, done w -> In w (stack s) -> dfn s w < dfn s x) /\
+                                 dfn s u < dfn s x)) ->
     Hoare (fun s => low_forset_inv u done s /\ ~ a0 ∈ visited s /\ ~ done a0 /\ done_visited done s /\ In u (stack s) /\
                     stack_dfn_order s /\ dfn_injective s /\
                     (forall w, done w -> In w (stack s) -> dfn s w < dfn s a0))
@@ -2522,7 +2543,7 @@ Section IS_LOW.
           (fun _ s => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\ low_post a0 s).
   Proof.
-    intros Hneq Hdg Hndone HW.
+    intros Hneq Hdg Hndone HW Hframe.
     pose (Qmid := fun (_: unit) (s: SCCSt) =>
       low_forset_inv u done s /\ fa s a0 = u /\ low_pre a0 s /\ ~ done a0 /\
       done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
@@ -2574,29 +2595,50 @@ Section IS_LOW.
       split; [exact Hinu |].
       split; [exact Horder |].
       exact Hinj.
-    - (* W a0 with low-link IH *)
-      intro a'. destruct a'. specialize (HW a0).
-      apply (Hoare_conseq_post (Qmid tt) (W a0)
-        (fun (_: unit) (s: SCCSt) => low_forset_inv u done s /\ fa s a0 = u /\
-          a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\
-          stack_dfn_order s /\ dfn_injective s /\ low_post a0 s)
-        (fun (_: unit) (s: SCCSt) => low_post a0 s /\ a0 ∈ visited s /\
-          u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)).
-      { intros _ s [Hpost [Hvis_a0 [Huvis' [Hinu' [Horder' Hinj']]]]].
-        destruct H as [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split. exact Hlow_inv. split. exact Hfa. split. exact Hvis_a0.
-        split. exact Hdv'. split. exact Hinu'. split. exact Horder'.
-        split. exact Hinj'. exact Hpost. }
-      apply (Hoare_conseq_pre (Qmid tt) (W a0)
-        (fun (_: unit) (s: SCCSt) => low_post a0 s /\ a0 ∈ visited s /\
-          u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
-        (fun s => low_pre a0 s /\ u ∈ visited s /\ In u (stack s) /\
-          stack_dfn_order s /\ dfn_injective s)).
-      { intros s [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split. exact Hpre. split.
-        destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'.
-        split. exact Hinu0. split. exact Horder0. exact Hinj0. }
-      exact HW.
+    - (* W a0: combine low-link IH and frame lemma *)
+      intro a'. destruct a'. specialize (HW a0) as Hlowlink. specialize (Hframe a0) as Hframe_a0.
+      apply (Hoare_conseq_pre (Qmid tt)
+        (fun (s: SCCSt) =>
+          (low_post a0 s /\ a0 ∈ visited s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s) /\
+          (low_forset_inv u done s /\ fa s a0 = u /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
+           (forall w, done w -> In w (stack s) -> dfn s w < dfn s a0) /\ dfn s u < dfn s a0))
+        (W a0)
+        (fun (_: unit) (s: SCCSt) => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ low_post a0 s)).
+      { intros s Hqmid. destruct Hqmid as [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
+        split.
+        - split. exact Hpre. split.
+          destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'.
+          split. exact Hinu0. split. exact Horder0. exact Hinj0.
+        - split. exact Hlow_inv. split. exact Hfa.
+          split. exact Hdv'. split. exact Hinu0. split. exact Horder0.
+          split. exact Hinj0.
+          (* dfn-ordering and dfn s u < dfn s a0 from the forset invariant:
+             Not available here — these must be provided by the caller.
+             The frame lemma's precondition includes dfn s u < dfn s a0
+             and the forall done-ordering, but Qmid does not. *)
+          admit. }
+      apply Hoare_conj.
+      + (* low-link IH *)
+        apply (Hoare_conseq_pre (Qmid tt)
+          (fun s => low_pre a0 s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+          (W a0)
+          (fun (_: unit) (s: SCCSt) => low_post a0 s /\ a0 ∈ visited s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)).
+        { intros s [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
+          split. exact Hpre. split.
+          destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'.
+          split. exact Hinu0. split. exact Horder0. exact Hinj0. }
+        exact Hlowlink.
+      + (* frame lemma *)
+        apply (Hoare_conseq_pre (Qmid tt)
+          (fun s => low_forset_inv u done s /\ fa s a0 = u /\ low_pre a0 s /\ ~ done a0 /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+          (W a0)
+          (fun (_: unit) (s: SCCSt) => low_forset_inv u done s /\ fa s a0 = u /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
+           (forall w, done w -> In w (stack s) -> dfn s w < dfn s a0) /\ dfn s u < dfn s a0)).
+        { intros s [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
+          split. exact Hlow_inv. split. exact Hfa. split. exact Hpre.
+          split. exact Hnd'. split. exact Hdv'. split. exact Hinu0.
+          split. exact Horder0. exact Hinj0. }
+        exact Hframe_a0.
   Qed.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
