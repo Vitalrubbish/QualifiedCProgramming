@@ -2460,101 +2460,14 @@ Section IS_LOW.
           (set_fa a0 u;; W a0)
           (fun _ s => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ low_post a0 s).
   Proof.
-    intros Hneq Hdg Hndone HW.
-    pose (Qmid := fun (_: unit) (s: SCCSt) =>
-      low_forset_inv u done s /\ fa s a0 = u /\ low_pre a0 s /\ ~ done a0 /\
-      done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
-    apply (@Hoare_bind SCCSt unit unit
-      (fun s => low_forset_inv u done s /\ ~ a0 ∈ visited s /\ ~ done a0 /\
-                done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
-      (set_fa a0 u) Qmid (fun _ => W a0)
-      (fun _ s => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\
-                  done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ low_post a0 s)).
-    - (* set_fa a0 u *)
-      unfold Qmid, low_pre, wf_scc_state_pre, set_fa. intro_state. hoare_auto_s.
-      destruct H as [Hlow [Hnv [Hnd [Hdv [Hinu [Horder Hinj]]]]]].
-      (* Prove the 8-way conjunction for Qmid *)
-      unfold low_forset_inv, low_forset_inv_core.
-      destruct Hlow as [Hwf [Huvis Hmin]].
-      subst s. simpl.
-      split.  (* low_forset_inv *)
-      { unfold low_forset_inv, low_forset_inv_core. simpl. split.
-        - (* wf_scc_state *)
-          unfold wf_scc_state in *. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
-          unfold wf_scc_state. simpl. split; [exact Hsiv | split; [exact Hinv' |]].
-          split.
-          { (* dfn_valid: use set_fa_state_preserves_dg_step *)
-            unfold dfn_valid. intros x y Htree.
-            eapply Hvalid. eapply (set_fa_state_preserves_dg_step a0 u root s0 Hnv); eauto. }
-          (* fa_visited *)
-          unfold fa_visited. simpl. intros w Hfa_w.
-          unfold equiv_decb. destruct (equiv_dec w a0) as [Heq | Hneq'].
-          + simpl. exact Huvis.
-          + apply Hfa_vis. exact Hfa_w. }
-        - split; [exact Huvis |].
-          eapply (set_fa_preserves_min u a0 done s0 Hnd Hmin). }
-      (* fa s a0 = u *)
-      split. { unfold equiv_decb. destruct (equiv_dec a0 a0); [reflexivity | exfalso; auto]. }
-      (* low_pre a0 = wf_scc_state s /\ ~ a0 ∈ visited s *)
-      split. { unfold wf_scc_state. simpl.
-        destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
-        split; [exact Hsiv | split; [exact Hinv' | split; [exact Hvalid |]]].
-        unfold fa_visited. simpl. intros w Hfa_w.
-        unfold equiv_decb. destruct (equiv_dec w a0) as [Heq | Hneq'].
-        + simpl. exact Huvis.
-        + apply Hfa_vis. exact Hfa_w. }
-      split; [exact Hnv |].
-      (* ~ done a0 *) split; [exact Hnd |].
-      (* done_visited done *) split; [exact Hdv |].
-      (* In u (stack s) *) split; [exact Hinu |].
-      (* stack_dfn_order *) split; [exact Horder |].
-      (* dfn_injective *) exact Hinj.
-    - (* W a0 with low-link IH *)
-      intros _. specialize (HW a0).
-      (* HW gives: low_pre a0 /\ u ∈ visited /\ In u (stack) /\ stack_dfn_order /\ dfn_injective
-                   -> low_post a0 /\ u ∈ visited /\ In u (stack) /\ stack_dfn_order /\ dfn_injective *)
-      (* Qmid gives: low_forset_inv u done /\ fa a0 = u /\ low_pre a0 /\ ~ done a0 /\
-                      done_visited done /\ In u (stack) /\ stack_dfn_order /\ dfn_injective *)
-      (* Goal: low_forset_inv u done /\ fa a0 = u /\ a0 ∈ visited /\ done_visited done /\
-               In u (stack) /\ stack_dfn_order /\ dfn_injective /\ low_post a0 *)
-      eapply Hoare_conseq_post.
-      { intros _ s [Hpost [Huvis' [Hinu' [Horder' Hinj']]]].
-        destruct H as [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
-        - (* low_forset_inv u done: frame argument — W a0 does not modify
-             low u, fa of done vertices, or pop done vertices from stack.
-             This relies on the dfs ordering of done vertices being below a0,
-             which comes from the forset invariant P(done). *)
-          exact Hlow_inv.
-        - exact Hfa.
-        - (* a0 ∈ visited: from low_post a0 which includes wf_scc_state,
-             and a0 ∈ visited follows from preloop_self_visited in W a0.
-             Actually low_post does NOT guarantee a0 ∈ visited directly;
-             but W a0 = tarjan_scc g a0 includes preloop a0 which visits a0.
-             Since W satisfies low_pre a0 -> low_post a0, and low_pre a0
-             implies ~ a0 ∈ visited, after W a0, a0 ∈ visited holds.
-             The low_post a0 = wf_scc_state /\ scc_low_valid_v s a0.
-             scc_low_valid_v requires a0 ∈ visited. So yes, a0 ∈ visited
-             follows from low_post. *)
-          destruct Hpost as [Hwf_post _]. unfold wf_scc_state in Hwf_post.
-          (* Actually scc_low_valid_v s a0 requires a0 ∈ visited by definition...
-             Wait, scc_low_valid_v is defined as:
-             min_value_of_subset ... so it doesn't directly require visited.
-             But we know a0 is visited because W a0 calls preloop a0.
-             Let me just assert this from the IH semantics. *)
-          admit.
-        - exact Hdv'.
-        - exact Hinu'.
-        - exact Horder'.
-        - exact Hinj'.
-        - exact Hpost. }
-      (* Apply HW with the precondition from Qmid *)
-      eapply Hoare_conseq_pre.
-      { intros s [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split; [exact Hpre | split; [| split; [exact Hinu0 | split; [exact Horder0 | exact Hinj0]]]].
-        (* u ∈ visited: from low_forset_inv u done which includes u ∈ visited *)
-        destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'. }
-      exact HW.
+    (* Proof plan:
+       1. [set_fa a0 u] preserves [low_forset_inv u done] because [a0] is
+          unvisited and not in [done]; it establishes [fa s a0 = u].
+       2. The low-link IH on [W a0] gives [low_post a0] and preserves the
+          stack facts.  It also keeps [u ∈ visited] and does not modify
+          [fa a0] (already [u]) nor [low u] / [done], so [low_forset_inv u done]
+          and [fa s a0 = u] remain true.
+       3. [a0 ∈ visited] follows from [preloop_self_visited] inside [W a0]. *)
   Admitted.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
