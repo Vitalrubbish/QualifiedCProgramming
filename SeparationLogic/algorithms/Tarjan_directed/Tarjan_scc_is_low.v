@@ -2156,181 +2156,73 @@ Section IS_LOW.
           (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
                       (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
   Proof.
+    (* ================================================================ *)
+    (*  ANALYSIS: P and Q Design Issues                                  *)
+    (* ================================================================ *)
+    (*
+      The fixpoint invariant P and Q have several structural flaws:
+
+      1. Q is independent of the vertex [a].
+         Q(a,_,s) = Q(b,_,s) for all a,b, so the fixpoint induction
+         hypothesis cannot distinguish which vertex was processed.
+         In particular, Q does NOT include [a ∈ visited s], even though
+         preloop a makes [a] visited and nothing un-visits it.
+
+      2. Consequence: the [IH_forset] construction (adapting the fixpoint
+         IH to the shape expected by [forset_keeps_low_forset_inv]) fails.
+         The forset invariant requires the parent vertex [a] to stay
+         visited after the child [W x] returns, but Q x cannot provide
+         [a ∈ visited s].  This needs either a separate
+         visited-monotonicity lemma [W_keeps_visited x a] or a stronger Q.
+
+      3. P lacks the dfn-ordering invariant.
+         The lemma's outer postcondition demands:
+           forall w, done w -> In w (stack s) -> dfn s w < dfn s v
+         But P only carries [(a = v \/ v ∈ visited s)] — it never
+         transports [dfn s w < dfn s v] through the fixpoint.
+         P should use [(a = v \/ dfn_lt_v s)] where:
+           dfn_lt_v s := forall w, done w -> In w (stack s) -> dfn s w < dfn s v
+         This is needed inside the [pop_scc a] branch for
+         [done_not_popped_by_subtree_pop_scc].
+
+      4. The [pop_scc a] branch and [skip] branch in the If after forset
+         are both incomplete (admit).  The [pop_scc] branch needs the
+         dfn-ordering invariant described above; the [skip] branch is
+         missing recovery of static conjuncts ([fa], [done_visited],
+         [stack_dfn_order], [dfn_injective]) from the forset context.
+
+      5. [In a (stack s)] after forset.
+         The [pop_scc a] branch needs [In a (stack s)] as a precondition
+         (for [pop_scc_keeps_low_forset_inv_other]).  This is established
+         by preloop and preserved through forset (forset does not pop [a]).
+         The intermediate state after forset should explicitly carry
+         [In a (stack s)].
+
+      Proposed repairs for P and Q:
+
+        set (dfn_lt_v := fun s => forall w, done w -> In w (stack s) ->
+                                  dfn s w < dfn s v).
+        set (P := fun a s =>
+          low_forset_inv u done s /\ fa s v = u /\ ~ a ∈ visited s /\ ~ done a /\
+          done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
+          (a = v \/ (v ∈ visited s /\ dfn_lt_v s)) /\ u <> a).
+        set (Q := fun a _ s =>
+          low_forset_inv u done s /\ fa s v = u /\ a ∈ visited s /\
+          done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
+          dfn_lt_v s).
+
+      Additional required lemmas:
+        - [preloop_preserves_done_dfn_lt_v]: establishes [dfn_lt_v] after preloop.
+        - [W_keeps_visited x a]: parent visited persists through child recursion.
+        - [forset_preserves_static_conjuncts]: forset preserves [fa], [In stack],
+          [done_visited], [stack_dfn_order], [dfn_injective], [dfn_lt_v].
+
+      See also: docs/dev/20260623-W-preserves-ancestor-inv-repair-plan.md
+    *)
+    (* ================================================================ *)
     intros Hneq Hndone_v.
-    unfold tarjan_scc.
-    (* Define fixpoint pre/post indexed by the current vertex a.
-       P(a,s): invariant before processing a. Q(a,s): invariant after. *)
-    set (P := fun (a: V) (s: SCCSt) =>
-      low_forset_inv u done s /\ fa s v = u /\ ~ a ∈ visited s /\ ~ done a /\
-      done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
-      (a = v \/ v ∈ visited s) /\ u <> a).
-    set (Q := fun (a: V) (_: unit) (s: SCCSt) =>
-      low_forset_inv u done s /\ fa s v = u /\
-      done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
-      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
-    (* Strengthen the lemma pre/post to use P and Q, then apply fixpoint. *)
-    assert (Hfix: Hoare (P v) (tarjan_scc g v) (Q v)). {
-      unfold tarjan_scc. apply Hoare_fix with (P := P) (Q := Q).
-      intros W IH a.
-      subst P Q. unfold tarjan_scc_f.
-      (* Body: preloop a ;; forset ;; If *)
-      apply (Hoare_bind
-        (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ a ∈ visited s /\ ~ done a /\
-                  done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
-                  (a = v \/ v ∈ visited s) /\ u <> a)
-        (preloop a)
-        (fun _ s => low_forset_inv u done s /\ fa s v = u /\ a ∈ visited s /\
-                    (a = v \/ v ∈ visited s) /\ ~ done a /\ done_visited done s /\
-                    (stack_dfn_order s /\ dfn_injective s) /\ In a (stack s) /\ u <> a)
-        (fun _ => forset (fun v0 : V => dg_step g a v0) (process_edge a W) ;;
-                 If (fun s => low s a = dfn s a) (pop_scc a))
-        (fun _ s => low_forset_inv u done s /\ fa s v = u /\
-                    done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
-                    (forall w, done w -> In w (stack s) -> dfn s w < dfn s v))).
-      + (* === PRELOOP a === *)
-        intro_state. destruct H as [Hinv [Hfa [Hnv [Hnd [Hdv [Hstack_inj [Hvvis_or Hneq_ua]]]]]]].
-        destruct Hstack_inj as [Hstack_ord Hdfn_inj].
-        (* Use preloop_keeps_low_forset_inv_other *)
-        assert (Hpre_low: Hoare (fun s => low_forset_inv u done s /\ ~ a ∈ visited s /\ ~ done a)
-                                (preloop a) (fun _ s => low_forset_inv u done s /\ a ∈ visited s)).
-        { apply (preloop_keeps_low_forset_inv_other u a done). }
-        assert (Hpre_fa: Hoare (fun s => fa s v = u) (preloop a) (fun _ s => fa s v = u)).
-        { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. exact H. }
-        assert (Hpre_nd: Hoare (fun s => ~ done a) (preloop a) (fun _ s => ~ done a)).
-        { unfold preloop. unfold_op. intro_state. hoare_auto_s. }
-        assert (Hpre_dv: Hoare (fun s => done_visited done s) (preloop a) (fun _ s => done_visited done s)).
-        { unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
-          unfold done_visited. intros w Hw. sets_unfold. left. apply H. exact Hw. }
-        assert (Hpre_stack: Hoare (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ a ∈ visited s)
-                                  (preloop a) (fun _ s => stack_dfn_order s)).
-        { apply preloop_preserves_stack_dfn_order. }
-        assert (Hpre_inj: Hoare (fun s => dfn_injective s /\ dfn_inv s /\ ~ a ∈ visited s)
-                                (preloop a) (fun _ s => dfn_injective s)).
-        { apply preloop_preserves_dfn_injective. }
-        assert (Hpre_in_stk: Hoare (fun s => True) (preloop a) (fun _ s => In a (stack s))).
-        { apply preloop_in_stack. }
-        (* v ∈ visited: if a = v, preloop_self_visited; if a ≠ v, v already visited and preserved *)
-        assert (Hpre_vvis: Hoare (fun s => a = v \/ v ∈ visited s) (preloop a) (fun _ s => v ∈ visited s)). {
-          destruct (equiv_dec a v) as [Heq | Hneq_av].
-          - apply Hoare_conseq with (P2 := fun _ => True) (Q2 := fun _ s => a ∈ visited s).
-            { intros. exact I. } { intros _ s Hvis. rewrite <- Heq. exact Hvis. }
-            apply preloop_self_visited.
-          - apply Hoare_conseq_pre with (P2 := fun s => v ∈ visited s).
-            { intros s [Heq_av' | Hvvis]. { exfalso. apply Hneq_av. exact Heq_av'. } exact Hvvis. }
-            apply (preloop_keep_visited a v). }
-        (* Combine all preloop Hoares *)
-        eapply Hoare_conseq_post.
-        2: { apply Hoare_conj with
-               (Q1 := fun _ s => ((((low_forset_inv u done s /\ a ∈ visited s) /\ fa s v = u) /\
-                                    v ∈ visited s) /\ ~ done a /\ done_visited done s) /\
-                                  (stack_dfn_order s /\ dfn_injective s) /\ In a (stack s))
-               (Q2 := fun _ s => a = v \/ v ∈ visited s). (* consumed, not in post *)
-             - apply Hoare_conj with
-                 (Q1 := fun _ s => (((low_forset_inv u done s /\ a ∈ visited s) /\ fa s v = u) /\
-                                     v ∈ visited s) /\ ~ done a /\ done_visited done s)
-                 (Q2 := fun _ s => (stack_dfn_order s /\ dfn_injective s) /\ In a (stack s)).
-               + apply Hoare_conj with
-                   (Q1 := fun _ s => ((low_forset_inv u done s /\ a ∈ visited s) /\ fa s v = u) /\ v ∈ visited s)
-                   (Q2 := fun _ s => ~ done a /\ done_visited done s).
-                 * apply Hoare_conj with
-                     (Q1 := fun _ s => (low_forset_inv u done s /\ a ∈ visited s) /\ fa s v = u)
-                     (Q2 := fun _ s => v ∈ visited s).
-                   -- apply Hoare_conj with
-                        (Q1 := fun _ s => low_forset_inv u done s /\ a ∈ visited s)
-                        (Q2 := fun _ s => fa s v = u).
-                      ++ apply Hoare_conseq_pre with
-                           (P2 := fun s => low_forset_inv u done s /\ ~ a ∈ visited s /\ ~ done a).
-                         { intros s Heq. subst s. exact (conj Hinv (conj Hnv Hnd)). } apply Hpre_low.
-                      ++ apply Hoare_conseq_pre with (P2 := fun s => fa s v = u). { intros s Heq. subst s. exact Hfa. } apply Hpre_fa.
-                   -- apply Hoare_conseq_pre with (P2 := fun s => a = v \/ v ∈ visited s).
-                      { intros s Heq. subst s. exact Hvvis_or. }
-                      apply Hpre_vvis.
-                 * apply Hoare_conj with (Q1 := fun _ s => ~ done a) (Q2 := fun _ s => done_visited done s).
-                   -- apply Hoare_conseq_pre with (P2 := fun s => ~ done a). { intros s Heq. subst s. exact Hnd. } apply Hpre_nd.
-                   -- apply Hoare_conseq_pre with (P2 := fun s => done_visited done s). { intros s Heq. subst s. exact Hdv. } apply Hpre_dv.
-               + apply Hoare_conj with
-                   (Q1 := fun _ s => stack_dfn_order s /\ dfn_injective s)
-                   (Q2 := fun _ s => In a (stack s)).
-                 * apply Hoare_conj with (Q1 := fun _ s => stack_dfn_order s) (Q2 := fun _ s => dfn_injective s).
-                   -- apply Hoare_conseq_pre with
-                        (P2 := fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ a ∈ visited s).
-                      { intros s Heq. subst s.
-                        unfold low_forset_inv in Hinv. destruct Hinv as [Hwf _]. destruct Hwf as [Hsiv [Hdinv _]].
-                        exact (conj Hstack_ord (conj Hdinv (conj Hsiv Hnv))). }
-                      apply Hpre_stack.
-                   -- apply Hoare_conseq_pre with
-                        (P2 := fun s => dfn_injective s /\ dfn_inv s /\ ~ a ∈ visited s).
-                      { intros s Heq. subst s.
-                        unfold low_forset_inv in Hinv. destruct Hinv as [Hwf _]. destruct Hwf as [_ [Hdinv _]].
-                        exact (conj Hdfn_inj (conj Hdinv Hnv)). }
-                      apply Hpre_inj.
-                 * apply Hoare_conseq_pre with (P2 := fun s => True). { intros s Heq. exact I. } apply Hpre_in_stk.
-             - apply Hoare_conseq_post with (Q2 := fun _ s => v ∈ visited s).
-               { intros _ s Hvvis_s. right. exact Hvvis_s. }
-               apply Hoare_conseq_pre with (P2 := fun s => a = v \/ v ∈ visited s).
-               { intros s Heq. subst s. exact Hvvis_or. }
-               apply Hpre_vvis. }
-        { intros _ s [HQ1 HQ2].
-          destruct HQ1 as [[[[[Hinv_s Hav_s] Hfa_s] Hvvis_s] [Hnd_s Hdv_s]] [[Hstack_ord_s Hdfn_inj_s] Ha_stk_s]].
-          split. { exact Hinv_s. } split. { exact Hfa_s. } split. { exact Hav_s. }
-          split. { exact HQ2. } split. { exact Hnd_s. } split. { exact Hdv_s. }
-          split. { split; [exact Hstack_ord_s | exact Hdfn_inj_s]. } split. { exact Ha_stk_s. } exact Hneq_ua. }
-      + (* === FORSET + IF === *)
-        simpl. intros _. intro_state.
-        destruct H as [Hinv [Hfa [Hav [Hvvis [Hnd [Hdv [[Hstack_ord Hdfn_inj] [Ha_stk Hneq_ua]]]]]]]].
-        (* Use forset_keeps_low_forset_inv to handle the forset.
-           We need to adapt the IH from Hoare_fix to the shape forset_keeps_low_forset_inv expects. *)
-        assert (IH_forset: forall x, Hoare (fun s => low_forset_inv u done s /\ ~ x ∈ visited s /\ ~ done x /\ a ∈ visited s /\ done_visited done s) (W x)
-                                          (fun _ s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s)). {
-          intros x. apply Hoare_conseq with
-            (P2 := fun s => low_forset_inv u done s /\ fa s v = u /\ ~ x ∈ visited s /\ ~ done x /\
-                            done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
-                            (x = v \/ v ∈ visited s) /\ u <> x)
-            (Q2 := fun _ s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s).
-          - intros s [Hinv' [Hnv_x [Hnd_x [Hav' Hdv']]]].
-            assert (Hvvis_x: x = v \/ v ∈ visited s). {
-              (* v ∈ visited s follows from fa_visited since fa s v = u ≠ v *)
-              unfold low_forset_inv in Hinv'. destruct Hinv' as [Hwf _].
-              unfold wf_scc_state in Hwf. destruct Hwf as [_ [_ [_ Hfa_vis]]].
-              unfold fa_visited in Hfa_vis. apply Hfa_vis.
-              rewrite Hfa. exact Hneq. }
-            assert (Hneq_ux: u <> x). {
-              intro Heq. subst x.
-              unfold low_forset_inv in Hinv'. destruct Hinv' as [_ [Hu_vis _]].
-              exact (Hnv_x Hu_vis). }
-            exact (conj Hinv' (conj Hfa (conj Hnv_x (conj Hnd_x (conj Hdv' (conj (conj Hstack_ord Hdfn_inj) (conj Hvvis_x Hneq_ux))))))).
-          - intros _ s Hpost. destruct Hpost as [_ [_ [_ [_ [_ [Hinv' [_ [Hav' Hdv']]]]]]]].
-            exact (conj Hinv' (conj Hav' Hdv')).
-          - apply IH. }
-        (* Now handle forset ;; If *)
-        apply (Hoare_bind
-          (fun s => low_forset_inv u done s /\ a ∈ visited s /\ done_visited done s /\ v ∈ visited s)
-          (forset (fun v0 : V => dg_step g a v0) (process_edge a W))
-          (fun _ s => low_forset_inv u done s /\ v ∈ visited s)
-          (fun _ => If (fun s => low s a = dfn s a) (pop_scc a))
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\
-                      done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\
-                      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v))).
-        { (* Forset *) apply (forset_keeps_low_forset_inv u a done W Hneq_ua Hnd IH_forset). }
-        { simpl. intros _. intro_state. hoare_auto_s.
-          { (* pop_scc a: low a = dfn a *)
-            admit. }
-          { (* skip: low a <> dfn a *)
-            destruct H0 as [Heq _]. subst s.
-            destruct H as [Hinv' Hrest]. (* We need to recover fa, stack order, dfn-ordering, etc.
-               These are static facts from the outer context, still true after forset. *)
-            exact (conj Hinv' (conj Hfa (conj Hdv (conj (conj Hstack_ord Hdfn_inj) (fun w Hdw Hw_stk => _))))). } }
-    }
-    (* Connect P v back to the original pre, Q v to original post *)
-    apply (Hoare_conseq
-      (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s))
-      (P v) (tarjan_scc g v)
-      (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\ (stack_dfn_order s /\ dfn_injective s) /\ (forall w, done w -> In w (stack s) -> dfn s w < dfn s v))
-      (Q v)
-      (fun s H => let '(conj Hinv (conj Hfa (conj Hnv (conj Hnd (conj Hdv (conj Hstack Hdfn_inj)))))) := H in
-                  conj Hinv (conj Hfa (conj Hnv (conj Hnd (conj Hdv (conj (conj Hstack Hdfn_inj) (conj (or_introl (eq_refl v)) Hneq)))))))
-      (fun _ s H => H)
-      Hfix).
+    (* TODO: proof pending — the analysis above describes the required
+       P/Q changes and missing lemmas. *)
   Admitted.
 
 
