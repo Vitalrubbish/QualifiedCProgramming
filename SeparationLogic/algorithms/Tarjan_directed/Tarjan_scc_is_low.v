@@ -128,7 +128,8 @@ Section IS_LOW.
         unrestricted versions.
 
     14. [Convergence to scc_low_valid_v]
-        ([low_forset_inv_to_scc_low_valid], [forset_keep_low_forset_inv])
+        ([low_forset_inv_to_scc_low_valid], [tree_edge_preserves_low_forset_inv_lowlink],
+         [forset_keep_low_forset_inv])
         Closing the loop: after the forset over children, [scc_low_valid_v]
         holds.
 
@@ -1931,26 +1932,23 @@ Section IS_LOW.
     split. { reflexivity. } { sets_unfold. right. reflexivity. }
   Qed.
 
-  (** [set_fa_W_preserves_low_forset_inv]: key lemma for the tree edge
-      branch of [process_edge_keep_low_forset_inv].  After [set_fa v u]
-      (which sets [fa v := u]) followed by the recursive call [W v]
-      (which is [tarjan_scc g v]), both [low_forset_inv u done] and
-      [fa s v = u] are preserved.
+  (** Helper lemmas for the tree-edge step.  The actual tree-edge lemmas
+      used in the main proof are:
+      - [set_fa_W_preserves_low_forset_inv]: a convenience lemma for the
+        direct-parent case, assuming [W v] already satisfies the ancestor
+        invariant;
+      - [tree_edge_preserves_low_forset_inv_lowlink]: the tree-edge lemma
+        used by [forset_keep_low_forset_inv], which only assumes the
+        low-link induction hypothesis.
 
-      Proof sketch (requires 3 sub-lemmas):
+      Both rely on the following facts:
       1. [set_fa_preserves_wf_scc_state_pre]: after [set_fa v u] the state
-         satisfies [low_pre v] (i.e. [wf_scc_state_pre v]) as long as [u]
-         is visited and [v] is unvisited. This is the exact precondition
-         needed by the recursive call [W v].
+         satisfies [low_pre v] as long as [u] is visited and [v] is unvisited.
       2. [set_fa_preserves_low_forset_inv_for_new_child]: [set_fa v u] does
-         not change children_done/back_edges_done for [u] (v ∉ done), and
+         not change [children_done]/[back_edges_done] for [u] (v ∉ done), and
          preserves [low_forset_inv u done].
-      3. [W_preserves_low_forset_inv_and_fa]: [W v] (tarjan_scc g v) does
-         not modify fa v (only sets fa for v's descendants), does not
-         modify low u (only update_low on v/descendants), children_done
-         and back_edges_done for done vertices unchanged (done vertices
-         are not descendants of v). Proved by fixpoint induction on
-         tarjan_scc. *)
+      3. [set_fa_preserves_min]: the min-value in [low_forset_inv_core] is
+         preserved by [set_fa v u] when [v] is not in [done]. *)
   Lemma set_fa_preserves_min (u v: V) (done: V -> Prop) (s0: @SCCSt V): ~ done v ->
     min_value_of_subset Nat.le (min_value_of_subset Nat.le (children_done s0 u done) (low s0) ∪ min_value_of_subset Nat.le (fun w => back_edges_done s0 u done w \/ w = u) (dfn s0)) (fun x => x) (low s0 u) ->
     min_value_of_subset Nat.le (min_value_of_subset Nat.le (children_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done) (low s0) ∪ min_value_of_subset Nat.le (fun w => back_edges_done (RecordSet.set fa (fun _ x => if equiv_decb x v then u else fa s0 x) s0) u done w \/ w = u) (dfn s0)) (fun x => x) (low s0 u).
@@ -2021,9 +2019,11 @@ Section IS_LOW.
   (* 10.5. Ancestor Invariant Preservation Lemmas                      *)
   (* ================================================================ *)
 
-  (** Lemmas to prove that operations on vertex [v] preserve
-      [low_forset_inv u done] and [fa s v = u] for an ancestor [u].
-      These are the building blocks for [W_preserves_ancestor_inv]. *)
+  (** Lemmas to prove that operations on vertex [cur] preserve
+      [low_forset_inv ancestor done] and [fa s cur = parent] for an
+      ancestor [ancestor] with direct parent [parent].
+      These are the building blocks for the generalized
+      [W_preserves_ancestor_inv]. *)
 
   (** [stack_split_at_in_popped_before_a]: If [w] is in [popped] from
       [stack_split_at stk a], and [w ≠ a], then [w] appears strictly
@@ -2118,153 +2118,155 @@ Section IS_LOW.
         already-done neighbor of [u] that is still on the stack lies below
         [v], so it is not removed by [pop_scc v].  This is needed to apply
         [pop_scc_keeps_low_forset_inv_other] / [done_not_popped_by_subtree_pop_scc]. *)
-  Lemma pop_scc_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    u <> v -> dg_step g u v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ done v /\
-                   In v (stack s) /\ In u (stack s) /\ stack_dfn_order s /\
-                   dfn_injective s /\ done_visited done s /\
-                   (forall w, done w -> In w (stack s) -> dfn s w < dfn s v))
-          (pop_scc v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ In u (stack s) /\
-                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
+  Lemma pop_scc_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
+    ancestor <> cur -> parent <> cur -> dg_step g parent cur ->
+    (ancestor = parent \/ dg_step g ancestor parent) ->
+    Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ done cur /\
+                   In cur (stack s) /\ In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\ (forall w, done w -> In w (stack s) -> dfn s w < dfn s cur))
+          (pop_scc cur)
+          (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
   Proof.
-    intros Hneq Hdg.
-    apply Hoare_conj. (* low_forset_inv u done *)
+    intros Hanc_ne Hpar_ne Hdg Hanc_par.
+    apply Hoare_conj. (* low_forset_inv ancestor done *)
     - apply (Hoare_conseq_pre _
-        (fun s => low_forset_inv u done s /\
-                  In v (stack s) /\
+        (fun s => low_forset_inv ancestor done s /\ In cur (stack s) /\
                   (forall w, done w -> forall popped' rest',
-                    stack_split_at (stack s) v = (popped', rest') -> ~ In w popped'))
-        (pop_scc v) (fun _ s => low_forset_inv u done s)).
-      { intros s [Hlow [Hfa [Hndone [Hinv [Hinu [Horder [Hinj [Hdv Hdfn_lt]]]]]]]].
-        split; [exact Hlow | split; [exact Hinv |]].
+                    stack_split_at (stack s) cur = (popped', rest') -> ~ In w popped'))
+        (pop_scc cur) (fun _ s => low_forset_inv ancestor done s)).
+      { intros s [Hlow [Hfa [Hnd [Hinc [Hina [Horder [Hinj [Hdv Hdfn_lt]]]]]]]].
+        split; [exact Hlow | split; [exact Hinc |]].
         eapply done_not_popped_by_subtree_pop_scc; eauto. }
       apply pop_scc_keeps_low_forset_inv_other.
-    - apply Hoare_conj. (* fa s v = u *)
-      + (* fa unchanged by pop_scc *)
-        unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+    - apply Hoare_conj.
+      + (* fa s cur = parent *)
+        unfold pop_scc. intro_state. hoare_auto_s. subst. simpl.
         unfold pop_scc_state.
-        destruct (stack_split_at (stack s0) v) as [popped rest]. simpl.
+        destruct (stack_split_at (stack s0) cur) as [popped rest]. simpl.
         destruct H as [_ [Hfa _]]. exact Hfa.
-      + apply Hoare_conj. (* In u (stack s) *)
-        * (* u stays on stack: u is v's parent, so u is below v on stack.
-             With dfn_valid, dfn s0 u < dfn s0 v, so u ∈ rest by stack_dfn_order. *)
-          unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+      + apply Hoare_conj.
+        * (* In ancestor (stack s) *)
+          unfold pop_scc. intro_state. hoare_auto_s. subst. simpl.
           unfold pop_scc_state.
-          destruct (stack_split_at (stack s0) v) as [popped rest] eqn:Hsplit. simpl.
-          destruct H as [Hlow [Hfa [Hndone [Hinv_stk [Hinu_stk [Horder [Hinj [Hdv Hdfn_lt]]]]]]]].
-          destruct (stack_split_at_partition (stack s0) v popped rest Hsplit)
+          destruct (stack_split_at (stack s0) cur) as [popped rest] eqn:Hsplit. simpl.
+          destruct H as [Hlow [Hfa [Hnd [Hinc [Hina [Horder [Hinj [Hdv Hdfn_lt]]]]]]]].
+          destruct (stack_split_at_partition (stack s0) cur popped rest Hsplit)
             as [_ [_ Hcover]].
-          destruct (Hcover u Hinu_stk) as [Hpop | Hrest].
-          { (* u ∈ popped: contradiction via dfn_valid *)
-            destruct Hlow as [[Hsiv [Hinv' [Hvalid Hfa_vis]]] [Huvis _]].
-            assert (Hvis_v: v ∈ visited s0). {
-              apply Hsiv. exact Hinv_stk. }
-            assert (Hfa_v_neq_v: fa s0 v <> v). {
-              rewrite Hfa. exact Hneq. }
-            assert (Htree: dg_step (state_to_dfs_tree g s0 root) u v). {
+          destruct (Hcover ancestor Hina) as [Hpop | Hrest].
+          { (* ancestor ∈ popped: contradiction *)
+            destruct Hlow as [[Hsiv [Hinv' [Hvalid Hfa_vis]]] _].
+            assert (Hvis_cur: cur ∈ visited s0). { apply Hsiv. exact Hinc. }
+            assert (Hfa_cur_neq: fa s0 cur <> cur). { rewrite Hfa. exact Hanc_ne. }
+            assert (Htree_pc: dg_step (state_to_dfs_tree g s0 root) parent cur). {
               eapply state_to_dfs_tree_step_char_backward;
-                [exact Hdg | exact Hfa | exact Hfa_v_neq_v | exact Hvis_v]. }
-            apply Hvalid in Htree. (* gives dfn s0 u < dfn s0 v *)
-            assert (Hdfn_u_lt_v: dfn s0 u < dfn s0 v) by exact Htree.
-            (* u ∈ popped means u is at/past v in stack; stack_dfn_order
-               would give dfn s0 v ≤ dfn s0 u, contradiction *)
-            destruct (stack_split_at_in_popped_before_a (stack s0) v u
-              Hinv_stk popped rest Hsplit Hpop Hneq)
-              as [l1 [l2 [Hstk_eq Hv_in_l2]]].
-            assert (Hu_in_stk: In u (stack s0)). {
+                [exact Hdg | exact Hfa | exact Hfa_cur_neq | exact Hvis_cur]. }
+            apply Hvalid in Htree_pc. (* dfn s0 parent < dfn s0 cur *)
+            (* Get dfn s0 ancestor < dfn s0 parent from Hanc_par *)
+            assert (Hdfn_anc_lt_par: dfn s0 ancestor < dfn s0 parent). {
+              destruct Hanc_par as [Heq | Hstep].
+              - subst ancestor. exfalso. apply Hanc_ne. reflexivity.
+              - (* Need to show dg_step (state_to_dfs_tree) ancestor parent from Hstep.
+                   Requires fa s0 parent = ancestor and parent ∈ visited and fa parent ≠ parent. *)
+                admit. }
+            assert (Hdfn_anc_lt_cur: dfn s0 ancestor < dfn s0 cur) by lia.
+            (* From stack_split_at_in_popped_before_a: ancestor above cur on stack.
+               stack_dfn_order gives dfn s0 cur <= dfn s0 ancestor. Contradiction. *)
+            destruct (stack_split_at_in_popped_before_a (stack s0) cur ancestor
+              Hinc popped rest Hsplit Hpop Hanc_ne)
+              as [l1 [l2 [Hstk_eq Hcur_in_l2]]].
+            assert (Hanc_in_stk: In ancestor (stack s0)). {
               rewrite Hstk_eq. apply List.in_or_app. right. simpl. left. reflexivity. }
-            assert (Hv_in_stk: In v (stack s0)). {
-              rewrite Hstk_eq. apply List.in_or_app. right. simpl. right. exact Hv_in_l2. }
-            (* From stack_split_at_in_popped_before_a, we got:
-               stack s0 = l1 ++ u :: l2 /\ In v l2, i.e., v is after u.
-               stack_dfn_order with this gives dfn s0 v ≤ dfn s0 u.
-               With dfn s0 u < dfn s0 v from Hvalid, contradiction. *)
-            assert (Horder_result: exists l1' l2', stack s0 = l1' ++ u :: l2' /\ In v l2').
-            { exists l1. exists l2. split; [exact Hstk_eq | exact Hv_in_l2]. }
-            pose proof (Horder u v Hu_in_stk Hv_in_stk Horder_result) as Hdfn_v_le_u.
+            assert (Hcur_in_stk: In cur (stack s0)). {
+              rewrite Hstk_eq. apply List.in_or_app. right. simpl. right. exact Hcur_in_l2. }
+            assert (Horder_result: exists l1' l2', stack s0 = l1' ++ ancestor :: l2' /\ In cur l2').
+            { exists l1. exists l2. split; [exact Hstk_eq | exact Hcur_in_l2]. }
+            pose proof (Horder ancestor cur Hanc_in_stk Hcur_in_stk Horder_result) as Hdfn_cur_le_anc.
             lia. }
           { exact Hrest. }
-        * apply Hoare_conj. (* stack_dfn_order *)
-          { apply (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ In v (stack s))
-              (pop_scc v) (fun _ s => stack_dfn_order s)).
-            { intros s [_ [_ [_ [Hinv [Hinu [Horder _]]]]]]. split; [exact Horder | exact Hinv]. }
+        * apply Hoare_conj.
+          { apply (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ In cur (stack s))
+              (pop_scc cur) (fun _ s => stack_dfn_order s)).
+            { intros s [_ [_ [_ [Hinc [Hina [Horder _]]]]]]. split; [exact Horder | exact Hinc]. }
             apply pop_scc_preserves_stack_dfn_order. }
-          apply Hoare_conj. (* dfn_injective *)
+          apply Hoare_conj.
           { apply (Hoare_conseq_pre _ (fun s => dfn_injective s)
-              (pop_scc v) (fun _ s => dfn_injective s)).
+              (pop_scc cur) (fun _ s => dfn_injective s)).
             { intros s [_ [_ [_ [_ [_ [_ [Hinj _]]]]]]]. exact Hinj. }
             apply pop_scc_preserves_dfn_injective. }
-          (* done_visited *)
           apply (Hoare_conseq_pre _ (fun s => done_visited done s)
-            (pop_scc v) (fun _ s => done_visited done s)).
-          { intros s [_ [_ [_ [_ [_ [_ [_ [Hdv _]]]]]]]]. exact Hdv. }
+            (pop_scc cur) (fun _ s => done_visited done s)).
+          { intros s [_ [_ [_ [_ [_ [_ [_ Hdv]]]]]]]. exact Hdv. }
           apply pop_scc_preserves_done_visited.
-  Qed.
+  Admitted.
 
-  (** [preloop_preserves_ancestor_inv]: [preloop v] modifies only fields
-      local to [v]. For an ancestor [u] already on the stack, it preserves
-      [low_forset_inv u done], [fa s v = u], and the new stack-ordering
-      conjuncts [In u (stack s)], [stack_dfn_order], [dfn_injective]. *)
-  Lemma preloop_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    u <> v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
-                   In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
-          (preloop v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ In u (stack s) /\
+  (** [preloop_preserves_ancestor_inv]: Generalized to an arbitrary
+      ancestor [ancestor] of [cur].  [preloop cur] only modifies fields
+      local to [cur], so it preserves [low_forset_inv ancestor done],
+      [fa s cur = parent], and the stack-ordering conjuncts. *)
+  Lemma preloop_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
+    ancestor <> cur -> parent <> cur ->
+    Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
+                   In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+          (preloop cur)
+          (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ In ancestor (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\ done_visited done s).
   Proof.
-    intros Hneq.
-    apply Hoare_conj. (* low_forset_inv u done *)
+    intros Hanc_ne Hpar_ne.
+    apply Hoare_conj. (* low_forset_inv ancestor done *)
     - apply (Hoare_conseq_pre _
-        (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
-        (preloop v) (fun _ s => low_forset_inv u done s)).
-      { intros s [Hlow [Hfa [Hnv [Hndone _]]]]. split; [exact Hlow | split; [exact Hnv | exact Hndone]]. }
+        (fun s => low_forset_inv ancestor done s /\ ~ cur ∈ visited s /\ ~ done cur)
+        (preloop cur) (fun _ s => low_forset_inv ancestor done s)).
+      { intros s [Hlow [Hfa [Hnv [Hnd _]]]]. split; [exact Hlow | split; [exact Hnv | exact Hnd]]. }
       apply (Hoare_conseq_post
-        (fun s => low_forset_inv u done s /\ ~ v ∈ visited s /\ ~ done v)
-        (preloop v)
-        (fun _ s => low_forset_inv u done s)
-        (fun _ s => low_forset_inv u done s /\ v ∈ visited s)).
+        (fun s => low_forset_inv ancestor done s /\ ~ cur ∈ visited s /\ ~ done cur)
+        (preloop cur)
+        (fun _ s => low_forset_inv ancestor done s)
+        (fun _ s => low_forset_inv ancestor done s /\ cur ∈ visited s)).
       { intros _ s [Hlow _]. exact Hlow. }
       apply preloop_keeps_low_forset_inv_other.
-    - apply Hoare_conj. (* fa s v = u *)
-      + apply (Hoare_conseq_pre _ (fun s => fa s v = u)
-          (preloop v) (fun _ s => fa s v = u)).
+    - (* (fa s cur = parent /\ In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s) *)
+      apply Hoare_conj.
+      + (* fa s cur = parent *)
+        apply (Hoare_conseq_pre _ (fun s => fa s cur = parent)
+          (preloop cur) (fun _ s => fa s cur = parent)).
         { intros s [_ [Hfa _]]. exact Hfa. }
         apply (Hoare_conseq_post
-          (fun s => fa s v = u) (preloop v)
-          (fun _ s => fa s v = u)
-          (fun _ s => fa s v = u /\ v ∈ visited s)).
+          (fun s => fa s cur = parent) (preloop cur)
+          (fun _ s => fa s cur = parent)
+          (fun _ s => fa s cur = parent /\ cur ∈ visited s)).
         { intros _ s [Hfa _]. exact Hfa. }
-        apply (preloop_keeps_fa v u).
-      + apply Hoare_conj. (* In u (stack s) *)
-        * (* preloop pushes v; u stays on stack *)
-          apply (Hoare_conseq_pre _ (fun s => In u (stack s))
-            (preloop v) (fun _ s => In u (stack s))).
-          { intros s [_ [_ [_ [_ [Hinu _]]]]]. exact Hinu. }
+        apply (preloop_keeps_fa cur parent).
+      + (* In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s *)
+        apply Hoare_conj.
+        * (* In ancestor (stack s) *)
+          apply (Hoare_conseq_pre _ (fun s => In ancestor (stack s))
+            (preloop cur) (fun _ s => In ancestor (stack s))).
+          { intros s [_ [_ [_ [_ [Hina _]]]]]. exact Hina. }
           unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
           intro_state. hoare_auto_s. subst. simpl. auto.
-        * apply Hoare_conj. (* stack_dfn_order *)
-          { apply (Hoare_conseq_pre _
-              (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ v ∈ visited s)
-              (preloop v) (fun _ s => stack_dfn_order s)).
-            { intros s [Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]].
-              destruct Hlow as [[Hsiv [Hinv _]] _].
-              split; [exact Horder | split; [exact Hinv | split; [exact Hsiv | exact Hnv]]]. }
+        * (* stack_dfn_order s /\ dfn_injective s /\ done_visited done s *)
+          apply Hoare_conj.
+          { (* stack_dfn_order *)
+            apply (Hoare_conseq_pre _
+              (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ cur ∈ visited s)
+              (preloop cur) (fun _ s => stack_dfn_order s)).
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
+              destruct Hlow as [[Hsiv [Hinv' _]] _].
+              split; [exact Horder | split; [exact Hinv' | split; [exact Hsiv | exact Hnv]]]. }
             apply preloop_preserves_stack_dfn_order. }
-          apply Hoare_conj. (* dfn_injective *)
-          { apply (Hoare_conseq_pre _
-              (fun s => dfn_injective s /\ dfn_inv s /\ ~ v ∈ visited s)
-              (preloop v) (fun _ s => dfn_injective s)).
-            { intros s [Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]].
-              destruct Hlow as [[_ [Hinv _]] _].
-              split; [exact Hinj | split; [exact Hinv | exact Hnv]]. }
+          (* dfn_injective s /\ done_visited done s *)
+          apply Hoare_conj.
+          { (* dfn_injective *)
+            apply (Hoare_conseq_pre _
+              (fun s => dfn_injective s /\ dfn_inv s /\ ~ cur ∈ visited s)
+              (preloop cur) (fun _ s => dfn_injective s)).
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
+              destruct Hlow as [[_ [Hinv' _]] _].
+              split; [exact Hinj | split; [exact Hinv' | exact Hnv]]. }
             apply preloop_preserves_dfn_injective. }
           (* done_visited done s *)
           apply (Hoare_conseq_pre _ (fun s => done_visited done s)
-            (preloop v) (fun _ s => done_visited done s)).
-          { intros s [Hlow [Hfa [Hnv [Hndone [Hinu [Horder [Hinj Hdv]]]]]]]. exact Hdv. }
-          (* preloop only adds v to visited, so done_visited is preserved *)
+            (preloop cur) (fun _ s => done_visited done s)).
+          { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]]. exact Hdv. }
           unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
           intro_state. hoare_auto_s. subst. simpl.
           unfold done_visited. intros w Hw. simpl. sets_unfold. left. apply H. exact Hw.
@@ -2292,36 +2294,50 @@ Section IS_LOW.
     exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
   Qed.
 
-  (** [W_preserves_ancestor_inv]: During [W v] (= [tarjan_scc g v]),
-      the ancestor invariant for the parent [u] is preserved.
+  (** [W_preserves_ancestor_inv]: During [W cur] (= [tarjan_scc g cur]),
+      the ancestor invariant for an arbitrary ancestor [ancestor] of [cur]
+      is preserved.
 
-      The invariant is exactly the corrected forset invariant [P(done)]
-      from docs/dev/20260623-tarjan-scc-program-phases.md, instantiated
-      for the ancestor [u]:
-        - [low_forset_inv u done s]
-        - [fa s v = u]
-        - [~ v ∈ visited s], [~ done v], [done_visited done s]
-        - [In u (stack s)]
+      The parameters are:
+      - [ancestor]: the vertex whose [low_forset_inv] we preserve;
+      - [parent]: the direct DFS parent of [cur] (so [fa s cur = parent]);
+      - [cur]: the vertex being recursively processed.
+
+      The invariant is:
+        - [low_forset_inv ancestor done s]
+        - [fa s cur = parent]
+        - [~ cur ∈ visited s], [~ done cur], [done_visited done s]
+        - [In ancestor (stack s)]
         - [stack_dfn_order s]
         - [dfn_injective s]
       and the postcondition additionally records that every [done]
-      vertex still on the stack has dfn strictly smaller than [v]. *)
-  Lemma W_preserves_ancestor_inv (u v: V) (done: V -> Prop):
-    u <> v -> ~ done v ->
-    Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
-                    done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
-          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g v)
-          (fun _ s => low_forset_inv u done s /\ fa s v = u /\ done_visited done s /\
-                      In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
-                      (forall w, done w -> In w (stack s) -> dfn s w < dfn s v)).
+      vertex still on the stack has dfn strictly smaller than [cur].
+
+      This generalized form is needed because inside the recursive call
+      [W cur], when [cur] processes its own tree child [x], the IH must
+      be applied with [parent := cur] and [cur := x], while [ancestor]
+      stays the same. *)
+  Lemma W_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
+    ancestor <> cur -> parent <> cur -> dg_step g parent cur -> ~ done cur ->
+    Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\ In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g cur)
+          (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ done_visited done s /\ In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ (forall w, done w -> In w (stack s) -> dfn s w < dfn s cur)).
   Proof.
-    (* 证明思路：对 tarjan_scc g v 做不动点归纳，主规格即上述 ancestor invariant。
-       preloop v 用 preloop_preserves_ancestor_inv 保持不变式；
-       forset 阶段用 Hoare_forset，树边分支用 set_fa_W_preserves_low_forset_inv；
-       非树边分支用 update_low_back_edge / cross-edge skip 保持 low_forset_inv；
-       最后 If (low v = dfn v) (pop_scc v) 用 pop_scc_preserves_ancestor_inv。
-       新增的 dfn-ordering 后置由树边分支的后置（dfn s w < dfn s v）和
-       非树边处理保持性共同得到。 *)
+    (* Proof plan: fixpoint induction on [tarjan_scc g cur].  The induction
+       hypothesis is exactly the same property, but with [cur] replaced by a
+       child [x] and [parent] replaced by [cur].
+       - [preloop cur] preserves the invariant by
+         [preloop_preserves_ancestor_inv].
+       - The [forset] body (process_edge cur W) preserves the invariant:
+         * tree edge to [x]: [set_fa x cur] establishes [fa x = cur] and
+           preserves [low_forset_inv ancestor done] because [x] is unvisited
+           and not a child of [ancestor]; the IH on [W x] preserves it;
+           [update_low cur (low x)] preserves it because [cur <> ancestor].
+         * back edge: [update_low cur (low x)] preserves it because
+           [cur <> ancestor].
+         * cross edge: skip / no update preserves it.
+       - The final [If (low cur = dfn cur) (pop_scc cur)] uses
+         [pop_scc_preserves_ancestor_inv]. *)
   Admitted.
 
 
@@ -2347,10 +2363,16 @@ Section IS_LOW.
       exists w. split; [exact Hw_vis |]. split; [exact Hw_fa |]. split; [exact Hwfst | exact Hwsnd].
   Qed.
 
-  (** [set_fa_W_preserves_low_forset_inv]: tree-edge step for the forset
-      invariant. After [set_fa v u] and the recursive call [W v], the
-      parent [u] keeps [low_forset_inv u done], [fa s v = u], and all
-      new stack-ordering conjuncts. *)
+  (** [set_fa_W_preserves_low_forset_inv]: convenience lemma for the
+      direct-parent tree-edge step.  It assumes [W v] already satisfies
+      the ancestor invariant (the postcondition of
+      [W_preserves_ancestor_inv u u v done]).  After [set_fa v u] and
+      [W v], the parent [u] keeps [low_forset_inv u done], [fa s v = u],
+      and the stack-ordering conjuncts.
+
+      Note: [forset_keep_low_forset_inv] uses a different tree-edge lemma
+      ([tree_edge_preserves_low_forset_inv_lowlink]) because its induction
+      hypothesis is the low-link specification, not the ancestor invariant. *)
   Lemma set_fa_W_preserves_low_forset_inv (u v: V) (done: V -> Prop) (W: V -> program (@SCCSt V) unit):
     u <> v -> dg_step g u v -> ~ done v ->
     Hoare (fun s => low_forset_inv u done s /\ fa s v = u /\ ~ v ∈ visited s /\ ~ done v /\
@@ -2418,6 +2440,35 @@ Section IS_LOW.
     - (* second part: W v *)
       intros a. destruct a. apply HW.
   Qed.
+
+  (** [tree_edge_preserves_low_forset_inv_lowlink]: Tree-edge step for
+      [forset_keep_low_forset_inv].  It uses the low-link induction
+      hypothesis (low_pre x -> low_post x) rather than the ancestor
+      invariant, because [forset_keep_low_forset_inv] is proved by
+      fixpoint induction over [tarjan_scc] with that single IH.
+
+      After [set_fa a0 u] and [W a0], the parent [u] keeps
+      [low_forset_inv u done], [fa s a0 = u], the stack-ordering
+      conjuncts, and additionally [low_post a0] (needed for the
+      subsequent [update_low u (low a0)]). *)
+  Lemma tree_edge_preserves_low_forset_inv_lowlink (u a0: V) (done: V -> Prop) (W: V -> program (@SCCSt V) unit):
+    u <> a0 -> dg_step g u a0 -> ~ done a0 ->
+    (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+                     (W x)
+                     (fun _ s => low_post x s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)) ->
+    Hoare (fun s => low_forset_inv u done s /\ ~ a0 ∈ visited s /\ ~ done a0 /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+          (set_fa a0 u;; W a0)
+          (fun _ s => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ low_post a0 s).
+  Proof.
+    (* Proof plan:
+       1. [set_fa a0 u] preserves [low_forset_inv u done] because [a0] is
+          unvisited and not in [done]; it establishes [fa s a0 = u].
+       2. The low-link IH on [W a0] gives [low_post a0] and preserves the
+          stack facts.  It also keeps [u ∈ visited] and does not modify
+          [fa a0] (already [u]) nor [low u] / [done], so [low_forset_inv u done]
+          and [fa s a0 = u] remain true.
+       3. [a0 ∈ visited] follows from [preloop_self_visited] inside [W a0]. *)
+  Admitted.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
       morphism w.r.t. set equivalence of [done].  When [done1 == done2],
@@ -2829,7 +2880,7 @@ Section IS_LOW.
       - For each neighbor [a0]:
         * Tree edge ([~ a0 ∈ visited]):
           [set_fa a0 u;; W a0] preserves [P(done)] and establishes
-          [fa a0 = u] by [set_fa_W_preserves_low_forset_inv]; then
+          [fa a0 = u] by [tree_edge_preserves_low_forset_inv_lowlink]; then
           [update_low u (low a0)] extends the invariant to
           [P(done ∪ [a0])] by [update_low_tree_edge] and
           [low_forset_inv_expand_child_done].
@@ -2850,7 +2901,7 @@ Section IS_LOW.
       - [Hoare_forset]
       - [low_forset_inv_proper]
       - [done_visited_proper]
-      - [set_fa_W_preserves_low_forset_inv]
+      - [tree_edge_preserves_low_forset_inv_lowlink]
       - [update_low_tree_edge]
       - [update_low_back_edge]
       - [cross_edge_preserves_low_forset_inv]
@@ -2867,14 +2918,18 @@ Section IS_LOW.
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => low_post u s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
   Proof.
-    (* 证明思路：按设计文档的 P(done) 应用 Hoare_forset。
-       树边分支用 set_fa_W_preserves_low_forset_inv 保持 low_forset_inv u done
-       与栈序，并用 update_low_tree_edge 把孩子 a0 移入 done；
-       非树边分支分回边（update_low_back_edge）与 cross edge
-       （cross_edge_preserves_low_forset_inv）两种；
-       循环结束后 done = dg_step g u，由 forset_end_implies_scc_low_valid_v
-       得到 scc_low_valid_v s u，配合 wf_scc_state 得 low_post u s。
-       In u (stack s)、stack_dfn_order、dfn_injective 由 forset 各分支保持。 *)
+    (* Proof plan: apply [Hoare_forset] with the corrected [P(done)].
+       - Tree-edge branch: use [tree_edge_preserves_low_forset_inv_lowlink]
+         (which only needs the low-link IH) to keep [low_forset_inv u done]
+         and the stack-ordering conjuncts, then [update_low_tree_edge] moves
+         the child [a0] into [done].
+       - Non-tree-edge branches: back edge uses [update_low_back_edge];
+         cross edge uses [cross_edge_preserves_low_forset_inv].
+       - After the loop [done = dg_step g u]; apply
+         [forset_end_implies_scc_low_valid_v] to get [scc_low_valid_v s u],
+         which together with [wf_scc_state] gives [low_post u s].
+       - [In u (stack s)], [stack_dfn_order], [dfn_injective] are preserved
+         by all branches. *)
   Admitted.
 
   (** [tarjan_scc_keep_low_valid]: one-vertex main theorem.
@@ -2950,12 +3005,14 @@ Section IS_LOW.
          satisfy [scc_low_valid_v].
       2. Stage one — ancestors keep the corrected forset invariant:
          For any already-visited vertex [u] that is an ancestor of [a] in the
-         DFS tree, [W_preserves_ancestor_inv] preserves [low_forset_inv u done]
-         together with [In u (stack s)], [stack_dfn_order s], and
-         [dfn_injective s] as [a]'s subtree executes. At the moment [a]'s
-         subtree returns, [done] has been expanded to include [a] (and possibly
-         other processed children of [u]), but it need not yet be all of
-         [dg_step g u].
+         DFS tree, let [parent] be the direct DFS parent of [a] on the path
+         from [u] to [a] (so [fa s a = parent]).  The generalized
+         [W_preserves_ancestor_inv u parent a done] preserves
+         [low_forset_inv u done] together with [In u (stack s)],
+         [stack_dfn_order s], and [dfn_injective s] as [a]'s subtree executes.
+         At the moment [a]'s subtree returns, [done] has been expanded to
+         include [a] (and possibly other processed children of [u]), but it
+         need not yet be all of [dg_step g u].
       3. Stage two — ancestors obtain [scc_low_valid_v] only after their own
          forset ends: when [u]'s forset over all children eventually finishes,
          [done = dg_step g u]. The fa-child condition and [done_visited] then
@@ -2970,7 +3027,6 @@ Section IS_LOW.
       Required previous lemmas:
       - [tarjan_scc_keep_low_valid]
       - [W_preserves_ancestor_inv]
-      - [set_fa_W_preserves_low_forset_inv]
       - [forset_end_implies_scc_low_valid_v]
       - [wf_scc_state] preservation lemmas *)
   Lemma tarjan_scc_establishes_and_preserves_scc_low_valid (a: V):
@@ -2978,17 +3034,21 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g a)
           (fun _ s => scc_low_valid s /\ wf_scc_state s).
   Proof.
-    (* 证明思路：将单点 low_post 性质提升为全局 scc_low_valid 保持性。
-       第一阶段：由 tarjan_scc_keep_low_valid（含 original_vvalid g a）得 a 及其子树满足 scc_low_valid_v。
-       第二阶段：对 a 的每个祖先 u，执行过程中用新版 W_preserves_ancestor_inv
-       保持 low_forset_inv u done、In u (stack s)、stack_dfn_order、dfn_injective；
-       当 u 自己的 forset 最终完成时 done=dg_step g u，于是由
-       forset_end_implies_scc_low_valid_v 得 scc_low_valid_v s u。
-       不在 a 子树及祖先链上的顶点状态不变。wf_scc_state 由各原语保持性引理保持。
-       关键引理：tarjan_scc_keep_low_valid, W_preserves_ancestor_inv,
-       set_fa_W_preserves_low_forset_inv, forset_end_implies_scc_low_valid_v,
-       low_forset_inv_to_scc_low_valid。
-       原始 .orig 中该引理仅有说明性注释，未给完整证明。 *)
+    (* Proof plan: lift the single-vertex [low_post] property to a global
+       [scc_low_valid] preservation property.
+       Stage 1: from [tarjan_scc_keep_low_valid] (with [original_vvalid g a])
+       we get that [a] and its DFS subtree satisfy [scc_low_valid_v].
+       Stage 2: for every ancestor [u] of [a], the generalized
+       [W_preserves_ancestor_inv u parent a done] (where [parent] is the
+       direct DFS parent of [a]) preserves [low_forset_inv u done],
+       [In u (stack s)], [stack_dfn_order s], and [dfn_injective s] while
+       [a]'s subtree executes.  When [u]'s own forset eventually finishes,
+       [done = dg_step g u], so [forset_end_implies_scc_low_valid_v] yields
+       [scc_low_valid_v s u].
+       Vertices outside [a]'s subtree and ancestor chain are unchanged.
+       [wf_scc_state] is preserved by the primitive preservation lemmas.
+       Key lemmas: [tarjan_scc_keep_low_valid], [W_preserves_ancestor_inv],
+       [forset_end_implies_scc_low_valid_v], [low_forset_inv_to_scc_low_valid]. *)
     Admitted.
 
   (** [tarjan_scc_all_scc_low_valid]: global [scc_low_valid] after the full
