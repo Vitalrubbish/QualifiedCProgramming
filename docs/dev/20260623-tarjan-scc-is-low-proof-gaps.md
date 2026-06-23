@@ -1,6 +1,6 @@
 # Tarjan SCC Low Correctness — 证明中的前置条件缺口
 
-**Author**: Vitalrubbish / Claude
+**Author**: Vitalrubbish
 **Date**: 2026-06-23
 
 ## 概述
