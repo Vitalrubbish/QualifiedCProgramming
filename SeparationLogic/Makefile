@@ -142,6 +142,10 @@ Algorithms_FILES = \
 	Tarjan/Tarjan_basics.v Tarjan/Tarjan_basics_ex.v \
 	Tarjan/Tarjan_is_dfn.v Tarjan/Tarjan_no_cross_edge.v Tarjan/Tarjan_is_low.v \
 	Tarjan/Tarjan_bridge_iff.v Tarjan/Tarjan_tarjan.v \
+	Kosaraju/SCC.v Kosaraju/Kosaraju.v \
+	Tarjan_directed/SCC_basic.v Tarjan_directed/Tarjan_scc.v \
+	Tarjan_directed/Tarjan_scc_basics.v Tarjan_directed/Tarjan_scc_is_dfn.v \
+	Tarjan_directed/Tarjan_scc_is_low.v \
 
 SumLib_FILES = \
 	Sum.v \
@@ -212,8 +216,8 @@ QCP_DEMO_Example_Lib_FILES = \
 	sll_merge_rel_lib.v kmp_lib.v kmp_rel_lib.v int_array_merge_rel_lib.v \
 
 LLM_FRIENDLY_CASES_Lib_FILES = \
-	poly_sll_lib.v sll_lib.v sll_insert_sort_lib.v functional_queue_lib.v dll_queue_lib.v sll_queue_lib.v simple_arith/Apos_lib.v simple_arith/PDiv_lib.v bst_lib.v bst_fp_lib.v swap_lib.v eval_lib.v avl_shape.v sll_shape_lib.v dll_shape_lib.v \
-	sll_merge_rel_lib.v kmp_lib.v kmp_rel_lib.v int_array_merge_rel_lib.v \
+	poly_sll_lib.v sll_lib.v sll_insert_sort_lib.v functional_queue_lib.v dll_queue_lib.v sll_queue_lib.v simple_arith/Apos_lib.v simple_arith/PDiv_lib.v bst_lib.v bst_fp_lib.v swap_lib.v eval_lib.v avl_shape.v sll_shape_lib.v dll_shape_lib.v SllPtrArrayLib.v \
+	sll_merge_rel_lib.v kmp_lib.v kmp_rel_lib.v int_array_merge_rel_lib.v kosaraju_rel_lib.v \
 	majorityElement_lib.v sortArray_lib.v zephyr_slist_lib.v union_find_err_rel_lib.v \
 
 LLM_BENCH_Lib_FILES = \
@@ -270,7 +274,7 @@ QCP_DEMO_EXAMPLE_FILE_NAME = \
 LLM_FRIENDLY_CASES_EXAMPLE_FILE_NAME = \
 	poly_sll sll sll_insert_sort functional_queue dll_queue sll_queue simple_arith/abs simple_arith/add simple_arith/max3 simple_arith/gcd simple_arith/Always_pos simple_arith/div_test simple_arith/exgcd \
 	sum bst_insert bst_insert_rec bst_fp_insert bst_fp_delete swap eval bst_delete_rec bst_delete_rec2 avl_insert sll_auto dll_auto array_auto chars \
-	kmp_rel int_array_merge_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases union_find_err_rel \
+	kmp_rel int_array_merge_rel kosaraju_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases union_find_err_rel \
 	two_d_int_array two_d_int_ptr_array two_d_char_ptr_array
 
 LLM_BENCH_EXAMPLE_FILE_NAME = \
@@ -399,7 +403,7 @@ QCP_DEMO_STRATEGY_FILE_NAME = \
 
 LLM_FRIENDLY_CASES_STRATEGY_FILE_NAME = \
 	common poly_sll sll_shape sll dll_queue functional_queue sll_queue int_array undef_uint_array uint_array array_shape bst bst_fp eval char_array avl dll_shape safeexec safeexecE \
-	array2 int_ptr_array2 ptr_array2
+	array2 int_ptr_array2 ptr_array2 sll_ptr_array
 
 APPLICATION_STRATEGY_FILE_NAME = \
 	fme/fme typeinfer/typeinfer minigmp/gmp mergeablelist/sll_project
