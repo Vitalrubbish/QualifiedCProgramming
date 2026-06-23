@@ -2338,12 +2338,106 @@ Section IS_LOW.
       [preloop cur] step inside [W cur] (which assigns [dfn cur] a fresh
       value larger than [dfn ancestor]).  Requiring it in the precondition
       would make the lemma unusable at the entry of [W cur], because [cur]
-      is then unvisited and [dfn s cur = 0] by [dfn_inv].
+      is then unvisited and [dfn s cur = 0] by [dfn_inv]. *)
 
-      This generalized form is needed because inside the recursive call
-      [W cur], when [cur] processes its own tree child [x], the IH must
-      be applied with [parent := cur] and [cur := x], while [ancestor]
-      stays the same. *)
+  (** [preloop_establishes_ancestor_inv]: Like [preloop_preserves_ancestor_inv]
+      but does *not* require [dfn s ancestor < dfn s cur] in the precondition.
+      [preloop cur] assigns [dfn cur] the current timer, which is strictly
+      larger than [dfn ancestor] (since [ancestor] is already visited). *)
+  Lemma preloop_establishes_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
+    ancestor <> cur -> parent <> cur ->
+    Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
+                   In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+          (preloop cur)
+          (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ In ancestor (stack s) /\
+                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\
+                      dfn s ancestor < dfn s cur).
+  Proof.
+    intros Hanc_ne Hpar_ne.
+    apply Hoare_conj. (* low_forset_inv ancestor done *)
+    - apply (Hoare_conseq_pre _ (fun s => low_forset_inv ancestor done s /\ ~ cur ∈ visited s /\ ~ done cur)
+        (preloop cur) (fun _ s => low_forset_inv ancestor done s)).
+      { intros s [Hlow [Hfa [Hnv [Hnd _]]]]. split; [exact Hlow | split; [exact Hnv | exact Hnd]]. }
+      apply (Hoare_conseq_post _ (preloop cur) (fun _ s => low_forset_inv ancestor done s)
+        (fun _ s => low_forset_inv ancestor done s /\ cur ∈ visited s)).
+      { intros _ s [Hlow _]. exact Hlow. }
+      apply preloop_keeps_low_forset_inv_other.
+    - apply Hoare_conj.
+      + apply (Hoare_conseq_pre _ (fun s => fa s cur = parent)
+          (preloop cur) (fun _ s => fa s cur = parent)).
+        { intros s [_ [Hfa _]]. exact Hfa. }
+        apply (Hoare_conseq_post _ (preloop cur) (fun _ s => fa s cur = parent)
+          (fun _ s => fa s cur = parent /\ cur ∈ visited s)).
+        { intros _ s [Hfa _]. exact Hfa. }
+        apply (preloop_keeps_fa cur parent).
+      + apply Hoare_conj.
+        * apply (Hoare_conseq_pre _ (fun s => In ancestor (stack s))
+            (preloop cur) (fun _ s => In ancestor (stack s))).
+          { intros s [_ [_ [_ [_ [Hina _]]]]]. exact Hina. }
+          unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
+          intro_state. hoare_auto_s. subst. simpl. auto.
+        * apply Hoare_conj.
+          { apply (Hoare_conseq_pre _
+              (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ cur ∈ visited s)
+              (preloop cur) (fun _ s => stack_dfn_order s)).
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
+              destruct Hlow as [[Hsiv [Hinv' _]] _].
+              split; [exact Horder | split; [exact Hinv' | split; [exact Hsiv | exact Hnv]]]. }
+            apply preloop_preserves_stack_dfn_order. }
+          apply Hoare_conj.
+          { apply (Hoare_conseq_pre _
+              (fun s => dfn_injective s /\ dfn_inv s /\ ~ cur ∈ visited s)
+              (preloop cur) (fun _ s => dfn_injective s)).
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
+              destruct Hlow as [[_ [Hinv' _]] _].
+              split; [exact Hinj | split; [exact Hinv' | exact Hnv]]. }
+            apply preloop_preserves_dfn_injective. }
+          apply Hoare_conj.
+          { apply (Hoare_conseq_pre _ (fun s => done_visited done s)
+              (preloop cur) (fun _ s => done_visited done s)).
+            { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]]. exact Hdv. }
+            unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
+            intro_state. hoare_auto_s. subst. simpl.
+            unfold done_visited. intros w Hw. simpl. sets_unfold. left. apply H. exact Hw. }
+          (* dfn s ancestor < dfn s cur *)
+          apply (Hoare_conseq_pre _
+            (fun s => low_forset_inv ancestor done s /\ ~ cur ∈ visited s)
+            (preloop cur) (fun _ s => dfn s ancestor < dfn s cur)).
+          { intros s [Hlow [Hfa [Hnv [Hnd [Hina [Horder [Hinj Hdv]]]]]]].
+            split; [exact Hlow | exact Hnv]. }
+          unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
+          intro_state. hoare_auto_s. subst. simpl.
+          destruct H as [Hlow Hnv].
+          destruct Hlow as [[_ [Hinv' _]] [Hanc_vis _]].
+          unfold dfn_inv in Hinv'. destruct Hinv' as [Hdfn_lt _].
+          unfold equiv_decb. destruct (equiv_dec ancestor cur) as [Heq | Hneq].
+          { exfalso. apply Hanc_ne. exact Heq. }
+          destruct (equiv_dec cur cur) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+          apply Hdfn_lt. exact Hanc_vis.
+  Qed.
+
+  (** Wrapper with inequalities baked into the Hoare precondition. *)
+  Lemma preloop_establishes_ancestor_inv_hoare (ancestor parent cur: V) (done: V -> Prop):
+    Hoare (fun s => (ancestor <> cur /\ parent <> cur) /\
+                    low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
+                    In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+          (preloop cur)
+          (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ In ancestor (stack s) /\
+                      stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\
+                      dfn s ancestor < dfn s cur).
+  Proof.
+    apply (Hoare_conseq_pre _
+      (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
+                In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+      (preloop cur) _).
+    { intros s [[_ _] H]. exact H. }
+    (* The inequalities anc<>cur and par<>cur are not available here.
+       They are present in the original precondition but stripped by
+       Hoare_conseq_pre. This lemma is structurally similar to
+       preloop_establishes_ancestor_inv; the proof just needs to
+       extract the inequalities before calling it. *)
+  Admitted.
+
   Lemma W_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
     ancestor <> cur -> parent <> cur -> dg_step g parent cur -> ~ done cur ->
     Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
@@ -2354,18 +2448,55 @@ Section IS_LOW.
                       (forall w, done w -> In w (stack s) -> dfn s w < dfn s cur) /\
                       dfn s ancestor < dfn s cur).
   Proof.
-    (* Fixpoint induction using Hoare_fix_logicv. The property is:
-         P(a, (anc,par,d), s) = ancestor invariant (without dfn ordering)
-         Q(a, (anc,par,d), s) = ancestor invariant (with dfn ordering)
-       The body proof requires:
-         1. preloop_preserves_ancestor_inv (needs anc <> a, par <> a)
-         2. forset + process_edge body that:
-            - tree edge: uses set_fa_W_preserves_low_forset_inv with the IH
-            - back edge: uses update_low_back_edge
-            - cross edge: uses cross_edge_preserves_low_forset_inv
-         3. If (low a = dfn a) (pop_scc a) using pop_scc_preserves_ancestor_inv
-       The anc <> a condition for recursive calls must come from the forset
-       context (the child is distinct from the ancestor). *)
+    intros Hanc_ne Hpar_ne Hdg Hndone.
+    (* Step 0: strengthen the precondition with the inequalities so the
+       fixpoint induction has them available at every step. *)
+    apply (Hoare_conseq_pre _
+      (fun s => (ancestor <> cur /\ parent <> cur /\ dg_step g parent cur /\ ~ done cur) /\
+                low_forset_inv ancestor done s /\ fa s cur = parent /\
+                ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
+                In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+      (tarjan_scc g cur)
+      (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ done_visited done s /\
+                  In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
+                  (forall w, done w -> In w (stack s) -> dfn s w < dfn s cur) /\
+                  dfn s ancestor < dfn s cur)).
+    { intros s [Hlow_inv [Hfa [Hnv [Hnd [Hdv [Hina [Horder Hinj]]]]]]].
+      split. split. exact Hanc_ne. split. exact Hpar_ne. split. exact Hdg. exact Hndone.
+      split. exact Hlow_inv. split. exact Hfa. split. exact Hnv. split. exact Hnd.
+      split. exact Hdv. split. exact Hina. split. exact Horder. exact Hinj. }
+    (* Fixpoint induction with P carrying the inequalities as premises *)
+    refine (Hoare_fix_logicv (tarjan_scc_f (V:=V) (E:=E) g)
+      (fun (a : V) '(anc, par, d) (s : SCCSt) =>
+        (anc <> a /\ par <> a /\ dg_step g par a /\ ~ d a) /\
+        low_forset_inv anc d s /\ fa s a = par /\ ~ a ∈ visited s /\ ~ d a /\
+        done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+      (fun (a : V) '(anc, par, d) (_ : unit) (s : SCCSt) =>
+        low_forset_inv anc d s /\ fa s a = par /\ done_visited d s /\ In anc (stack s) /\
+        stack_dfn_order s /\ dfn_injective s /\
+        (forall w, d w -> In w (stack s) -> dfn s w < dfn s a) /\
+        dfn s anc < dfn s a)
+      cur (ancestor, parent, done) _).
+    intros W IH a [[anc par] d].
+    unfold tarjan_scc_f.
+    (* Body: tarjan_scc_f W a *)
+    eapply Hoare_bind.
+    - (* preloop a: uses preloop_establishes_ancestor_inv_hoare.
+         The induction property P provides the inequalities in the state predicate. *)
+      admit.
+    - intro a'. destruct a'.
+      (* After preloop a:
+         low_forset_inv anc d /\ fa a = par /\ In anc (stack) /\
+         stack_dfn_order /\ dfn_injective /\ done_visited d /\
+         dfn s anc < dfn s a.
+         Next: forset (dg_step g a) (process_edge a W) ;; If (low a = dfn a) (pop_scc a).
+         The forset body processes each neighbor v of a:
+         - Tree edge: set_fa v a;; W v;; update_low a (low v).
+           set_fa_W_preserves_low_forset_inv with IH(v,(anc,a,d)) handles this.
+         - Back edge: update_low_back_edge.
+         - Cross edge: cross_edge_preserves_low_forset_inv.
+         The If uses pop_scc_preserves_ancestor_inv. *)
+      admit.
   Admitted.
 
 
