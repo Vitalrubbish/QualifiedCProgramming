@@ -2597,26 +2597,20 @@ Section IS_LOW.
       exact Hinj.
     - (* W a0: combine low-link IH and frame lemma *)
       intro a'. destruct a'. specialize (HW a0) as Hlowlink. specialize (Hframe a0) as Hframe_a0.
-      apply (Hoare_conseq_pre (Qmid tt)
-        (fun (s: SCCSt) =>
+      (* Step 3: first reshape to the two-group combined postcondition,
+         then use Hoare_conj to combine the two IHs. *)
+      apply (Hoare_conseq_post (Qmid tt) (W a0)
+        (fun (_: unit) (s: SCCSt) => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ low_post a0 s)
+        (fun (_: unit) (s: SCCSt) =>
           (low_post a0 s /\ a0 ∈ visited s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s) /\
           (low_forset_inv u done s /\ fa s a0 = u /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
-           (forall w, done w -> In w (stack s) -> dfn s w < dfn s a0) /\ dfn s u < dfn s a0))
-        (W a0)
-        (fun (_: unit) (s: SCCSt) => low_forset_inv u done s /\ fa s a0 = u /\ a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ low_post a0 s)).
-      { intros s Hqmid. destruct Hqmid as [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split.
-        - split. exact Hpre. split.
-          destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'.
-          split. exact Hinu0. split. exact Horder0. exact Hinj0.
-        - split. exact Hlow_inv. split. exact Hfa.
-          split. exact Hdv'. split. exact Hinu0. split. exact Horder0.
-          split. exact Hinj0.
-          (* dfn-ordering and dfn s u < dfn s a0 from the forset invariant:
-             Not available here — these must be provided by the caller.
-             The frame lemma's precondition includes dfn s u < dfn s a0
-             and the forall done-ordering, but Qmid does not. *)
-          admit. }
+           (forall w, done w -> In w (stack s) -> dfn s w < dfn s a0) /\ dfn s u < dfn s a0))).
+      { intros _ s [[Hpost [Hvis [Huvis' [Hinu' [Horder' Hinj']]]]]
+                    [Hlow_inv [Hfa [Hdv' [Hinu0 [Horder0 [Hinj0 [Hdfn_lt Hdfn_u]]]]]]]].
+        split. exact Hlow_inv. split. exact Hfa. split. exact Hvis.
+        split. exact Hdv'. split. exact Hinu'. split. exact Horder'.
+        split. exact Hinj'. exact Hpost. }
+      (* Step 1+2: align both IHs to Qmid and combine with Hoare_conj *)
       apply Hoare_conj.
       + (* low-link IH *)
         apply (Hoare_conseq_pre (Qmid tt)
