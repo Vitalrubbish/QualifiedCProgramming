@@ -626,21 +626,80 @@ Section IS_LOW.
       - [u] is on the stack;
       - stack dfn ordering and dfn injectivity are preserved. *)
   Lemma preloop_establishes_low_forset_inv (u: V):
-    Hoare (fun s: @SCCSt V => low_pre u s)
+    Hoare (fun s: @SCCSt V => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
           (preloop u)
           (fun _ s => low_forset_inv u ∅ s /\
                       (forall v, fa s v = u -> v = u) /\
                       In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
   Proof.
-    (* 证明思路：
-       - low_forset_inv u ∅：由 preloop_preserves_wf_scc_state、preloop_self_visited
-         与 preloop_low_eq_dfn + low_eq_dfn_to_min_empty 组合得到。
-       - fa s v = u -> v = u：preloop 前 low_pre u 保证 u ∉ visited；结合 fa_visited
-         可知若 fa s v = u 且 u ∉ visited，则必有 v = u。preloop_keeps_fa 保持该性质。
-       - In u (stack s)：preloop_in_stack。
-       - stack_dfn_order s：preloop_preserves_stack_dfn_order。
-       - dfn_injective s：preloop_preserves_dfn_injective。 *)
-  Admitted.
+    apply Hoare_conj. (* split low_forset_inv from fa /\ In /\ order /\ inj *)
+    - (* low_forset_inv u ∅ *)
+      unfold low_forset_inv.
+      apply Hoare_conj. (* wf_scc_state *)
+      + apply (Hoare_conseq_pre
+          (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+          (fun s => wf_scc_state_pre u s)
+          (preloop u) (fun _ s => wf_scc_state s)).
+        { unfold low_pre, wf_scc_state_pre, wf_scc_state.
+          intros s [[[Hsiv [Hinv [Hvalid Hfa]]] Hnuvis] _].
+          split. { split; [exact Hsiv | split; [exact Hinv | split; [exact Hvalid | exact Hfa]]]. } exact Hnuvis. }
+        apply preloop_preserves_wf_scc_state.
+      + apply Hoare_conj. (* u ∈ visited *)
+        * apply (Hoare_conseq_pre
+            (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+            (fun _ => True) (preloop u) (fun _ s => u ∈ visited s)).
+          { intros s _. exact I. }
+          apply preloop_self_visited.
+        * (* low_forset_inv_core u ∅ *)
+          apply (Hoare_conseq_post
+            (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+            (preloop u)
+            (fun _ s => low_forset_inv_core u ∅ s)
+            (fun _ s => low s u = dfn s u)).
+          { intros _ s Heq. apply low_eq_dfn_to_min_empty. exact Heq. }
+          apply (Hoare_conseq_pre
+            (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+            (fun _ => True) (preloop u) (fun _ s => low s u = dfn s u)).
+          { intros s _. exact I. }
+          apply preloop_low_eq_dfn.
+    - apply Hoare_conj. (* fa property *)
+      + (* fa s v = u -> v = u *)
+        unfold low_pre, wf_scc_state_pre.
+        unfold preloop, set_dfn, set_low, incr_timer, push_stack, visit.
+        intro_state. hoare_auto_s.
+        (* After hoare_auto_s, the post-state has fa unchanged from s0.
+           The goal is forall v, fa (post_state) v = u -> v = u.
+           Since fa is unchanged, this is exactly fa s0 v = u -> v = u. *)
+        destruct H as [[[Hsiv [Hinv [Hvalid Hfa_vis]]] Hnuvis] [Horder Hinj]].
+        subst s. simpl in H2.
+        apply low_pre_fa_eq_u_implies_eq_u with (s := s0) (v := v); auto.
+        unfold low_pre, wf_scc_state_pre, wf_scc_state.
+        split; [split; [exact Hsiv | split; [exact Hinv | split; [exact Hvalid | exact Hfa_vis]]] | exact Hnuvis].
+      + apply Hoare_conj. (* In u (stack s) *)
+        * apply (Hoare_conseq_pre
+            (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+            (fun _ => True) (preloop u) (fun _ s => In u (stack s))).
+          { intros s _. exact I. }
+          apply preloop_in_stack.
+        * apply Hoare_conj. (* stack_dfn_order *)
+          { apply (Hoare_conseq_pre
+              (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+              (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ u ∈ visited s)
+              (preloop u) (fun _ s => stack_dfn_order s)).
+            { unfold low_pre, wf_scc_state_pre.
+              intros s [[[Hsiv [Hinv [Hvalid Hfa]]] Hnuvis] [Horder Hinj]].
+              split; [exact Horder | split; [exact Hinv | split; [exact Hsiv | exact Hnuvis]]]. }
+            apply preloop_preserves_stack_dfn_order. }
+          (* dfn_injective s *)
+          apply (Hoare_conseq_pre
+            (fun s => low_pre u s /\ stack_dfn_order s /\ dfn_injective s)
+            (fun s => dfn_injective s /\ dfn_inv s /\ ~ u ∈ visited s)
+            (preloop u) (fun _ s => dfn_injective s)).
+          { unfold low_pre, wf_scc_state_pre.
+            intros s [[[Hsiv [Hinv [Hvalid Hfa]]] Hnuvis] [Horder Hinj]].
+            split; [exact Hinj | split; [exact Hinv | exact Hnuvis]]. }
+          apply preloop_preserves_dfn_injective.
+  Qed.
 
   (* ================================================================ *)
   (* 8. pop_scc Preserves Low Valid                                   *)
