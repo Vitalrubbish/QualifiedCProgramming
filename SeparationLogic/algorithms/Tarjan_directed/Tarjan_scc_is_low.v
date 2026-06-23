@@ -2492,6 +2492,16 @@ Section IS_LOW.
       conjuncts, and additionally [low_post a0] (needed for the
       subsequent [update_low u (low a0)]).
 
+      The induction hypothesis on [W x] is strengthened with
+      [x ∈ visited s] in its postcondition.  This is necessary because
+      [low_post x] alone only gives [wf_scc_state s] and
+      [scc_low_valid_v s x], and [dfn_inv] does not forbid
+      [dfn s x = 0] for unvisited vertices; thus [a0 ∈ visited] cannot
+      be derived from [low_post a0] alone, yet it is required to show
+      [done_visited (done ∪ [a0])] and to invoke later lemmas.
+      Strengthening the IH is sound: [W x] begins with [preloop x],
+      which marks [x] visited.
+
       The additional precondition
         [forall w, done w -> In w (stack s) -> dfn s w < dfn s a0]
       is the frame condition identified in
@@ -2504,7 +2514,7 @@ Section IS_LOW.
     u <> a0 -> dg_step g u a0 -> ~ done a0 ->
     (forall x, Hoare (fun s => low_pre x s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
                      (W x)
-                     (fun _ s => low_post x s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)) ->
+                     (fun _ s => low_post x s /\ x ∈ visited s /\ u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)) ->
     Hoare (fun s => low_forset_inv u done s /\ ~ a0 ∈ visited s /\ ~ done a0 /\ done_visited done s /\ In u (stack s) /\
                     stack_dfn_order s /\ dfn_injective s /\
                     (forall w, done w -> In w (stack s) -> dfn s w < dfn s a0))
@@ -2528,68 +2538,66 @@ Section IS_LOW.
       destruct H as [Hlow [Hnv [Hnd [Hdv [Hinu [Horder [Hinj Hdfn_lt]]]]]]].
       unfold low_forset_inv, low_forset_inv_core.
       destruct Hlow as [Hwf [Huvis Hmin]].
-      subst. simpl.
-      split. (* low_forset_inv *)
+      unfold wf_scc_state in Hwf. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
+      subst s. simpl.
+      split.  (* low_forset_inv *)
       { unfold low_forset_inv, low_forset_inv_core. simpl. split.
         - (* wf_scc_state *)
-          unfold wf_scc_state in *. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
           unfold wf_scc_state. simpl. split; [exact Hsiv | split; [exact Hinv' |]].
+          split.
+          * unfold dfn_valid. intros x y Htree.
+            eapply Hvalid. eapply (set_fa_state_preserves_dg_step a0 u root s0 Hnv); eauto.
+          * unfold fa_visited. simpl. intros w Hfa_w.
+            unfold equiv_decb. unfold equiv_decb in Hfa_w.
+            destruct (equiv_dec w a0) as [Heq_wa0 | Hneq_wa0].
+            + simpl. exact Huvis.
+            + simpl in Hfa_w. simpl. apply Hfa_vis. exact Hfa_w.
+        - split; [exact Huvis |].
+          eapply (set_fa_preserves_min u a0 done s0 Hnd Hmin). }
+      split.  (* fa s a0 = u *)
+      { unfold equiv_decb. destruct (equiv_dec a0 a0) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity]. }
+      split.  (* low_pre a0 *)
+      { unfold wf_scc_state. simpl. split.
+        * split; [exact Hsiv |].
+          split; [exact Hinv' |].
           split.
           { unfold dfn_valid. intros x y Htree.
             eapply Hvalid. eapply (set_fa_state_preserves_dg_step a0 u root s0 Hnv); eauto. }
-          unfold fa_visited. simpl. intros w Hfa_w.
-          unfold equiv_decb. unfold equiv_decb in Hfa_w.
-          destruct (equiv_dec w a0) as [Heq | Hneq'].
-          + simpl. exact Huvis.
-          + simpl in Hfa_w. apply Hfa_vis. exact Hfa_w. }
-        - split; [exact Huvis |].
-          eapply (set_fa_preserves_min u a0 done s0 Hnd Hmin). }
-      (* fa s a0 = u *)
-      split. { unfold equiv_decb. destruct (equiv_dec a0 a0); [reflexivity | exfalso; auto]. }
-      (* low_pre a0 = wf_scc_state s /\ ~ a0 ∈ visited s *)
-      split. { unfold wf_scc_state. simpl.
-        destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
-        split; [exact Hsiv | split; [exact Hinv' | split; [exact Hvalid |]]].
-        unfold fa_visited. simpl. intros w Hfa_w.
-        unfold equiv_decb. destruct (equiv_dec w a0) as [Heq | Hneq'].
-        + simpl. exact Huvis.
-        + apply Hfa_vis. exact Hfa_w. }
-      split; [exact Hnv |]. split; [exact Hnd |].
-      split; [exact Hdv |]. split; [exact Hinu |].
-      split; [exact Horder | exact Hinj].
+          { unfold fa_visited. simpl. intros w Hfa_w.
+            unfold equiv_decb. unfold equiv_decb in Hfa_w.
+            destruct (equiv_dec w a0) as [Heq_wa0 | Hneq_wa0].
+            + simpl. exact Huvis.
+            + simpl in Hfa_w. simpl. apply Hfa_vis. exact Hfa_w. }
+        * exact Hnv. }
+      split; [exact Hnd |].
+      split; [unfold done_visited; simpl; exact Hdv |].
+      split; [exact Hinu |].
+      split; [exact Horder |].
+      exact Hinj.
     - (* W a0 with low-link IH *)
-      intros _. specialize (HW a0).
-      eapply Hoare_conseq_post.
-      { intros _ s [Hpost [Huvis' [Hinu' [Horder' Hinj']]]].
+      intro a'. destruct a'. specialize (HW a0).
+      apply (Hoare_conseq_post (Qmid tt) (W a0)
+        (fun (_: unit) (s: SCCSt) => low_forset_inv u done s /\ fa s a0 = u /\
+          a0 ∈ visited s /\ done_visited done s /\ In u (stack s) /\
+          stack_dfn_order s /\ dfn_injective s /\ low_post a0 s)
+        (fun (_: unit) (s: SCCSt) => low_post a0 s /\ a0 ∈ visited s /\
+          u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)).
+      { intros _ s [Hpost [Hvis_a0 [Huvis' [Hinu' [Horder' Hinj']]]]].
         destruct H as [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
-        - (* low_forset_inv u done: preserved by W a0 because:
-             * low u unchanged (W only updates a0's subtree)
-             * fa of done vertices unchanged
-             * done vertices not popped (by dfn-ordering premise) *)
-          exact Hlow_inv.
-        - exact Hfa.
-        - (* a0 ∈ visited: from low_post a0 via dfn_inv:
-             dfn_inv from wf_scc_state says dfn s v = 0 <-> ~v ∈ visited.
-             W a0 includes preloop a0 which sets dfn a0 := timer (> 0). *)
-          destruct Hpost as [Hwf_post _]. destruct Hwf_post as [_ [Hinv_post _]].
-          destruct Hinv_post as [_ Hdfn_zero].
-          destruct (classic (a0 ∈ visited s)) as [Hvis | Hnvis]; [exact Hvis |].
-          apply Hdfn_zero in Hnvis. (* gives dfn s a0 = 0 *)
-          (* But preloop a0 sets dfn a0 > 0. Contradiction cannot be derived
-             from the W specification alone — this is a specification gap. *)
-          admit.
-        - exact Hdv'.
-        - exact Hinu'.
-        - exact Horder'.
-        - exact Hinj'.
-        - exact Hpost. }
-      eapply Hoare_conseq_pre.
+        split. exact Hlow_inv. split. exact Hfa. split. exact Hvis_a0.
+        split. exact Hdv'. split. exact Hinu'. split. exact Horder'.
+        split. exact Hinj'. exact Hpost. }
+      apply (Hoare_conseq_pre (Qmid tt) (W a0)
+        (fun (_: unit) (s: SCCSt) => low_post a0 s /\ a0 ∈ visited s /\
+          u ∈ visited s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s)
+        (fun s => low_pre a0 s /\ u ∈ visited s /\ In u (stack s) /\
+          stack_dfn_order s /\ dfn_injective s)).
       { intros s [Hlow_inv [Hfa [Hpre [Hnd' [Hdv' [Hinu0 [Horder0 Hinj0]]]]]]].
-        split; [exact Hpre | split; [| split; [exact Hinu0 | split; [exact Horder0 | exact Hinj0]]]].
-        destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'. }
+        split. exact Hpre. split.
+        destruct Hlow_inv as [_ [Huvis' _]]. exact Huvis'.
+        split. exact Hinu0. split. exact Horder0. exact Hinj0. }
       exact HW.
-  Admitted.
+  Qed.
 
   (** [low_forset_inv_proper]: [low_forset_inv u done s] is a Proper
       morphism w.r.t. set equivalence of [done].  When [done1 == done2],
