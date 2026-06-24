@@ -280,12 +280,43 @@ Section IS_LOW.
       dg_step (state_to_dfs_tree g s root) u v ->
       scc_is_low_v_val s v (low s v)):
     scc_low_valid_v s u -> scc_is_low_v s u.
-  Admitted.
+  Proof.
+    intros Hvalid.
+    unfold scc_low_valid_v in Hvalid.
+    rewrite scc_is_low_induction in Hvalid; auto.
+    apply min_union_iff in Hvalid.
+    unfold scc_is_low_v, scc_is_low_v_val.
+    rewrite scc_low_tree_decompose; auto.
+    rewrite (Sets_union_comm [u] (scc_back_edge s u)).
+    rewrite Sets_union_comm.
+    exact Hvalid.
+  Qed.
 
   Lemma scc_low_valid_implies_is_low (s: @SCCSt V):
     dfn_valid g s root -> dfn_inv s ->
     (forall v, v ∈ visited s -> scc_low_valid_v s v) -> scc_is_low s.
-  Admitted.
+  Proof.
+    intros Hvalid Hinv Hlow.
+    destruct Hinv as [Hdfn_lt [Hdfn_zero Hpos]].
+    unfold scc_is_low.
+    cut (forall n u, u ∈ visited s -> timer s - dfn s u = n -> scc_is_low_v s u).
+    { intros H u Hu. apply H with (n := timer s - dfn s u); auto. }
+    induction n as [n IH] using (well_founded_induction (Nat.lt_wf 0)).
+    intros u Hu Hn.
+    apply (scc_is_low_induction_is_low s u Hu).
+    - intros v Hson_orig.
+      pose proof Hson_orig as Hson_for_step.
+      apply tree_step_char in Hson_for_step.
+      destruct Hson_for_step as [_ [_ Hvis_v]].
+      apply Hvalid in Hson_orig.
+      pose proof (Hdfn_lt u Hu) as Hdfn_u_lt.
+      pose proof (Hdfn_lt v Hvis_v) as Hdfn_v_lt.
+      apply (IH (timer s - dfn s v)).
+      + lia.
+      + exact Hvis_v.
+      + reflexivity.
+    - apply Hlow. exact Hu.
+  Qed.
   (** * Well-formed SCC state abstraction
 
       We bundle the four global invariants that are preserved by every
@@ -603,7 +634,63 @@ Section IS_LOW.
     Hoare (fun s: @SCCSt V => wf_scc_state s /\ scc_low_valid_v s u /\ low s u = dfn s u)
           (pop_scc u)
           (fun _ s => wf_scc_state s /\ scc_low_valid_v s u).
-  Admitted.
+  Proof.
+    unfold pop_scc. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit. simpl.
+    destruct H as [Hwf [Hlow_valid Heq_low]].
+    destruct (stack_split_at_partition (stack s0) u popped rest Hsplit) as [Hrest_incl [Hfresh Hcover]].
+    assert (Hwf_post: wf_scc_state
+      {| visited := visited s0; timer := timer s0;
+         dfn := dfn s0; low := low s0; fa := fa s0;
+         stack := rest; sccs := (fun v => In v popped) :: sccs s0 |}).
+    { destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+      unfold wf_scc_state. simpl. split; [| split; [| split]]; auto.
+      (* stack_in_visited: rest ⊆ original stack ⊆ visited *)
+      unfold stack_in_visited. intros w Hw. simpl in Hw.
+      apply Hrest_incl in Hw. apply Hsiv. exact Hw. }
+    assert (Hlow_valid_post: scc_low_valid_v
+      {| visited := visited s0; timer := timer s0;
+         dfn := dfn s0; low := low s0; fa := fa s0;
+         stack := rest; sccs := (fun v => In v popped) :: sccs s0 |} u).
+    { unfold scc_low_valid_v. simpl. rewrite Heq_low.
+      exists (dfn s0 u). split.
+      - split.
+        + sets_unfold. right.
+          exists u. split.
+          * split.
+            -- sets_unfold. right. reflexivity.
+            -- intros v Hv. sets_unfold in Hv.
+               destruct Hv as [Hback_post | Heq_v].
+               ++ destruct Hback_post as [Hstep [Hin_rest Hnot_tree]].
+                  assert (Hv_in_stack0: In v (stack s0)). { apply Hrest_incl. exact Hin_rest. }
+                  assert (Hback_pre: scc_back_edge s0 u v). {
+                    unfold scc_back_edge. split; [exact Hstep | split; [exact Hv_in_stack0 | exact Hnot_tree]]. }
+                  eapply scc_low_valid_v_low_eq_dfn_implies_dfn_le_back_edge_dfn;
+                    [exact Hlow_valid | exact Heq_low | exact Hback_pre].
+               ++ subst v. apply Nat.le_refl.
+          * reflexivity.
+        + intros n Hn. sets_unfold in Hn.
+          destruct Hn as [Hn_left | Hn_right].
+          * unfold scc_low_valid_v in Hlow_valid.
+            destruct Hlow_valid as [a_pre [[_ Ha_pre_min] Ha_pre_eq]].
+            rewrite Heq_low in Ha_pre_eq.
+            rewrite <- Ha_pre_eq.
+            apply Ha_pre_min. sets_unfold. left. exact Hn_left.
+          * destruct Hn_right as [v [[Hv_in Hv_min] Heq_v]].
+            rewrite <- Heq_v.
+            sets_unfold in Hv_in.
+            destruct Hv_in as [Hback_post | Heq_vin].
+            -- destruct Hback_post as [Hstep [Hin_rest Hnot_tree]].
+               assert (Hv_in_stack0: In v (stack s0)). { apply Hrest_incl. exact Hin_rest. }
+               assert (Hback_pre: scc_back_edge s0 u v). {
+                 unfold scc_back_edge. split; [exact Hstep | split; [exact Hv_in_stack0 | exact Hnot_tree]]. }
+               eapply scc_low_valid_v_low_eq_dfn_implies_dfn_le_back_edge_dfn;
+                 [exact Hlow_valid | exact Heq_low | exact Hback_pre].
+            -- subst v. apply Nat.le_refl.
+      - reflexivity. }
+    split; [exact Hwf_post | exact Hlow_valid_post].
+  Qed.
 
   (* ================================================================ *)
   (* 9. Set Decomposition Lemmas (needed for process_edge)            *)
@@ -1072,15 +1159,85 @@ Section IS_LOW.
     Hoare (fun s: @SCCSt V => wf_scc_state_pre u s)
           (preloop u)
           (fun _ s => forset_inv u ∅ s).
-  Admitted.
+  Proof.
+    unfold forset_inv.
+    apply Hoare_conj with
+      (Q1 := fun _ s => wf_scc_state s)
+      (Q2 := fun _ s => u ∈ visited s /\ In u (stack s) /\ low s u <= dfn s u /\
+             (forall v, ∅ v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v))).
+    { apply (Hoare_conseq_pre _ (fun s => wf_scc_state_pre u s) (preloop u) (fun _ s => wf_scc_state s)).
+      intros s H. exact H. apply preloop_preserves_wf_scc_state. }
+    apply Hoare_conj with
+      (Q1 := fun _ s => u ∈ visited s)
+      (Q2 := fun _ s => In u (stack s) /\ low s u <= dfn s u /\
+             (forall v, ∅ v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v))).
+    { apply (Hoare_conseq_pre _ (fun s => True) (preloop u) (fun _ s => u ∈ visited s)).
+      intros s _. exact I. apply preloop_self_visited. }
+    apply Hoare_conj with
+      (Q1 := fun _ s => In u (stack s))
+      (Q2 := fun _ s => low s u <= dfn s u /\
+             (forall v, ∅ v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v))).
+    { apply (Hoare_conseq_pre _ (fun s => True) (preloop u) (fun _ s => In u (stack s))).
+      intros s _. exact I. apply preloop_in_stack. }
+    apply Hoare_conj with
+      (Q1 := fun _ s => low s u <= dfn s u)
+      (Q2 := fun _ s => forall v, ∅ v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)).
+    { apply (Hoare_conseq_post (fun s => wf_scc_state_pre u s) (preloop u) (fun _ s => low s u <= dfn s u) (fun _ s => low s u = dfn s u)).
+      intros _ s' Heq. rewrite Heq. apply Nat.le_refl.
+      apply (Hoare_conseq_pre _ (fun s => True) (preloop u) (fun _ s => low s u = dfn s u)).
+      intros s _. exact I. apply preloop_low_eq_dfn. }
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl. cbn in H2. destruct H2.
+  Qed.
 
   (** [set_fa_preserves_forset_inv]: [set_fa v p] only changes [fa],
-      which does not affect the inequalities in [forset_inv]. *)
+      which does not affect the inequalities in [forset_inv].
+      Requires [~ v ∈ visited s] (so that [state_to_dfs_tree] is unchanged,
+      preserving [dfn_valid]) and [~ done v] (so that the new [fa v = p]
+      doesn't create an unprovable obligation when [p = u]).
+      In the intended use (tree-edge branch of [process_edge]), [v] is the
+      unvisited neighbour being processed, hence both conditions hold. *)
   Lemma set_fa_preserves_forset_inv (u v p: V) (done: V -> Prop):
-    Hoare (fun s: @SCCSt V => forset_inv u done s /\ p ∈ visited s)
+    Hoare (fun s: @SCCSt V => forset_inv u done s /\ p ∈ visited s /\ ~ v ∈ visited s /\ ~ done v)
           (set_fa v p)
           (fun _ s => forset_inv u done s).
-  Admitted.
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s. subst s. simpl.
+    destruct H as [[Hwf [Huvis [Hinu [Hlow_le Hforall]]]] [Hpvis [Hnv_vis Hnv_done]]].
+    unfold forset_inv. simpl.
+    split; [| split; [| split; [| split]]].
+    - (* wf_scc_state: fa changes but all components preserved *)
+      destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+      unfold wf_scc_state. simpl. split; [| split; [| split]].
+      + (* stack_in_visited *) exact Hsiv.
+      + (* dfn_inv *) exact Hinv.
+      + (* dfn_valid: since v ∉ visited, no tree edge changes *)
+        unfold dfn_valid. intros x y Hstep.
+        unfold dg_step, original_step in *.
+        destruct Hstep as [e [[w [Hw_vis [Hw_fa [Hwfst Hwsnd]]]] [Hfst Hsnd]]].
+        simpl in Hw_vis, Hw_fa, Hwfst.
+        unfold equiv_decb in Hw_fa, Hwfst.
+        destruct (equiv_dec w v) as [Heq_wv | Hneq_wv].
+        { rewrite Heq_wv in Hw_vis. exfalso. exact (Hnv_vis Hw_vis). }
+        { assert (Hstep_old: dg_step (state_to_dfs_tree g s0 root) x y). {
+            unfold dg_step, original_step.
+            exists e. split; [| split]; auto.
+            exists w. split; [exact Hw_vis |]. split; [exact Hw_fa |]. split; [exact Hwfst | exact Hwsnd]. }
+          simpl. apply (Hvalid x y Hstep_old). }
+      + (* fa_visited *) intros w Hfa_ne. simpl in *. unfold equiv_decb in *.
+        destruct (equiv_dec w v) as [Heq_wv | Hneq_wv].
+        { rewrite Heq_wv in *. simpl. exact Hpvis. }
+        { simpl. apply Hfa_vis. exact Hfa_ne. }
+    - (* u ∈ visited *) exact Huvis.
+    - (* In u (stack) *) exact Hinu.
+    - (* low s u <= dfn s u *) exact Hlow_le.
+    - (* forall: for w ≠ v, fa unchanged; for w = v, done v is false *)
+      intros w Hw_done Hdg_w. simpl. unfold equiv_decb.
+      destruct (equiv_dec w v) as [Heq_wv | Hneq_wv].
+      + assert (Heq_wv' : w = v) by (apply Heq_wv).
+        subst w. exfalso. exact (Hnv_done Hw_done).
+      + destruct (Hforall w Hw_done Hdg_w) as [Hfa_part Hstack_part]. split; auto.
+  Qed.
 
   (** [get_low_update_low_preserves_forset_inv]: after [update_low u (low v)]
       (tree edge), [forset_inv u done] is preserved and the new inequality
@@ -1164,15 +1321,23 @@ Section IS_LOW.
   (* ================================================================ *)
 
   (** [forset_inv_implies_scc_is_low_v]: When [done = dg_step g u]
-      (all neighbours processed), the inequality invariant implies
-      [scc_is_low_v s u]. *)
+      (all neighbours processed), the inequality invariant plus the
+      child low-link induction hypothesis implies [scc_is_low_v s u]. *)
   Lemma forset_inv_implies_scc_is_low_v (u: V) (s: SCCSt):
     forset_inv u (dg_step g u) s ->
     done_visited (dg_step g u) s ->
     (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
+    (forall v, dg_step (state_to_dfs_tree g s root) u v -> scc_is_low_v s v) ->
     scc_is_low_v s u.
   Proof.
-    (* TODO: Step A (lower bound) + Step B (upper bound) = scc_is_low_v *)
+    intros Hfinv Hdone_vis Hfa_child IH_child.
+    destruct Hfinv as [Hwf [Huvis [Hinu [Hlow_le Hforall]]]].
+    (* We first prove scc_low_valid_v s u, then use induction lemma *)
+    apply (scc_is_low_induction_is_low s u Huvis IH_child).
+    (* Now prove scc_low_valid_v s u from forset_inv *)
+    unfold scc_low_valid_v.
+    (* TODO: need to relate low s u to the min value of children/bedges using Hforall *)
+    (* This requires Step A (lower bound) and Step B (upper bound/existence) *)
   Admitted.
 
   (* ================================================================ *)
@@ -1180,10 +1345,14 @@ Section IS_LOW.
   (* ================================================================ *)
 
   Lemma forset_keep_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
+    (forall v, Hoare (fun s => low_pre v s) (W v) (fun _ s => low_post v s)) ->
     Hoare (fun s => forset_inv u ∅ s /\ In u (stack s) /\
                     stack_dfn_order s /\ dfn_injective s /\ (forall v, fa s v = u -> v = u))
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => low_post u s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
+  Proof.
+    intros HW_low.
+    (* TODO: use hoare_fix_nolv_auto with invariant combining forset_inv and child scc_is_low_v *)
   Admitted.
 
   (* ================================================================ *)
@@ -1194,6 +1363,8 @@ Section IS_LOW.
     Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
           (fun _ s => low_post u s).
+  Proof.
+    (* TODO: use Hoare_fix with induction hypothesis giving child low-post *)
   Admitted.
 
 End IS_LOW.
