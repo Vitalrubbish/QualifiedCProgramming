@@ -91,6 +91,7 @@ void dfs1(int u, int n, struct list **radj, int *vis1, int *fin, int *timer_p)
         radj == radj@pre && vis1 == vis1@pre && fin == fin@pre &&
         timer_p == timer_p@pre &&
         0 <= u && u < n && n <= 2147483647 &&
+        data_at(radj + (u * sizeof(struct list *)), struct list *, head) *
         SllPtrArray::missing_i(radj, n, u, head, radj_rows) *
         sllseg(head, cur, processed) *
         sll(cur, rem) *
@@ -109,6 +110,7 @@ void dfs1(int u, int n, struct list **radj, int *vis1, int *fin, int *timer_p)
           rem == cons(vdata, rest) &&
           safeExec(pre_dfs1(g, vis1_m, fin_m, timer_m),
                    dfs_finish_from(u, edges_of(u, processed)), X) &&
+          data_at(radj + (u * sizeof(struct list *)), struct list *, head) *
           SllPtrArray::missing_i(radj, n, u, head, radj_rows) *
           sllseg(head, cur, processed) *
           store(&(cur->data), vdata) * store(&(cur->next), next_ptr) *
@@ -152,6 +154,7 @@ void dfs1(int u, int n, struct list **radj, int *vis1, int *fin, int *timer_p)
           rem == cons(vdata_, rest_) &&
           safeExec(pre_dfs1(g, vis1_m_, fin_m_, timer_m_),
                    dfs_finish_from(u, edges_of(u, processed)), X) &&
+          data_at(radj + (u * sizeof(struct list *)), struct list *, head) *
           SllPtrArray::missing_i(radj, n, u, head, radj_rows) *
           sllseg(head, cur, processed) *
           store(&(cur->data), vdata_) * store(&(cur->next), next_ptr_) *
@@ -177,6 +180,7 @@ void dfs1(int u, int n, struct list **radj, int *vis1, int *fin, int *timer_p)
           timer_m_set == timer_m + 1 &&
           safeExec(pre_dfs1(g, vis1_m, fin_m_set, timer_m_set),
                    return(tt), X) &&
+          data_at(radj + (u * sizeof(struct list *)), struct list *, head) *
           SllPtrArray::missing_i(radj, n, u, head, radj_rows) *
           sll(head, Znth(u, radj_rows, nil)) *
           store(&cur, struct list*, 0) *
@@ -232,6 +236,7 @@ void dfs2(int root, int u, int n, struct list **fadj, int *vis2, int *sid)
         root == root@pre && u == u@pre && n == n@pre &&
         fadj == fadj@pre && vis2 == vis2@pre && sid == sid@pre &&
         0 <= root && root < n && 0 <= u && u < n && n <= 2147483647 &&
+        data_at(fadj + (u * sizeof(struct list *)), struct list *, head) *
         SllPtrArray::missing_i(fadj, n, u, head, fadj_rows) *
         sllseg(head, cur, processed) *
         sll(cur, rem) *
@@ -249,6 +254,7 @@ void dfs2(int root, int u, int n, struct list **fadj, int *vis2, int *sid)
           rem == cons(vdata, rest) &&
           safeExec(pre_dfs2(g, vis2_m, sid_m),
                    dfs_scc_from(root, u, edges_of(u, processed)), X) &&
+          data_at(fadj + (u * sizeof(struct list *)), struct list *, head) *
           SllPtrArray::missing_i(fadj, n, u, head, fadj_rows) *
           sllseg(head, cur, processed) *
           store(&(cur->data), vdata) * store(&(cur->next), next_ptr) *
@@ -289,6 +295,7 @@ void dfs2(int root, int u, int n, struct list **fadj, int *vis2, int *sid)
           rem == cons(vdata_, rest_) &&
           safeExec(pre_dfs2(g, vis2_m_, sid_m_),
                    dfs_scc_from(root, u, edges_of(u, processed)), X) &&
+          data_at(fadj + (u * sizeof(struct list *)), struct list *, head) *
           SllPtrArray::missing_i(fadj, n, u, head, fadj_rows) *
           sllseg(head, cur, processed) *
           store(&(cur->data), vdata_) * store(&(cur->next), next_ptr_) *
@@ -311,6 +318,7 @@ void dfs2(int root, int u, int n, struct list **fadj, int *vis2, int *sid)
         0 <= root && root < n && 0 <= u && u < n && n <= 2147483647 &&
         safeExec(pre_dfs2(g, vis2_m, sid_m),
                  return(tt), X) &&
+        data_at(fadj + (u * sizeof(struct list *)), struct list *, head) *
         SllPtrArray::missing_i(fadj, n, u, head, fadj_rows) *
         sll(head, Znth(u, fadj_rows, nil)) *
         store(&cur, struct list*, 0) *

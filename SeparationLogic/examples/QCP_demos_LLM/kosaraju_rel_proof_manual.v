@@ -188,6 +188,12 @@ Proof. Admitted.
 Lemma proof_of_dfs2_entail_wit_5 : dfs2_entail_wit_5.
 Proof. Admitted. 
 
+Lemma proof_of_dfs2_entail_wit_6_split_goal_1 : dfs2_entail_wit_6_split_goal_1.
+Proof. Abort.
+
+Lemma proof_of_dfs2_entail_wit_6_split_goal_spatial : dfs2_entail_wit_6_split_goal_spatial.
+Proof. Abort.
+
 Lemma proof_of_dfs2_entail_wit_6 : dfs2_entail_wit_6.
 Proof. Admitted. 
 
