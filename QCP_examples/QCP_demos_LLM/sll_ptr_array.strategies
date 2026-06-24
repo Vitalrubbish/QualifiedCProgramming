@@ -1,0 +1,41 @@
+#include "sll_ptr_array_def.h"
+
+id : 1
+priority : core(1)
+left : SllPtrArray::full(?p, ?n, ?rows) at 0
+right : data_at(?p + (?i * sizeof(PTR)), PTR, ?v) at 1
+check : infer(0 <= i);
+        infer(i < n);
+action : right_erase(1);
+         left_erase(0);
+         left_exist_add(row_ptr);
+         left_add(SllPtrArray::missing_i(p, n, i, row_ptr, rows));
+         left_add(sll(row_ptr, rows[i]));
+         right_add(v == row_ptr);
+
+id : 2
+priority : post(1)
+left : SllPtrArray::missing_i(?p, ?n, ?i, ?row_ptr, ?rows) at 0
+       sll(row_ptr, rows[i]) at 1
+       data_at(p + i * sizeof(PTR), PTR, row_ptr) at 2
+check : infer(0 <= i);
+        infer(i < n);
+action : left_erase(2);
+         left_erase(1);
+         left_erase(0);
+         left_add(SllPtrArray::full(p, n, rows));
+
+id : 4
+priority : core(1)
+left : SllPtrArray::full(?p, ?n, ?rows1) at 0
+right : SllPtrArray::full(p, n, ?rows2) at 1
+action : right_erase(1);
+         left_erase(0);
+         right_add(rows1 == rows2);
+
+id : 5
+priority : core(1)
+left : SllPtrArray::missing_i(?p, ?n, ?i, ?row_ptr, ?rows) at 0
+right : SllPtrArray::missing_i(p, n, i, row_ptr, rows) at 1
+action : left_erase(0);
+         right_erase(1);
