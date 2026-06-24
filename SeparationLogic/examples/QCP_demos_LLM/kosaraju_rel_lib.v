@@ -592,80 +592,42 @@ Definition kosaraju_scc_monad : program KSt unit :=
 Definition kosaraju_monad : program KSt unit :=
   kosaraju_finish_monad ;; kosaraju_scc_monad.
 
-(* [kosaraju_finish_from done_i] is the Lfix continuation of         *)
-(* kosaraju_finish after the for-loop has already attempted vertices  *)
-(* 0..done_i-1: each of those vertices has either been visited earlier *)
-(* or had its DFS_finish completed.  The remaining computation picks  *)
-(* the next unvisited vertex (if any) and recurses, until all         *)
-(* vertices are visited1.  Parameterised by the loop cursor done_i.   *)
-(*                                                                   *)
-(* This is a mathematical continuation predicate: it relates the      *)
-(* abstract remaining work to the current loop index.  The body is    *)
-(* the Lfix kosaraju_finish itself, guarded by the assumption that    *)
-(* every vertex j < done_i has been processed by the for-loop so far. *)
-Parameter kosaraju_finish_from : Z -> program KSt unit.
+(* [kosaraju_finish_from done_i] is the remaining-work continuation of *)
+(* kosaraju_finish after the C-side for-loop has already attempted     *)
+(* vertices 0..done_i-1.  On the monad side the loop cursor done_i is  *)
+(* a PURE loop-progress token carried by the C invariant: it records   *)
+(* that vertices < done_i have already been attempted.  The monad      *)
+(* continuation itself is the whole kosaraju_finish Lfix fixpoint,     *)
+(* because the abstract monad is the non-deterministic angelic pick    *)
+(* (pick_unvisited1) of which the deterministic for-loop is one        *)
+(* existential realization under safeExec.  The C invariant carries    *)
+(* the "< done_i already processed" progress purely on the assertion   *)
+(* side, so that any unvisited vertex the monad may pick is >= done_i. *)
+(*                                                                    *)
+(* This is a pure mathematical continuation: a closed monad program    *)
+(* indexed by the loop cursor, NOT a Rocq mirror of the C for-loop.    *)
+Definition kosaraju_finish_from (done_i : Z) : program KSt unit :=
+  kosaraju_finish_monad.
 
-(* [kosaraju_scc_from done_i] is the analogous Lfix continuation of   *)
-(* kosaraju_scc after the order-driven for-loop has already          *)
-(* attempted the first done_i entries of order[]: every such root     *)
-(* vertex u has either been visited2 earlier or had its              *)
-(* set_scc_root_id + DFS_scc u u completed.  The remaining           *)
-(* computation picks the next unvisited2 vertex with maximal finish,  *)
-(* assigns it a fresh scc id, and DFS_scc's it.                       *)
-Parameter kosaraju_scc_from : Z -> program KSt unit.
+(* [kosaraju_scc_from done_i] is the analogous remaining-work          *)
+(* continuation of kosaraju_scc after the order-driven for-loop has    *)
+(* already attempted the first done_i entries of order[].  Same shape: *)
+(* done_i is a pure loop-progress token on the C side; the monad       *)
+(* continuation is the whole kosaraju_scc Lfix fixpoint (the angelic   *)
+(* pick_unvisited2, of which the finish-descending order[] iteration   *)
+(* is one existential realization).                                   *)
+Definition kosaraju_scc_from (done_i : Z) : program KSt unit :=
+  kosaraju_scc_monad.
 
-(* The full outer programs equal their continuations starting from 0. *)
-Axiom kosaraju_finish_from_0 : kosaraju_finish_from 0 = kosaraju_finish_monad.
-Axiom kosaraju_scc_from_0 : kosaraju_scc_from 0 = kosaraju_scc_monad.
-
-(* When vertex done_i has just been DFS_finish'd (or was already      *)
-(* visited1), the continuation steps from done_i to done_i + 1.       *)
-(* Pure property of the continuation cursor; admitted at Stage 4.     *)
-(* The full single-step monad body (choice of the DFS_finish branch   *)
-(* and the already-visited branch, unfolding the Lfix kosaraju_finish_f)*)
-(* is needed only by the proving phase; here it is abstracted as a    *)
-(* parameter [kosaraju_finish_step_prog].                             *)
-Parameter kosaraju_finish_step_prog : Z -> program KSt unit.
-
-Axiom kosaraju_finish_from_step : forall done_i,
-  (0 <= done_i < adj_verts empty_adj)%Z ->
-  kosaraju_finish_from done_i == kosaraju_finish_step_prog done_i.
-
-Axiom kosaraju_finish_step_prog_next : forall done_i,
-  (0 <= done_i < adj_verts empty_adj)%Z ->
-  kosaraju_finish_step_prog done_i == kosaraju_finish_from (done_i + 1).
-
-(* When all vertices are visited1, the continuation is just return. *)
-Axiom kosaraju_finish_from_all_visited :
-  kosaraju_finish_from (adj_verts empty_adj) == return tt.
-
-(* The k-th vertex of the finish-descending order on the C side.      *)
-Definition order_vertex (done_i : Z) : Z :=
-  nth_def (map Z.of_nat (seq 0 (Z.to_nat (adj_verts empty_adj)))) done_i 0.
-
-(* set_scc_root_id closed over the concrete carrier, analogous to     *)
-(* dfs_finish / dfs_scc.  Used by the kosaraju_scc single-step body.  *)
-(* The per-step set_scc_root_id effect is absorbed into the outer     *)
-(* kosaraju_scc_monad frame; no separate closed symbol is needed for  *)
-(* the C annotation.                                                   *)
-
-(* Analogous stepping parameter for kosaraju_scc_from.  The C-side     *)
-(* order[] drives the loop; on the monad side, the k-th vertex of the  *)
-(* finish-descending order is vertex [u].  Full body deferred to       *)
-(* proving phase.                                                      *)
-Parameter kosaraju_scc_step_prog : Z -> Z -> program KSt unit.
-
-Axiom kosaraju_scc_from_step : forall done_i u,
-  (0 <= done_i < adj_verts empty_adj)%Z ->
-  u = order_vertex done_i ->
-  kosaraju_scc_from done_i == kosaraju_scc_step_prog done_i u.
-
-Axiom kosaraju_scc_step_prog_next : forall done_i u,
-  (0 <= done_i < adj_verts empty_adj)%Z ->
-  kosaraju_scc_step_prog done_i u == kosaraju_scc_from (done_i + 1).
-
-Axiom kosaraju_scc_from_all_visited :
-  kosaraju_scc_from (adj_verts empty_adj) == return tt.
+(* kosaraju_finish_from / kosaraju_scc_from above are the loop-cursor-   *)
+(* indexed continuations used in the C invariant; each equals the whole   *)
+(* kosaraju_finish / kosaraju_scc Lfix (the monad-side continuation is    *)
+(* the abstract angelic pick_unvisited, of which the C for-loop's         *)
+(* deterministic order is one existential realization under safeExec,     *)
+(* carried purely on the assertion side).  No single-step unfolding       *)
+(* lemmas (from_step / step_prog_next / all_visited) are needed: the      *)
+(* generated VCs keep the continuation opaque, so they are omitted here   *)
+(* (they were vacuous on the empty_adj carrier anyway, adj_verts = 0).    *)
 
 (* order_sorted: the C-side order[] array lists vertices in           *)
 (* non-increasing finish-time order.  [order_l] is the logical list   *)
@@ -699,19 +661,3 @@ Definition pre_kosaraju (g : AdjGraph)
      scc_id st u = Z.to_nat (Znth u sid_l 0)) /\
   timer st = Z.to_nat timer_v /\
   scc_next st = Z.to_nat scc_next_v.
-
-(* pre_kosaraju entails the scoped preconditions used by dfs1/dfs2.  *)
-(* These are trivial conjunct projections; proved in the proving phase. *)
-Lemma pre_kosaraju_pre_dfs1 : forall g vis1_l vis2_l fin_l sid_l timer_v scc_next_v st,
-  pre_kosaraju g vis1_l vis2_l fin_l sid_l timer_v scc_next_v st ->
-  pre_dfs1 g vis1_l fin_l timer_v st.
-Proof.
-  admit.
-Admitted.
-
-Lemma pre_kosaraju_pre_dfs2 : forall g vis1_l vis2_l fin_l sid_l timer_v scc_next_v st,
-  pre_kosaraju g vis1_l vis2_l fin_l sid_l timer_v scc_next_v st ->
-  pre_dfs2 g vis2_l sid_l st.
-Proof.
-  admit.
-Admitted.
