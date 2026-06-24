@@ -2632,6 +2632,230 @@ Section IS_LOW.
     apply (preloop_establishes_ancestor_inv ancestor parent cur done Hanc_ne Hpar_ne).
   Qed.
 
+  (** [pop_scc_preserves_stack_below]: popping the SCC at [a] keeps any
+      vertex [x] that is below [a] on the stack.  The key precondition is
+      [dfn s x < dfn s a]; together with [stack_dfn_order] it implies [x]
+      is in the [rest] segment returned by [stack_split_at]. *)
+  Lemma pop_scc_preserves_stack_below (a x: V):
+    Hoare (fun s => In a (stack s) /\ In x (stack s) /\ dfn s x < dfn s a /\ stack_dfn_order s)
+          (pop_scc a)
+          (fun _ s => In x (stack s)).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s. subst. simpl.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) a) as [popped rest] eqn:Hsplit. simpl.
+    destruct H as [Hina [Hinx [Hdfn_lt Horder]]].
+    destruct (stack_split_at_partition (stack s0) a popped rest Hsplit)
+      as [Hrest_in [Hnot_popped Hcover]].
+    destruct (Hcover x Hinx) as [Hx_pop | Hx_rest].
+    - (* x ∈ popped: contradiction via stack_dfn_order *)
+      destruct (equiv_dec x a) as [Heq | Hneq].
+      + (* x = a: contradicts dfn s x < dfn s a *)
+        exfalso. rewrite Heq in Hdfn_lt. lia.
+      + (* x ≠ a: x appears before a on the stack, so dfn a <= dfn x *)
+        destruct (stack_split_at_in_popped_before_a (stack s0) a x
+          Hina popped rest Hsplit Hx_pop Hneq) as [l1 [l2 [Heq_stk Ha_in_l2]]].
+        assert (Hx_in_stk: In x (stack s0)). {
+          rewrite Heq_stk. apply List.in_or_app. right. simpl. left. reflexivity. }
+        assert (Ha_in_stk: In a (stack s0)). {
+          rewrite Heq_stk. apply List.in_or_app. right. simpl. right. exact Ha_in_l2. }
+        pose proof (Horder x a Hx_in_stk Ha_in_stk (ex_intro _ l1 (ex_intro _ l2 (conj Heq_stk Ha_in_l2)))) as Hle.
+        lia.
+    - exact Hx_rest.
+  Qed.
+
+  (** [tarjan_scc_preserves_stack_element]: [tarjan_scc g u] keeps any
+      already-visited vertex [x] that is on the stack below [u].  The
+      precondition [~ u ∈ visited s] ensures [u] is still unvisited, so
+      after [preloop u] we have [dfn s x < dfn s u] and can apply
+      [pop_scc_preserves_stack_below] at the end. *)
+  Lemma tarjan_scc_preserves_stack_element (x u0: V):
+    Hoare (fun s: @SCCSt V =>
+             ~ u0 ∈ visited s /\ In x (stack s) /\ x ∈ visited s /\ x <> u0 /\
+             wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s)
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u0)
+          (fun _ s => In x (stack s) /\ wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s).
+  Proof.
+    set (P := fun (u: V) (s: SCCSt) =>
+      ~ u ∈ visited s /\ In x (stack s) /\ x ∈ visited s /\ x <> u /\
+      wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s).
+    set (Q := fun (u: V) (_: unit) (s: SCCSt) =>
+      In x (stack s) /\ wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s).
+    apply Hoare_conseq_pre with (P2 := P u0).
+    { intros s H. exact H. }
+    apply (Hoare_fix P Q (tarjan_scc_f (V:=V) (E:=E) g) u0).
+    intros W IH u. unfold tarjan_scc_f, P, Q.
+    intro_state. destruct H as [Hnv [Hinx [Hvisx [Hneq_xu [Hwf [Horder Hinj]]]]]].
+    eapply Hoare_bind.
+    { (* preloop u: push u, preserve In x/In u/wf/order/inj/x_vis, establish dfn x < dfn u *)
+      apply Hoare_conseq_pre with (P2 := fun s =>
+        In x (stack s) /\ x ∈ visited s /\ x <> u /\ ~ u ∈ visited s /\
+        wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s).
+      { intros s' Hs'. subst s'. split. exact Hinx. split. exact Hvisx. split. exact Hneq_xu.
+        split. exact Hnv. split. exact Hwf. split. exact Horder. exact Hinj. }
+      apply (Hoare_conj _ _ (fun _ s => In u (stack s))).
+      - apply (Hoare_conseq_pre _ (fun _ => True) (preloop u) (fun _ s => In u (stack s))).
+        { intros s _. exact I. }
+        apply preloop_in_stack.
+      - apply (Hoare_conj _ _ (fun _ s => In x (stack s))).
+        + apply (Hoare_conseq_pre _ (fun s => In x (stack s)) (preloop u) (fun _ s => In x (stack s))).
+          { intros s (Hinx_s & _ & _ & _ & _ & _ & _). exact Hinx_s. }
+          unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. right. exact H.
+        + apply (Hoare_conj _ _ (fun _ s => x ∈ visited s)).
+          * apply (Hoare_conseq_pre _ (fun s => x ∈ visited s) (preloop u) (fun _ s => x ∈ visited s)).
+            { intros s (_ & Hvisx_s & _ & _ & _ & _ & _). exact Hvisx_s. }
+            unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. sets_unfold. left. exact H.
+          * apply (Hoare_conj _ _ (fun _ s => wf_scc_state s)).
+            { apply (Hoare_conseq_pre _ (fun s => wf_scc_state s /\ ~ u ∈ visited s) (preloop u) (fun _ s => wf_scc_state s)).
+              { intros s (_ & _ & _ & Hnv_s & Hwf_s & _ & _). split. exact Hwf_s. exact Hnv_s. }
+              apply preloop_preserves_wf_scc_state. }
+            apply (Hoare_conj _ _ (fun _ s => stack_dfn_order s)).
+            { apply (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ dfn_inv s /\ stack_in_visited s /\ ~ u ∈ visited s)
+                (preloop u) (fun _ s => stack_dfn_order s)).
+              { intros s (_ & _ & _ & Hnv_s & Hwf_s & Horder_s & _).
+                destruct Hwf_s as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+                split. exact Horder_s. split. exact Hinv. split. exact Hsiv. exact Hnv_s. }
+              apply preloop_preserves_stack_dfn_order. }
+            apply (Hoare_conj _ _ (fun _ s => dfn_injective s)).
+            { apply (Hoare_conseq_pre _ (fun s => dfn_injective s /\ dfn_inv s /\ ~ u ∈ visited s)
+                (preloop u) (fun _ s => dfn_injective s)).
+              { intros s (_ & _ & _ & Hnv_s & Hwf_s & _ & Hinj_s).
+                destruct Hwf_s as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+                split. exact Hinj_s. split. exact Hinv. exact Hnv_s. }
+              apply preloop_preserves_dfn_injective. }
+            { (* dfn s x < dfn s u after preloop *)
+              apply (Hoare_conseq_pre _ (fun s => x ∈ visited s /\ ~ u ∈ visited s /\ dfn_inv s) (preloop u)
+                (fun _ s => dfn s x < dfn s u)).
+              { intros s (_ & Hvisx_s & _ & Hnv_s & Hwf_s & _ & _).
+                destruct Hwf_s as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+                split. exact Hvisx_s. split. exact Hnv_s. exact Hinv. }
+              unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+              destruct H as [Hvisx' [Hnv' Hinv']].
+              unfold dfn_inv in Hinv'. destruct Hinv' as [Hdfn_lt _].
+              apply Hdfn_lt in Hvisx'.
+              unfold equiv_decb. destruct (equiv_dec x u) as [Heq | Hneq].
+              { exfalso. apply Hneq_xu. exact Heq. }
+              destruct (equiv_dec u u) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+              exact Hvisx'. } }
+    simpl. intro a.
+    eapply Hoare_bind.
+    - (* forset: preserve the invariant *)
+      set (Inv := fun (done: V -> Prop) (s: SCCSt) =>
+        In u (stack s) /\ In x (stack s) /\ x ∈ visited s /\
+        wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
+        dfn s x < dfn s u).
+      apply (Hoare_forset Inv (fun v => dg_step g u v) (process_edge u W)).
+      { unfold Proper, respectful. intros done1 done2 Heq s1 s2 Heqs. subst s2.
+        unfold Inv. unfold iff; tauto. }
+      { intros done v Hsub Huniv Hnotin.
+        apply Hoare_conseq_pre with (P2 := Inv done).
+        { intros s Hs. exact Hs. }
+        unfold process_edge, if_else. intro_state.
+        destruct H as [Hinu [Hinx_s [Hvisx_s [Hwf_s [Horder_s [Hinj_s Hdfn_lt]]]]]].
+
+        apply Hoare_choice.
+        + (* Tree edge *)
+          apply Hoare_assume_bind. simpl. intro_state.
+          destruct H as [Hnv_v Heq_s]. subst s1.
+          apply Hoare_conseq_pre with (P2 := fun s =>
+            In u (stack s) /\ In x (stack s) /\ x ∈ visited s /\
+            wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
+            dfn s x < dfn s u).
+          { intros s1 Hs1. subst s1. split. exact Hinu. split. exact Hinx_s. split. exact Hvisx_s.
+            split. exact Hwf_s. split. exact Horder_s. split. exact Hinj_s. exact Hdfn_lt. }
+          apply (Hoare_bind (fun s =>
+            In u (stack s) /\ In x (stack s) /\ x ∈ visited s /\
+            wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
+            dfn s x < dfn s u)
+            (set_fa v u)
+            (fun _ s =>
+              In u (stack s) /\ In x (stack s) /\ x ∈ visited s /\
+              wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
+              dfn s x < dfn s u)
+            (fun _ => W v ;; lv <- get' (fun s => low s v) ;; update_low u lv)
+            (fun _ s => Inv (done ∪ [v]) s)).
+          * unfold set_fa. intro_state. hoare_auto_s. subst s. simpl.
+            destruct H as [Hinu' [Hinx' [Hvisx' [Hwf' [Horder' [Hinj' Hdfn_lt']]]]]].
+            split. exact Hinu'. split. exact Hinx'. split. exact Hvisx'.
+            (* set_fa v u adds tree edge u→v with v unvisited; wf_scc_state not fully preserved.
+               Use set_fa_preserves_wf_scc_state_pre for wf_scc_state_pre v. *)
+            admit. (* TODO: set_fa preserves In u/In x/x_vis but needs wf_scc_state_pre for wf/order/inj *)
+          * simpl. intros _.
+            eapply Hoare_bind.
+            { apply (Hoare_conseq_pre _ (fun s =>
+                ~ v ∈ visited s /\ In u (stack s) /\ In x (stack s) /\ u <> v /\ x <> v /\
+                u ∈ visited s /\ x ∈ visited s /\ wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s)
+                (W v) (fun _ s =>
+                  In u (stack s) /\ In x (stack s) /\ wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s)).
+              { intros s (Hinu_post & Hinx_post & Hvisx_post & Hwf_post & Horder_post & Hinj_post & Hdfn_lt_post).
+                simpl. exact Hnv_v.
+                split. exact Hinu_post.
+                split. exact Hinx_post.
+                split. { intro Heq. subst v. apply Hnv_v. destruct Hwf_post as [Hsiv _]. apply Hsiv. exact Hinu_post. }
+                split. { intro Heq. subst v. apply Hnv_v. destruct Hwf_post as [Hsiv _]. apply Hsiv. exact Hinx_post. }
+                split. destruct Hwf_post as [Hsiv _]. apply Hsiv. exact Hinu_post.
+                split. exact Hvisx_post.
+                split. exact Hwf_post. split. exact Horder_post. exact Hinj_post. }
+              apply Hoare_conj.
+              - apply (Hoare_conseq_pre _ (P v) (W v) (fun _ s => In x (stack s))).
+                { intros s Hpost. exact Hpost. }
+                apply (IH v).
+              - apply (Hoare_conseq_pre _ (P v) (W v) (fun _ s => In u (stack s))).
+                { intros s Hpost. exact Hpost. }
+                apply (IH v). }
+            simpl. intros _. unfold get', update_low. intro_state. hoare_auto_s.
+            { subst s. simpl. destruct H as (Hinu_post & Hinx_post & Hwf_post & Horder_post & Hinj_post).
+              split. exact Hinu_post. split. exact Hinx_post. split. exact Hvisx_s.
+              split. exact Hwf_post. split. exact Horder_post. split. exact Hinj_post. exact Hdfn_lt. }
+            { destruct H1. subst s. destruct H as (Hinu_post & Hinx_post & Hwf_post & Horder_post & Hinj_post).
+              split. exact Hinu_post. split. exact Hinx_post. split. exact Hvisx_s.
+              split. exact Hwf_post. split. exact Horder_post. split. exact Hinj_post. exact Hdfn_lt. }
+        + (* Non-tree edge *)
+          intro_state. hoare_auto_s.
+          * apply Hoare_conseq_pre with (P2 := Inv done).
+            { intros s1 Hs1. subst s1. split. exact Hinu. split. exact Hinx_s. split. exact Hvisx_s.
+              split. exact Hwf_s. split. exact Horder_s. split. exact Hinj_s. exact Hdfn_lt. }
+            unfold update_low. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+            destruct H as (Hinu' & Hinx' & Hvisx' & Hwf' & Horder' & Hinj' & Hdfn_lt').
+            split. exact Hinu'. split. exact Hinx'. split. exact Hvisx'.
+            split. exact Hwf'. split. exact Horder'. split. exact Hinj'. exact Hdfn_lt'.
+          * destruct H1 as [Heq _]. subst s. destruct H as (Hinu' & Hinx' & _).
+            split. exact Hinu'. split. exact Hinx'. split. exact Hvisx_s.
+            split. exact Hwf_s. split. exact Horder_s. split. exact Hinj_s. exact Hdfn_lt. }
+    - simpl. intros _. intro_state. hoare_auto_s.
+      + (* pop_scc u *)
+        apply Hoare_conseq_pre with (P2 := fun s =>
+          In u (stack s) /\ In x (stack s) /\ dfn s x < dfn s u /\ stack_dfn_order s /\
+          wf_scc_state s /\ dfn_injective s).
+        { intros s' Hs'. destruct Hs' as [Hinu [Hinx_s [Hvisx_s [Hwf_s [Horder_s [Hinj_s Hdfn_lt]]]]]].
+          split. exact Hinu. split. exact Hinx_s. split. exact Hdfn_lt. split. exact Horder_s.
+          split. exact Hwf_s. exact Hinj_s. }
+        apply Hoare_conj.
+        * apply (Hoare_conseq_pre _ (fun s =>
+            In u (stack s) /\ In x (stack s) /\ dfn s x < dfn s u /\ stack_dfn_order s)
+            (pop_scc u) (fun _ s => In x (stack s))).
+          { intros s' [Hinu [Hinx [Hdfn_lt [Horder [Hwf Hinj]]]]].
+            split. exact Hinu. split. exact Hinx. split. exact Hdfn_lt. exact Horder. }
+          apply pop_scc_preserves_stack_below.
+        * apply Hoare_conj.
+          { apply (Hoare_conseq_pre _ (fun s => wf_scc_state s)
+              (pop_scc u) (fun _ s => wf_scc_state s)).
+            { intros s' [Hinu [Hinx [Hdfn_lt [Horder [Hwf Hinj]]]]]. exact Hwf. }
+            apply pop_scc_preserves_wf_scc_state. }
+          apply Hoare_conj.
+          { apply (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ In u (stack s))
+              (pop_scc u) (fun _ s => stack_dfn_order s)).
+            { intros s' [Hinu [Hinx [Hdfn_lt [Horder [Hwf Hinj]]]]]. split. exact Horder. exact Hinu. }
+            apply pop_scc_preserves_stack_dfn_order. }
+          { apply (Hoare_conseq_pre _ (fun s => dfn_injective s)
+              (pop_scc u) (fun _ s => dfn_injective s)).
+            { intros s' [Hinu [Hinx [Hdfn_lt [Horder [Hwf Hinj]]]]]. exact Hinj. }
+            apply pop_scc_preserves_dfn_injective. }
+      + (* skip branch *)
+        destruct H1 as [Heq _]. subst s. destruct H as [Hinu [Hinx_s [Hdfn_lt [Hvisx_s [Hwf_s [Horder_s Hinj_s]]]]]].
+        split. exact Hinx_s. split. exact Hwf_s. split. exact Horder_s. exact Hinj_s.
+  Admitted.
+
   Lemma W_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
     ancestor <> cur -> parent <> cur -> dg_step g parent cur -> ~ done cur ->
     Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
