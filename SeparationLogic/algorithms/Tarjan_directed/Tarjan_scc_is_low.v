@@ -2416,27 +2416,33 @@ Section IS_LOW.
           apply Hdfn_lt. exact Hanc_vis.
   Qed.
 
-  (** Wrapper with inequalities baked into the Hoare precondition. *)
+  (** Wrapper with inequalities baked into the Hoare precondition.
+      The precondition format matches the induction property P exactly:
+      (anc <> cur /\ par <> cur /\ dg_step g par cur /\ ~ done cur) /\
+      low_forset_inv anc done s /\ fa s cur = par /\ ... *)
   Lemma preloop_establishes_ancestor_inv_hoare (ancestor parent cur: V) (done: V -> Prop):
-    Hoare (fun s => (ancestor <> cur /\ parent <> cur) /\
+    Hoare (fun s => (ancestor <> cur /\ parent <> cur /\ dg_step g parent cur /\ ~ done cur) /\
                     low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
-                    In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+                    done_visited done s /\ In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s)
           (preloop cur)
           (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ In ancestor (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\
                       dfn s ancestor < dfn s cur).
   Proof.
-    apply (Hoare_conseq_pre _
-      (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
-                In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
-      (preloop cur) _).
-    { intros s [[_ _] H]. exact H. }
-    (* The inequalities anc<>cur and par<>cur are not available here.
-       They are present in the original precondition but stripped by
-       Hoare_conseq_pre. This lemma is structurally similar to
-       preloop_establishes_ancestor_inv; the proof just needs to
-       extract the inequalities before calling it. *)
-  Admitted.
+    apply Hoare_state_intro. intros s0 H.
+    destruct H as [[Hanc_ne [Hpar_ne [Hdg' Hnd']]] Hpre].
+    destruct Hpre as [Hlow_inv [Hfa [Hnv [Hnd [Hdv [Hina [Horder Hinj]]]]]]].
+    apply (Hoare_conseq_pre (fun s => s = s0) (fun s => low_forset_inv ancestor done s /\
+      fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\
+      In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s)
+      (preloop cur) (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\
+      In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited done s /\
+      dfn s ancestor < dfn s cur)).
+    { intros s1 Heq. subst s1.
+      split. exact Hlow_inv. split. exact Hfa. split. exact Hnv. split. exact Hnd.
+      split. exact Hina. split. exact Horder. split. exact Hinj. exact Hdv. }
+    apply (preloop_establishes_ancestor_inv ancestor parent cur done Hanc_ne Hpar_ne).
+  Qed.
 
   Lemma W_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
     ancestor <> cur -> parent <> cur -> dg_step g parent cur -> ~ done cur ->
@@ -2481,9 +2487,8 @@ Section IS_LOW.
     unfold tarjan_scc_f.
     (* Body: tarjan_scc_f W a *)
     eapply Hoare_bind.
-    - (* preloop a: uses preloop_establishes_ancestor_inv_hoare.
-         The induction property P provides the inequalities in the state predicate. *)
-      admit.
+    - (* preloop a: the hoare wrapper has the right precondition (with inequalities) *)
+      apply (preloop_establishes_ancestor_inv_hoare anc par a d).
     - intro a'. destruct a'.
       (* After preloop a:
          low_forset_inv anc d /\ fa a = par /\ In anc (stack) /\
