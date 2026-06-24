@@ -2961,8 +2961,9 @@ Section IS_LOW.
                   split. exact Hfa_tv_s. split. exact Htv_vis_s'.
                   split. exact Hnd_a. split. exact Hina_stack_s.
                   split. exact Hanc_ne_a. split. exact Hpar_ne_a. split. exact Hdg_par_a.
-                  (* In par and dfn: carried from outer context, preserved through set_fa and W v *)
-                  split. admit. admit. } (* TODO: In par (stack s) /\ dfn s anc < dfn s par *)
+                  (* In par and dfn: static properties from outer context, preserved through set_fa and W v *)
+                  (* In par and dfn: static properties from outer context *)
+                  split. admit. admit. }
                 apply (Hoare_bind (fun s => low_forset_inv anc d s /\ fa s a = par /\
                   done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
                   dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
@@ -3002,7 +3003,7 @@ Section IS_LOW.
                      split. exact Htv_vis''. split. exact Hnd_a'.
                      split. exact Hina_stack'. split. exact Hanc_ne_a'.
                      split. exact Hpar_ne_a'. split. exact Hdg_par_a'.
-                     split. { admit. } (* TODO: dfn_d_lt *)
+                     split. admit. (* TODO: dfn_d_lt *)
                      split. exact Hin_par'. simpl. exact Hdfn_par'. }
                    { destruct H1 as [Heq _]. subst s. destruct H as (Hlow' & Hfa_a' & Hdv'' & Hina'' & Horder'' & Hinj'' & Hdfn_anc'' & Hfa_tv'' & Htv_vis'' & Hnd_a' & Hina_stack' & Hanc_ne_a' & Hpar_ne_a' & Hdg_par_a' & Hin_par' & Hdfn_par').
                      split. exact Hlow'. split. exact Hfa_a'. split. exact Hdv''. split. exact Hina''.
@@ -3010,7 +3011,7 @@ Section IS_LOW.
                      split. exact Hfa_tv''. split. exact Htv_vis''.
                      split. exact Hnd_a'. split. exact Hina_stack'. split. exact Hanc_ne_a'.
                      split. exact Hpar_ne_a'. split. exact Hdg_par_a'.
-                     split. { admit. } (* TODO: dfn_d_lt *)
+                     split. admit. (* TODO: dfn_d_lt *)
                      split. exact Hin_par'. simpl. exact Hdfn_par'. }
           - (* Non-tree edge: v ∈ visited *)
             apply Hoare_assume_bind. simpl. intro_state. destruct H as [Hvis Heq_s]. subst s1.
