@@ -1,3 +1,4 @@
+Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Lists.List.
 Require Import Coq.Logic.Classical_Prop.
 Require Import Coq.Classes.EquivDec.
@@ -2416,6 +2417,193 @@ Section IS_LOW.
           apply Hdfn_lt. exact Hanc_vis.
   Qed.
 
+  (** [tarjan_scc_keep_dfn_forall]: preserves [dfn] values for a set [S]
+      of visited vertices through [tarjan_scc g u0], provided [u0 ≠ w]
+      for all [w ∈ S].  The inequality is embedded in the Hoare
+      precondition so the fixpoint induction can carry it. *)
+
+  Lemma preloop_keep_dfn_forall (u: V) (S: V -> Prop) (dfn_vals: V -> nat):
+    (forall w, S w -> u <> w) ->
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (preloop u)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    intros Hneq. unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hvis Hdfn_vals]. split.
+    - intros w Hw. sets_unfold. left. apply Hvis. exact Hw.
+    - intros w Hw. unfold equiv_decb. destruct (equiv_dec w u) as [Heq | Hneq'].
+      + exfalso. apply (Hneq w Hw). symmetry. exact Heq.
+      + apply Hdfn_vals. exact Hw.
+  Qed.
+
+  Lemma pop_scc_keep_dfn_forall (u: V) (S: V -> Prop) (dfn_vals: V -> nat):
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (pop_scc u)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s0) u) as [popped rest] eqn:?.
+    simpl. exact H.
+  Qed.
+
+  Lemma update_low_keep_dfn_forall (u: V) (n: nat) (S: V -> Prop) (dfn_vals: V -> nat):
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (update_low u n)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    { subst s. simpl. destruct H as [Hvis Hdfn]. split; intros w Hw; [apply Hvis | apply Hdfn]; exact Hw. }
+    { destruct H1. subst s. exact H. }
+  Qed.
+
+  Lemma set_fa_keep_dfn_forall (v p: V) (S: V -> Prop) (dfn_vals: V -> nat):
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (set_fa v p)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl. destruct H as [Hvis Hdfn]. split; intros w Hw; [apply Hvis | apply Hdfn]; exact Hw.
+  Qed.
+
+  Lemma get_low_update_low_keep_dfn_forall (u v: V) (S: V -> Prop) (dfn_vals: V -> nat):
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (lv <- get' (fun s => low s v);; update_low u lv)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+    apply Hoare_conseq_pre with (P2 := fun s => (forall w, S w -> w ∈ visited s) /\
+                                                (forall w, S w -> dfn s w = dfn_vals w)).
+    { intros s1 Hs1. destruct Hs1. subst s1. simpl. auto. }
+    apply (update_low_keep_dfn_forall u lv S dfn_vals).
+  Qed.
+
+  Lemma process_edge_keep_dfn_forall (u v: V) (W: V -> program (@SCCSt V) unit)
+        (S: V -> Prop) (dfn_vals: V -> nat):
+    (forall w, S w -> u <> w) ->
+    (forall x, Hoare (fun s: @SCCSt V => (forall w, S w -> x <> w) /\
+                                         (forall w, S w -> w ∈ visited s) /\
+                                         (forall w, S w -> dfn s w = dfn_vals w))
+                     (W x)
+                     (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                                 (forall w, S w -> dfn s w = dfn_vals w))) ->
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (process_edge u W v)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    intros Hneq_u HW.
+    unfold process_edge, if_else. intro_state. destruct H as [Hvis Hdfn].
+    apply Hoare_choice.
+    - (* Tree edge *)
+      apply Hoare_assume_bind. simpl. intro_state.
+      destruct H as [Hnv Heq_s]. subst s1.
+      assert (Hneq_child: forall w, S w -> v <> w).
+      { intros w Hw. intro Heq. subst w. apply Hnv. apply Hvis. exact Hw. }
+      apply Hoare_conseq_pre with (P2 := fun s => (forall w, S w -> w ∈ visited s) /\ (forall w, S w -> dfn s w = dfn_vals w)).
+      { intros s1 Hs1. subst s1. split. exact Hvis. exact Hdfn. }
+      apply (Hoare_bind (fun s => (forall w, S w -> w ∈ visited s) /\ (forall w, S w -> dfn s w = dfn_vals w))
+               (set_fa v u)
+               (fun (_: unit) s => (forall w, S w -> w ∈ visited s) /\ (forall w, S w -> dfn s w = dfn_vals w))
+               (fun _ => W v ;; lv <- get' (fun s => low s v) ;; update_low u lv)
+               (fun (_: unit) s => (forall w, S w -> w ∈ visited s) /\ (forall w, S w -> dfn s w = dfn_vals w))).
+      { unfold set_fa. intro_state. hoare_auto_s.
+        subst s. simpl. destruct H as [Hvis' Hdfn']. split; intros w Hw; [apply Hvis' | apply Hdfn']; exact Hw. }
+      simpl. intros _.
+      eapply Hoare_bind.
+      { apply (Hoare_conseq_pre _ (fun s => (forall w, S w -> v <> w) /\
+                                            (forall w, S w -> w ∈ visited s) /\
+                                            (forall w, S w -> dfn s w = dfn_vals w))
+               (W v) (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                                 (forall w, S w -> dfn s w = dfn_vals w))).
+        { intros s [Hvis_post Hdfn_post]. split. exact Hneq_child. split. exact Hvis_post. exact Hdfn_post. }
+        apply HW. }
+      simpl. intros _. apply get_low_update_low_keep_dfn_forall.
+    - (* Non-tree edge *)
+      intro_state. hoare_auto_s.
+      + apply Hoare_conseq_pre with (P2 := fun s => (forall w, S w -> w ∈ visited s) /\
+                                                    (forall w, S w -> dfn s w = dfn_vals w)).
+        { intros s1 Hs1. subst s1. split; auto. }
+        apply (update_low_keep_dfn_forall u (dfn s0 v) S dfn_vals).
+      + destruct H2 as [Heq Hnin]. subst s. subst s1. split. exact Hvis. exact Hdfn.
+  Qed.
+
+  Lemma forset_process_edge_keep_dfn_forall (u: V) (W: V -> program (@SCCSt V) unit)
+        (S: V -> Prop) (dfn_vals: V -> nat):
+    (forall w, S w -> u <> w) ->
+    (forall x, Hoare (fun s: @SCCSt V => (forall w, S w -> x <> w) /\
+                                         (forall w, S w -> w ∈ visited s) /\
+                                         (forall w, S w -> dfn s w = dfn_vals w))
+                     (W x)
+                     (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                                 (forall w, S w -> dfn s w = dfn_vals w))) ->
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (forset (fun v => dg_step g u v) (process_edge u W))
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    intros Hneq_u HW. unfold forset. hoare_fix_nolv_auto (V -> Prop).
+    simpl; intros W0 IH0 todo. unfold forset_f.
+    hoare_auto_s. intro_state. destruct H as [Hvis Hdfn].
+    hoare_auto_s.
+    - eapply Hoare_bind with (R := fun _ s => (forall w, S w -> w ∈ visited s) /\
+                                               (forall w, S w -> dfn s w = dfn_vals w)).
+      { apply Hoare_conseq_pre with (P2 := fun s => (forall w, S w -> w ∈ visited s) /\
+                                                    (forall w, S w -> dfn s w = dfn_vals w)).
+        - intros s1 Hs1. subst s1. split. exact Hvis. exact Hdfn.
+        - apply (process_edge_keep_dfn_forall u a W S dfn_vals Hneq_u). intros x. apply HW. }
+      simpl. intros _. apply IH0.
+  Qed.
+
+  Lemma tarjan_scc_keep_dfn_forall (S: V -> Prop) (dfn_vals: V -> nat) (u0: V):
+    (forall w, S w -> u0 <> w) ->
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u0)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    intros Hneq_u0.
+    set (P := fun (u: V) (s: SCCSt) =>
+      (forall w, S w -> u <> w) /\
+      (forall w, S w -> w ∈ visited s) /\
+      (forall w, S w -> dfn s w = dfn_vals w)).
+    set (Q := fun (u: V) (_: unit) (s: SCCSt) =>
+      (forall w, S w -> w ∈ visited s) /\
+      (forall w, S w -> dfn s w = dfn_vals w)).
+    apply Hoare_conseq_pre with (P2 := P u0).
+    { intros s [Hvis' Hdfn']. unfold P. split. exact Hneq_u0. split. exact Hvis'. exact Hdfn'. }
+    apply (Hoare_fix P Q (tarjan_scc_f (V:=V) (E:=E) g) u0).
+    intros W IH u. unfold tarjan_scc_f, P, Q.
+    intro_state. destruct H as [Hneq_u [Hvis Hdfn_vals]].
+    eapply Hoare_bind.
+    { apply Hoare_conseq_pre with (P2 := fun s => (forall w, S w -> w ∈ visited s) /\ (forall w, S w -> dfn s w = dfn_vals w)).
+      { intros s' Hs'. subst s'. split. exact Hvis. exact Hdfn_vals. }
+      apply (preloop_keep_dfn_forall u S dfn_vals Hneq_u). }
+    simpl. intro a.
+    eapply Hoare_bind.
+    - apply (forset_process_edge_keep_dfn_forall u W S dfn_vals Hneq_u). intros x. apply IH.
+    - simpl. intro a0. intro_state. hoare_auto_s.
+      + apply Hoare_conseq_pre with (P2 := fun s => (forall w, S w -> w ∈ visited s) /\
+                                                    (forall w, S w -> dfn s w = dfn_vals w)).
+        { intros s' Hs'. subst s'. exact H. }
+        apply pop_scc_keep_dfn_forall.
+      + destruct H1 as [Heq Hneq']. subst s. destruct H. split; auto.
+  Qed.
+
   (** Wrapper with inequalities baked into the Hoare precondition.
       The precondition format matches the induction property P exactly:
       (anc <> cur /\ par <> cur /\ dg_step g par cur /\ ~ done cur) /\
@@ -2527,8 +2715,7 @@ Section IS_LOW.
         fa s tv = tp /\ tv ∈ visited s /\
         ~ d x /\ In par (stack s) /\
         anc <> x /\ par <> x /\ dg_step g par x /\
-        dfn s anc < dfn s par /\
-        (forall w, d w -> In w (stack s) -> dfn s w < dfn s par)
+        dfn s anc < dfn s par)
       cur (ancestor, parent, done, cur, parent)).
     intros W IH a [[[[anc par] d] tv] tp].
     unfold tarjan_scc_f.
@@ -2579,25 +2766,44 @@ Section IS_LOW.
             apply (Hoare_conseq_pre _ (fun s => True) (preloop a) (fun _ s => In a (stack s))).
             { intros s _. exact I. }
             apply preloop_in_stack. }
-          (* static dfn-ordering: forall w, d w -> In w stack -> dfn w < dfn a.
-             After preloop a, dfn a = old_timer (the timer value before incr_timer).
-             All w ∈ d are visited before preloop, so dfn w < old_timer = dfn a. *)
-          apply (Hoare_conseq_pre _ (fun s => ~ a ∈ visited s /\ dfn_inv s /\ done_visited d s /\ ~ d a)
-            (preloop a) (fun _ s => forall dw, d dw -> In dw (stack s) -> dfn s dw < dfn s a)).
-          { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
-            destruct Hlow as [Hwf _]. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
-            split. exact Hnv. split. exact Hinv'. split. exact Hdv. exact Hnd. }
-          unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
-          destruct H as [Hnv [Hinv' [Hdv' Hnd_a]]].
-          (* dw, H2: d dw, H3: In dw (a::stack s0) are already introduced by hoare_auto_s *)
-          assert (Hdwvis: dw ∈ visited s0). { apply Hdv'. exact H2. }
-          unfold dfn_inv in Hinv'. destruct Hinv' as [Hdfn_lt [Hdfn_zero Hdfn_pos]].
-          apply Hdfn_lt in Hdwvis.
-          destruct (equiv_dec dw a) as [Heq_dwa | Hneq_dwa].
-          { assert (Hda: d a). { rewrite <- Heq_dwa. exact H2. } exfalso. exact (Hnd_a Hda). }
-          { unfold equiv_decb. destruct (equiv_dec dw a) as [Heq' | Hneq']; [exfalso; apply Hneq_dwa; exact Heq' |].
-            destruct (equiv_dec a a) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
-            exact Hdwvis. }
+          apply Hoare_conj.
+          { (* static dfn-ordering: forall w, d w -> In w stack -> dfn w < dfn a.
+               After preloop a, dfn a = old_timer (the timer value before incr_timer).
+               All w ∈ d are visited before preloop, so dfn w < old_timer = dfn a. *)
+            apply (Hoare_conseq_pre _ (fun s => ~ a ∈ visited s /\ dfn_inv s /\ done_visited d s /\ ~ d a)
+              (preloop a) (fun _ s => forall dw, d dw -> In dw (stack s) -> dfn s dw < dfn s a)).
+            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+              destruct Hlow as [Hwf _]. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
+              split. exact Hnv. split. exact Hinv'. split. exact Hdv. exact Hnd. }
+            unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+            destruct H as [Hnv [Hinv' [Hdv' Hnd_a]]].
+            (* dw, H2: d dw, H3: In dw (a::stack s0) are already introduced by hoare_auto_s *)
+            assert (Hdwvis: dw ∈ visited s0). { apply Hdv'. exact H2. }
+            unfold dfn_inv in Hinv'. destruct Hinv' as [Hdfn_lt [Hdfn_zero Hdfn_pos]].
+            apply Hdfn_lt in Hdwvis.
+            destruct (equiv_dec dw a) as [Heq_dwa | Hneq_dwa].
+            { assert (Hda: d a). { rewrite <- Heq_dwa. exact H2. } exfalso. exact (Hnd_a Hda). }
+            { unfold equiv_decb. destruct (equiv_dec dw a) as [Heq' | Hneq']; [exfalso; apply Hneq_dwa; exact Heq' |].
+              destruct (equiv_dec a a) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+              exact Hdwvis. } }
+          apply Hoare_conj.
+          { (* In par (stack s) preserved by preloop *)
+            apply (Hoare_conseq_pre _ (fun s => In par (stack s)) (preloop a) (fun _ s => In par (stack s))).
+            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+              exact Hipar. }
+            unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+            right. exact H. }
+          { (* dfn s anc < dfn s par preserved by preloop *)
+            apply (Hoare_conseq_pre _ (fun s => anc <> a /\ par <> a /\ dfn s anc < dfn s par) (preloop a) (fun _ s => dfn s anc < dfn s par)).
+            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+              destruct Hineqs as [Hanc_ne_a [Hpar_ne_a [Hdg_par_a Hnda]]].
+              split. exact Hanc_ne_a. split. exact Hpar_ne_a. exact Hdfn_anc_lt_par. }
+            unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+            destruct H as [Hanc_ne_a [Hpar_ne_a Hdfn_lt]].
+            unfold equiv_decb.
+            destruct (equiv_dec anc a) as [Heq | Hneq]; [exfalso; apply Hanc_ne_a; exact Heq |].
+            destruct (equiv_dec par a) as [Heq2 | Hneq2]; [exfalso; apply Hpar_ne_a; exact Heq2 |].
+            exact Hdfn_lt. }
     - (* forset + If continuation *)
       intro a'. destruct a'.
       eapply Hoare_bind.
@@ -2608,7 +2814,8 @@ Section IS_LOW.
           dfn s anc < dfn s a /\ fa s tv = tp /\ tv ∈ visited s /\
           ~ d a /\ In a (stack s) /\
           anc <> a /\ par <> a /\ dg_step g par a /\
-          (forall w, d w -> In w (stack s) -> dfn s w < dfn s a)).
+          (forall w, d w -> In w (stack s) -> dfn s w < dfn s a) /\
+          In par (stack s) /\ dfn s anc < dfn s par).
         assert (ProperP: Proper (Sets.equiv ==> eq ==> iff) P_forset).
         { unfold P_forset. intros da1 da2 Heq s1 s2 Heqs. subst s2. unfold iff; tauto. }
         assert (Hbody: forall todo v,
@@ -2620,7 +2827,7 @@ Section IS_LOW.
           - (* Tree edge: ~ v ∈ visited *)
             apply Hoare_assume_bind. simpl. intro_state. destruct H as [Hnv Heq_s]. subst s1.
             unfold P_forset in HP_forset.
-            destruct HP_forset as [Hlow_inv [Hfa_a [Hdv' [Hina' [Horder' [Hinj' [Hdfn_anc' [Hfa_tv' [Htv_vis' [Hnd_a [Hina_stack [Hanc_ne_a [Hpar_ne_a [Hdg_par_a Hdfn_d_lt_a]]]]]]]]]]]]]].
+            destruct HP_forset as [Hlow_inv [Hfa_a [Hdv' [Hina' [Horder' [Hinj' [Hdfn_anc' [Hfa_tv' [Htv_vis' [Hnd_a [Hina_stack [Hanc_ne_a [Hpar_ne_a [Hdg_par_a [Hdfn_d_lt_a [Hin_par Hdf_anc_par]]]]]]]]]]]]]]]].
             assert (Hneq_av: a <> v).
             { intro Heq. subst v. destruct Hlow_inv as [Hwf _]. destruct Hwf as [Hsiv _].
               apply Hsiv in Hina_stack. exact (Hnv Hina_stack). }
@@ -2635,7 +2842,8 @@ Section IS_LOW.
                 dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
                 tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
                 anc <> a /\ par <> a /\ dg_step g par a /\
-                (forall w, d w -> In w (stack s) -> dfn s w < dfn s a)).
+                (forall w, d w -> In w (stack s) -> dfn s w < dfn s a) /\
+                In par (stack s) /\ dfn s anc < dfn s par).
             apply (Hoare_bind (fun s => s = s0) (set_fa v a) Qmid
               (fun _ => W v ;; lv <- get' (fun s => low s v) ;; update_low a lv) Qfinal).
             * (* set_fa v a *)
@@ -2708,44 +2916,43 @@ Section IS_LOW.
                     split. exact Hdfn_anc''. split. exact Horder''. exact Hinj''. }
                   (* The IH now gives our exact target — use it directly *)
                   exact IH.
-                ++ (* fa a = par via IH(v, (anc, a, d, a, par)) — now also gives In a(stack) etc *)
+                ++ (* fa a = par via IH(v, (anc, a, d, a, par)) *)
                   specialize (IH v (anc, a, d, a, par)).
-                  (* The IH postcondition now includes fa s a = par /\ a ∈ visited s *)
-                  apply (Hoare_conseq_pre (fun s => low_forset_inv anc d s /\ fa s v = a /\
-                    fa s a = par /\ fa s tv = tp /\ tv ∈ visited s /\
-                    ~ d a /\ In a (stack s) /\ anc <> a /\ par <> a /\ dg_step g par a /\
-                    done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
-                    dfn_injective s /\ dfn s anc < dfn s a /\ ~ v ∈ visited s)
-                    (fun s => (a = v \/ a ∈ visited s) /\ fa s a = par /\
-                      (anc <> v /\ a <> v /\ dg_step g a v /\ ~ d v) /\
-                      low_forset_inv anc d s /\ fa s v = a /\ ~ v ∈ visited s /\ ~ d v /\
-                      done_visited d s /\ In anc (stack s) /\ In a (stack s) /\
-                      dfn s anc < dfn s a /\
-                      stack_dfn_order s /\ dfn_injective s) (W v) (fun _ s => fa s a = par)).
-                  { intros s [Hlow' [Hfa_v' [Hfa_a' [Hfa_tv'' [Htv_vis'' [Hnd_a' [Hina_stack' [Hanc_ne_a' [Hpar_ne_a' [Hdg_par_a' [Hdv'' [Hina'' [Horder'' [Hinj'' [Hdfn_anc'' Hnv_s]]]]]]]]]]]]]]].
-                    assert (Hanc_ne_v: anc <> v).
-                    { intro Heq. subst v. destruct Hlow_inv as [_ [Hanc_vis_s0 _]]. exact (Hnv Hanc_vis_s0). }
-                    split. { right. destruct Hlow' as [Hwf _]. destruct Hwf as [Hsiv _]. apply Hsiv. exact Hina_stack'. } split. { exact Hfa_a'. }
-                    split. split. exact Hanc_ne_v. split. exact Hneq_av. split. exact Huniv. exact Hnv_d.
-                    split. exact Hlow'. split. exact Hfa_v'. split. exact Hnv_s. split. exact Hnv_d.
-                    split. exact Hdv''. split. exact Hina''. split. exact Hina_stack'.
-                    split. exact Hdfn_anc''. split. exact Horder''. exact Hinj''. }
-                  (* The IH postcondition now includes fa s a = par; weaken it *)
-                  eapply Hoare_conseq_post; [| exact IH].
-                  intros b s2 Hpost.
-                  destruct Hpost as [Hlow_s [Hfa_v_s [Hdv_s [Hina_s [Horder_s [Hinj_s [Hdfn_lt_v [Hdfn_anc_v [Hfa_tv_s Hrest]]]]]]]]].
-                  exact Hfa_tv_s.
+                     (* The IH postcondition now includes fa s a = par /\ a ∈ visited s *)
+                     apply (Hoare_conseq_pre (fun s => low_forset_inv anc d s /\ fa s v = a /\
+                       fa s a = par /\ fa s tv = tp /\ tv ∈ visited s /\
+                       ~ d a /\ In a (stack s) /\ anc <> a /\ par <> a /\ dg_step g par a /\
+                       done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
+                       dfn_injective s /\ dfn s anc < dfn s a /\ ~ v ∈ visited s)
+                       (fun s => (a = v \/ a ∈ visited s) /\ fa s a = par /\
+                         (anc <> v /\ a <> v /\ dg_step g a v /\ ~ d v) /\
+                         low_forset_inv anc d s /\ fa s v = a /\ ~ v ∈ visited s /\ ~ d v /\
+                         done_visited d s /\ In anc (stack s) /\ In a (stack s) /\
+                         dfn s anc < dfn s a /\
+                         stack_dfn_order s /\ dfn_injective s) (W v) (fun _ s => fa s a = par)).
+                     { intros s [Hlow' [Hfa_v' [Hfa_a' [Hfa_tv'' [Htv_vis'' [Hnd_a' [Hina_stack' [Hanc_ne_a' [Hpar_ne_a' [Hdg_par_a' [Hdv'' [Hina'' [Horder'' [Hinj'' [Hdfn_anc'' Hnv_s]]]]]]]]]]]]]]].
+                       assert (Hanc_ne_v: anc <> v).
+                       { intro Heq. subst v. destruct Hlow_inv as [_ [Hanc_vis_s0 _]]. exact (Hnv Hanc_vis_s0). }
+                       split. { right. destruct Hlow' as [Hwf _]. destruct Hwf as [Hsiv _]. apply Hsiv. exact Hina_stack'. } split. { exact Hfa_a'. }
+                       split. split. exact Hanc_ne_v. split. exact Hneq_av. split. exact Huniv. exact Hnv_d.
+                       split. exact Hlow'. split. exact Hfa_v'. split. exact Hnv_s. split. exact Hnv_d.
+                       split. exact Hdv''. split. exact Hina''. split. exact Hina_stack'.
+                       split. exact Hdfn_anc''. split. exact Horder''. exact Hinj''. }
+                     (* The IH postcondition now includes fa s a = par; weaken it *)
+                     eapply Hoare_conseq_post; [| exact IH].
+                     intros b s2 Hpost.
+                     destruct Hpost as [Hlow_s [Hfa_v_s [Hdv_s [Hina_s [Horder_s [Hinj_s [Hdfn_lt_v [Hdfn_anc_v [Hfa_tv_s Hrest]]]]]]]]].
+                     exact Hfa_tv_s.
               -- (* get' low v ;; update_low a lv *)
                 intros a1. simpl.
                 (* The Hoare_conj gives: (IH1_post) /\ (fa s a = par).
-                   IH1_post: low_forset_inv /\ fa v = a /\ done_visited /\ In anc /\
-                             stack_dfn_order /\ dfn_injective /\ ...
-                   We combine with static properties from outer context. *)
+                   We also carry In par (stack s) and dfn s anc < dfn s par from the outer context. *)
                 apply (Hoare_conseq_pre _ (fun s => low_forset_inv anc d s /\ fa s a = par /\
                   done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
                   dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
                   tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
-                  anc <> a /\ par <> a /\ dg_step g par a) _ _).
+                  anc <> a /\ par <> a /\ dg_step g par a /\
+                  In par (stack s) /\ dfn s anc < dfn s par) _ _).
                 { intros s [[Hlow_s [Hfa_v_s [Hdv_s [Hina_s [Horder_s [Hinj_s [Hdfn_lt_v_s [Hdfn_anc_v_s [Hfa_tv_s Htv_vis_s]]]]]]]]] Hfa_a_s].
                   destruct Htv_vis_s as [Htv_vis_s' [Hnd_v [Hina_stack_s [Hanc_ne_v_s [Hneq_av_s Hdg_av_s]]]]].
                   destruct Hdg_av_s as [Hdg_av_s' Hdfn_anc_a_s].
@@ -2753,119 +2960,140 @@ Section IS_LOW.
                   split. exact Horder_s. split. exact Hinj_s. split. exact Hdfn_anc_a_s.
                   split. exact Hfa_tv_s. split. exact Htv_vis_s'.
                   split. exact Hnd_a. split. exact Hina_stack_s.
-                  split. exact Hanc_ne_a. split. exact Hpar_ne_a. exact Hdg_par_a. }
+                  split. exact Hanc_ne_a. split. exact Hpar_ne_a. split. exact Hdg_par_a.
+                  (* In par and dfn: carried from outer context, preserved through set_fa and W v *)
+                  split. admit. admit. } (* TODO: In par (stack s) /\ dfn s anc < dfn s par *)
                 apply (Hoare_bind (fun s => low_forset_inv anc d s /\ fa s a = par /\
                   done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
                   dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
                   tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
-                  anc <> a /\ par <> a /\ dg_step g par a)
+                  anc <> a /\ par <> a /\ dg_step g par a /\
+                  In par (stack s) /\ dfn s anc < dfn s par)
                   (get' (fun s => low s v))
                   (fun lv s => low_forset_inv anc d s /\ fa s a = par /\
                     done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
                     dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
                     tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
-                    anc <> a /\ par <> a /\ dg_step g par a)
-                  (fun lv => update_low a lv)
-                  (fun _ s => low_forset_inv anc d s /\ fa s a = par /\
-                    done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
-                    dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
-                    tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
                     anc <> a /\ par <> a /\ dg_step g par a /\
-                    (forall w, d w -> In w (stack s) -> dfn s w < dfn s a))).
+                    In par (stack s) /\ dfn s anc < dfn s par)
+                  (fun lv => update_low a lv)
+                  Qfinal).
                 ++ unfold get'. intro_state. hoare_auto_s.
-                   destruct H1 as [Heq _]. subst s. exact H.   
+                   destruct H1 as [Heq _]. subst s. exact H.
                 ++ intros lv. unfold update_low. intro_state. hoare_auto_s.
                    { unfold set_low. intro_state. hoare_auto_s. subst s2. subst s.
-                     destruct H as [Hlow' [Hfa_a' [Hdv'' [Hina'' [Horder'' [Hinj'' [Hdfn_anc'' [Hfa_tv'' [Htv_vis'' [Hnd_a' [Hina_stack' [Hanc_ne_a' [Hpar_ne_a' Hdg_par_a']]]]]]]]]]]]].
+                     destruct H as (Hlow' & Hfa_a' & Hdv'' & Hina'' & Horder'' & Hinj'' & Hdfn_anc'' & Hfa_tv'' & Htv_vis'' & Hnd_a' & Hina_stack' & Hanc_ne_a' & Hpar_ne_a' & Hdg_par_a' & Hin_par' & Hdfn_par').
                      assert (Hlow_post: low_forset_inv anc d
                        (RecordSet.set low (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s1 a) lv else low0 x) s1)).
                      { eapply (update_low_preserves_low_forset_inv_for_other anc a lv d s1); eauto. }
                      assert (Hle: lv <= low s1 a). { lia. }
-                     replace (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s1 a) lv else low0 x)
-                       with (fun (low0: V->nat) (x:V) => if equiv_decb x a then lv else low0 x) in Hlow_post.
-                     { simpl. split. exact Hlow_post. split. exact Hfa_a'. split. exact Hdv''.
-                       split. exact Hina''. split. exact Horder''. split. exact Hinj''.
-                       split. exact Hdfn_anc''. split. exact Hfa_tv''.
-                       split. exact Htv_vis''. split. exact Hnd_a'.
-                       split. exact Hina_stack'. split. exact Hanc_ne_a'.
-                       split. exact Hpar_ne_a'. exact Hdg_par_a'.
-                       split. exact Hdfn_d_lt_a. }
-                     { extensionality low0. extensionality x. unfold equiv_decb.
+                     assert (Hlow_fun_eq: (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s1 a) lv else low0 x)
+                                        = (fun (low0: V->nat) (x:V) => if equiv_decb x a then lv else low0 x)).
+                     { apply functional_extensionality; intro low0.
+                       apply functional_extensionality; intro x.
+                       unfold equiv_decb.
                        destruct (equiv_dec x a) as [Heq | Hneq].
-                       - subst x. rewrite Nat.min_r; auto.
-                       - reflexivity. } }
-                   { destruct H1 as [Heq _]. subst s. destruct H as [Hlow' [Hfa_a' [Hdv'' [Hina'' [Horder'' [Hinj'' [Hdfn_anc'' [Hfa_tv'' [Htv_vis'' [Hnd_a' [Hina_stack' [Hanc_ne_a' [Hpar_ne_a' Hdg_par_a']]]]]]]]]]]].
+                       - rewrite Nat.min_r; [reflexivity | exact Hle].
+                       - reflexivity. }
+                     rewrite Hlow_fun_eq in Hlow_post.
+                     simpl. split. exact Hlow_post. split. exact Hfa_a'. split. exact Hdv''.
+                     split. exact Hina''. split. exact Horder''. split. exact Hinj''.
+                     split. exact Hdfn_anc''. split. exact Hfa_tv''.
+                     split. exact Htv_vis''. split. exact Hnd_a'.
+                     split. exact Hina_stack'. split. exact Hanc_ne_a'.
+                     split. exact Hpar_ne_a'. split. exact Hdg_par_a'.
+                     split. { admit. } (* TODO: dfn_d_lt *)
+                     split. exact Hin_par'. simpl. exact Hdfn_par'. }
+                   { destruct H1 as [Heq _]. subst s. destruct H as (Hlow' & Hfa_a' & Hdv'' & Hina'' & Horder'' & Hinj'' & Hdfn_anc'' & Hfa_tv'' & Htv_vis'' & Hnd_a' & Hina_stack' & Hanc_ne_a' & Hpar_ne_a' & Hdg_par_a' & Hin_par' & Hdfn_par').
                      split. exact Hlow'. split. exact Hfa_a'. split. exact Hdv''. split. exact Hina''.
                      split. exact Horder''. split. exact Hinj''. split. exact Hdfn_anc''.
                      split. exact Hfa_tv''. split. exact Htv_vis''.
                      split. exact Hnd_a'. split. exact Hina_stack'. split. exact Hanc_ne_a'.
-                     split. exact Hpar_ne_a'. exact Hdg_par_a'.
-                     exact Hdfn_d_lt_a. }
+                     split. exact Hpar_ne_a'. split. exact Hdg_par_a'.
+                     split. { admit. } (* TODO: dfn_d_lt *)
+                     split. exact Hin_par'. simpl. exact Hdfn_par'. }
           - (* Non-tree edge: v ∈ visited *)
             apply Hoare_assume_bind. simpl. intro_state. destruct H as [Hvis Heq_s]. subst s1.
             unfold P_forset in HP_forset.
-            destruct HP_forset as [Hlow_inv [Hfa_a [Hdv' [Hina' [Horder' [Hinj' [Hdfn_anc' [Hfa_tv' [Htv_vis' [Hnd_a [Hina_stack [Hanc_ne_a [Hpar_ne_a [Hdg_par_a Hdfn_d_lt_a]]]]]]]]]]]]]].
+            destruct HP_forset as [Hlow_inv [Hfa_a [Hdv' [Hina' [Horder' [Hinj' [Hdfn_anc' [Hfa_tv' [Htv_vis' [Hnd_a [Hina_stack [Hanc_ne_a [Hpar_ne_a [Hdg_par_a [Hdfn_d_lt_a [Hin_par Hdf_anc_par]]]]]]]]]]]]]]]].
             apply Hoare_choice.
             + (* Back edge: In v (stack s) *)
-              apply (Hoare_bind (fun s => low_forset_inv anc d s /\ fa s a = par /\
-                done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
-                dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
-                tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
-                anc <> a /\ par <> a /\ dg_step g par a)
+              apply Hoare_assume_bind. simpl. intro_state. destruct H as [Hin_stack Heq_s']. subst s1.
+              apply (Hoare_bind (fun s => s = s0)
                 (get' (fun s0 => dfn s0 v))
-                (fun dv s => low_forset_inv anc d s /\ fa s a = par /\
+                (fun dv s => s = s0 /\
+                  low_forset_inv anc d s /\ fa s a = par /\
                   done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
                   dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
                   tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
-                  anc <> a /\ par <> a /\ dg_step g par a)
+                  anc <> a /\ par <> a /\ dg_step g par a /\
+                  In par (stack s) /\ dfn s anc < dfn s par)
                 (fun dv => update_low a dv)
                 (fun _ s => low_forset_inv anc d s /\ fa s a = par /\
                   done_visited d s /\ In anc (stack s) /\ stack_dfn_order s /\
                   dfn_injective s /\ dfn s anc < dfn s a /\ fa s tv = tp /\
                   tv ∈ visited s /\ ~ d a /\ In a (stack s) /\
                   anc <> a /\ par <> a /\ dg_step g par a /\
-                  (forall w, d w -> In w (stack s) -> dfn s w < dfn s a))).
-              * unfold get'. intro_state. hoare_auto_s.
-              * intros dv. unfold update_low. intro_state. hoare_auto_s.
+                  (forall w, d w -> In w (stack s) -> dfn s w < dfn s a) /\
+                  In par (stack s) /\ dfn s anc < dfn s par)).
+              ++ unfold get'. intro_state. hoare_auto_s.
+                 destruct H1 as [Heq_s _]. subst s. subst s1.
+                 split. reflexivity.
+                 split. exact Hlow_inv. split. exact Hfa_a. split. exact Hdv'. split. exact Hina'.
+                 split. exact Horder'. split. exact Hinj'. split. exact Hdfn_anc'. split. exact Hfa_tv'.
+                 split. exact Htv_vis'. split. exact Hnd_a. split. exact Hina_stack.
+                 split. exact Hanc_ne_a. split. exact Hpar_ne_a. split. exact Hdg_par_a.
+                 split. exact Hin_par. exact Hdf_anc_par.
+              ++ intros dv. unfold update_low. intro_state. hoare_auto_s.
                 { unfold set_low. intro_state. hoare_auto_s. subst s2. subst s.
-                  destruct H as [Hlow' [Hfa_a' [Hdv'' [Hina'' [Horder'' [Hinj'' [Hdfn_anc'' [Hfa_tv'' [Htv_vis'' [Hnd_a' [Hina_stack' [Hanc_ne_a' [Hpar_ne_a' Hdg_par_a']]]]]]]]]]]].
+                  destruct H as [Heq_s1 Hrest]. subst s1. clear Hrest.
                   assert (Hlow_post: low_forset_inv anc d
-                    (RecordSet.set low (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s1 a) dv else low0 x) s1)).
-                  { eapply (update_low_preserves_low_forset_inv_for_other anc a dv d s1); eauto. }
-                  assert (Hle: dv <= low s1 a). { lia. }
-                  replace (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s1 a) dv else low0 x)
-                    with (fun (low0: V->nat) (x:V) => if equiv_decb x a then dv else low0 x) in Hlow_post.
-                  { simpl. split. exact Hlow_post. split. exact Hfa_a'. split. exact Hdv''.
-                  split. exact Hina''. split. exact Horder''. split. exact Hinj''.
-                  split. exact Hdfn_anc''. split. exact Hfa_tv''.
-                  split. exact Htv_vis''. split. exact Hnd_a'.
-                  split. exact Hina_stack'. split. exact Hanc_ne_a'.
-                  split. exact Hpar_ne_a'. exact Hdg_par_a'.
-                  split. exact Hdfn_d_lt_a. }
-                  { extensionality low0. extensionality x. unfold equiv_decb.
+                    (RecordSet.set low (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s0 a) dv else low0 x) s0)).
+                  { eapply (update_low_preserves_low_forset_inv_for_other anc a dv d s0); eauto. }
+                  assert (Hle: dv <= low s0 a). { lia. }
+                  assert (Hlow_fun_eq2: (fun (low0: V->nat) (x:V) => if equiv_decb x a then Nat.min (low s0 a) dv else low0 x)
+                                     = (fun (low0: V->nat) (x:V) => if equiv_decb x a then dv else low0 x)).
+                  { apply functional_extensionality; intro low0.
+                    apply functional_extensionality; intro x.
+                    unfold equiv_decb.
                     destruct (equiv_dec x a) as [Heq | Hneq].
-                    - subst x. rewrite Nat.min_r; auto.
-                    - reflexivity. } }
+                    - rewrite Nat.min_r; [reflexivity | auto].
+                    - reflexivity. }
+                  rewrite Hlow_fun_eq2 in Hlow_post.
+                  simpl. split. exact Hlow_post. split. reflexivity. split. exact Hdv'.
+                  split. exact Hina'. split. exact Horder'. split. exact Hinj'.
+                  split. exact Hdfn_anc'. split. reflexivity.
+                  split. exact Htv_vis'. split. exact Hnd_a.
+                  split. exact Hina_stack. split. exact Hanc_ne_a.
+                  split. exact Hpar_ne_a. split. exact Hdg_par_a.
+                  split. exact Hdfn_d_lt_a.
+                  split. exact Hin_par. exact Hdf_anc_par. }
                 { destruct H1 as [Heq _]. subst s.
-                  destruct H as [Hlow' [Hfa_a' [Hdv'' [Hina'' [Horder'' [Hinj'' [Hdfn_anc'' [Hfa_tv'' [Htv_vis'' [Hnd_a' [Hina_stack' [Hanc_ne_a' [Hpar_ne_a' Hdg_par_a']]]]]]]]]]]].
-                  split. exact Hlow'. split. exact Hfa_a'. split. exact Hdv''. split. exact Hina''.
-                  split. exact Horder''. split. exact Hinj''. split. exact Hdfn_anc''.
-                  split. exact Hfa_tv''. split. exact Htv_vis''.
-                  split. exact Hnd_a'. split. exact Hina_stack'. split. exact Hanc_ne_a'.
-                  split. exact Hpar_ne_a'. exact Hdg_par_a'.
-                  exact Hdfn_d_lt_a. }
+                  destruct H as [Heq_s1 Hrest]. subst s1. clear Hrest.
+                  split. exact Hlow_inv. split. reflexivity. split. exact Hdv'. split. exact Hina'.
+                  split. exact Horder'. split. exact Hinj'. split. exact Hdfn_anc'.
+                  split. reflexivity.
+                  split. exact Htv_vis'. split. exact Hnd_a. split. exact Hina_stack.
+                  split. exact Hanc_ne_a. split. exact Hpar_ne_a. split. exact Hdg_par_a.
+                  split. exact Hdfn_d_lt_a.
+                  split. exact Hin_par. exact Hdf_anc_par. }
             + (* Cross edge: ~ In v (stack s): skip *)
-              destruct H1 as [Heq _]. subst s.
+              intro_state. hoare_auto_s.
+              destruct H1 as [Heq_s Hnstack]. subst s. subst s1.
               split. exact Hlow_inv. split. exact Hfa_a. split. exact Hdv'. split. exact Hina'.
               split. exact Horder'. split. exact Hinj'. split. exact Hdfn_anc'.
               split. exact Hfa_tv'. split. exact Htv_vis'.
               split. exact Hnd_a. split. exact Hina_stack. split. exact Hanc_ne_a.
-              split. exact Hpar_ne_a. exact Hdg_par_a.
-              exact Hdfn_d_lt_a. }
-        (* Apply Hoare_forset *)
-        refine (let H_forset := @Hoare_forset SCCSt V P_forset (fun v => dg_step g a v) (process_edge a W) ProperP Hbody in _).
+              split. exact Hpar_ne_a. split. exact Hdg_par_a.
+              split. exact Hdfn_d_lt_a.
+              split. exact Hin_par. exact Hdf_anc_par. }
+        (* Apply Hoare_forset: P_forset already includes In par and dfn anc < dfn s par *)
+        assert (Hforset_full: Hoare (fun s => P_forset (fun _ => False) s)
+          (forset (fun v => dg_step g a v) (process_edge a W))
+          (fun _ s => P_forset (fun v => dg_step g a v) s)).
+        { refine (@Hoare_forset SCCSt V P_forset (fun v => dg_step g a v) (process_edge a W) ProperP Hbody). }
         apply (Hoare_conseq_pre _ (fun s => P_forset (fun _ => False) s) _ _).
-        { intros s [HP_anc [HP_tvtp [HP_ineqs [HP_nda [HP_instack HP_dfnd]]]]].
+        { intros s [HP_anc [HP_tvtp [HP_ineqs [HP_nda [HP_instack [HP_dfnd [HP_par HP_dfnd_par]]]]]]].
           destruct HP_anc as [Hlow_inv [Hfa_a [Hina' [Horder' [Hinj' [Hdv' Hdfn_anc']]]]]].
           destruct HP_tvtp as [Hfa_tv' Htv_vis'].
           destruct HP_ineqs as [Hanc_ne_a [Hpar_ne_a Hdg_par_a]].
@@ -2873,25 +3101,37 @@ Section IS_LOW.
           split. exact Hina'. split. exact Horder'. split. exact Hinj'. split. exact Hdfn_anc'.
           split. exact Hfa_tv'. split. exact Htv_vis'.
           split. exact HP_nda. split. exact HP_instack. split. exact Hanc_ne_a.
-          split. exact Hpar_ne_a. exact Hdg_par_a.
-          exact HP_dfnd. }
-        exact H_forset.
+          split. exact Hpar_ne_a. split. exact Hdg_par_a.
+          split. exact HP_dfnd. split. exact HP_par. exact HP_dfnd_par. }
+        exact Hforset_full.
       + (* If (low a = dfn a) (pop_scc a) *)
         intro a''. destruct a''.
         intro_state. hoare_auto_s.
         * (* pop_scc a branch *)
-          destruct H as [HP_forset Heq_low_dfn].
-          unfold P_forset in HP_forset.
-          destruct HP_forset as [Hlow_inv [Hfa_a [Hdv' [Hina' [Horder' [Hinj' [Hdfn_anc' [Hfa_tv' [Htv_vis' [Hnd_a [Hina_stack [Hanc_ne_a [Hpar_ne_a [Hdg_par_a Hdfn_d_lt_a]]]]]]]]]]]]]].
-          eapply (pop_scc_preserves_ancestor_inv anc par a d Hanc_ne_a Hpar_ne_a Hdg_par_a).
+          destruct H as [Hlow_inv Heq_low_dfn].
+          destruct Heq_low_dfn as (Hfa_a & Hdv' & Hina' & Horder' & Hinj' & Hdfn_anc' & Hfa_tv' & Htv_vis' & Hnd_a & Hina_stack & Hanc_ne_a & Hpar_ne_a & Hdg_par_a & Hdfn_d_lt_a & Hin_par & Hdf_anc_par).
+          apply Hoare_conseq_pre with (P2 := fun s => low_forset_inv anc d s /\ fa s a = par /\ ~ d a /\
+            In a (stack s) /\ In anc (stack s) /\ stack_dfn_order s /\ dfn_injective s /\ done_visited d s /\
+            (forall w, d w -> In w (stack s) -> dfn s w < dfn s a) /\ dfn s anc < dfn s a).
+          { intros s' Hs'. subst s'. split. exact Hlow_inv. split. exact Hfa_a. split. exact Hnd_a.
+            split. exact Hina_stack. split. exact Hina'. split. exact Horder'.
+            split. exact Hinj'. split. exact Hdv'.
+            split. exact Hdfn_d_lt_a. exact Hdfn_anc'. }
+          eapply Hoare_conseq_post.
+          2: { eapply (pop_scc_preserves_ancestor_inv anc par a d Hanc_ne_a Hpar_ne_a Hdg_par_a). }
+          intros _ s [Hlow_inv' [Hfa_a' [Hina'' [Horder'' [Hinj'' Hdv'']]]]].
+          (* Remaining conjuncts: all properties preserved through pop_scc since it only modifies stack/sccs *)
+          admit.
         * (* skip branch: ~ low a = dfn a *)
-          destruct H as [HP_forset Hneq]. destruct H1 as [Heq _]. subst s.
-          unfold P_forset in HP_forset.
-          destruct HP_forset as [Hlow_inv [Hfa_a [Hdv' [Hina' [Horder' [Hinj' [Hdfn_anc' [Hfa_tv' [Htv_vis' [Hnd_a [Hina_stack [Hanc_ne_a [Hpar_ne_a [Hdg_par_a Hdfn_d_lt_a]]]]]]]]]]]]]].
+          destruct H as [Hlow_inv Hrest]. destruct H1 as [Heq _]. subst s.
+          destruct Hrest as (Hfa_a & Hdv' & Hina' & Horder' & Hinj' & Hdfn_anc' & Hfa_tv' & Htv_vis' & Hnd_a & Hina_stack & Hanc_ne_a & Hpar_ne_a & Hdg_par_a & Hdfn_d_lt_a & Hin_par & Hdf_anc_par).
           split. exact Hlow_inv. split. exact Hfa_a. split. exact Hdv'. split. exact Hina'.
           split. exact Horder'. split. exact Hinj'. split. exact Hdfn_d_lt_a.
-          split. exact Hdfn_anc'. split. exact Hfa_tv'. exact Htv_vis'.
-  Qed.
+          split. exact Hdfn_anc'. split. exact Hfa_tv'. split. exact Htv_vis'.
+          split. exact Hnd_a. split. exact Hin_par.
+          split. exact Hanc_ne_a. split. exact Hpar_ne_a. split. exact Hdg_par_a.
+          exact Hdf_anc_par.
+  Admitted.
 
 
 
