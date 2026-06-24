@@ -307,15 +307,15 @@ Section TarjanSCC.
     unfold state_to_dfs_tree, original_vvalid. reflexivity.
   Qed.
 
-  (** [state_to_dfs_tree_step_char]: Forward characterization of
+  (** [tree_step_char]: Forward characterization of
       directed edges in the DFS tree.  If the tree has an edge
       [x → y], then [fa s y = x], [fa s y ≠ y] (the [fa] field
       was actually assigned), and [y] is visited.
 
       The converse direction requires an additional edge-existence
       condition in the original graph [g]; see
-      [state_to_dfs_tree_step_char_backward]. *)
-  Lemma state_to_dfs_tree_step_char (s: SCCSt) (root x y: V):
+      [tree_step_char_backward]. *)
+  Lemma tree_step_char (s: SCCSt) (root x y: V):
     dg_step (state_to_dfs_tree s root) x y ->
     fa s y = x /\ fa s y <> y /\ y ∈ visited s.
   Proof.
@@ -333,13 +333,13 @@ Section TarjanSCC.
     split; [exact Hfst_eq | split; [exact Hfa_ne | exact Hvis]].
   Qed.
 
-  (** [state_to_dfs_tree_step_char_backward]: The converse direction
+  (** [tree_step_char_backward]: The converse direction
       of the edge characterization, requiring that a corresponding
       edge exists in the original graph [g].  This condition holds
       in reachable algorithm states because [fa s y = x] can only
       be established by [set_fa] in the tree-edge branch of
       [process_edge], which is guarded by [dg_step g x y]. *)
-  Lemma state_to_dfs_tree_step_char_backward (s: SCCSt) (root x y: V):
+  Lemma tree_step_char_backward (s: SCCSt) (root x y: V):
     dg_step g x y ->
     fa s y = x -> fa s y <> y -> y ∈ visited s ->
     dg_step (state_to_dfs_tree s root) x y.
@@ -364,7 +364,7 @@ Section TarjanSCC.
     dg_step (state_to_dfs_tree s root) (fa s v) v.
   Proof.
     intros Hstep_g Hvis Hfa_ne.
-    eapply state_to_dfs_tree_step_char_backward;
+    eapply tree_step_char_backward;
       eauto.
   Qed.
 
@@ -396,7 +396,7 @@ Section TarjanSCC.
     ~ dg_step (state_to_dfs_tree s root) v v.
   Proof.
     intros Hstep.
-    apply state_to_dfs_tree_step_char in Hstep.
+    apply tree_step_char in Hstep.
     destruct Hstep as [Hfa_eq [Hfa_ne _]].
     apply Hfa_ne. exact Hfa_eq.
   Qed.

@@ -17,7 +17,7 @@ Section SCC_DEFS.
           (finite_vertices: forall v, original_vvalid g v -> In v (original_listV g)).
 
   (* ================================================================ *)
-  (* Section 0: dg_step / dg_reachable — Directed graph primitives   *)
+  (* Section 1: dg_step / dg_reachable — Directed graph primitives   *)
   (* ================================================================ *)
 
   (** [dg_step g x y] holds when there is a directed edge from x to y
@@ -108,7 +108,7 @@ Section SCC_DEFS.
   Qed.
 
   (* ================================================================ *)
-  (* Section 1: mutually_reachable — Mutual reachability              *)
+  (* Section 2: mutually_reachable — Mutual reachability              *)
   (* ================================================================ *)
 
   (** Two vertices are mutually reachable if there is a directed path
@@ -158,7 +158,7 @@ Section SCC_DEFS.
   Qed.
 
   (* ================================================================ *)
-  (* Section 2: is_SCC — SCC predicate                                *)
+  (* Section 3: is_SCC — SCC predicate                                *)
   (* ================================================================ *)
 
   (** [is_SCC g s] holds when [s] is a strongly connected component
@@ -244,7 +244,7 @@ Section SCC_DEFS.
   Qed.
 
   (* ================================================================ *)
-  (* Section 3: scc_partition — SCC partition                         *)
+  (* Section 4: scc_partition — SCC partition                         *)
   (* ================================================================ *)
 
   (** [scc_partition g sccs] holds when [sccs] is a valid SCC
@@ -460,7 +460,7 @@ Section SCC_DEFS.
   Qed.
 
   (* ================================================================ *)
-  (* Section 4: condensation — Condensation graph DAG                 *)
+  (* Section 5: condensation — Condensation graph DAG                 *)
   (* ================================================================ *)
 
   (** [condensation_edge sccs s1 s2]: there is a directed edge from
@@ -621,7 +621,7 @@ Section SCC_DEFS.
   Qed.
 
   (* ================================================================ *)
-  (* Section 5: reverse_graph — Graph reversal & SCC invariance       *)
+  (* Section 6: reverse_graph — Graph reversal & SCC invariance       *)
   (* ================================================================ *)
 
   (** [reverse_graph g] swaps the direction of every edge in [g].
