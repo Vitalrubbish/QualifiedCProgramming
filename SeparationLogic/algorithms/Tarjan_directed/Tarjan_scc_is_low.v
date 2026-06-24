@@ -2490,18 +2490,31 @@ Section IS_LOW.
     - (* preloop a: the hoare wrapper has the right precondition (with inequalities) *)
       apply (preloop_establishes_ancestor_inv_hoare anc par a d).
     - intro a'. destruct a'.
-      (* After preloop a:
-         low_forset_inv anc d /\ fa a = par /\ In anc (stack) /\
-         stack_dfn_order /\ dfn_injective /\ done_visited d /\
-         dfn s anc < dfn s a.
-         Next: forset (dg_step g a) (process_edge a W) ;; If (low a = dfn a) (pop_scc a).
-         The forset body processes each neighbor v of a:
-         - Tree edge: set_fa v a;; W v;; update_low a (low v).
-           set_fa_W_preserves_low_forset_inv with IH(v,(anc,a,d)) handles this.
-         - Back edge: update_low_back_edge.
-         - Cross edge: cross_edge_preserves_low_forset_inv.
-         The If uses pop_scc_preserves_ancestor_inv. *)
-      admit.
+      (* After preloop a, we have:
+         Hpost: low_forset_inv anc d /\ fa a = par /\ In anc (stack) /\
+                stack_dfn_order /\ dfn_injective /\ done_visited d /\
+                dfn s anc < dfn s a *)
+      (* The dfn-ordering (forall w, d w -> In w (stack) -> dfn w < dfn a) is
+         a static property: all w ∈ d are visited, so dfn s w < timer s0,
+         and dfn s a = timer s0 (set by preloop a). It follows from dfn_inv. *)
+      (* Step 2a: forset over dg_step g a *)
+      eapply Hoare_bind.
+      + (* forset: the invariant P_forset(done_a, s) tracks a's processed children.
+           Key: anc's state (low_forset_inv anc d, dfn s anc < dfn s a) is
+           untouched by all process_edge operations since a ≠ anc.
+           The forset body proof requires:
+           - Tree edge (v unvisited): set_fa v a;; W v;; update_low a (low v)
+             set_fa: preserves anc's invariant, establishes fa v = a
+             W v (via IH(v,(anc,a,d))): preserves anc's invariant, gives dfn-ordering for d
+             update_low: only modifies low a, preserves anc's low
+           - Back edge (v visited, in stack): update_low a (dfn v) — only modifies low a
+           - Cross edge (v visited, not in stack): skip *)
+        admit.
+      + (* Step 2b: If (low a = dfn a) (pop_scc a)
+           Uses pop_scc_preserves_ancestor_inv anc par a d.
+           Needs: anc<>a, par<>a (from IH), dg_step g par a (from IH),
+           dfn s anc < dfn s a (from P_forset), done-ordering (static). *)
+        admit.
   Admitted.
 
 
