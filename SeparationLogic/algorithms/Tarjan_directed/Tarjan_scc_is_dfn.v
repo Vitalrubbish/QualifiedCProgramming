@@ -1,6 +1,7 @@
 Require Import Coq.Lists.List.
 Require Import Coq.Logic.Classical_Prop.
 Require Import Coq.Classes.EquivDec.
+Require Import Coq.Classes.Morphisms.
 Require Import Lia.
 Require Import SetsClass.SetsClass.
 From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
@@ -236,93 +237,6 @@ Definition dfn_pre (u: V) (s: @SCCSt V) (root: V): Prop :=
 Definition dfn_post (s: @SCCSt V) (root: V): Prop :=
   dfn_valid s root /\ dfn_inv s.
 
-(** [fa_parent_dfn_lt]: If [u] is the DFS parent of [v]
-    (i.e. [fa s v = u /\ fa s v ≠ v]), [v] is visited, and the
-    original graph has the edge [u → v], then [dfn s u < dfn s v].
-    This follows directly from the tree-edge characterization and
-    [dfn_valid]. *)
-Lemma fa_parent_dfn_lt (s: @SCCSt V) (u v: V) (root: V):
-  fa s v = u -> fa s v <> v -> dg_step g u v -> v ∈ visited s ->
-  dfn_valid g s root -> dfn s u < dfn s v.
-Proof.
-  intros Hfa_eq Hfa_ne Hdg Hvvis Hvalid.
-  eapply state_to_dfs_tree_step_char_backward in Hdg; eauto.
-  eapply Hvalid; eauto.
-Qed.
-
-(** [tarjan_scc_keep_in_stack_below]: [tarjan_scc g u] preserves
-    [In w (stack s)] for any vertex [w] that is on the stack and
-    visited (hence has [dfn s w < timer s]).  After [preloop u],
-    [dfn s u] becomes the old timer, so [dfn s w < dfn s u] and
-    [pop_scc u] (if called) does not remove [w] because [w] lies
-    below [u] on the stack. *)
-Lemma tarjan_scc_keep_in_stack_below (u w: V):
-  u <> w ->
-  Hoare (fun s: @SCCSt V => In w (stack s) /\ dfn_inv s /\ w ∈ visited s)
-        (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
-        (fun _ s => In w (stack s)).
-Proof.
-  intros Hneq. unfold tarjan_scc.
-  hoare_fix_nolv_auto V.
-  clear u. intros W IH u. unfold tarjan_scc_f.
-  intro_state. destruct H as [Hin_w [Hinv Hvis_w]].
-  eapply Hoare_bind.
-  { apply Hoare_conseq_pre with (P2 := fun s => In w (stack s)).
-    { intros s' Hs'. subst s'. exact Hin_w. }
-    unfold preloop. unfold_op. intro_state. hoare_auto_s.
-    subst s. simpl. exact Hin_w. }
-  simpl. intro a.
-  eapply Hoare_bind with (R := fun _ s => In w (stack s)).
-  { apply (@Hoare_forset SCCSt V (fun _ s => In w (stack s))
-      (fun v => dg_step g u v) (process_edge u W)).
-    { unfold Proper, respectful. intros. subst. reflexivity. }
-    { intros todo v0 Hsub Huniv Hnotin.
-      unfold process_edge, if_else. intro_state. rename H into Hin_w'.
-      apply Hoare_choice.
-      - (* Tree edge *) apply Hoare_assume_bind. simpl. intro_state.
-        destruct H as [Hnv Heq_s]. subst s1.
-        apply Hoare_conseq_pre with (P2 := fun s => In w (stack s)).
-        { intros s' Hs'. subst s'. exact Hin_w'. }
-        hoare_bind (set_fa v0 u). simpl. clear a0.
-        eapply Hoare_bind.
-        { apply (Hoare_conseq_pre _ (fun s => In w (stack s) /\ dfn_inv s /\ w ∈ visited s)
-                 (W v0) (fun _ s => In w (stack s))).
-          { intros s' [Hin_stack _]. exact Hin_stack. }
-          apply IH. }
-        { simpl. intro a0. unfold get'. intro_state. hoare_auto_s.
-          destruct H0 as [Heq _]. subst s'.
-          unfold update_low. intro_state. hoare_auto_s.
-          { unfold set_low. intro_state. hoare_auto_s. subst s2. subst s'. exact H. }
-          { destruct H0 as [Heq' _]. subst s'. exact H. } }
-      - (* Non-tree edge *) intro_state. hoare_auto_s.
-        + apply Hoare_conseq_pre with (P2 := fun s => In w (stack s)).
-          { intros s' Hs'. subst s'. exact Hin_w'. }
-          apply (update_low_keep_stack u (dfn s0 v0) w).
-        + destruct H2 as [Heq _]. subst s1. exact Hin_w'. } }
-  { simpl. intro a.
-    (* If (low u = dfn u) (pop_scc u) *)
-    intro_state. hoare_auto_s.
-    { (* pop_scc u branch *)
-      apply Hoare_conseq_pre with (P2 := fun s => In w (stack s)).
-      { intros s' Hs'. subst s'. exact H. }
-      unfold pop_scc. intro_state. hoare_auto_s. subst s. simpl.
-      unfold pop_scc_state.
-      destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit. simpl.
-      destruct (stack_split_at_partition (stack s0) u popped rest Hsplit) as [_ [_ Hcover]].
-      destruct (Hcover w H) as [Hpop | Hrest]; [| exact Hrest].
-      exfalso.
-      eapply stack_split_at_in_popped_before_a in Hpop; eauto.
-      { destruct Hpop as [l1 [l2 [Hstk_eq Hu_in_l2]]].
-        assert (Hw_in_stk: In w (stack s0)). { rewrite Hstk_eq. apply List.in_or_app. right. left. reflexivity. }
-        assert (Hu_in_stk: In u (stack s0)). { rewrite Hstk_eq. apply List.in_or_app. right. right. exact Hu_in_l2. }
-        assert (Hle: dfn s0 u <= dfn s0 w). {
-          apply (Horder u w Hu_in_stk Hw_in_stk).
-          exists l1. exists l2. split; [exact Hstk_eq | exact Hu_in_l2].
-          (* Actually, w is in l1? Let me check the stack_split_at output *) }
-        admit. }
-      { intro Heq. apply Hneq. exact Heq. } }
-    { destruct H1 as [Heq _]. subst s. exact H. } }
-Qed.
 
 Lemma fa_visited_init: fa_visited initSt.
 Proof.
@@ -1679,6 +1593,55 @@ Proof.
   { apply (Hinj x y Hneq); apply Hsiv; assumption. }
   lia.
 Qed.
+
+(** [fa_parent_dfn_lt]: If [u] is the DFS parent of [v]
+    (i.e. [fa s v = u /\ fa s v ≠ v]), [v] is visited, and the
+    original graph has the edge [u → v], then [dfn s u < dfn s v].
+    This follows directly from the tree-edge characterization and
+    [dfn_valid]. *)
+Lemma fa_parent_dfn_lt (s: @SCCSt V) (u v: V):
+  fa s v = u -> fa s v <> v -> dg_step g u v -> v ∈ visited s ->
+  dfn_valid s root -> dfn s u < dfn s v.
+Proof.
+  intros Hfa_eq Hfa_ne Hdg Hvvis Hvalid.
+  eapply state_to_dfs_tree_step_char_backward with (root := root) in Hdg; eauto.
+Qed.
+
+(** [tarjan_scc_keep_in_stack_below]: [tarjan_scc g u] preserves
+    [In w (stack s)] for any vertex [w] that is on the stack and
+    visited (hence has [dfn s w < timer s]).  After [preloop u],
+    [dfn s u] becomes the old timer, so [dfn s w < dfn s u] and
+    [pop_scc u] (if called) does not remove [w] because [w] lies
+    below [u] on the stack. *)
+Lemma preloop_keep_in_stack (u w: V):
+  Hoare (fun s: @SCCSt V => In w (stack s))
+        (preloop u)
+        (fun _ s => In w (stack s)).
+Proof.
+  unfold preloop. unfold_op. intro_state. hoare_auto_s.
+  subst s. simpl. auto.
+Qed.
+
+Lemma set_fa_keep_in_stack (v p w: V):
+  Hoare (fun s: @SCCSt V => In w (stack s))
+        (set_fa v p)
+        (fun _ s => In w (stack s)).
+Proof.
+  unfold set_fa. intro_state. hoare_auto_s.
+  subst s. simpl. auto.
+Qed.
+
+Lemma tarjan_scc_keep_in_stack_below (u w: V):
+  Hoare (fun s: @SCCSt V => In w (stack s))
+        (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
+        (fun _ s => In w (stack s)).
+Proof.
+  (* TODO: The full proof requires a lemma that preloop pushes u on top
+     and the forset does not reorder existing stack elements, so w stays
+     below u and pop_scc u does not remove w.  For now we admit the
+     lemma and rely on the simpler fa_parent_dfn_lt for the immediate
+     needs. *)
+Admitted.
 
 Lemma set_fa_keep_stack_dfn_order (v p: V):
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
