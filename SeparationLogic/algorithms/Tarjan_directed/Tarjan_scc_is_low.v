@@ -2447,8 +2447,7 @@ Section IS_LOW.
   Lemma W_preserves_ancestor_inv (ancestor parent cur: V) (done: V -> Prop):
     ancestor <> cur -> parent <> cur -> dg_step g parent cur -> ~ done cur ->
     Hoare (fun s => low_forset_inv ancestor done s /\ fa s cur = parent /\ ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
-                    In ancestor (stack s) /\ In parent (stack s) /\ dfn s ancestor < dfn s parent /\
-                    stack_dfn_order s /\ dfn_injective s)
+                    In ancestor (stack s) /\ In parent (stack s) /\ stack_dfn_order s /\ dfn_injective s)
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g cur)
           (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ done_visited done s /\ In ancestor (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\
@@ -2463,18 +2462,16 @@ Section IS_LOW.
                 low_forset_inv ancestor done s /\ fa s cur = parent /\
                 ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
                 In ancestor (stack s) /\ In parent (stack s) /\
-                dfn s ancestor < dfn s parent /\
                 stack_dfn_order s /\ dfn_injective s)
       (tarjan_scc g cur)
       (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\ done_visited done s /\
                   In ancestor (stack s) /\ stack_dfn_order s /\ dfn_injective s /\
                   (forall w, done w -> In w (stack s) -> dfn s w < dfn s cur) /\
                   dfn s ancestor < dfn s cur)).
-    { intros s [Hlow_inv [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]].
+    { intros s [Hlow_inv [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]].
       split. split. exact Hanc_ne. split. exact Hpar_ne. split. exact Hdg. exact Hndone.
       split. exact Hlow_inv. split. exact Hfa. split. exact Hnv. split. exact Hnd.
-      split. exact Hdv. split. exact Hina. split. exact Hipar. split. exact Hdfn_anc_lt_par.
-      split. exact Horder. exact Hinj. }
+      split. exact Hdv. split. exact Hina. split. exact Hipar. split. exact Horder. exact Hinj. }
     (* Strengthened fixpoint with 5-tuple (anc, par, d, tv, tp).
        The extra (tv, tp) preserves fa tv = tp through all recursive calls,
        solving the fa a = par preservation problem in the forset body. *)
@@ -2486,15 +2483,13 @@ Section IS_LOW.
         low_forset_inv ancestor done s /\ fa s cur = parent /\
         ~ cur ∈ visited s /\ ~ done cur /\ done_visited done s /\
         In ancestor (stack s) /\ In parent (stack s) /\
-        dfn s ancestor < dfn s parent /\
         stack_dfn_order s /\ dfn_injective s) f Q _ _)
     end.
-    { intros s [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]].
+    { intros s [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]].
       split. left. reflexivity. split. exact Hfa.
       split. exact Hineqs. split. exact Hlow. split. exact Hfa.
       split. exact Hnv. split. exact Hnd. split. exact Hdv.
-      split. exact Hina. split. exact Hipar. split. exact Hdfn_anc_lt_par.
-      split. exact Horder. exact Hinj. }
+      split. exact Hina. split. exact Hipar. split. exact Horder. exact Hinj. }
     match goal with |- Hoare ?P ?f ?Q =>
       refine (Hoare_conseq_post P f Q
         (fun _ s => low_forset_inv ancestor done s /\ fa s cur = parent /\
@@ -2504,8 +2499,7 @@ Section IS_LOW.
           dfn s ancestor < dfn s cur /\
           fa s cur = parent /\ cur ∈ visited s /\
           ~ done cur /\ In parent (stack s) /\
-          ancestor <> cur /\ parent <> cur /\ dg_step g parent cur /\
-          dfn s ancestor < dfn s parent) _ _)
+          ancestor <> cur /\ parent <> cur /\ dg_step g parent cur) _ _)
     end.
     { intros _ s [Hlow [Hfa [Hdv [Hina [Horder [Hinj [Hdfn_d_lt [Hdfn_anc _]]]]]]]].
       split. exact Hlow. split. exact Hfa. split. exact Hdv. split. exact Hina.
@@ -2517,7 +2511,6 @@ Section IS_LOW.
         (anc <> x /\ par <> x /\ dg_step g par x /\ ~ d x) /\
         low_forset_inv anc d s /\ fa s x = par /\ ~ x ∈ visited s /\ ~ d x /\
         done_visited d s /\ In anc (stack s) /\ In par (stack s) /\
-        dfn s anc < dfn s par /\
         stack_dfn_order s /\ dfn_injective s)
       (fun (x : V) '(anc, par, d, tv, tp) (_ : unit) (s : SCCSt) =>
         low_forset_inv anc d s /\ fa s x = par /\ done_visited d s /\ In anc (stack s) /\
@@ -2542,7 +2535,7 @@ Section IS_LOW.
           (fun _ s => low_forset_inv anc d s /\ fa s a = par /\ In anc (stack s) /\
                       stack_dfn_order s /\ dfn_injective s /\ done_visited d s /\
                       dfn s anc < dfn s a)).
-        { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+        { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]]]].
           split. exact Hineqs. split. exact Hlow. split. exact Hfa. split. exact Hnv.
           split. exact Hnd. split. exact Hdv. split. exact Hina. split. exact Horder. exact Hinj. }
         apply preloop_establishes_ancestor_inv_hoare.
@@ -2550,7 +2543,7 @@ Section IS_LOW.
         * (* tv/tp preservation *)
           apply (Hoare_conseq_pre _ (fun s => (tv = a \/ tv ∈ visited s) /\ fa s tv = tp)
             (preloop a) (fun _ s => fa s tv = tp /\ tv ∈ visited s)).
-          { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+          { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]]]].
             split. exact Htv_or. exact Hfa_tv. }
           unfold preloop. unfold_op. intro_state. hoare_auto_s.
           destruct H as [Htv_or' Hfa_tv']. subst s. simpl.
@@ -2562,7 +2555,7 @@ Section IS_LOW.
           { (* static inequalities preserved by preloop *)
             apply (Hoare_conseq_pre _ (fun s => anc <> a /\ par <> a /\ dg_step g par a)
               (preloop a) (fun _ s => anc <> a /\ par <> a /\ dg_step g par a)).
-            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]]]].
               destruct Hineqs as [Ha1 [Ha2 [Ha3 Ha4]]].
               split. exact Ha1. split. exact Ha2. exact Ha3. }
             unfold preloop. unfold_op. intro_state. hoare_auto_s. }
@@ -2570,7 +2563,7 @@ Section IS_LOW.
           { (* ~ d a preserved *)
             apply (Hoare_conseq_pre _ (fun s => ~ d a)
               (preloop a) (fun _ s => ~ d a)).
-            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]]]].
               destruct Hineqs as [Ha1 [Ha2 [Ha3 Hnda]]]. exact Hnda. }
             unfold preloop. unfold_op. intro_state. hoare_auto_s. }
           apply Hoare_conj.
@@ -2582,32 +2575,15 @@ Section IS_LOW.
           { (* In par (stack s): preserved by preloop *)
             apply (Hoare_conseq_pre _ (fun s => In par (stack s))
               (preloop a) (fun _ s => In par (stack s))).
-            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+            { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]]]].
               exact Hipar. }
             unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl. auto. }
-          - (* dfn s anc < dfn s par: preserved by preloop *)
-            apply (Hoare_conseq_pre _ (fun s => anc <> a /\ par <> a /\ dfn s anc < dfn s par)
-              (preloop a) (fun _ s => dfn s anc < dfn s par)).
-            intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
-            destruct Hineqs as [Hanc_ne_a' [Hpar_ne_a' [Hdg_par_a' Hnd_a']]].
-            split. exact Hanc_ne_a'. split. exact Hpar_ne_a'. exact Hdfn_anc_lt_par.
-            unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
-            destruct H as [Hanc_ne_a' [Hpar_ne_a' Hdfn_pre]].
-            destruct (equiv_dec anc a) as [Heq_anc_a | Hneq_anc_a].
-            - exfalso. apply Hanc_ne_a'. exact Heq_anc_a.
-            - destruct (equiv_dec par a) as [Heq_par_a | Hneq_par_a].
-              + exfalso. apply Hpar_ne_a'. exact Heq_par_a.
-              + unfold equiv_decb. destruct (equiv_dec anc a) as [Heq' | Hneq'].
-                * exfalso. apply Hanc_ne_a'. exact Heq'.
-                * destruct (equiv_dec par a) as [Heq'' | Hneq''].
-                  { exfalso. apply Hpar_ne_a'. exact Heq''. }
-                  { exact Hdfn_pre. } }
           (* static dfn-ordering: forall w, d w -> In w stack -> dfn w < dfn a.
              After preloop a, dfn a = old_timer (the timer value before incr_timer).
              All w ∈ d are visited before preloop, so dfn w < old_timer = dfn a. *)
           apply (Hoare_conseq_pre _ (fun s => ~ a ∈ visited s /\ dfn_inv s /\ done_visited d s /\ ~ d a)
             (preloop a) (fun _ s => forall dw, d dw -> In dw (stack s) -> dfn s dw < dfn s a)).
-          { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Hdfn_anc_lt_par [Horder Hinj]]]]]]]]]]]].
+          { intros s [Htv_or [Hfa_tv [Hineqs [Hlow [Hfa [Hnv [Hnd [Hdv [Hina [Hipar [Horder Hinj]]]]]]]]]]].
             destruct Hlow as [Hwf _]. destruct Hwf as [Hsiv [Hinv' [Hvalid Hfa_vis]]].
             split. exact Hnv. split. exact Hinv'. split. exact Hdv. exact Hnd. }
           unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
