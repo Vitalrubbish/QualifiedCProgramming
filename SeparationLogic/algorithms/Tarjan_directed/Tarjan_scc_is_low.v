@@ -1247,7 +1247,65 @@ Section IS_LOW.
             fa s v = u /\ wf_scc_state s /\ scc_is_low_v s v /\ dfn s u < dfn s v)
           (lv <- get' (fun s => low s v);; update_low u lv)
           (fun _ s => forset_inv u (done ∪ [v]) s).
-  Admitted.
+  Proof.
+    intro_state. destruct H as [Hfinv [Hinstk [Hfa_eq [Hwf [His_low Hdfn_lt]]]]].
+    eapply Hoare_bind. { eapply Hoare_get'. }
+    simpl. intros lv. apply Hoare_conseq_pre with
+      (P2 := fun s => forset_inv u done s /\ In v (stack s) /\ wf_scc_state s /\
+             scc_is_low_v s v /\ dfn s u < dfn s v /\ low s v = lv).
+    { intros s' [Hs'_eq Hlv_eq]. subst s'. split. exact Hfinv. split. exact Hinstk. split. exact Hwf.
+      split. exact His_low. split. exact Hdfn_lt. symmetry. exact Hlv_eq. }
+    clear Hfinv Hinstk Hwf His_low Hdfn_lt Hfa_eq.
+    intro_state. destruct H as [Hfinv' [Hinstk' [Hwf' [His_low' [Hdfn_lt' Hlv_eq]]]]].
+    destruct Hfinv' as [Hwf_inv [Huvis [Hinu [Hlow_le Hforall]]]].
+    unfold update_low. (* Don't unfold_op! Keep set_low as a sub-program *)
+    intro_state. hoare_auto_s.
+    { (* n < low s0 u: set_low branch *)
+      pose (f := fun (st: SCCSt) => set low (fun low0 x => if x ==b u then low s1 v else low0 x) st).
+      apply (Hoare_conseq_post (fun st' => st' = s1) (update' f)
+        (fun _ st' => forset_inv u (done ∪ [v]) st') (fun _ st' => st' = f s1)).
+      { intros _ st' Heq. subst st'.
+        unfold f, forset_inv. simpl.
+        split. { exact Hwf_inv. } split. { exact Huvis. } split. { exact Hinu. } split.
+        { simpl. unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+          apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ H) Hlow_le). }
+        { intros w Hor Hdg_w. simpl. unfold equiv_decb. destruct Hor as [Hw_done|Hw_eq].
+          { destruct (Hforall w Hw_done Hdg_w) as [Hfa_w Hstk_w].
+            destruct (equiv_dec w u) as [Heq_wu|Hneq_wu].
+            { rewrite Heq_wu. split.
+              { intros _. apply Nat.le_refl. }
+              { intros _. simpl. unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+                apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ H) Hlow_le). } }
+            { split; auto. } }
+          { rewrite Hw_eq. split.
+            { intro Hfa_vu. simpl. unfold equiv_decb.
+              destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity]. apply Nat.le_min_r. }
+            { intro Hv_stk. simpl. unfold equiv_decb.
+              destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+              transitivity (low s1 v). apply Nat.le_min_r.
+              unfold scc_is_low_v, scc_is_low_v_val in His_low'.
+              destruct His_low' as [x [[Hxin Hxmin] Heqx]].
+              assert (Hv_tree: scc_low_tree s1 v v). {
+                unfold scc_low_tree, scc_low_reachable.
+                exists v. split; [apply rt_refl|left;reflexivity]. }
+              rewrite <- Heqx. apply Hxmin. exact Hv_tree. } } }
+      apply Hoare_update'. }
+    { (* ~ n < low s0 u: skip branch *)
+      destruct H1 as [Heq_skip _]. subst s.
+      destruct H as [Hwf_pre _]. unfold forset_inv.
+      refine (conj Hwf_inv (conj Huvis (conj Hinu (conj Hlow_le _)))).
+      intros w Hor Hdg_w. destruct Hor as [Hw_done|Hw_eq].
+      { apply Hforall; auto. }
+      { rewrite Hw_eq. split.
+        { intro Hfa_vu. apply Nat.nlt_ge. exact Heq_skip. }
+        { intro Hv_stk.
+          unfold scc_is_low_v, scc_is_low_v_val in His_low'.
+          destruct His_low' as [x [[Hxin Hxmin] Heqx]].
+          assert (Hv_tree: scc_low_tree s1 v v). {
+            unfold scc_low_tree, scc_low_reachable.
+            exists v. split; [apply rt_refl|left;reflexivity]. }
+          rewrite <- Heqx. apply (Nat.le_trans _ _ _ Hlow_le (Hxmin v Hv_tree)). } } }
+  Qed.
 
   (** [update_low_back_preserves_forset_inv]: after [update_low u (dfn v)]
       (back edge), [forset_inv u done] is preserved and the new inequality
@@ -1257,7 +1315,52 @@ Section IS_LOW.
             dg_step g u v /\ fa s v <> u /\ dfn s v < dfn s u)
           (dv <- get' (fun s => dfn s v);; update_low u dv)
           (fun _ s => forset_inv u (done ∪ [v]) s).
-  Admitted.
+  Proof.
+    intro_state. destruct H as [Hfinv [Hinstk [Hdg [Hfa_ne Hdfn_lt]]]].
+    eapply Hoare_bind. { eapply Hoare_get'. }
+    simpl. intros dv. apply Hoare_conseq_pre with
+      (P2 := fun s => forset_inv u done s /\ In v (stack s) /\ dg_step g u v /\
+             fa s v <> u /\ dfn s v < dfn s u /\ dfn s v = dv).
+    { intros s' [Hs'_eq Hdv_eq]. subst s'. split. exact Hfinv. split. exact Hinstk. split. exact Hdg.
+      split. exact Hfa_ne. split. exact Hdfn_lt. symmetry. exact Hdv_eq. }
+    clear Hfinv Hinstk Hdg Hfa_ne Hdfn_lt.
+    intro_state. destruct H as [Hfinv' [Hinstk' [Hdg' [Hfa_ne' [Hdfn_lt' Hdv_eq]]]]].
+    destruct Hfinv' as [Hwf_inv [Huvis [Hinu [Hlow_le Hforall]]]].
+    unfold update_low. (* Don't unfold_op! *)
+    intro_state. hoare_auto_s.
+    { (* n < low s0 u: set_low branch — new low u = dfn s1 v *)
+      pose (f := fun (st: SCCSt) => set low (fun low0 x => if x ==b u then dfn s1 v else low0 x) st).
+      apply (Hoare_conseq_post (fun st' => st' = s0) (update' f)
+        (fun _ st' => forset_inv u (done ∪ [v]) st') (fun _ st' => st' = f s0)).
+      { intros _ st' Heq. subst st'.
+        unfold f, forset_inv. simpl.
+        split. { exact Hwf_inv. } split. { exact Huvis. } split. { exact Hinu. } split.
+        { simpl. unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+          apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ H) Hlow_le). }
+        { intros w Hor Hdg_w. simpl. unfold equiv_decb. destruct Hor as [Hw_done|Hw_eq].
+          { destruct (Hforall w Hw_done Hdg_w) as [Hfa_w Hstk_w].
+            destruct (equiv_dec w u) as [Heq_wu|Hneq_wu].
+            { rewrite Heq_wu. split.
+              { intros _. apply Nat.le_refl. }
+              { intros _. simpl. unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+                apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ H) Hlow_le). } }
+            { split; auto. } }
+          { rewrite Hw_eq. split.
+            { intro Hfa_vu. exfalso. apply Hfa_ne'. exact Hfa_vu. }
+            { intro Hv_stk. simpl. unfold equiv_decb.
+              destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity]. apply Nat.le_min_r. } } }
+      apply Hoare_update'. }
+    { (* ~ n < low s0 u: skip branch *)
+      destruct H1 as [Heq_skip _]. subst s.
+      unfold forset_inv.
+      refine (conj Hwf_inv (conj Huvis (conj Hinu (conj Hlow_le _)))).
+      intros w Hor Hdg_w. destruct Hor as [Hw_done|Hw_eq].
+      { apply Hforall; auto. }
+      { rewrite Hw_eq. split.
+        { intro Hfa_vu. exfalso. apply Hfa_ne'. exact Hfa_vu. }
+        { intro Hv_stk. apply Nat.nlt_ge in Heq_skip.
+          transitivity (low s1 v); [exact Hlow_le|exact (Nat.le_trans _ _ _ Heq_skip (Nat.lt_le_incl _ _ Hdfn_lt'))]. } } }
+  Qed.
 
   (** [cross_edge_preserves_forset_inv]: for a cross edge (visited, not on stack),
       skip preserves [forset_inv] and adds [v] to [done] vacuously. *)
