@@ -1662,6 +1662,115 @@ Section IS_LOW.
     - intros v Hnv Hfa_v. apply Hfa_not_done; [intro Hv; apply Hnv; left; exact Hv | exact Hfa_v].
   Qed.
 
+  (** [set_low_tree_preserves_I]: tree-edge version of set_low preservation.
+      When [low a < low u] after processing tree child [a] (where [fa a = u]),
+      [set_low u (low a)] establishes [I (done ∪ [a])].
+      Analogous to [set_low_back_preserves_I] but uses the tree-edge witness
+      ([fa a = u]) instead of the back-edge witness ([In a (stack)]). *)
+  Lemma set_low_tree_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt):
+    wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
+    (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
+    done_visited done s -> stack_dfn_order s -> dfn_injective s ->
+    low_src u done s ->
+    (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
+    fa_child_of_u u s -> fa_not_done_implies_eq_u u (done ∪ [a]) s ->
+    a ∈ visited s -> dg_step g u a -> fa s a = u -> fa s a <> a ->
+    scc_is_low_v s a -> low s a < low s u ->
+    Hoare (fun s' => s' = s) (set_low u (low s a)) (fun _ s' =>
+      forset_inv u (done ∪ [a]) s' /\
+      done_visited (done ∪ [a]) s' /\
+      In u (stack s') /\
+      stack_dfn_order s' /\
+      dfn_injective s' /\
+      low_src u (done ∪ [a]) s' /\
+      (forall v, (done ∪ [a]) v -> dg_step g u v -> fa s' v = u -> fa s' v <> v -> scc_is_low_v s' v) /\
+      fa_child_of_u u s' /\
+      fa_not_done_implies_eq_u u (done ∪ [a]) s').
+  Proof.
+    intros Hwf Huvis Hinu Hlow_le Hforall Hdone_vis Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done
+           Hvis_a Hdg Hfa_a Hfa_ne_a Hscc_a Hlt_low.
+    unfold set_low; intro_state; hoare_auto_s.
+    rewrite H in H1. subst s0. rewrite H1; clear H1 s1.
+    repeat (unfold forset_inv, done_visited, low_src, fa_child_of_u, fa_not_done_implies_eq_u,
+            wf_scc_state, stack_in_visited, dfn_inv, dfn_valid, fa_visited,
+            done_visited, stack_dfn_order, dfn_injective, scc_is_low_v, scc_is_low_v_val,
+            min_value_of_subset, min_object_of_subset); simpl.
+    repeat split.
+    - destruct Hwf as [Hsiv [[Hlt [Hiff Hpos]] [Hvalid Hfa_vis]]]. exact Hsiv.
+    - destruct Hwf as [Hsiv [[Hlt [Hiff Hpos]] [Hvalid Hfa_vis]]]. exact Hlt.
+    - destruct Hwf as [Hsiv [[Hlt [Hiff Hpos]] [Hvalid Hfa_vis]]]. apply Hiff.
+    - destruct Hwf as [Hsiv [[Hlt [Hiff Hpos]] [Hvalid Hfa_vis]]]. apply Hiff.
+    - destruct Hwf as [Hsiv [[Hlt [Hiff Hpos]] [Hvalid Hfa_vis]]]. exact Hpos.
+    - intros x y Hstep.
+      destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]]. apply Hvalid.
+      unfold state_to_dfs_tree in Hstep |- *. simpl in Hstep |- *. exact Hstep.
+    - destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]]. exact Hfa_vis.
+    - exact Huvis.
+    - exact Hinu.
+    - unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+      apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ Hlt_low) Hlow_le).
+    - rename H into Hor. rename H1 into Hdg_v. destruct Hor as [Hv_done | Hv_eq_a].
+      + intros Hfa_eq1.
+        unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+        destruct (equiv_dec v u) as [Heq_vu | Hneq_vu].
+        * assert (Heq_vu_eq: v = u) by apply Heq_vu. subst v.
+          destruct (equiv_dec u u) as [_|_]; apply Nat.le_refl.
+        * destruct (Hforall v Hv_done Hdg_v) as [Hfa_part _].
+          apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ Hlt_low) (Hfa_part Hfa_eq1)).
+      + sets_unfold in Hv_eq_a; subst v.
+        unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+        destruct (equiv_dec a u) as [Heq_au | Hneq_au]; intros _; apply Nat.le_refl.
+    - rename H into Hor. rename H1 into Hdg_v. destruct Hor as [Hv_done | Hv_eq_a].
+      + intros Hinstk1.
+        unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+        destruct (equiv_dec v u) as [Heq_vu | Hneq_vu].
+        * assert (Heq_vu_eq: v = u) by apply Heq_vu. subst v.
+          unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+          apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ Hlt_low) Hlow_le).
+        * destruct (Hforall v Hv_done Hdg_v) as [_ Hstk_part].
+          apply (Nat.le_trans _ _ _ (Nat.lt_le_incl _ _ Hlt_low) (Hstk_part Hinstk1)).
+      + sets_unfold in Hv_eq_a; subst v.
+        unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+        intros _.
+        unfold scc_is_low_v, scc_is_low_v_val, min_value_of_subset in Hscc_a.
+        destruct Hscc_a as [a0 [Hmo_a0 Heq_a0]].
+        unfold min_object_of_subset in Hmo_a0.
+        destruct Hmo_a0 as [_ Hmo_forall].
+        assert (Hineq: dfn s a0 <= dfn s a) by
+          (apply Hmo_forall;
+           unfold scc_low_tree, scc_low_reachable;
+           exists a; split; [apply rt_refl | left; reflexivity]).
+        rewrite <- Heq_a0. exact Hineq.
+    - intros w Hor. destruct Hor as [Hw_done | Hw_eq_a].
+      + apply Hdone_vis. exact Hw_done.
+      + sets_unfold in Hw_eq_a; subst w; exact Hvis_a.
+    - exact Hinu.
+    - exact Horder.
+    - exact Hinj.
+    - right. left. exists a.
+      split; [right; reflexivity | split; [exact Hdg | split; [exact Hfa_a | split; [exact Hfa_ne_a |]]]].
+      unfold equiv_decb.
+      destruct (equiv_dec u u) as [_|Hc]; [|exfalso;apply Hc;reflexivity].
+      destruct (equiv_dec a u) as [Heq_au | Hneq_au]; reflexivity.
+    - intros v Hor Hdg_v Hfa_v Hfa_ne_v. destruct Hor as [Hv_done | Hv_eq_a].
+      + assert (Hv_ne_u: v <> u). { intro Heq; subst v; exfalso; apply Hfa_ne_v; exact Hfa_v. }
+        assert (Hlow_eq: (if v ==b u then low s a else low s v) = low s v). {
+          unfold equiv_decb; destruct (equiv_dec v u) as [Heq_vu | Hneq_vu]; [exfalso; apply Hv_ne_u; apply Heq_vu | reflexivity]. }
+        rewrite Hlow_eq.
+        unfold scc_low_tree, scc_low_reachable, scc_back_edge; simpl.
+        apply Hchild; [exact Hv_done | exact Hdg_v | exact Hfa_v | exact Hfa_ne_v].
+      + sets_unfold in Hv_eq_a; subst v.
+        (* a ≠ u since fa a = u and fa a ≠ a, so set_low doesn't change low a.
+           The scc_is_low_v is unchanged by set_low for a. *)
+        unfold scc_is_low_v, scc_is_low_v_val, scc_low_tree, scc_low_reachable, scc_back_edge.
+        simpl. unfold equiv_decb.
+        destruct (equiv_dec a u) as [Heq_au | Hneq_au]; [exfalso; apply Hfa_ne_a; rewrite <- Heq_au in Hfa_a; exact Hfa_a |].
+        simpl.
+        exact Hscc_a.
+    - exact Hfa_child.
+    - exact Hfa_not_done.
+  Qed.
+
   (** [W_preserves_ancestor_I]: The recursive call [W a] (tarjan_scc a)
       preserves all components of [I done] that concern the ancestor [u].
       Structural justification (Design Doc §8.4, lines 480-484):
@@ -1803,14 +1912,25 @@ Section IS_LOW.
   Qed.
 
   (** [tree_edge_preserves_I]: tree-edge branch composes [set_fa],
-      [W a] (via [W_preserves_ancestor_I]), and [update_low_tree]
-      to establish [I (done ∪ [a])].
-      TODO: Steps 1 (set_fa) and 3 (update_low) need helper lemmas
-      [set_fa_preserves_I] and [update_low_tree_preserves_I] similar
-      to [set_low_back_preserves_I]. *)
+      [W a] (via [W_preserves_ancestor_I]), and [update_low]
+      to establish [I (done ∪ [a])]. *)
   Lemma tree_edge_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt)
         (W: V -> program SCCSt unit):
     (forall v, Hoare (fun s' => low_pre v s') (W v) (fun _ s' => low_post v s')) ->
+    (forall v (anc: V) (d: V -> Prop) (s0: SCCSt),
+       forset_inv anc d s0 -> In anc (stack s0) -> stack_dfn_order s0 ->
+       dfn_injective s0 -> low_src anc d s0 ->
+       (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
+        scc_is_low_v s0 w) ->
+       fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
+       done_visited d s0 -> dfn s0 anc < dfn s0 v -> ~ v ∈ visited s0 ->
+       Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
+         forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
+         dfn_injective s' /\ low_src anc d s' /\
+         (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
+          scc_is_low_v s' w) /\
+         fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
+         done_visited d s' /\ low_post v s')) ->
     wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
     (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
     done_visited done s -> stack_dfn_order s -> dfn_injective s ->
