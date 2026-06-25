@@ -1421,24 +1421,100 @@ Section IS_LOW.
   (* 7. Bridging Lemma: forset_inv → scc_is_low_v                   *)
   (* ================================================================ *)
 
+  (** Helper lemma: low[u] ≤ dfn[w] for every w in scc_low_tree s u,
+      using the forset_inv inequalities and the children's low-link correctness. *)
+  Lemma low_u_le_dfn_scc_low_tree (u: V) (s: SCCSt):
+    u ∈ visited s ->
+    low s u <= dfn s u ->
+    (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
+    (forall v, dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
+    (forall v, dg_step (state_to_dfs_tree g s root) u v -> scc_is_low_v s v) ->
+    forall w, scc_low_tree s u w -> low s u <= dfn s w.
+  Proof.
+    intros Huvis Hle_dfnu Hfa_child Hforall IH_child w Hw.
+    apply (scc_low_tree_decompose s u Huvis) in Hw.
+    sets_unfold in Hw. destruct Hw as [[Heq_wu | Hback] | Hchild].
+    - (* w = u *) subst w. exact Hle_dfnu.
+    - (* w is a back-edge target of u *)
+      destruct Hback as [Hstep [Hinstk Hnotree]].
+      destruct (Hforall w Hstep) as [_ Hstk_part].
+      apply Hstk_part. exact Hinstk.
+    - (* w reachable through tree child v *)
+      destruct Hchild as [v [Htree Hvw]].
+      apply tree_step_char in Htree as [Hfa_eq [Hfa_ne Hvis_v]].
+      assert (Hdg_v: dg_step g u v). {
+        apply (Hfa_child v). split; [exact Hfa_eq | exact Hfa_ne]. }
+      destruct (Hforall v Hdg_v) as [Hfa_part _].
+      specialize (Hfa_part Hfa_eq).
+      assert (Htree_uv: dg_step (state_to_dfs_tree g s root) u v).
+      { apply tree_step_char_backward; auto. }
+      pose proof (IH_child v Htree_uv) as Hchild_low.
+      unfold scc_is_low_v, scc_is_low_v_val in Hchild_low.
+      destruct Hchild_low as [x [[Hx_in Hx_min] Heqx]].
+      assert (Hlow_v_le_dfn_w: low s v <= dfn s w). {
+        rewrite <- Heqx. apply Hx_min. unfold scc_low_tree. exact Hvw. }
+      exact (Nat.le_trans _ _ _ Hfa_part Hlow_v_le_dfn_w).
+  Qed.
+
   (** [forset_inv_implies_scc_is_low_v]: When [done = dg_step g u]
       (all neighbours processed), the inequality invariant plus the
-      child low-link induction hypothesis implies [scc_is_low_v s u]. *)
+      child low-link induction hypothesis plus a source-tracking
+      disjunction yields [scc_is_low_v s u].
+      The source tracking says [low s u] comes from [dfn s u],
+      a tree-child's [low], or a back-edge target's [dfn]. *)
   Lemma forset_inv_implies_scc_is_low_v (u: V) (s: SCCSt):
     forset_inv u (dg_step g u) s ->
     done_visited (dg_step g u) s ->
     (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
     (forall v, dg_step (state_to_dfs_tree g s root) u v -> scc_is_low_v s v) ->
+    (low s u = dfn s u \/
+     (exists v, dg_step g u v /\ fa s v = u /\ low s u = low s v) \/
+     (exists w, dg_step g u w /\ In w (stack s) /\ low s u = dfn s w)) ->
     scc_is_low_v s u.
   Proof.
-    intros Hfinv Hdone_vis Hfa_child IH_child.
+    intros Hfinv Hdone_vis Hfa_child IH_child Hsrc.
     destruct Hfinv as [Hwf [Huvis [Hinu [Hlow_le Hforall]]]].
-    (* We first prove scc_low_valid_v s u, then use induction lemma *)
-    apply (scc_is_low_induction_is_low s u Huvis IH_child).
-    (* Now prove scc_low_valid_v s u from forset_inv *)
-    unfold scc_low_valid_v.
-    (* TODO: need to relate low s u to the min value of children/bedges using Hforall *)
-    (* This requires Step A (lower bound) and Step B (upper bound/existence) *)
+    unfold scc_is_low_v, scc_is_low_v_val.
+    (* Use min_nonempty_exists to find the min dfn in scc_low_tree *)
+    assert (Htree_nonempty: exists w, scc_low_tree s u w). {
+      exists u. unfold scc_low_tree, scc_low_reachable.
+      exists u. split; [apply rt_refl | left; reflexivity]. }
+    pose proof (min_nonempty_exists (dfn s) (scc_low_tree s u) Htree_nonempty)
+      as [m Hmin].
+    unfold min_value_of_subset in Hmin.
+    destruct Hmin as [w [[Hw_in Hw_min] Heq_m]].
+    (* Prove low s u <= dfn s w via the helper lemma *)
+    assert (Hlow_le_min: low s u <= dfn s w). {
+      apply (low_u_le_dfn_scc_low_tree u s Huvis Hlow_le Hfa_child); auto. }
+    (* Prove dfn s w <= low s u using the source tracking *)
+    assert (Hmin_le_low: dfn s w <= low s u). {
+      destruct Hsrc as [Heq_dfnu | [[v [Hdg_v [Hfa_v Heq_lowv]]] | [v [Hdg_v [Hinstk_v Heq_dfnv]]]]].
+      - (* low s u = dfn s u *)
+        assert (Hu_in: scc_low_tree s u u). {
+          unfold scc_low_tree, scc_low_reachable.
+          exists u. split; [apply rt_refl | left; reflexivity]. }
+        apply Hw_min in Hu_in. rewrite Heq_dfnu. exact Hu_in.
+      - (* low s u = low s v for tree child v *)
+        assert (Htree: dg_step (state_to_dfs_tree g s root) u v). {
+          apply tree_step_char_backward; auto. apply Hdone_vis in Hdg_v. exact Hdg_v.
+          apply (Hfa_child v). split; auto. }
+        pose proof (IH_child v Htree) as Hchild.
+        unfold scc_is_low_v, scc_is_low_v_val in Hchild.
+        destruct Hchild as [x [[Hx_in Hx_min'] Heqx]].
+        assert (Hx_in_u: scc_low_tree s u x). {
+          unfold scc_low_tree, scc_low_reachable.
+          destruct Hx_in as [z' [Hz_reach Hz_end]].
+          exists z'. split; [eapply rt_trans; [apply rt_step; exact Htree | exact Hz_reach] | exact Hz_end]. }
+        apply Hw_min in Hx_in_u. rewrite <- Heq_lowv. rewrite Heqx. exact Hx_in_u.
+      - (* low s u = dfn s v for back-edge target v *)
+        assert (Hv_in: scc_low_tree s u v). {
+          unfold scc_low_tree, scc_low_reachable.
+          exists u. split; [apply rt_refl | right].
+          unfold scc_back_edge. split; [exact Hdg_v | split; [exact Hinstk_v |]].
+          intro Htree_uv. apply tree_step_char in Htree_uv as [Hfa_uv _]. }
+        apply Hw_min in Hv_in. rewrite Heq_dfnv. exact Hv_in. }
+    apply Nat.le_antisymm in Hlow_le_min; [| exact Hmin_le_low].
+    rewrite <- Heq_m. rewrite Hlow_le_min. reflexivity.
   Admitted.
 
   (* ================================================================ *)
