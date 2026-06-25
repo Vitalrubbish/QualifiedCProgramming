@@ -1696,49 +1696,27 @@ Section IS_LOW.
             stack_dfn_order, dfn_injective, scc_is_low_v, scc_is_low_v_val,
             min_value_of_subset, min_object_of_subset); simpl.
     repeat split.
-    (* 1-5: wf_scc_state components — unchanged by set_fa *)
-    - destruct Hwf as [Hsiv _]. exact Hsiv.
-    - destruct Hwf as [_ [[Hlt _] _]]. exact Hlt.
-    - destruct Hwf as [_ [[_ [Hiff _]] _]]. apply Hiff.
-    - destruct Hwf as [_ [[_ [Hiff _]] _]]. apply Hiff.
-    - destruct Hwf as [_ [[_ [_ Hpos]] _]]. exact Hpos.
-    (* 6: dfn_valid — state_to_dfs_tree unchanged since a not visited.
-       TODO: use set_fa_preserves_tree_edges lemma. *)
-    - admit.
-    (* 7: fa_visited — for v≠a unchanged; for v=a, fa[a]=u and u∈visited *)
-    - { intros v Hfa_ne; unfold equiv_decb in Hfa_ne; destruct (equiv_dec v a) as [Heq|Hneq];
-        [assert (Heq_eq: v = a) by apply Heq; subst v; unfold equiv_decb; destruct (equiv_dec a a) as [_|Hc]; [|exfalso;apply Hc;reflexivity]; exact Huvis
-        | unfold equiv_decb; destruct (equiv_dec v a) as [Heq' | Hneq']; [exfalso; apply Hneq; apply Heq' | destruct Hwf as [_ [_ [_ Hfa_vis]]]; apply Hfa_vis; exact Hfa_ne]]. }
-    (* 8-10: direct *)
-    - exact Huvis.
-    - exact Hinu.
-    - exact Hlow_le.
-    (* 11: forset_inv forall — for v∈done, v≠a since a∉done, fa unchanged *)
-    - { rename H into Hv_done; rename H1 into Hdg_v; unfold equiv_decb;
-        destruct (equiv_dec v a) as [Heq|Hneq];
-        [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hv_done
-        | unfold equiv_decb; destruct (equiv_dec v a) as [Heq' | Hneq']; [exfalso; apply Hneq; apply Heq' | destruct (Hforall v Hv_done Hdg_v) as [Hfa_part _]; exact Hfa_part]]. }
-    (* 12-16: direct *)
-    - exact Hdone_vis.
-    - exact Hinu.
-    - exact Horder.
-    - exact Hinj.
-    - exact Hsrc.
-    (* 17: child IH — v∈done so v≠a, fa unchanged *)
-    - { rename H into Hv_done; rename H1 into Hdg_v; rename H2 into Hfa_v; rename H3 into Hfa_ne_v;
-        unfold equiv_decb; destruct (equiv_dec v a) as [Heq|Hneq];
-        [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hv_done
-        | apply Hchild; [exact Hv_done | exact Hdg_v | exact Hfa_v | exact Hfa_ne_v]]. }
-    (* 18: fa_child_of_u — for v=a: fa[a]=u, need dg_step g u a *)
-    - { unfold fa_child_of_u; intros v [Hfa_eq Hfa_ne]; unfold equiv_decb;
-        destruct (equiv_dec v a) as [Heq|Hneq];
-        [assert (Heq_eq: v = a) by apply Heq; subst v; exact Hdg
-        | apply Hfa_child; split; [exact Hfa_eq | exact Hfa_ne]]. }
-    (* 19: fa_not_done — for v=a: ~done a, fa[a]=u, but a≠u, vacuous *)
-    - { unfold fa_not_done_implies_eq_u; intros v Hnv Hfa_v; unfold equiv_decb;
-        destruct (equiv_dec v a) as [Heq|Hneq];
-        [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hnv
-        | apply Hfa_not_done; [exact Hnv | exact Hfa_v]]. }
+    all: try (destruct Hwf as [Hsiv [[Hlt [Hiff Hpos]] [Hvalid Hfa_vis]]]).
+    (* stack_in_visited *) exact Hsiv.
+    (* dfn < timer *) exact Hlt.
+    (* dfn=0 <-> ~visited, dir1 *) apply Hiff.
+    (* dfn=0 <-> ~visited, dir2 *) apply Hiff.
+    (* 0 < timer *) exact Hpos.
+    (* dfn_valid — TODO: set_fa_preserves_tree_edges *) admit.
+    (* fa_visited *) { intros v0 Hfa_ne; unfold equiv_decb in Hfa_ne; destruct (equiv_dec v0 a) as [Heq|Hneq]; [assert (Heq_eq: v0 = a) by apply Heq; subst v0; unfold equiv_decb; destruct (equiv_dec a a) as [_|Hc]; [|exfalso;apply Hc;reflexivity]; exact Huvis | unfold equiv_decb; destruct (equiv_dec v0 a) as [Heq'|Hneq']; [exfalso; apply Hneq; apply Heq' | apply Hfa_vis; exact Hfa_ne]]. }
+    (* u in visited *) exact Huvis.
+    (* In u stack *) exact Hinu.
+    (* low u <= dfn u *) exact Hlow_le.
+    (* forset_inv forall — fa part *) { rename H into Hv_done; rename H1 into Hdg_v; unfold equiv_decb; destruct (equiv_dec v a) as [Heq|Hneq]; [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hv_done | destruct (Hforall v Hv_done Hdg_v) as [Hfa_part _]; exact Hfa_part]. }
+    (* forset_inv forall — stack part *) { rename H into Hv_done; rename H1 into Hdg_v; unfold equiv_decb; destruct (equiv_dec v a) as [Heq|Hneq]; [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hv_done | destruct (Hforall v Hv_done Hdg_v) as [_ Hstk_part]; exact Hstk_part]. }
+    (* done_visited *) exact Hdone_vis.
+    (* In u stack *) exact Hinu.
+    (* stack_dfn_order *) exact Horder.
+    (* dfn_injective *) exact Hinj.
+    (* low_src *) { unfold low_src; unfold low_src in Hsrc; destruct Hsrc as [Heq_dfnu | [[v0 [Hv0 [Hdg_v0 [Hfa_v0 [Hfa_ne_v0 Heq_low]]]]] | [w0 [Hw0 [Hdg_w0 [Hinstk_w0 [Hfa_ne_w0 Heq_dfn]]]]]]]; [left; exact Heq_dfnu | right; left; exists v0; split; [exact Hv0 | split; [exact Hdg_v0 | unfold equiv_decb; destruct (equiv_dec v0 a) as [Heq_va | Hneq_va]; [exfalso; apply Hnv_done; rewrite <- Heq_va; exact Hv0 | split; [exact Hfa_v0 | split; [exact Hfa_ne_v0 | exact Heq_low]]]]] | right; right; exists w0; split; [exact Hw0 | split; [exact Hdg_w0 | split; [exact Hinstk_w0 | unfold equiv_decb; destruct (equiv_dec w0 a) as [Heq_wa | Hneq_wa]; [exfalso; apply Hnv_done; rewrite <- Heq_wa; exact Hw0 | split; [exact Hfa_ne_w0 | exact Heq_dfn]]]]]]. }
+    (* child IH — scc_low_tree(set_fa s) ≠ scc_low_tree(s), needs simplification lemma *) admit.
+    (* fa_child_of_u *) { intros v0 [Hfa_eq Hfa_ne]; unfold equiv_decb; destruct (equiv_dec v0 a) as [Heq|Hneq]; [assert (Heq_eq: v0 = a) by apply Heq; subst v0; exact Hdg | unfold equiv_decb in Hfa_eq, Hfa_ne; destruct (equiv_dec v0 a) as [Heq'|Hneq']; [exfalso; apply Hneq; apply Heq' | apply Hfa_child; split; [exact Hfa_eq | exact Hfa_ne]]]. }
+    (* fa_not_done *) admit.
   Admitted.
 
   Lemma W_preserves_ancestor_I (u a: V) (done: V -> Prop) (s: SCCSt)
