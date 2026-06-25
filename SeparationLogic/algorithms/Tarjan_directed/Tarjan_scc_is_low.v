@@ -1669,6 +1669,78 @@ Section IS_LOW.
       3. [pop_scc] within [W a] only pops vertices with dfn ≥ dfn[a] > dfn[u]
       4. Thus [u] stays on the stack, [low[u]] unchanged, [fa_child_of_u u] preserved.
       TODO: formal proof via fixpoint induction on [W]. *)
+  Lemma set_fa_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt):
+    wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
+    (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
+    done_visited done s -> stack_dfn_order s -> dfn_injective s ->
+    low_src u done s ->
+    (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
+    fa_child_of_u u s -> fa_not_done_implies_eq_u u done s ->
+    ~ a ∈ visited s -> ~ a ∈ done -> dg_step g u a ->
+    Hoare (fun s' => s' = s) (set_fa a u) (fun _ s' =>
+      forset_inv u done s' /\
+      done_visited done s' /\
+      In u (stack s') /\
+      stack_dfn_order s' /\
+      dfn_injective s' /\
+      low_src u done s' /\
+      (forall v, done v -> dg_step g u v -> fa s' v = u -> fa s' v <> v -> scc_is_low_v s' v) /\
+      fa_child_of_u u s' /\
+      fa_not_done_implies_eq_u u done s').
+  Proof.
+    intros Hwf Huvis Hinu Hlow_le Hforall Hdone_vis Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done Hnv_vis Hnv_done Hdg.
+    unfold set_fa; intro_state; hoare_auto_s.
+    rewrite H in H1; subst s0; rewrite H1; clear H1 s1.
+    repeat (unfold forset_inv, done_visited, low_src, fa_child_of_u, fa_not_done_implies_eq_u,
+            wf_scc_state, stack_in_visited, dfn_inv, dfn_valid, fa_visited,
+            stack_dfn_order, dfn_injective, scc_is_low_v, scc_is_low_v_val,
+            min_value_of_subset, min_object_of_subset); simpl.
+    repeat split.
+    (* 1-5: wf_scc_state components — unchanged by set_fa *)
+    - destruct Hwf as [Hsiv _]. exact Hsiv.
+    - destruct Hwf as [_ [[Hlt _] _]]. exact Hlt.
+    - destruct Hwf as [_ [[_ [Hiff _]] _]]. apply Hiff.
+    - destruct Hwf as [_ [[_ [Hiff _]] _]]. apply Hiff.
+    - destruct Hwf as [_ [[_ [_ Hpos]] _]]. exact Hpos.
+    (* 6: dfn_valid — state_to_dfs_tree unchanged since a not visited.
+       TODO: use set_fa_preserves_tree_edges lemma. *)
+    - admit.
+    (* 7: fa_visited — for v≠a unchanged; for v=a, fa[a]=u and u∈visited *)
+    - { intros v Hfa_ne; unfold equiv_decb in Hfa_ne; destruct (equiv_dec v a) as [Heq|Hneq];
+        [assert (Heq_eq: v = a) by apply Heq; subst v; unfold equiv_decb; destruct (equiv_dec a a) as [_|Hc]; [|exfalso;apply Hc;reflexivity]; exact Huvis
+        | unfold equiv_decb; destruct (equiv_dec v a) as [Heq' | Hneq']; [exfalso; apply Hneq; apply Heq' | destruct Hwf as [_ [_ [_ Hfa_vis]]]; apply Hfa_vis; exact Hfa_ne]]. }
+    (* 8-10: direct *)
+    - exact Huvis.
+    - exact Hinu.
+    - exact Hlow_le.
+    (* 11: forset_inv forall — for v∈done, v≠a since a∉done, fa unchanged *)
+    - { rename H into Hv_done; rename H1 into Hdg_v; unfold equiv_decb;
+        destruct (equiv_dec v a) as [Heq|Hneq];
+        [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hv_done
+        | unfold equiv_decb; destruct (equiv_dec v a) as [Heq' | Hneq']; [exfalso; apply Hneq; apply Heq' | destruct (Hforall v Hv_done Hdg_v) as [Hfa_part _]; exact Hfa_part]]. }
+    (* 12-16: direct *)
+    - exact Hdone_vis.
+    - exact Hinu.
+    - exact Horder.
+    - exact Hinj.
+    - exact Hsrc.
+    (* 17: child IH — v∈done so v≠a, fa unchanged *)
+    - { rename H into Hv_done; rename H1 into Hdg_v; rename H2 into Hfa_v; rename H3 into Hfa_ne_v;
+        unfold equiv_decb; destruct (equiv_dec v a) as [Heq|Hneq];
+        [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hv_done
+        | apply Hchild; [exact Hv_done | exact Hdg_v | exact Hfa_v | exact Hfa_ne_v]]. }
+    (* 18: fa_child_of_u — for v=a: fa[a]=u, need dg_step g u a *)
+    - { unfold fa_child_of_u; intros v [Hfa_eq Hfa_ne]; unfold equiv_decb;
+        destruct (equiv_dec v a) as [Heq|Hneq];
+        [assert (Heq_eq: v = a) by apply Heq; subst v; exact Hdg
+        | apply Hfa_child; split; [exact Hfa_eq | exact Hfa_ne]]. }
+    (* 19: fa_not_done — for v=a: ~done a, fa[a]=u, but a≠u, vacuous *)
+    - { unfold fa_not_done_implies_eq_u; intros v Hnv Hfa_v; unfold equiv_decb;
+        destruct (equiv_dec v a) as [Heq|Hneq];
+        [assert (Heq_eq: v = a) by apply Heq; subst v; exfalso; apply Hnv_done; exact Hnv
+        | apply Hfa_not_done; [exact Hnv | exact Hfa_v]]. }
+  Admitted.
+
   Lemma W_preserves_ancestor_I (u a: V) (done: V -> Prop) (s: SCCSt)
         (W: V -> program SCCSt unit):
     (forall v, Hoare (fun s' => low_pre v s') (W v) (fun _ s' => low_post v s')) ->
