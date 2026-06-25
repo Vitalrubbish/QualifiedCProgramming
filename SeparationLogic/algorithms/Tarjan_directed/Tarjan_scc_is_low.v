@@ -1468,8 +1468,8 @@ Section IS_LOW.
     (forall v, fa s v = u /\ fa s v <> v -> dg_step g u v) ->
     (forall v, dg_step (state_to_dfs_tree g s root) u v -> scc_is_low_v s v) ->
     (low s u = dfn s u \/
-     (exists v, dg_step g u v /\ fa s v = u /\ low s u = low s v) \/
-     (exists w, dg_step g u w /\ In w (stack s) /\ low s u = dfn s w)) ->
+     (exists v, dg_step g u v /\ fa s v = u /\ fa s v <> v /\ low s u = low s v) \/
+     (exists w, dg_step g u w /\ In w (stack s) /\ fa s w <> u /\ low s u = dfn s w)) ->
     scc_is_low_v s u.
   Proof.
     intros Hfinv Hdone_vis Hfa_child IH_child Hsrc.
@@ -1488,34 +1488,35 @@ Section IS_LOW.
       apply (low_u_le_dfn_scc_low_tree u s Huvis Hlow_le Hfa_child); auto. }
     (* Prove dfn s w <= low s u using the source tracking *)
     assert (Hmin_le_low: dfn s w <= low s u). {
-      destruct Hsrc as [Heq_dfnu | [[v [Hdg_v [Hfa_v Heq_lowv]]] | [v [Hdg_v [Hinstk_v Heq_dfnv]]]]].
+      destruct Hsrc as [Heq_dfnu | [[v [Hdg_v [Hfa_v [Hfa_ne Heq_lowv]]]] | [v [Hdg_v [Hinstk_v [Hfa_ne Heq_dfnv]]]]]].
       - (* low s u = dfn s u *)
         assert (Hu_in: scc_low_tree s u u). {
           unfold scc_low_tree, scc_low_reachable.
           exists u. split; [apply rt_refl | left; reflexivity]. }
         apply Hw_min in Hu_in. rewrite Heq_dfnu. exact Hu_in.
       - (* low s u = low s v for tree child v *)
+        assert (Hvis_v: v ∈ visited s). { apply Hdone_vis. exact Hdg_v. }
         assert (Htree: dg_step (state_to_dfs_tree g s root) u v). {
-          apply tree_step_char_backward; auto. apply Hdone_vis in Hdg_v. exact Hdg_v.
-          apply (Hfa_child v). split; auto. }
+          apply tree_step_char_backward; auto. }
         pose proof (IH_child v Htree) as Hchild.
         unfold scc_is_low_v, scc_is_low_v_val in Hchild.
         destruct Hchild as [x [[Hx_in Hx_min'] Heqx]].
         assert (Hx_in_u: scc_low_tree s u x). {
           unfold scc_low_tree, scc_low_reachable.
           destruct Hx_in as [z' [Hz_reach Hz_end]].
-          exists z'. split; [eapply rt_trans; [apply rt_step; exact Htree | exact Hz_reach] | exact Hz_end]. }
-        apply Hw_min in Hx_in_u. rewrite <- Heq_lowv. rewrite Heqx. exact Hx_in_u.
+          exists z'. split; [eapply dg_reachable_trans; [apply dg_reachable_step; exact Htree | exact Hz_reach] | exact Hz_end]. }
+        apply Hw_min in Hx_in_u. rewrite Heqx in Hx_in_u. rewrite <- Heq_lowv in Hx_in_u. exact Hx_in_u.
       - (* low s u = dfn s v for back-edge target v *)
         assert (Hv_in: scc_low_tree s u v). {
-          unfold scc_low_tree, scc_low_reachable.
-          exists u. split; [apply rt_refl | right].
-          unfold scc_back_edge. split; [exact Hdg_v | split; [exact Hinstk_v |]].
-          intro Htree_uv. apply tree_step_char in Htree_uv as [Hfa_uv _]. }
+          unfold scc_low_tree, scc_low_reachable; exists u; split; [apply rt_refl | right];
+          unfold scc_back_edge; split; [exact Hdg_v | split; [exact Hinstk_v |
+          intro Htree_uv; apply tree_step_char in Htree_uv as [Hfa_uv _];
+          exfalso; apply Hfa_ne; exact Hfa_uv]]. }
         apply Hw_min in Hv_in. rewrite Heq_dfnv. exact Hv_in. }
     apply Nat.le_antisymm in Hlow_le_min; [| exact Hmin_le_low].
-    rewrite <- Heq_m. rewrite Hlow_le_min. reflexivity.
-  Admitted.
+    rewrite <- Hlow_le_min. rewrite Heq_m.
+    unfold min_value_of_subset. exists w. split. split. exact Hw_in. exact Hw_min. exact Heq_m.
+  Qed.
 
   (* ================================================================ *)
   (* 8. Forset Iteration Lemma                                         *)
