@@ -1884,30 +1884,29 @@ Section IS_LOW.
        (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
         scc_is_low_v s0 w) ->
        fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
-       done_visited d s0 -> dfn s0 anc < dfn s0 v -> ~ v ∈ visited s0 ->
+       done_visited d s0 -> dfn s0 anc < timer s0 -> ~ v ∈ visited s0 ->
        Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
          forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
          dfn_injective s' /\ low_src anc d s' /\
          (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
           scc_is_low_v s' w) /\
          fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
-         done_visited d s' /\ low_post v s')) ->
+         done_visited d s' /\ low_post v s' /\ v ∈ visited s')) ->
     forset_inv u done s -> In u (stack s) -> stack_dfn_order s -> dfn_injective s ->
     low_src u done s ->
     (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
     fa_child_of_u u s -> fa_not_done_implies_eq_u u (done ∪ [a]) s ->
-    done_visited done s -> dfn s u < dfn s a ->
+    done_visited done s -> dfn s u < timer s ->
     ~ a ∈ visited s -> dg_step g u a ->
     Hoare (fun s' => s' = s) (W a) (fun _ s' =>
       forset_inv u done s' /\ In u (stack s') /\ stack_dfn_order s' /\
       dfn_injective s' /\ low_src u done s' /\
       (forall v, done v -> dg_step g u v -> fa s' v = u -> fa s' v <> v -> scc_is_low_v s' v) /\
       fa_child_of_u u s' /\ fa_not_done_implies_eq_u u (done ∪ [a]) s' /\ done_visited done s' /\
-      low_post a s').
+      low_post a s' /\ a ∈ visited s').
   Proof.
     intros HW_low HW_frame Hfinv Hinstk Horder Hinj Hsrc Hchild
            Hfa_child Hfa_not_done Hdone_vis Hdfn_lt Hnv_vis Hdg.
-    (* Direct application of the frame-preservation hypothesis *)
     eapply HW_frame; eauto.
   Qed.
 
@@ -1923,14 +1922,14 @@ Section IS_LOW.
        (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
         scc_is_low_v s0 w) ->
        fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
-       done_visited d s0 -> dfn s0 anc < dfn s0 v -> ~ v ∈ visited s0 ->
+       done_visited d s0 -> dfn s0 anc < timer s0 -> ~ v ∈ visited s0 ->
        Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
          forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
          dfn_injective s' /\ low_src anc d s' /\
          (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
           scc_is_low_v s' w) /\
          fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
-         done_visited d s' /\ low_post v s')) ->
+         done_visited d s' /\ low_post v s' /\ v ∈ visited s')) ->
     wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
     (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
     done_visited done s -> stack_dfn_order s -> dfn_injective s ->
@@ -1938,7 +1937,7 @@ Section IS_LOW.
     (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
     fa_child_of_u u s -> fa_not_done_implies_eq_u u done s ->
     ~ a ∈ visited s -> ~ a ∈ done ->
-    dg_step g u a -> dfn s u < dfn s a ->
+    dg_step g u a -> dfn s u < timer s ->
     Hoare (fun s' => s' = s) (set_fa a u;; W a;; lv <- get' (fun s' => low s' a);; update_low u lv)
           (fun _ s' => forset_inv u (done ∪ [a]) s' /\
                       done_visited (done ∪ [a]) s' /\
@@ -1960,14 +1959,14 @@ Section IS_LOW.
        (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
         scc_is_low_v s0 w) ->
        fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
-       done_visited d s0 -> dfn s0 anc < dfn s0 v -> ~ v ∈ visited s0 ->
+       done_visited d s0 -> dfn s0 anc < timer s0 -> ~ v ∈ visited s0 ->
        Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
          forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
          dfn_injective s' /\ low_src anc d s' /\
          (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
           scc_is_low_v s' w) /\
          fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
-         done_visited d s' /\ low_post v s')) ->
+         done_visited d s' /\ low_post v s' /\ v ∈ visited s')) ->
     Hoare (fun s => forset_inv u ∅ s /\ In u (stack s) /\
                     stack_dfn_order s /\ dfn_injective s /\
                     low s u = dfn s u /\ (forall v, fa s v = u -> v = u) /\
@@ -2047,12 +2046,17 @@ Section IS_LOW.
       destruct Hfinv as [Hwf [Huvis [Hinu_stk [Hlow_le Hforall]]]].
       apply Hoare_choice.
       (* Tree edge: a unvisited *)
-      + (* The code is: set_fa a u;; W a;; lv <- get' (low a);; update_low u lv *)
-        (* Step 1: set_fa a u — get invariants + fa a = u *)
-        (* Step 1 prep: get the set_fa_preserves_I lemma (before intro_state shadows H0) *)
-        (* Get set_fa_preserves_I before intro_state shadows H0 *)
-        (* TODO: tree edge case — needs set_fa + W a + update_low composition.
-           Requires resolving dfn s u < dfn s a contradiction (dfn s a = 0 when a ∉ visited). *)
+      + (* Derive dfn s0 u < timer s0 from wf_scc_state *)
+        assert (Hdfn_timer: dfn s0 u < timer s0). {
+          destruct Hwf as [_ [Hinv _]].
+          destruct Hinv as [Hdfn_inv _]. apply Hdfn_inv. exact Huvis. }
+
+        (* Step 1: set_fa a u *)
+        (* After set_fa a u, the state s1 has fa a = u, all other fields unchanged.
+           We need to establish all invariants about u and done for state s1,
+           then apply W_preserves_ancestor_I for the W a call, and finally
+           handle update_low using set_low_tree_preserves_I / skip reconstruction.
+           TODO: prove invariants about set_fa_state s a u (fa-only change). *)
         admit.
       (* Non-tree edge: a visited *)
       + intro_state. hoare_auto_s.
