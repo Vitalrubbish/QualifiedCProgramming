@@ -1661,6 +1661,33 @@ Section IS_LOW.
     - intros v Hnv Hfa_v. apply Hfa_not_done; [intro Hv; apply Hnv; left; exact Hv | exact Hfa_v].
   Qed.
 
+  (** [tree_edge_preserves_I]: tree-edge branch
+      [set_fa a u;; W a;; lv <- get' (low a);; update_low u lv]
+      establishes all 9 conjuncts of [I (done ∪ [a])].
+      TODO: fill in the W-preservation and post-update_low parts. *)
+  Lemma tree_edge_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt)
+        (W: V -> program SCCSt unit):
+    (forall v, Hoare (fun s' => low_pre v s') (W v) (fun _ s' => low_post v s')) ->
+    wf_scc_state s -> u ∈ visited s -> In u (stack s) ->
+    (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
+    done_visited done s -> stack_dfn_order s -> dfn_injective s ->
+    low_src u done s ->
+    (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
+    fa_child_of_u u s -> fa_not_done_implies_eq_u u done s ->
+    ~ a ∈ visited s -> ~ a ∈ done ->
+    dg_step g u a -> dfn s u < dfn s a ->
+    Hoare (fun s' => s' = s) (set_fa a u;; W a;; lv <- get' (fun s' => low s' a);; update_low u lv)
+          (fun _ s' => forset_inv u (done ∪ [a]) s' /\
+                      done_visited (done ∪ [a]) s' /\
+                      In u (stack s') /\
+                      stack_dfn_order s' /\
+                      dfn_injective s' /\
+                      low_src u (done ∪ [a]) s' /\
+                      (forall v, (done ∪ [a]) v -> dg_step g u v -> fa s' v = u -> fa s' v <> v -> scc_is_low_v s' v) /\
+                      fa_child_of_u u s' /\
+                      fa_not_done_implies_eq_u u (done ∪ [a]) s').
+  Proof.
+  Admitted.
 
   Lemma forset_keep_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall v, Hoare (fun s => low_pre v s) (W v) (fun _ s => low_post v s)) ->
