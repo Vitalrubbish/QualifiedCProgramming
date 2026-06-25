@@ -1954,6 +1954,20 @@ Section IS_LOW.
 
   Lemma forset_keep_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall v, Hoare (fun s => low_pre v s) (W v) (fun _ s => low_post v s)) ->
+    (forall v (anc: V) (d: V -> Prop) (s0: SCCSt),
+       forset_inv anc d s0 -> In anc (stack s0) -> stack_dfn_order s0 ->
+       dfn_injective s0 -> low_src anc d s0 ->
+       (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
+        scc_is_low_v s0 w) ->
+       fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
+       done_visited d s0 -> dfn s0 anc < dfn s0 v -> ~ v ∈ visited s0 ->
+       Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
+         forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
+         dfn_injective s' /\ low_src anc d s' /\
+         (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
+          scc_is_low_v s' w) /\
+         fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
+         done_visited d s' /\ low_post v s')) ->
     Hoare (fun s => forset_inv u ∅ s /\ In u (stack s) /\
                     stack_dfn_order s /\ dfn_injective s /\
                     low s u = dfn s u /\ (forall v, fa s v = u -> v = u) /\
@@ -1961,7 +1975,7 @@ Section IS_LOW.
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => low_post u s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
   Proof.
-    intros HW_low.
+    intros HW_low HW_frame.
     set (S := fun v => dg_step g u v).
     set (I := fun (done: V -> Prop) (s: SCCSt) =>
       forset_inv u done s /\
@@ -2033,7 +2047,13 @@ Section IS_LOW.
       destruct Hfinv as [Hwf [Huvis [Hinu_stk [Hlow_le Hforall]]]].
       apply Hoare_choice.
       (* Tree edge: a unvisited *)
-      + admit. (* Tree edge: a unvisited - TODO *)
+      + (* The code is: set_fa a u;; W a;; lv <- get' (low a);; update_low u lv *)
+        (* Step 1: set_fa a u — get invariants + fa a = u *)
+        (* Step 1 prep: get the set_fa_preserves_I lemma (before intro_state shadows H0) *)
+        (* Get set_fa_preserves_I before intro_state shadows H0 *)
+        (* TODO: tree edge case — needs set_fa + W a + update_low composition.
+           Requires resolving dfn s u < dfn s a contradiction (dfn s a = 0 when a ∉ visited). *)
+        admit.
       (* Non-tree edge: a visited *)
       + intro_state. hoare_auto_s.
         * (* Back edge: In a (stack s0) — H2 holds this *)
