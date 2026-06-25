@@ -1541,7 +1541,49 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
           (fun _ s => low_post u s).
   Proof.
-    (* TODO: use Hoare_fix with induction hypothesis giving child low-post *)
+    set (P := fun (x: V) (s: SCCSt) => low_pre x s /\ original_vvalid g x).
+    set (Q := fun (x: V) (_: unit) (s: SCCSt) => low_post x s).
+    apply Hoare_conseq_pre with (P2 := P u).
+    { intros s H. unfold P. exact H. }
+    apply (Hoare_fix P Q (tarjan_scc_f (V:=V) (E:=E) g) u).
+    intros W IH x. unfold tarjan_scc_f, P, Q.
+    intro_state. destruct H as [[Hwf Hnxvis] Hvvalid_x].
+    (* Step 1: preloop x *)
+    eapply Hoare_bind.
+    { apply Hoare_conseq_pre with
+        (P2 := fun s => forset_inv x ∅ s /\ In x (stack s) /\ stack_dfn_order s /\
+               dfn_injective s /\ (forall v, fa s v = x -> v = x)).
+      { intros s' [Hs'_eq _]. subst s'. split. { admit. } (* forset_inv from preloop *)
+        split. { admit. } (* In stack from preloop *)
+        split. { admit. } (* stack_dfn_order from preloop *)
+        split. { admit. } (* dfn_injective from preloop *)
+        { intros v Hfa_vx. eapply low_pre_fa_eq_u_implies_eq_u; eauto. } }
+      unfold preloop. apply preloop_establishes_forset_inv. }
+    simpl. intro a.
+    (* Step 2: forset *)
+    eapply Hoare_bind.
+    - apply (forset_keep_forset_inv x W). intros v.
+      (* Need: Hoare (low_pre v) (W v) (fun _ => low_post v).
+         This follows from IH: Hoare (P v) (W v) (Q v) where P v = low_pre v /\ original_vvalid g v *)
+      apply (Hoare_conseq_pre _ (P v) (W v) (Q v)).
+      { intros s [Hpre Hvvalid]. exact (conj Hpre Hvvalid). }
+      apply IH.
+    - simpl. intro a0. intro_state. hoare_auto_s.
+      + (* low s x = dfn s x: pop_scc branch *)
+        apply Hoare_conseq_pre with
+          (P2 := fun s => wf_scc_state s /\ scc_low_valid_v s x /\ low s x = dfn s x).
+        { intros s' [Hs'_eq _]. subst s'.
+          destruct H as [[Hlp [Hinx [Horder Hinj]]] _].
+          destruct Hlp as [Hwf' Hscc_low]. split. exact Hwf'.
+          (* Need: scc_is_low_v s x -> scc_low_valid_v s x when low = dfn *)
+          (* This requires the reverse direction of scc_is_low_induction_is_low *)
+          admit. split. admit. }
+        apply pop_scc_keep_scc_is_low_v.
+      + (* low s x <> dfn s x: skip branch *)
+        destruct H1 as [Heq Hneq]. subst s.
+        destruct H as [[Hlp [Hinx [Horder Hinj]]] _].
+        destruct Hlp as [Hwf' Hscc_low].
+        unfold low_post. split. exact Hwf'. exact Hscc_low.
   Admitted.
 
 End IS_LOW.
