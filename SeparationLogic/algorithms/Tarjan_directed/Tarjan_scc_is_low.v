@@ -1564,7 +1564,7 @@ Section IS_LOW.
       stack_dfn_order s /\
       dfn_injective s /\
       low_src u done s /\
-      (forall v, done v -> dg_step g u v -> fa s v = u -> scc_is_low_v s v) /\
+      (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) /\
       fa_child_of_u u s /\
       fa_not_done_implies_eq_u u done s).
     assert (ProperI: Proper (Sets.equiv ==> eq ==> iff) I). {
@@ -1575,12 +1575,12 @@ Section IS_LOW.
       destruct Hsrc_equiv as [Hsrc12 Hsrc21].
       split; intros [Hfinv [Hdonevis [Hinstk [Horder [Hinj [Hsrc [Hchild [Hfa_child Hfa_not_done]]]]]]]].
       - split; [apply Hfinv12; exact Hfinv | split; [intros v Hv; apply Hdonevis; apply Hequiv; exact Hv | split; [exact Hinstk | split; [exact Horder | split; [exact Hinj | split; [apply Hsrc12; exact Hsrc | split; [| split]]]]]]].
-        + intros v Hv Hdg Hfa. apply Hchild; [apply Hequiv; exact Hv | exact Hdg | exact Hfa].
+        + intros v Hv Hdg Hfa Hfa_ne. apply Hchild; [apply Hequiv; exact Hv | exact Hdg | exact Hfa | exact Hfa_ne].
         + exact Hfa_child.
         + unfold fa_not_done_implies_eq_u. intros v Hnv Hfa_eq.
           apply Hfa_not_done; [intro Hv; apply Hnv; apply Hequiv; exact Hv | exact Hfa_eq].
       - split; [apply Hfinv21; exact Hfinv | split; [intros v Hv; apply Hdonevis; apply Hequiv; exact Hv | split; [exact Hinstk | split; [exact Horder | split; [exact Hinj | split; [apply Hsrc21; exact Hsrc | split; [| split]]]]]]].
-        + intros v Hv Hdg Hfa. apply Hchild; [apply Hequiv; exact Hv | exact Hdg | exact Hfa].
+        + intros v Hv Hdg Hfa Hfa_ne. apply Hchild; [apply Hequiv; exact Hv | exact Hdg | exact Hfa | exact Hfa_ne].
         + exact Hfa_child.
         + unfold fa_not_done_implies_eq_u. intros v Hnv Hfa_eq.
           apply Hfa_not_done; [intro Hv; apply Hnv; apply Hequiv; exact Hv | exact Hfa_eq]. }
@@ -1613,6 +1613,7 @@ Section IS_LOW.
           { apply Hfa_child. exact (conj Hfa_eq Hfa_ne). }
           { apply Hfa_child. exact (conj Hfa_eq Hfa_ne). }
           { exact Hfa_eq. }
+          { exact Hfa_ne. }
         - unfold low_src in Hsrc. destruct Hsrc as [Hdfn | [[v [Hv [Hdg [Hfa [Hne Hlow]]]]] | [w [Hw [Hdg [Hinstk_w [Hne Hlow]]]]]]].
           + left; exact Hdfn.
           + right; left; exists v; auto.
@@ -1655,11 +1656,9 @@ Section IS_LOW.
             | right; left; exists v3; split; [left; exact Hv3 | auto]
             | right; right; exists w3; split; [left; exact Hw3 | auto] ]. }
           (* 4: child IH *)
-          { intros v4 Hor4 Hdg4 Hfa4; destruct Hor4 as [Hv_done4 | Hv_eq_u4];
-            [ apply Hchild; auto
-            | sets_unfold in Hv_eq_u4; subst v4 ].
-            (* Need: dg_step g u u -> fa s0 u = u -> scc_is_low_v s0 u *)
-            admit. }
+          { intros v4 Hor4 Hdg4 Hfa4 Hfa4_ne; destruct Hor4 as [Hv_done4 | Hv_eq_u4];
+            [ apply Hchild; [exact Hv_done4 | exact Hdg4 | exact Hfa4 | exact Hfa4_ne]
+            | sets_unfold in Hv_eq_u4; subst v4; exfalso; apply Hfa4_ne; exact Hfa4 ]. }
           (* 5: fa_not_done *)
           { unfold fa_not_done_implies_eq_u; intros v5 Hnv5 Hfa5;
             apply Hfa_not_done; [intro Hv5; apply Hnv5; left; exact Hv5 | exact Hfa5]. }
@@ -1688,8 +1687,8 @@ Section IS_LOW.
             [ left; exact Heq_dfnu
             | right; left; exists v3; split; [left; exact Hv3 | auto]
             | right; right; exists w3; split; [left; exact Hw3 | auto] ]. }
-          { intros v4 Hor4 Hdg4 Hfa4; destruct Hor4 as [Hv_done4 | Hv_eq_a4];
-            [ apply Hchild; auto
+          { intros v4 Hor4 Hdg4 Hfa4 Hfa4_ne; destruct Hor4 as [Hv_done4 | Hv_eq_a4];
+            [ apply Hchild; [exact Hv_done4 | exact Hdg4 | exact Hfa4 | exact Hfa4_ne]
             | sets_unfold in Hv_eq_a4; subst v4; exfalso; apply Hfa_ne_a; exact Hfa4 ]. }
           { unfold fa_not_done_implies_eq_u; intros v5 Hnv5 Hfa5;
             apply Hfa_not_done; [intro Hv5; apply Hnv5; left; exact Hv5 | exact Hfa5]. }
@@ -1713,8 +1712,8 @@ Section IS_LOW.
             [ left; exact Heq_dfnu
             | right; left; exists v3; split; [left; exact Hv3 | auto]
             | right; right; exists w3; split; [left; exact Hw3 | auto] ]. }
-          { intros v4 Hor4 Hdg4 Hfa4; destruct Hor4 as [Hv_done4 | Hv_eq_a4];
-            [ apply Hchild; auto
+          { intros v4 Hor4 Hdg4 Hfa4 Hfa4_ne; destruct Hor4 as [Hv_done4 | Hv_eq_a4];
+            [ apply Hchild; [exact Hv_done4 | exact Hdg4 | exact Hfa4 | exact Hfa4_ne]
             | sets_unfold in Hv_eq_a4; subst v4; exfalso; apply Hfa_ne_a; exact Hfa4 ]. }
           { unfold fa_not_done_implies_eq_u; intros v5 Hnv5 Hfa5;
             apply Hfa_not_done; [intro Hv5; apply Hnv5; left; exact Hv5 | exact Hfa5]. }
@@ -1744,9 +1743,9 @@ Section IS_LOW.
             - left. exact Heq_dfnu.
             - right. left. exists v. split; [left; exact Hv | auto].
             - right. right. exists w. split; [left; exact Hw | auto]. }
-          split. { (* child IH *) intros v Hor Hdg_v Hfa_v.
+          split. { (* child IH *) intros v Hor Hdg_v Hfa_v Hfa_ne_v.
             destruct Hor as [Hv_done | Hv_eq_a].
-            - apply Hchild; auto.
+            - apply Hchild; [exact Hv_done | exact Hdg_v | exact Hfa_v | exact Hfa_ne_v].
             - sets_unfold in Hv_eq_a. subst v. exfalso. apply Hfa_ne_a. exact Hfa_v. }
           split. { (* fa_child_of_u *) exact Hfa_child. }
           { (* fa_not_done *) unfold fa_not_done_implies_eq_u. intros v Hnv Hfa_v.
