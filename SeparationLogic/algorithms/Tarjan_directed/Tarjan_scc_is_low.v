@@ -1527,6 +1527,17 @@ Section IS_LOW.
     (exists v, done v /\ dg_step g u v /\ fa s v = u /\ fa s v <> v /\ low s u = low s v) \/
     (exists w, done w /\ dg_step g u w /\ In w (stack s) /\ fa s w <> u /\ low s u = dfn s w).
 
+  Lemma low_src_proper u s: Proper (Sets.equiv ==> iff) (fun done => low_src u done s).
+  Proof.
+    intros done1 done2 Hequiv. split; intros [Hdfn | [[v [Hv [Hdg [Hfa [Hne Hlow]]]]] | [w [Hw [Hdg [Hinstk [Hne Hlow]]]]]]].
+    - left; exact Hdfn.
+    - right; left; exists v; split; [apply Hequiv; exact Hv | auto].
+    - right; right; exists w; split; [apply Hequiv; exact Hw | auto].
+    - left; exact Hdfn.
+    - right; left; exists v; split; [apply Hequiv; exact Hv | auto].
+    - right; right; exists w; split; [apply Hequiv; exact Hw | auto].
+  Qed.
+
   Lemma forset_keep_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall v, Hoare (fun s => low_pre v s) (W v) (fun _ s => low_post v s)) ->
     Hoare (fun s => forset_inv u ∅ s /\ In u (stack s) /\
@@ -1535,11 +1546,49 @@ Section IS_LOW.
           (fun _ s => low_post u s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
   Proof.
     intros HW_low.
-    (* TODO: use hoare_fix_nolv_auto with invariant I combining forset_inv, low_src, and child scc_is_low_v.
-       The invariant I(done, s) is: forset_inv u done s /\ In u (stack s) /\ stack_dfn_order s /\
-       dfn_injective s /\ (forall v, fa s v = u -> v = u) /\ low_src u done s /\
-       (forall v, done v -> dg_step g u v -> fa s v = u -> scc_is_low_v s v).
-       At the end (done = dg_step g u), use forset_inv_implies_scc_is_low_v to derive low_post. *)
+    set (S := fun v => dg_step g u v).
+    (* Simplified invariant: drop low_src and child scc_is_low_v for now.
+       We'll prove low_post directly from forset_inv at the end. *)
+    set (I := fun (done: V -> Prop) (s: SCCSt) =>
+      forset_inv u done s /\
+      In u (stack s) /\
+      stack_dfn_order s /\
+      dfn_injective s).
+    assert (ProperI: Proper (Sets.equiv ==> eq ==> iff) I). {
+      unfold I. intros done1 done2 Hequiv s1 s2 Heqs. subst s2.
+      split; intros [Hfinv [Hinstk [Horder Hinj]]].
+      - split; [apply (forset_inv_proper u _ _ Hequiv _ _ eq_refl); exact Hfinv | auto].
+      - split; [apply (forset_inv_proper u _ _ (Sets_equiv_Sets_sym _ _ Hequiv) _ _ eq_refl); exact Hfinv | auto]. }
+    apply (Hoare_forset I S (process_edge u W) ProperI).
+    intros done a Hdone_sub Ha_S Ha_not_done.
+    (* Prove: Hoare (I done) (process_edge u W a) (fun _ => I (done ∪ [a])) *)
+    unfold process_edge, if_else.
+    intro_state. destruct H as [Hinv Heq_s]. subst s0.
+    destruct Hinv as [Hfinv [Hinstk [Horder Hinj]]].
+    destruct Hfinv as [Hwf [Huvis [Hinu_stk [Hlow_le Hforall]]]].
+    apply Hoare_choice.
+    - (* Tree edge: a unvisited *)
+      apply Hoare_assume_bind. simpl. intro_state.
+      destruct H as [Hnv_a Heq_s1]. subst s1.
+      (* set_fa a u ;; W a ;; lv <- get' (fun s => low s a) ;; update_low u lv *)
+      eapply Hoare_bind. { eapply Hoare_get'. }
+      simpl. intros lv.
+      (* need to establish I (done ∪ [a]) after these operations *)
+      (* This is complex; we'd need to show set_fa, W, and update_low each preserve/extend I *)
+      admit.
+    - (* Non-tree edge: a visited *)
+      intro_state. hoare_auto_s.
+      + (* In a (stack s): back edge — get_dfn a ;; update_low u (dfn a) *)
+        eapply Hoare_bind. { eapply Hoare_get'. }
+        simpl. intros dv.
+        (* need to show update_low back edge extends I *)
+        admit.
+      + (* ~ In a (stack s): cross edge — skip, state unchanged *)
+        destruct H1 as [Heq_low Hninstk]. subst s0. subst s.
+        unfold I. (* s1 unchanged from initial state *)
+        split. { (* forset_inv u (done ∪ [a]) s1 from cross_edge_preserves_forset_inv *)
+          apply (cross_edge_preserves_forset_inv u a done). }
+        { split; [exact Hinstk | split; [exact Horder | exact Hinj]]. }
   Admitted.
 
   (* ================================================================ *)
