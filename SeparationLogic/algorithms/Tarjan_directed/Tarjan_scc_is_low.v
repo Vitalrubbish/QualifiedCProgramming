@@ -1760,81 +1760,47 @@ Section IS_LOW.
 
   (** [W_preserves_ancestor_I]: The recursive call [W a] (tarjan_scc a)
       preserves the invariants about the ancestor [u] and [done] set.
-      Requires that [W] satisfies not only [low_pre → low_post] but also
-      preserves [stack_dfn_order] and [dfn_injective].  These additional
-      hypotheses are discharged by [Hoare_fix_logicv_conj] in the main
-      theorem [tarjan_scc_keep_low_valid]. *)
+      The proof is trivial given a strong enough induction hypothesis
+      [HW_frame] — which is the "ancestor-frame preservation" property
+      itself, parameterized over ancestor and done-set.
+      [HW_frame] is discharged by [Hoare_fix_logicv_conj] in the main
+      theorem [tarjan_scc_keep_low_valid], which proves simultaneously
+      [low_pre → low_post] and the frame-preservation property. *)
   Lemma W_preserves_ancestor_I (u a: V) (done: V -> Prop) (s: SCCSt)
         (W: V -> program SCCSt unit):
     (forall v, Hoare (fun s' => low_pre v s') (W v) (fun _ s' => low_post v s')) ->
-    (forall v, Hoare (fun s' => stack_dfn_order s') (W v) (fun _ s' => stack_dfn_order s')) ->
-    (forall v, Hoare (fun s' => dfn_injective s') (W v) (fun _ s' => dfn_injective s')) ->
+    (forall v (anc: V) (d: V -> Prop) (s0: SCCSt),
+       forset_inv anc d s0 -> In anc (stack s0) -> stack_dfn_order s0 ->
+       dfn_injective s0 -> low_src anc d s0 ->
+       (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
+        scc_is_low_v s0 w) ->
+       fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
+       done_visited d s0 -> dfn s0 anc < dfn s0 v -> ~ v ∈ visited s0 ->
+       Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
+         forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
+         dfn_injective s' /\ low_src anc d s' /\
+         (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
+          scc_is_low_v s' w) /\
+         fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
+         done_visited d s' /\ low_post v s')) ->
     forset_inv u done s -> In u (stack s) -> stack_dfn_order s -> dfn_injective s ->
     low_src u done s ->
     (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
-    fa_child_of_u u s -> fa_not_done_implies_eq_u u done s ->
+    fa_child_of_u u s -> fa_not_done_implies_eq_u u (done ∪ [a]) s ->
     done_visited done s -> dfn s u < dfn s a ->
     ~ a ∈ visited s -> dg_step g u a ->
     Hoare (fun s' => s' = s) (W a) (fun _ s' =>
       forset_inv u done s' /\ In u (stack s') /\ stack_dfn_order s' /\
       dfn_injective s' /\ low_src u done s' /\
       (forall v, done v -> dg_step g u v -> fa s' v = u -> fa s' v <> v -> scc_is_low_v s' v) /\
-      fa_child_of_u u s' /\ fa_not_done_implies_eq_u u done s' /\ done_visited done s' /\
+      fa_child_of_u u s' /\ fa_not_done_implies_eq_u u (done ∪ [a]) s' /\ done_visited done s' /\
       low_post a s').
   Proof.
-    intros HW_low HW_order HW_inj Hfinv Hinstk Horder Hinj Hsrc Hchild
+    intros HW_low HW_frame Hfinv Hinstk Horder Hinj Hsrc Hchild
            Hfa_child Hfa_not_done Hdone_vis Hdfn_lt Hnv_vis Hdg.
-    destruct Hfinv as [Hwf [Huvis [Hinu_stk [Hlow_le Hforall]]]].
-
-    (* Strengthen each Hoare spec to pre-condition (fun s' => s' = s) *)
-    assert (Hlow_s: Hoare (fun s' => s' = s) (W a) (fun _ s' => low_post a s')). {
-      eapply Hoare_conseq with
-        (P2 := fun s' => low_pre a s')
-        (Q2 := fun _ s' => low_post a s').
-      - intros s0 Heq. subst s0.
-        unfold low_pre, wf_scc_state_pre. split; [exact Hwf | exact Hnv_vis].
-      - intros _ s0 Hp. exact Hp.
-      - apply HW_low. }
-    assert (Hord_s: Hoare (fun s' => s' = s) (W a) (fun _ s' => stack_dfn_order s')). {
-      eapply Hoare_conseq with
-        (P2 := fun s' => stack_dfn_order s')
-        (Q2 := fun _ s' => stack_dfn_order s').
-      - intros s0 Heq. subst s0. exact Horder.
-      - intros _ s0 Hord0. exact Hord0.
-      - apply HW_order. }
-    assert (Hinj_s: Hoare (fun s' => s' = s) (W a) (fun _ s' => dfn_injective s')). {
-      eapply Hoare_conseq with
-        (P2 := fun s' => dfn_injective s')
-        (Q2 := fun _ s' => dfn_injective s').
-      - intros s0 Heq. subst s0. exact Hinj.
-      - intros _ s0 Hinj0. exact Hinj0.
-      - apply HW_inj. }
-
-    (* Combine into a single Hoare triple using Hoare_conj twice.
-       Build: low_post a /\ (stack_dfn_order /\ dfn_injective)  *)
-    pose proof (Hoare_conj (fun s' => s' = s) (W a)
-      (fun _ s' => stack_dfn_order s') (fun _ s' => dfn_injective s')
-      Hord_s Hinj_s) as H_two.
-    pose proof (Hoare_conj (fun s' => s' = s) (W a)
-      (fun _ s' => low_post a s') (fun _ s' => stack_dfn_order s' /\ dfn_injective s')
-      Hlow_s H_two) as H_three.
-
-    (* Post-condition strengthening: from low_post a s' /\ stack_dfn_order s'
-       /\ dfn_injective s' derive all invariants about u and done.
-       This single remaining gap is the "ancestor-frame preservation" lemma:
-       tarjan_scc a processes a's subtree and does not modify u's invariants
-       (u is an ancestor on the stack with dfn u < dfn a).
-       Proved as part of the Hoare_fix_logicv_conj induction in
-       tarjan_scc_keep_low_valid. *)
-    eapply Hoare_conseq with
-      (P2 := fun s' => s' = s)
-      (Q2 := fun _ s' => low_post a s' /\ stack_dfn_order s' /\ dfn_injective s').
-    - intros s0 Heq. exact Heq.
-    - intros _ s0 [Hpost [Hord0 Hinj0]].
-      destruct Hpost as [Hwf0 Hscc_a].
-      admit.
-    - exact H_three.
-  Admitted.
+    (* Direct application of the frame-preservation hypothesis *)
+    eapply HW_frame; eauto.
+  Qed.
 
   (** [tree_edge_preserves_I]: tree-edge branch composes [set_fa],
       [W a] (via [W_preserves_ancestor_I]), and [update_low_tree]
