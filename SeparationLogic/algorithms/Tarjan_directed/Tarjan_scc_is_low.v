@@ -2074,7 +2074,6 @@ Section IS_LOW.
          fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
          done_visited d s' /\ low_post v s' /\ v ∈ visited s' /\
          (fa s0 v = anc -> fa s' v = anc))) ->
-    (forall v p, Hoare (fun s' => fa s' v = p) (W v) (fun _ s' => fa s' v = p)) ->
     Hoare (fun s => forset_inv u ∅ s /\ In u (stack s) /\
                     stack_dfn_order s /\ dfn_injective s /\
                     low s u = dfn s u /\ (forall v, fa s v = u -> v = u) /\
@@ -2082,7 +2081,7 @@ Section IS_LOW.
           (forset (fun v => dg_step g u v) (process_edge u W))
           (fun _ s => low_post u s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
   Proof.
-    intros HW_low HW_frame HW_fa.
+    intros HW_low HW_frame.
     set (S := fun v => dg_step g u v).
     set (I := fun (done: V -> Prop) (s: SCCSt) =>
       forset_inv u done s /\
@@ -2287,7 +2286,7 @@ Section IS_LOW.
         split. { (* fa_child_of_u *) exact Hfa_child. }
         { (* fa_not_done *) unfold fa_not_done_implies_eq_u. intros v Hnv Hfa_v.
           apply Hfa_not_done; [intro Hv; apply Hnv; left; exact Hv | exact Hfa_v]. }
-  Admitted.
+  Qed.
 
   (* ================================================================ *)
   (* 9. Main Theorem: Single-vertex Low-link Correctness               *)
@@ -2298,10 +2297,12 @@ Section IS_LOW.
         (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
         (fun _ s => low_post u s).
   Proof.
-    (* TODO: Use Hoare_fix with invariant P = low_pre + vvalid + stack_dfn_order + dfn_injective.
-       Step 1 (preloop): establishes forset_inv, In stack, stack_dfn_order, dfn_injective, fa constraint.
-       Step 2 (forset): use hoare_fix_nolv_auto with invariant combining forset_inv + low_src + child scc_is_low_v.
-       Step 3 (pop_scc/skip): preserves low_post. *)
+    (* Proof strategy: Use Hoare_fix_logicv_conj to simultaneously prove
+       (1) low_pre → low_post and (2) the frame property (HW_frame).
+       The frame property must first be established for the fixpoint
+       via a separate Hoare_fix_logicv induction (tarjan_scc_keep_forset_frame_aux),
+       then used as the auxiliary invariant in Hoare_fix_logicv_conj.
+       TODO: Complete the fixpoint inductions. *)
   Admitted.
 
 End IS_LOW.
