@@ -2155,7 +2155,15 @@ Section IS_LOW.
       apply Hoare_choice.
       (* Tree edge: a unvisited *)
       + (* Derive dfn s0 u < timer s0 from wf_scc_state *)
-        admit.
+        assert (Hdfn_timer: dfn s0 u < timer s0). {
+          destruct Hwf as [_ [Hinv _]].
+          destruct Hinv as [Hdfn_inv _]. apply Hdfn_inv. exact Huvis. }
+        intro_state. subst s1.
+        apply (Hoare_assume_bind (fun s => s = s0) (fun s => ~ a ∈ visited s)
+                 (set_fa a u ;; W a ;; lv <- get' (fun s => low s a) ;; update_low u lv)
+                 (fun _ s => I (done ∪ [a]) s)).
+        intro_state. destruct H as [Hnv_vis_s1 Heq_s1]. subst s1.
+        exact (tree_edge_preserves_I u a done s0 W HW_low HW_frame Hwf Huvis Hinu_stk Hlow_le Hforall Hdone_vis Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done Hnv_vis_s1 Ha_not_done Ha_S Hdfn_timer).
       (* Non-tree edge: a visited *)
       + intro_state. hoare_auto_s.
       * (* Back edge: In a (stack s0) — H2 holds this *)
