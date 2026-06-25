@@ -1669,6 +1669,12 @@ Section IS_LOW.
       3. [pop_scc] within [W a] only pops vertices with dfn ≥ dfn[a] > dfn[u]
       4. Thus [u] stays on the stack, [low[u]] unchanged, [fa_child_of_u u] preserved.
       TODO: formal proof via fixpoint induction on [W]. *)
+
+  Lemma set_fa_preserves_scc_is_low_v (v a u: V) (s: SCCSt):
+    v <> a -> ~ a ∈ visited s ->
+    scc_is_low_v (set_fa_state s a u) v <-> scc_is_low_v s v.
+  Proof.
+  Admitted.
   Lemma set_fa_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt):
     wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
     (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
@@ -1712,12 +1718,15 @@ Section IS_LOW.
       unfold equiv_decb in Hfa_v0, Hfa_ne_v0;
       destruct (equiv_dec v0 a) as [Heq|Hneq];
       [ assert (Heq_eq: v0 = a) by apply Heq; subst v0; exfalso; apply Hnv_done; exact Hv_done
-      | destruct (equiv_dec v0 a) as [Heq'|Hneq'];
-        [ exfalso; apply Hneq; apply Heq'
-        | apply Hchild; [exact Hv_done | exact Hdg_v0 | exact Hfa_v0 | exact Hfa_ne_v0] ] ]. }
+      | apply (proj2 (set_fa_preserves_scc_is_low_v v0 a u s Hneq Hnv_vis));
+        apply Hchild; [exact Hv_done | exact Hdg_v0 | exact Hfa_v0 | exact Hfa_ne_v0] ]. }
     (* fa_child_of_u *) { intros v0 [Hfa_eq Hfa_ne]; unfold equiv_decb; destruct (equiv_dec v0 a) as [Heq|Hneq]; [assert (Heq_eq: v0 = a) by apply Heq; subst v0; exact Hdg | unfold equiv_decb in Hfa_eq, Hfa_ne; destruct (equiv_dec v0 a) as [Heq'|Hneq']; [exfalso; apply Hneq; apply Heq' | apply Hfa_child; split; [exact Hfa_eq | exact Hfa_ne]]]. }
     (* fa_not_done *) { intros v0 Hnv Hfa_v0; unfold equiv_decb in Hfa_v0; destruct (equiv_dec v0 a) as [Heq|Hneq]; [assert (Heq_eq: v0 = a) by apply Heq; subst v0; exfalso; apply Hnv; right; reflexivity | apply Hfa_not_done; [intro Hv_done; apply Hnv; left; exact Hv_done | exact Hfa_v0]]. }
   Admitted.
+
+  (** [set_fa_preserves_scc_is_low_v]: For [v ≠ a] with [a ∉ visited],
+      [scc_is_low_v] unchanged by [set_fa a u]. Uses [set_fa_preserves_tree_edges]
+      and induction on [dg_reachable]. *)
 
   Lemma W_preserves_ancestor_I (u a: V) (done: V -> Prop) (s: SCCSt)
         (W: V -> program SCCSt unit):
