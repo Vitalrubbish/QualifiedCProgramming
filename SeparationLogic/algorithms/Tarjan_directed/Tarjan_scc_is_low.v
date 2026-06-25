@@ -1661,14 +1661,42 @@ Section IS_LOW.
     - intros v Hnv Hfa_v. apply Hfa_not_done; [intro Hv; apply Hnv; left; exact Hv | exact Hfa_v].
   Qed.
 
-  (** [tree_edge_preserves_I]: tree-edge branch
-      [set_fa a u;; W a;; lv <- get' (low a);; update_low u lv]
-      establishes all 9 conjuncts of [I (done ∪ [a])].
-      TODO: fill in the W-preservation and post-update_low parts. *)
+  (** [W_preserves_ancestor_I]: The recursive call [W a] (tarjan_scc a)
+      preserves all components of [I done] that concern the ancestor [u].
+      Structural justification (Design Doc §8.4, lines 480-484):
+      1. [dfn s u < dfn s a] — tree edge dfn monotonicity
+      2. [stack_dfn_order] ensures u is below a on the stack
+      3. [pop_scc] within [W a] only pops vertices with dfn ≥ dfn[a] > dfn[u]
+      4. Thus [u] stays on the stack, [low[u]] unchanged, [fa_child_of_u u] preserved.
+      TODO: formal proof via fixpoint induction on [W]. *)
+  Lemma W_preserves_ancestor_I (u a: V) (done: V -> Prop) (s: SCCSt)
+        (W: V -> program SCCSt unit):
+    (forall v, Hoare (fun s' => low_pre v s') (W v) (fun _ s' => low_post v s')) ->
+    forset_inv u done s -> In u (stack s) -> stack_dfn_order s -> dfn_injective s ->
+    low_src u done s ->
+    (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) ->
+    fa_child_of_u u s -> fa_not_done_implies_eq_u u done s ->
+    done_visited done s -> dfn s u < dfn s a ->
+    ~ a ∈ visited s -> dg_step g u a ->
+    Hoare (fun s' => s' = s) (W a) (fun _ s' =>
+      forset_inv u done s' /\ In u (stack s') /\ stack_dfn_order s' /\
+      dfn_injective s' /\ low_src u done s' /\
+      (forall v, done v -> dg_step g u v -> fa s' v = u -> fa s' v <> v -> scc_is_low_v s' v) /\
+      fa_child_of_u u s' /\ fa_not_done_implies_eq_u u done s' /\ done_visited done s' /\
+      low_post a s').
+  Proof.
+  Admitted.
+
+  (** [tree_edge_preserves_I]: tree-edge branch composes [set_fa],
+      [W a] (via [W_preserves_ancestor_I]), and [update_low_tree]
+      to establish [I (done ∪ [a])].
+      TODO: Steps 1 (set_fa) and 3 (update_low) need helper lemmas
+      [set_fa_preserves_I] and [update_low_tree_preserves_I] similar
+      to [set_low_back_preserves_I]. *)
   Lemma tree_edge_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt)
         (W: V -> program SCCSt unit):
     (forall v, Hoare (fun s' => low_pre v s') (W v) (fun _ s' => low_post v s')) ->
-    wf_scc_state s -> u ∈ visited s -> In u (stack s) ->
+    wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
     (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
     done_visited done s -> stack_dfn_order s -> dfn_injective s ->
     low_src u done s ->
