@@ -1522,6 +1522,11 @@ Section IS_LOW.
   (* 8. Forset Iteration Lemma                                         *)
   (* ================================================================ *)
 
+  Definition low_src (u: V) (done: V -> Prop) (s: SCCSt): Prop :=
+    low s u = dfn s u \/
+    (exists v, done v /\ dg_step g u v /\ fa s v = u /\ fa s v <> v /\ low s u = low s v) \/
+    (exists w, done w /\ dg_step g u w /\ In w (stack s) /\ fa s w <> u /\ low s u = dfn s w).
+
   Lemma forset_keep_forset_inv (u: V) (W: V -> program (@SCCSt V) unit):
     (forall v, Hoare (fun s => low_pre v s) (W v) (fun _ s => low_post v s)) ->
     Hoare (fun s => forset_inv u ∅ s /\ In u (stack s) /\
@@ -1530,7 +1535,11 @@ Section IS_LOW.
           (fun _ s => low_post u s /\ In u (stack s) /\ stack_dfn_order s /\ dfn_injective s).
   Proof.
     intros HW_low.
-    (* TODO: use hoare_fix_nolv_auto with invariant combining forset_inv and child scc_is_low_v *)
+    (* TODO: use hoare_fix_nolv_auto with invariant I combining forset_inv, low_src, and child scc_is_low_v.
+       The invariant I(done, s) is: forset_inv u done s /\ In u (stack s) /\ stack_dfn_order s /\
+       dfn_injective s /\ (forall v, fa s v = u -> v = u) /\ low_src u done s /\
+       (forall v, done v -> dg_step g u v -> fa s v = u -> scc_is_low_v s v).
+       At the end (done = dg_step g u), use forset_inv_implies_scc_is_low_v to derive low_post. *)
   Admitted.
 
   (* ================================================================ *)
@@ -1542,10 +1551,10 @@ Section IS_LOW.
           (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
           (fun _ s => low_post u s).
   Proof.
-    (* The proof uses Hoare_fix following the tarjan_scc_keep_dfn_forall pattern.
-       Step 1: preloop establishes forset_inv + In stack + stack_dfn_order + dfn_injective + fa constraint.
-       Step 2: forset_keep_forset_inv (with child low-post IH) yields low_post.
-       Step 3: pop_scc/skip preserves low_post. *)
+    (* TODO: Use Hoare_fix with invariant P = low_pre + vvalid + stack_dfn_order + dfn_injective.
+       Step 1 (preloop): establishes forset_inv, In stack, stack_dfn_order, dfn_injective, fa constraint.
+       Step 2 (forset): use hoare_fix_nolv_auto with invariant combining forset_inv + low_src + child scc_is_low_v.
+       Step 3 (pop_scc/skip): preserves low_post. *)
   Admitted.
 
 End IS_LOW.
