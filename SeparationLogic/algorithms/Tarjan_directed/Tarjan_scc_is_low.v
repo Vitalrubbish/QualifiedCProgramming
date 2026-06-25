@@ -5,6 +5,7 @@ Require Import Coq.Classes.EquivDec.
 Require Import Coq.Arith.PeanoNat.
 Require Import Coq.Relations.Relations.
 Require Import Coq.Classes.Morphisms.
+Require Import Coq.Logic.PropExtensionality.
 Require Import Lia.
 Require Import SetsClass.SetsClass.
 From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
@@ -1674,7 +1675,36 @@ Section IS_LOW.
     v <> a -> ~ a ∈ visited s ->
     scc_is_low_v (set_fa_state s a u) v <-> scc_is_low_v s v.
   Proof.
-  Admitted.
+    intros Hneq Hnv.
+    assert (Htree_eq: state_to_dfs_tree g (set_fa_state s a u) root
+                    = state_to_dfs_tree g s root). {
+      unfold state_to_dfs_tree; simpl.
+      f_equal.
+      extensionality e. apply propositional_extensionality.
+      split.
+      - intros [v0 [Hvis [Hfa_ne [Hfst Hsnd]]]].
+        exists v0. split; [exact Hvis | ].
+        unfold equiv_decb in Hfa_ne, Hfst |- *.
+        destruct (equiv_dec v0 a) as [Heq|Hneq'].
+        { assert (Heq_eq: v0 = a) by apply Heq.
+          rewrite Heq_eq in Hvis.
+          exfalso. apply Hnv. exact Hvis. }
+        { split; [exact Hfa_ne | split; [exact Hfst | exact Hsnd]]. }
+      - intros [v0 [Hvis [Hfa_ne [Hfst Hsnd]]]].
+        exists v0. split; [exact Hvis | ].
+        unfold equiv_decb in Hfa_ne, Hfst |- *.
+        destruct (equiv_dec v0 a) as [Heq|Hneq'].
+        { assert (Heq_eq: v0 = a) by apply Heq.
+          rewrite Heq_eq in Hvis.
+          exfalso. apply Hnv. exact Hvis. }
+        { split; [exact Hfa_ne | split; [exact Hfst | exact Hsnd]]. }
+    }
+    unfold scc_is_low_v, scc_is_low_v_val, scc_low_tree, scc_low_reachable, scc_back_edge.
+    simpl.
+    rewrite Htree_eq.
+    reflexivity.
+  Qed.
+  
   Lemma set_fa_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt):
     wf_scc_state s -> u ∈ visited s -> In u (stack s) -> low s u <= dfn s u ->
     (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
@@ -1722,7 +1752,7 @@ Section IS_LOW.
         apply Hchild; [exact Hv_done | exact Hdg_v0 | exact Hfa_v0 | exact Hfa_ne_v0] ]. }
     (* fa_child_of_u *) { intros v0 [Hfa_eq Hfa_ne]; unfold equiv_decb; destruct (equiv_dec v0 a) as [Heq|Hneq]; [assert (Heq_eq: v0 = a) by apply Heq; subst v0; exact Hdg | unfold equiv_decb in Hfa_eq, Hfa_ne; destruct (equiv_dec v0 a) as [Heq'|Hneq']; [exfalso; apply Hneq; apply Heq' | apply Hfa_child; split; [exact Hfa_eq | exact Hfa_ne]]]. }
     (* fa_not_done *) { intros v0 Hnv Hfa_v0; unfold equiv_decb in Hfa_v0; destruct (equiv_dec v0 a) as [Heq|Hneq]; [assert (Heq_eq: v0 = a) by apply Heq; subst v0; exfalso; apply Hnv; right; reflexivity | apply Hfa_not_done; [intro Hv_done; apply Hnv; left; exact Hv_done | exact Hfa_v0]]. }
-  Admitted.
+  Qed.
 
   (** [set_fa_preserves_scc_is_low_v]: For [v ≠ a] with [a ∉ visited],
       [scc_is_low_v] unchanged by [set_fa a u]. Uses [set_fa_preserves_tree_edges]
