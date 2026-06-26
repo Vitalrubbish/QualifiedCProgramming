@@ -2545,6 +2545,11 @@ Section IS_LOW.
           (conj Hdone_vis_s (conj Hlow_post (conj Hvis Hfa_pres))))))))))).
   Qed.
 
+  (** [preloop_stack_eq]: [preloop a] prepends [a] to the stack. *)
+  Lemma preloop_stack_eq (a: V) (s0 s_result: SCCSt):
+    (s0, tt, s_result) ∈ preloop a -> stack s_result = a :: stack s0.
+  Proof. Admitted.
+
   (** [preloop_preserves_frame]: [preloop a] preserves the frame
       invariants for any ancestor [anc] when [anc ≠ a].  The
       [scc_is_low_v] conjunct for [d] vertices is intentionally
@@ -2569,9 +2574,214 @@ Section IS_LOW.
         fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
         done_visited d s).
   Proof.
-    (* TODO: fill via preloop_keep_low_dfn_forall + preloop_keep_fa_eq +
-       existing preloop Hoare lemmas. *)
-  Admitted.
+    intros Hwf Horder Hinj Hnv_a anc d Hfinv Hinstk Hsrc Hchild
+           Hfa_child Hfa_not_done Hdone_vis.
+    (* anc ≠ a: otherwise anc ∈ visited s0 contradicts ~ a ∈ visited s0 *)
+    destruct Hfinv as [Hwf_anc [Huvis_anc [Hinstk_s0 [Hlow_le Hforall]]]].
+    assert (Hne_anc: anc <> a). {
+      intro Heq. subst anc. exact (Hnv_a Huvis_anc). }
+    assert (Hnot_da: ~ d a). {
+      intro Hda. apply Hdone_vis in Hda. exact (Hnv_a Hda). }
+    apply Hoare_state_intro. intros s1 Heq. subst s1.
+    unfold Hoare. sets_unfold. intros s_start ret s_result Heq Hprog.
+    subst s_start.
+    (* --- Conjunct 1: forset_inv anc d s_result --- *)
+    assert (Hfinv_res: forset_inv anc d s_result). {
+      unfold forset_inv.
+      (* 1a: wf_scc_state *)
+      assert (Hwf_res: wf_scc_state s_result). {
+        pose proof (preloop_preserves_wf_scc_state a) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        apply (HL s0 tt s_result).
+        - unfold wf_scc_state_pre. split; [exact Hwf | exact Hnv_a].
+        - exact Hprog. }
+      (* 1b: anc ∈ visited *)
+      assert (Hvis_res: anc ∈ visited s_result). {
+        set (S := fun w => w = anc).
+        assert (Hneq: forall w, S w -> a <> w). {
+          intros w Hw. unfold S in Hw. subst w. intro Heq. apply Hne_anc. symmetry. exact Heq. }
+        pose proof (preloop_keep_low_dfn_forall a S (low s0) (dfn s0) Hneq) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        assert (Hpres: (forall w, S w -> visited s_result w) /\
+                        (forall w, S w -> low s_result w = low s0 w) /\
+                        (forall w, S w -> dfn s_result w = dfn s0 w)). {
+          apply (HL s0 tt s_result);
+            [split; [intros w Hw; unfold S in Hw; subst w; exact Huvis_anc
+                    |split; intros w Hw; unfold S in Hw; subst w; reflexivity]
+            |exact Hprog]. }
+        destruct Hpres as [Hvis_S _]. apply Hvis_S. unfold S. reflexivity. }
+      (* 1c: In anc (stack s_result) *)
+      assert (Hinstk_res: In anc (stack s_result)). {
+        pose proof (preloop_above_existing a anc) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        destruct (HL s0 tt s_result Hinstk_s0 Hprog) as (l1 & l2 & Heq & Hin).
+        rewrite Heq. apply List.in_or_app. right. simpl. right. exact Hin. }
+      (* 1d: low s_result anc <= dfn s_result anc *)
+      assert (Hlow_le_res: low s_result anc <= dfn s_result anc). {
+        set (S := fun w => d w \/ w = anc).
+        assert (Hneq: forall w, S w -> a <> w). {
+          intros w [Hdw | Heq_w].
+          - intro Heq. subst w. exact (Hnot_da Hdw).
+          - subst w. intro Heq. apply Hne_anc. symmetry. exact Heq. }
+        pose proof (preloop_keep_low_dfn_forall a S (low s0) (dfn s0) Hneq) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        assert (Hpres: (forall w, S w -> visited s_result w) /\
+                        (forall w, S w -> low s_result w = low s0 w) /\
+                        (forall w, S w -> dfn s_result w = dfn s0 w)). {
+          apply (HL s0 tt s_result);
+            [split; [intros w [Hdw|Heq_w]; [apply Hdone_vis; exact Hdw|subst w; exact Huvis_anc]
+                    |split; intros w [Hdw|Heq_w]; reflexivity]
+            |exact Hprog]. }
+        destruct Hpres as [_ [Hlow_S Hdfn_S]].
+        rewrite (Hlow_S anc). 2: { unfold S. right. reflexivity. }
+        rewrite (Hdfn_S anc). 2: { unfold S. right. reflexivity. }
+        exact Hlow_le. }
+      (* 1e: forall part *)
+      assert (Hforall_res: forall v, d v -> dg_step g anc v ->
+        (fa s_result v = anc -> low s_result anc <= low s_result v) /\
+        (In v (stack s_result) -> low s_result anc <= dfn s_result v)). {
+        set (S := fun w => d w \/ w = anc).
+        assert (Hneq: forall w, S w -> a <> w). {
+          intros w [Hdw | Heq_w].
+          - intro Heq. subst w. exact (Hnot_da Hdw).
+          - subst w. intro Heq. apply Hne_anc. symmetry. exact Heq. }
+        pose proof (preloop_keep_low_dfn_forall a S (low s0) (dfn s0) Hneq) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        assert (Hpres: (forall w, S w -> visited s_result w) /\
+                        (forall w, S w -> low s_result w = low s0 w) /\
+                        (forall w, S w -> dfn s_result w = dfn s0 w)). {
+          apply (HL s0 tt s_result);
+            [split; [intros w [Hdw|Heq_w]; [apply Hdone_vis; exact Hdw|subst w; exact Huvis_anc]
+                    |split; intros w [Hdw|Heq_w]; reflexivity]
+            |exact Hprog]. }
+        destruct Hpres as [_ [Hlow_S Hdfn_S]].
+        intros v Hdv Hdg. split.
+        - intro Hfa_eq.
+          rewrite (Hlow_S anc). 2: { unfold S. right. reflexivity. }
+          rewrite (Hlow_S v). 2: { unfold S. left. exact Hdv. }
+          destruct (Hforall v Hdv Hdg) as [Hfa_ineq _].
+          apply Hfa_ineq.
+          (* fa unchanged: fa s_result v = fa s0 v *)
+          pose proof (preloop_keep_fa_eq a v (fa s0 v)) as HL_fa.
+          unfold Hoare in HL_fa. sets_unfold in HL_fa.
+          pose proof (HL_fa s0 tt s_result eq_refl Hprog) as Hfa_pres.
+          rewrite <- Hfa_pres. exact Hfa_eq.
+        - intro Hinstk_v.
+          rewrite (Hlow_S anc). 2: { unfold S. right. reflexivity. }
+          rewrite (Hdfn_S v). 2: { unfold S. left. exact Hdv. }
+          destruct (Hforall v Hdv Hdg) as [_ Hstk_ineq].
+          apply Hstk_ineq.
+          pose proof (preloop_stack_eq a s0 s_result Hprog) as Hstack_eq.
+          rewrite Hstack_eq in Hinstk_v. simpl in Hinstk_v.
+          destruct Hinstk_v as [Heq_v | Hinstk0].
+          { subst v. exfalso. apply Hnot_da. exact Hdv. }
+          exact Hinstk0. }
+      exact (conj Hwf_res (conj Hvis_res (conj Hinstk_res (conj Hlow_le_res Hforall_res)))). }
+    (* --- Conjunct 2: In anc (stack s_result) --- *)
+    assert (Hinstk_res: In anc (stack s_result)). {
+      pose proof (preloop_above_existing a anc) as HL.
+      unfold Hoare in HL. sets_unfold in HL.
+      destruct (HL s0 tt s_result Hinstk_s0 Hprog) as (l1 & l2 & Heq & Hin).
+      rewrite Heq. apply List.in_or_app. right. simpl. right. exact Hin. }
+    (* --- Conjunct 3: stack_dfn_order s_result --- *)
+    assert (Horder_res: stack_dfn_order s_result). {
+      pose proof (preloop_preserves_stack_dfn_order a) as HL.
+      unfold Hoare in HL. sets_unfold in HL.
+      destruct Hwf as [Hsiv [Hinv_df _]].
+      apply (HL s0 tt s_result).
+      - split; [exact Horder | split; [exact Hinv_df | split; [exact Hsiv | exact Hnv_a]]].
+      - exact Hprog. }
+    (* --- Conjunct 4: dfn_injective s_result --- *)
+    assert (Hinj_res: dfn_injective s_result). {
+      pose proof (preloop_preserves_dfn_injective a) as HL.
+      unfold Hoare in HL. sets_unfold in HL.
+      destruct Hwf as [_ [Hinv_df _]].
+      apply (HL s0 tt s_result).
+      - split; [exact Hinj | split; [exact Hinv_df | exact Hnv_a]].
+      - exact Hprog. }
+    (* --- Conjunct 5: low_src anc d s_result --- *)
+    assert (Hsrc_res: low_src anc d s_result). {
+      set (S := fun w => d w \/ w = anc).
+      assert (Hneq: forall w, S w -> a <> w). {
+        intros w [Hdw | Heq_w].
+        - intro Heq. subst w. exact (Hnot_da Hdw).
+        - subst w. intro Heq. apply Hne_anc. symmetry. exact Heq. }
+      pose proof (preloop_keep_low_dfn_forall a S (low s0) (dfn s0) Hneq) as HL.
+      unfold Hoare in HL. sets_unfold in HL.
+      assert (Hpres: (forall w, S w -> visited s_result w) /\
+                      (forall w, S w -> low s_result w = low s0 w) /\
+                      (forall w, S w -> dfn s_result w = dfn s0 w)). {
+        apply (HL s0 tt s_result);
+          [split; [intros w [Hdw|Heq_w]; [apply Hdone_vis; exact Hdw|subst w; exact Huvis_anc]
+                  |split; intros w [Hdw|Heq_w]; reflexivity]
+          |exact Hprog]. }
+      destruct Hpres as [_ [Hlow_S Hdfn_S]].
+      unfold low_src. rewrite (Hlow_S anc). 2: { unfold S. right. reflexivity. }
+      unfold low_src in Hsrc.
+      destruct Hsrc as [Heq_dfnu | [[v [Hv [Hdg_v [Hfa_v [Hfa_ne_v Heq_low]]]]]
+        | [w [Hw [Hdg_w [Hinstk_w [Hfa_ne_w Heq_dfn]]]]]]].
+      - left. rewrite (Hdfn_S anc). 2: { unfold S. right. reflexivity. } exact Heq_dfnu.
+      - right. left. exists v.
+        assert (Hfa_res_eq: fa s_result v = anc). {
+          pose proof (preloop_keep_fa_eq a v anc) as HL_fa.
+          unfold Hoare in HL_fa. sets_unfold in HL_fa.
+          apply (HL_fa s0 tt s_result); [| exact Hprog]. exact Hfa_v. }
+        assert (Hfa_res_ne: fa s_result v <> v). {
+          pose proof (preloop_keep_fa_eq a v (fa s0 v)) as HL_fa2.
+          unfold Hoare in HL_fa2. sets_unfold in HL_fa2.
+          pose proof (HL_fa2 s0 tt s_result eq_refl Hprog) as Hfa_eq2.
+          rewrite Hfa_eq2. exact Hfa_ne_v. }
+        assert (Hlow_eq_res: low s0 anc = low s_result v). {
+          rewrite (Hlow_S v). 2: { unfold S. left. exact Hv. } exact Heq_low. }
+        split; [exact Hv | split; [exact Hdg_v | split; [exact Hfa_res_eq | split; [exact Hfa_res_ne | exact Hlow_eq_res]]]].
+      - right. right. exists w.
+        assert (Hinstk_res_w: In w (stack s_result)). {
+          pose proof (preloop_stack_eq a s0 s_result Hprog) as Hstack_eq.
+          rewrite Hstack_eq. simpl. right. exact Hinstk_w. }
+        assert (Hfa_res_ne_w: fa s_result w <> anc). {
+          pose proof (preloop_keep_fa_eq a w (fa s0 w)) as HL_fa3.
+          unfold Hoare in HL_fa3. sets_unfold in HL_fa3.
+          pose proof (HL_fa3 s0 tt s_result eq_refl Hprog) as Hfa_eq3.
+          rewrite Hfa_eq3. exact Hfa_ne_w. }
+        assert (Hdfn_eq_res: low s0 anc = dfn s_result w). {
+          rewrite (Hdfn_S w). 2: { unfold S. left. exact Hw. } exact Heq_dfn. }
+        split; [exact Hw | split; [exact Hdg_w | split; [exact Hinstk_res_w | split; [exact Hfa_res_ne_w | exact Hdfn_eq_res]]]]. }
+    (* --- Conjunct 6: fa_child_of_u anc s_result --- *)
+    assert (Hfa_child_res: fa_child_of_u anc s_result). {
+      unfold fa_child_of_u. intros v [Hfa_eq Hfa_ne].
+      pose proof (preloop_keep_fa_eq a v (fa s0 v)) as HL_fa.
+      unfold Hoare in HL_fa. sets_unfold in HL_fa.
+      pose proof (HL_fa s0 tt s_result eq_refl Hprog) as Hfa_pres.
+      rewrite Hfa_pres in Hfa_eq, Hfa_ne.
+      apply Hfa_child. split; [exact Hfa_eq | exact Hfa_ne]. }
+    (* --- Conjunct 7: fa_not_done_implies_eq_u anc (d ∪ [a]) s_result --- *)
+    assert (Hfa_not_done_res: fa_not_done_implies_eq_u anc (d ∪ [a]) s_result). {
+      unfold fa_not_done_implies_eq_u. intros v Hnv_sets Hfa_eq.
+      apply Hfa_not_done.
+      - exact Hnv_sets.
+      - pose proof (preloop_keep_fa_eq a v (fa s0 v)) as HL_fa.
+        unfold Hoare in HL_fa. sets_unfold in HL_fa.
+        pose proof (HL_fa s0 tt s_result eq_refl Hprog) as Hfa_pres.
+        rewrite Hfa_pres in Hfa_eq. exact Hfa_eq. }
+    (* --- Conjunct 8: done_visited d s_result --- *)
+    assert (Hdone_vis_res: done_visited d s_result). {
+      set (S := fun w => d w).
+      assert (Hneq: forall w, S w -> a <> w). {
+        intros w Hdw. intro Heq. subst w. exact (Hnot_da Hdw). }
+      pose proof (preloop_keep_low_dfn_forall a S (low s0) (dfn s0) Hneq) as HL.
+      unfold Hoare in HL. sets_unfold in HL.
+      assert (Hpres: (forall w, S w -> visited s_result w) /\
+                      (forall w, S w -> low s_result w = low s0 w) /\
+                      (forall w, S w -> dfn s_result w = dfn s0 w)). {
+        apply (HL s0 tt s_result);
+          [split; [intros w Hdw; apply Hdone_vis; exact Hdw
+                  |split; intros w Hdw; reflexivity]
+          |exact Hprog]. }
+      destruct Hpres as [Hvis_S _].
+      unfold done_visited. intros w Hdw. apply Hvis_S. exact Hdw. }
+    exact (conj Hfinv_res (conj Hinstk_res (conj Horder_res (conj Hinj_res
+      (conj Hsrc_res (conj Hfa_child_res (conj Hfa_not_done_res Hdone_vis_res))))))).
+  Qed.
 
   Theorem tarjan_scc_keep_low_valid (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u /\
@@ -2602,10 +2812,10 @@ Section IS_LOW.
     (* Hprog: (s0', tt, s2) ∈ preloop a;; forset ...;; If ... *)
     (* Goal: Q_low a s0' tt s2 *)
     unfold Q_low. intro Hant. destruct Hant as [Hnv_a [Hwf' [Horder' Hinj']]].
-    (* Decompose the trace: s0' --preloop a→ s_pre --forset→ s_forset --If→ s2 *)
+    (* Decompose the trace: s0' --preloop a-> s_pre --forset-> s_forset --If-> s2 *)
     destruct Hprog as [ret_pre [s_pre [Hpreloop_exec Hrest_exec]]].
     destruct Hrest_exec as [ret_forset [s_forset [Hforset_exec Hif_exec]]].
-    (* Step 1: preloop a → establish forset_inv a ∅ ∧ local properties *)
+    (* Step 1: preloop a -> establish forset_inv a ∅ ∧ local properties *)
     assert (Hpre_frame: forset_inv a ∅ s_pre /\ In a (stack s_pre) /\
                         stack_dfn_order s_pre /\ dfn_injective s_pre /\
                         low s_pre a = dfn s_pre a /\
@@ -2618,7 +2828,7 @@ Section IS_LOW.
       - exact Hpreloop_exec. }
     destruct Hpre_frame as [Hfinv_pre [Hinstk_pre [Horder_pre [Hinj_pre
       [Hlow_eq_pre [Hfa_child_pre Hfa_not_done_pre]]]]]].
-    (* Step 2: forset → low_post a *)
+    (* Step 2: forset -> low_post a *)
     assert (Hforset_result: low_post a s_forset /\ In a (stack s_forset) /\
                             stack_dfn_order s_forset /\ dfn_injective s_forset). {
       pose proof (forset_keep_forset_inv a W HW_frame) as HL.
@@ -2628,7 +2838,7 @@ Section IS_LOW.
           (conj Hinj_pre (conj Hlow_eq_pre (conj Hfa_child_pre Hfa_not_done_pre)))))).
       - exact Hforset_exec. }
     destruct Hforset_result as [Hlow_post_fs [Hinstk_fs [Horder_fs Hinj_fs]]].
-    (* Step 3: If → final result *)
+    (* Step 3: If -> final result *)
     assert (Hfinal: low_post a s2 /\ a ∈ visited s2 /\ stack_dfn_order s2 /\
                     dfn_injective s2). {
       destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
@@ -2676,7 +2886,7 @@ Section IS_LOW.
         split; [split; [exact Hwf_fs | exact Hscc_fs] |
           split; [exact Hvis_fs | split; [exact Horder_fs | exact Hinj_fs]]]. }
     destruct Hfinal as [Hlow_post_s2 [Hvis_s2 [Horder_s2 Hinj_s2]]].
-    (* Frame part: forall anc d, ... → admitted *)
+    (* Frame part: forall anc d, ... -> admitted *)
     assert (Hframe: forall anc d,
       forset_inv anc d s0' -> In anc (stack s0') ->
       dfn_injective s0' -> low_src anc d s0' ->
