@@ -2495,8 +2495,18 @@ Section IS_LOW.
         { apply (forset_keep_forset_inv a W HW_frame). }
         { intros ret2. apply Hoare_state_intro. intros s0 [Hlow_post_a [Hinstk' [Horder' Hinj']]].
           hoare_auto_s.
-          - (* pop_scc preserves low_post: wf_scc_state + scc_is_low_v *)
-            admit.
+          - (* pop_scc a preserves low_post a: wf_scc_state via pop_scc_preserves_wf_scc_state *)
+            unfold low_post.
+            refine (@Hoare_conj _ _ _ (pop_scc a) (fun _ s => wf_scc_state s)
+              (fun _ s => scc_is_low_v s a) _ _).
+            { eapply Hoare_conseq_pre. 2: apply pop_scc_preserves_wf_scc_state.
+              intros s1 Hs1. destruct Hs1. destruct Hlow_post_a as [Hwf _]. subst. exact Hwf. }
+            { (* scc_is_low_v a after pop_scc: the self-witness a works for the
+                 "minimum is achieved" part (low a = dfn a, preserved by pop_scc).
+                 The lower bound follows from Hlow_post_a + the fact that pop_scc
+                 only shrinks the stack, hence scc_low_tree can only shrink.
+                 TODO: prove pop_scc_preserves_scc_is_low_v lemma. *)
+              admit. }
           - destruct H as [Heq_s Hncond]. subst s. exact Hlow_post_a. } } }
     { (* Step 2: frame_pre a -> frame_post (F W a) *)
       intros W a IHlow IHframe.
