@@ -1586,7 +1586,7 @@ Section IS_LOW.
   Qed.
 
   (* ================================================================ *)
-  (* 7. Bridging Lemma: forset_inv → scc_is_low_v                   *)
+  (* 7. Bridging Lemma: forset_inv -> scc_is_low_v                   *)
   (* ================================================================ *)
 
   (** Helper lemma: low[u] ≤ dfn[w] for every w in scc_low_tree s u,
@@ -2033,7 +2033,7 @@ Section IS_LOW.
       itself, parameterized over ancestor and done-set.
       [HW_frame] is discharged by [Hoare_fix_logicv_conj] in the main
       theorem [tarjan_scc_keep_low_valid], which proves simultaneously
-      [low_pre → low_post] and the frame-preservation property. *)
+      [low_pre -> low_post] and the frame-preservation property. *)
   Lemma W_preserves_ancestor_I (u a: V) (done: V -> Prop) (s: SCCSt)
         (W: V -> program SCCSt unit):
     (forall v (anc: V) (d: V -> Prop) (s0: SCCSt),
@@ -2441,44 +2441,76 @@ Section IS_LOW.
   Qed.
 
   (* ================================================================ *)
+  (* 8.5. Preloop Stability Lemmas (for Normal-Form Proof)            *)
+  (* ================================================================ *)
+
+  (** [preloop_keep_low_dfn_forall]: Generalization of
+      [preloop_keep_dfn_forall] that additionally preserves [low]. *)
+  Lemma preloop_keep_low_dfn_forall (u: V) (S: V -> Prop)
+        (low_vals dfn_vals: V -> nat):
+    (forall w, S w -> u <> w) ->
+    Hoare (fun s: @SCCSt V => (forall w, S w -> w ∈ visited s) /\
+                               (forall w, S w -> low s w = low_vals w) /\
+                               (forall w, S w -> dfn s w = dfn_vals w))
+          (preloop u)
+          (fun _ s => (forall w, S w -> w ∈ visited s) /\
+                      (forall w, S w -> low s w = low_vals w) /\
+                      (forall w, S w -> dfn s w = dfn_vals w)).
+  Proof.
+    intros Hneq. unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hvis [Hlow_vals Hdfn_vals]]. split.
+    - intros w Hw. sets_unfold. left. apply Hvis. exact Hw.
+    - split.
+      + intros w Hw. unfold equiv_decb. destruct (equiv_dec w u) as [Heq | Hneq'].
+        * exfalso. apply (Hneq w Hw). symmetry. exact Heq.
+        * apply Hlow_vals. exact Hw.
+      + intros w Hw. unfold equiv_decb. destruct (equiv_dec w u) as [Heq | Hneq'].
+        * exfalso. apply (Hneq w Hw). symmetry. exact Heq.
+        * apply Hdfn_vals. exact Hw.
+  Qed.
+
+  (** [preloop_keep_fa_eq]: [preloop u] does not modify the [fa]
+      field, so [fa s v] is preserved for any vertex [v]. *)
+  Lemma preloop_keep_fa_eq (u v: V) (p: V):
+    Hoare (fun s: @SCCSt V => fa s v = p)
+          (preloop u)
+          (fun _ s => fa s v = p).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    reflexivity.
+  Qed.
+
+  (* ================================================================ *)
   (* 9. Main Theorem: Single-vertex Low-link Correctness               *)
   (* ================================================================ *)
 
-  (** Frame property: existential pre, universal post.
-      [frame_pre v s] = there exists an ancestor [anc] with done-set [d] and
-      initial state [s0] s.t. all frame preconditions hold and [s = s0].
-      [frame_post v _ s] = for all anc, d, s0 satisfying the preconditions,
-      the post-state [s] satisfies all frame postconditions. *)
-  Definition frame_pre (v: V) (s: @SCCSt V): Prop :=
-    exists (anc: V) (d: V -> Prop) (s0: SCCSt),
-      forset_inv anc d s0 /\ In anc (stack s0) /\ stack_dfn_order s0 /\
-      dfn_injective s0 /\ low_src anc d s0 /\
-      (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
-        scc_is_low_v s0 w) /\
-      fa_child_of_u anc s0 /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s0 /\
-      done_visited d s0 /\ dfn s0 anc < timer s0 /\ ~ v ∈ visited s0 /\
-      s = s0.
+  (** [Q_low u s0 _ s]: normal-form postcondition for [tarjan_scc_f].
+      If [u] is unvisited at start state [s0] and [s0] is well-formed,
+      then the result state [s] satisfies [low_post u s], [u] is
+      visited, and the frame invariants of any ancestor are preserved
+      from [s0] to [s]. *)
+  Definition Q_low (u: V) (s0: SCCSt) (_: unit) (s: SCCSt): Prop :=
+    (~ u ∈ visited s0 /\ wf_scc_state s0 /\ stack_dfn_order s0 /\ dfn_injective s0) ->
+    (low_post u s /\ u ∈ visited s /\ stack_dfn_order s /\ dfn_injective s /\
+     (forall anc d,
+        forset_inv anc d s0 -> In anc (stack s0) ->
+        dfn_injective s0 -> low_src anc d s0 ->
+        (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
+         scc_is_low_v s0 w) ->
+        fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [u]) s0 ->
+        done_visited d s0 -> dfn s0 anc < timer s0 ->
+        forset_inv anc d s /\ In anc (stack s) /\ stack_dfn_order s /\
+        dfn_injective s /\ low_src anc d s /\
+        (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
+         scc_is_low_v s w) /\
+        fa_child_of_u anc s /\ fa_not_done_implies_eq_u anc (d ∪ [u]) s /\
+        done_visited d s /\ (fa s0 u = anc -> fa s u = anc))).
 
-  Definition frame_post (v: V) (_: unit) (s: @SCCSt V): Prop :=
-    forall (anc: V) (d: V -> Prop) (s0: SCCSt),
-      forset_inv anc d s0 -> In anc (stack s0) -> stack_dfn_order s0 ->
-      dfn_injective s0 -> low_src anc d s0 ->
-      (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
-        scc_is_low_v s0 w) ->
-      fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [v]) s0 ->
-      done_visited d s0 -> dfn s0 anc < timer s0 -> ~ v ∈ visited s0 ->
-      forset_inv anc d s /\ In anc (stack s) /\ stack_dfn_order s /\
-      dfn_injective s /\ low_src anc d s /\
-      (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
-        scc_is_low_v s w) /\
-      fa_child_of_u anc s /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s /\
-      done_visited d s /\ low_post v s /\ v ∈ visited s /\
-      (fa s0 v = anc -> fa s v = anc).
-
-  (** Convert the [∀]-encoded [frame_post] IH into the concrete [HW_frame]
-      form that [forset_keep_forset_inv] expects. *)
-  Lemma frame_IH_to_hw_frame (W: V -> program SCCSt unit)
-        (IHframe: forall a, Hoare (frame_pre a) (W a) (frame_post a)):
+  (** Convert the normal-form [Q_low] induction hypothesis into the
+      concrete [HW_frame] form that [forset_keep_forset_inv] expects. *)
+  Lemma Q_low_to_HW_frame (W: V -> program SCCSt unit)
+        (IH: forall s0 a, Hoare (fun s => s = s0) (W a) (Q_low a s0)):
     forall v (anc: V) (d: V -> Prop) (s0: SCCSt),
       forset_inv anc d s0 -> In anc (stack s0) -> stack_dfn_order s0 ->
       dfn_injective s0 -> low_src anc d s0 ->
@@ -2497,147 +2529,169 @@ Section IS_LOW.
   Proof.
     intros v anc d s0 Hinv Hstack Horder Hinj Hsrc Hchild
            Hfa_child Hfa_not_done Hdone_vis Hdfn_lt Hnv.
-    specialize (IHframe v).
-    apply (@Hoare_conseq SCCSt unit
-      (fun s' => s' = s0) (frame_pre v) (W v)
-      (fun _ s' => forset_inv anc d s' /\ In anc (stack s') /\ stack_dfn_order s' /\
-                  dfn_injective s' /\ low_src anc d s' /\
-                  (forall w, d w -> dg_step g anc w -> fa s' w = anc -> fa s' w <> w ->
-                    scc_is_low_v s' w) /\
-                  fa_child_of_u anc s' /\ fa_not_done_implies_eq_u anc (d ∪ [v]) s' /\
-                  done_visited d s' /\ low_post v s' /\ v ∈ visited s' /\
-                  (fa s0 v = anc -> fa s' v = anc))
-      (frame_post v)).
-    { intros s1 Heq. subst s1. unfold frame_pre.
-      exists anc, d, s0. split; [|split; [|split; [|split; [|split; [|split;
-      [|split; [|split; [|split; [|split; [|split; [|split]]]]]]]]]]];
-      try assumption. }
-    { intros ret s' Hpost.
-      unfold frame_post in Hpost.
-      apply (Hpost anc d s0 Hinv Hstack Horder Hinj Hsrc Hchild
-        Hfa_child Hfa_not_done Hdone_vis Hdfn_lt Hnv). }
-    { exact IHframe. }
+    specialize (IH s0 v).
+    refine (Hoare_conseq_post _ _ _ _ _ IH).
+    intros b s' HQ. unfold Q_low in HQ.
+      assert (Hant: ~ v ∈ visited s0 /\ wf_scc_state s0 /\ stack_dfn_order s0 /\ dfn_injective s0). {
+        split; [exact Hnv |].
+        destruct Hinv as [Hwf _]. split; [exact Hwf | split; [exact Horder | exact Hinj]]. }
+      destruct (HQ Hant) as [Hlow_post [Hvis [Horder_s [Hinj_s Hframe]]]].
+      specialize (Hframe anc d Hinv Hstack Hinj Hsrc Hchild
+        Hfa_child Hfa_not_done Hdone_vis Hdfn_lt).
+      destruct Hframe as [Hfinv [Hinstk_s [Horder_s2 [Hinj_s2 [Hsrc_s [Hchild_s
+        [Hfa_child_s [Hfa_not_done_s [Hdone_vis_s Hfa_pres]]]]]]]]].
+      exact (conj Hfinv (conj Hinstk_s (conj Horder_s2 (conj Hinj_s2
+        (conj Hsrc_s (conj Hchild_s (conj Hfa_child_s (conj Hfa_not_done_s
+          (conj Hdone_vis_s (conj Hlow_post (conj Hvis Hfa_pres))))))))))).
   Qed.
 
+  (** [preloop_preserves_frame]: [preloop a] preserves the frame
+      invariants for any ancestor [anc] when [anc ≠ a].  The
+      [scc_is_low_v] conjunct for [d] vertices is intentionally
+      omitted — it is temporarily broken by [preloop a] and
+      re-established later by the forset. *)
+  Lemma preloop_preserves_frame (a: V) (s0: SCCSt):
+    wf_scc_state s0 -> stack_dfn_order s0 -> dfn_injective s0 ->
+    ~ a ∈ visited s0 ->
+    forall anc d,
+      forset_inv anc d s0 -> In anc (stack s0) ->
+      low_src anc d s0 ->
+      (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
+       scc_is_low_v s0 w) ->
+      fa_child_of_u anc s0 ->
+      fa_not_done_implies_eq_u anc (d ∪ [a]) s0 ->
+      done_visited d s0 ->
+      Hoare (fun s => s = s0) (preloop a) (fun _ s =>
+        forset_inv anc d s /\ In anc (stack s) /\
+        stack_dfn_order s /\ dfn_injective s /\
+        low_src anc d s /\
+        fa_child_of_u anc s /\
+        fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
+        done_visited d s).
+  Proof.
+    (* TODO: fill via preloop_keep_low_dfn_forall + preloop_keep_fa_eq +
+       existing preloop Hoare lemmas. *)
+  Admitted.
+
   Theorem tarjan_scc_keep_low_valid (u: V):
-    Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u /\ stack_dfn_order s /\ dfn_injective s)
+    Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u /\
+                              stack_dfn_order s /\ dfn_injective s)
         (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
         (fun _ s => low_post u s).
   Proof.
     unfold tarjan_scc.
-    (* Use Hoare_fix_mutual_conj: prove (1) low_pre -> low_post AND (2) frame_pre -> frame_post
-       simultaneously via mutual fixpoint induction.  Then extract (1) and add extra pre's. *)
-    pose proof (Hoare_fix_mutual_conj (Σ := @SCCSt V) (A := V) (B := unit) (C := unit)
-      (tarjan_scc_f g) (fun v s => low_pre v s /\ stack_dfn_order s /\ dfn_injective s) frame_pre
-      (fun v _ => low_post v) frame_post u) as [Hlow_raw Hframe_raw].
-    { (* Step 1: (low_pre ∧ order ∧ inj) → low_post (F W a) *)
-      intros W a IHlow IHframe.
-      pose proof (frame_IH_to_hw_frame W IHframe) as HW_frame.
-      unfold tarjan_scc_f.
-      eapply (Hoare_bind (fun s => low_pre a s /\ stack_dfn_order s /\ dfn_injective s) (preloop a)
-        (fun _ s => forset_inv a ∅ s /\ In a (stack s) /\
-                    stack_dfn_order s /\ dfn_injective s /\
-                    low s a = dfn s a /\
-                    fa_child_of_u a s /\
-                    fa_not_done_implies_eq_u a ∅ s)
-        (fun _ => forset (fun v => dg_step g a v) (process_edge a W);;
-                 If (fun s => low s a = dfn s a) (pop_scc a))
-        (fun _ s => low_post a s)).
-      { apply (Hoare_conseq_pre _ (fun s => wf_scc_state_pre a s /\ stack_dfn_order s /\ dfn_injective s)).
-        { intros s [Hlp [Horder Hinj]]. split; [exact Hlp | split; [exact Horder | exact Hinj]]. }
-        apply preloop_establishes_forset_precond. }
-      { intros ret.
-        eapply (Hoare_bind (fun s => forset_inv a ∅ s /\ In a (stack s) /\
-                                    stack_dfn_order s /\ dfn_injective s /\
-                                    low s a = dfn s a /\
-                                    fa_child_of_u a s /\
-                                    fa_not_done_implies_eq_u a ∅ s)
-          (forset (fun v => dg_step g a v) (process_edge a W))
-          (fun _ s => low_post a s /\ In a (stack s) /\ stack_dfn_order s /\ dfn_injective s)
-          (fun _ => If (fun s => low s a = dfn s a) (pop_scc a))
-          (fun _ s => low_post a s)).
-        { apply (forset_keep_forset_inv a W HW_frame). }
-        { intros ret2. apply Hoare_state_intro. intros s0 [Hlow_post_a [Hinstk' [Horder' Hinj']]].
-          hoare_auto_s.
-          - (* pop_scc a preserves low_post a: wf_scc_state via pop_scc_preserves_wf_scc_state *)
-            unfold low_post.
-            refine (@Hoare_conj _ _ _ (pop_scc a) (fun _ s => wf_scc_state s)
-              (fun _ s => scc_is_low_v s a) _ _).
-            { eapply Hoare_conseq_pre. 2: apply pop_scc_preserves_wf_scc_state.
-              intros s1 Hs1. destruct Hs1. destruct Hlow_post_a as [Hwf _]. subst. exact Hwf. }
-            { (* scc_is_low_v after pop_scc: goal is exactly pop_scc_preserves_scc_is_low_v *)
-              destruct Hlow_post_a as [_ Hscc0].
-              apply (pop_scc_preserves_scc_is_low_v a s0).
-              { exact H. }
-              { exact Hscc0. } }
-          - destruct H as [Heq_s Hncond]. subst s. exact Hlow_post_a. } } }
-    { (* Step 2: frame_pre a -> frame_post (F W a) *)
-      intros W a IHlow IHframe.
-      unfold tarjan_scc_f.
-      unfold Hoare. sets_unfold.
-      intros s1 ret s2 Hpre Hprog.
-      (* Pre gives us some anc, d, s0 with forset_inv anc d s0 etc. *)
-      destruct Hpre as [anc [d [s0 [Hinv [Hstack [Horder [Hinj [Hsrc [Hchild
-        [Hfa_child [Hfa_not_done [Hdone_vis [Hdfn_lt [Hnv Heq]]]]]]]]]]]]]].
-      subst s1.
-      (* Need to prove: frame_post a tt s2 *)
-      unfold frame_post. intros anc' d' s0' Hinv' Hstack' Horder' Hinj' Hsrc'
-        Hchild' Hfa_child' Hfa_not_done' Hdone_vis' Hdfn_lt' Hnv'.
-      (* Case: anc' = a is impossible (stack_in_visited contradiction) *)
-      destruct (classic (anc' = a)) as [Heq_anc | Hne_anc].
-      { subst anc'. destruct Hinv' as [Hsiv _]. unfold stack_in_visited in Hsiv.
-        apply Hsiv in Hstack'. exfalso. apply Hnv'. exact Hstack'. }
-      (* anc' ≠ a: decompose trace, prove each step preserves anc''s frame.
-         bind = exists (a:A) (s2:Σ), (s1,a,s2) ∈ f /\ (s2,b,s3) ∈ g a *)
-      destruct Hprog as [ret_pre [s_pre [Hpreloop_exec Hrest_exec]]].
-      destruct Hrest_exec as [ret_forset [s_forset [Hforset_exec Hif_exec]]].
-      (* Step A: preloop a preserves anc''s frame invariants.
-         Since anc' ≠ a, preloop only modifies a's state. *)
-      assert (Hpre_frame: forset_inv anc' d' s_pre /\ In anc' (stack s_pre) /\
-                         stack_dfn_order s_pre /\ dfn_injective s_pre /\
-                         low_src anc' d' s_pre /\
-                         (forall w, d' w -> dg_step g anc' w -> fa s_pre w = anc' ->
-                            fa s_pre w <> w -> scc_is_low_v s_pre w) /\
-                         fa_child_of_u anc' s_pre /\
-                         fa_not_done_implies_eq_u anc' (d' ∪ [a]) s_pre /\
-                         done_visited d' s_pre). {
-        (* preloop a only modifies a's state. Since anc' ≠ a, all anc'-related
-           fields are unchanged. TODO: prove via preloop step decomposition. *)
-        admit. }
-      (* Step B: forset + if_else preserves anc''s frame.
-         The forset uses HW_frame (from IHframe) which gives frame for recursive W calls.
-         Actions on a (set_fa, update_low) don't affect anc'. *)
-      assert (Hforset_frame: forset_inv anc' d' s_forset /\ In anc' (stack s_forset) /\
-                             stack_dfn_order s_forset /\ dfn_injective s_forset /\
-                             low_src anc' d' s_forset /\
-                             (forall w, d' w -> dg_step g anc' w -> fa s_forset w = anc' ->
-                                fa s_forset w <> w -> scc_is_low_v s_forset w) /\
-                             fa_child_of_u anc' s_forset /\
-                             fa_not_done_implies_eq_u anc' (d' ∪ [a]) s_forset /\
-                             done_visited d' s_forset /\
-                             low_post a s_forset /\ a ∈ visited s_forset /\
-                             (fa s0' a = anc' -> fa s_forset a = anc')). {
-        admit. }
-      (* Step C: if_else preserves anc''s frame.
-         Pop_scc a only pops from the top; anc' (with dfn < dfn a) stays below. *)
-      assert (Hif_frame: forset_inv anc' d' s2 /\ In anc' (stack s2) /\
-                         stack_dfn_order s2 /\ dfn_injective s2 /\
-                         low_src anc' d' s2 /\
-                         (forall w, d' w -> dg_step g anc' w -> fa s2 w = anc' ->
-                            fa s2 w <> w -> scc_is_low_v s2 w) /\
-                         fa_child_of_u anc' s2 /\
-                         fa_not_done_implies_eq_u anc' (d' ∪ [a]) s2 /\
-                         done_visited d' s2 /\
-                         low_post a s2 /\ a ∈ visited s2 /\
-                         (fa s0' a = anc' -> fa s2 a = anc')). {
-        admit. }
-      exact Hif_frame. }
-    (* Hlow_raw: Hoare (low_pre u ∧ stack_dfn_order ∧ dfn_injective) ... low_post u.
-       Goal:     Hoare (low_pre u ∧ original_vvalid g u ∧ stack_dfn_order ∧ dfn_injective) ... low_post u.
-       Apply Hoare_conseq_pre to add original_vvalid to the pre (it's trivially dropped). *)
-    eapply Hoare_conseq_pre.
-    - intros s [Hlp [Hov [Horder Hinj]]]. exact (conj Hlp (conj Horder Hinj)).
-    - exact Hlow_raw.
+    apply Hoare_normalize. intros s_init Hpre.
+    (* Hpre: (low_pre u s_init /\ original_vvalid g u /\ stack_dfn_order s_init /\ dfn_injective s_init) *)
+    assert (Hwf_s : wf_scc_state s_init) by (unfold low_pre, wf_scc_state_pre in Hpre; tauto).
+    assert (Hnv_u : ~ u ∈ visited s_init) by (unfold low_pre, wf_scc_state_pre in Hpre; tauto).
+    assert (Horder_s : stack_dfn_order s_init) by (tauto).
+    assert (Hinj_s : dfn_injective s_init) by (tauto).
+    cut (Hoare (fun s => s = s_init) (Lfix (tarjan_scc_f g) u) (Q_low u s_init)).
+    { intro HQL. eapply Hoare_conseq_post; [| exact HQL].
+      intros b s HQ. unfold Q_low in HQ.
+      destruct (HQ (conj Hnv_u (conj Hwf_s (conj Horder_s Hinj_s)))) as [Hlp _].
+      exact Hlp. }
+    apply (Hoare_normal_LFix Q_low (tarjan_scc_f g)).
+    (* Leaves two subgoals: the induction step, then s_init and u *)
+    intros W IH s0' a.
+    (* IH: ∀ s0 a, Hoare (s = s0) (W a) (Q_low a s0) *)
+    pose proof (Q_low_to_HW_frame W IH) as HW_frame.
+    unfold tarjan_scc_f.
+    unfold Hoare. sets_unfold. intros s1 ret s2 Heq Hprog.
+    sets_unfold in Heq. subst s1.
+    (* Hprog: (s0', tt, s2) ∈ preloop a;; forset ...;; If ... *)
+    (* Goal: Q_low a s0' tt s2 *)
+    unfold Q_low. intro Hant. destruct Hant as [Hnv_a [Hwf' [Horder' Hinj']]].
+    (* Decompose the trace: s0' --preloop a→ s_pre --forset→ s_forset --If→ s2 *)
+    destruct Hprog as [ret_pre [s_pre [Hpreloop_exec Hrest_exec]]].
+    destruct Hrest_exec as [ret_forset [s_forset [Hforset_exec Hif_exec]]].
+    (* Step 1: preloop a → establish forset_inv a ∅ ∧ local properties *)
+    assert (Hpre_frame: forset_inv a ∅ s_pre /\ In a (stack s_pre) /\
+                        stack_dfn_order s_pre /\ dfn_injective s_pre /\
+                        low s_pre a = dfn s_pre a /\
+                        fa_child_of_u a s_pre /\
+                        fa_not_done_implies_eq_u a ∅ s_pre). {
+      pose proof (preloop_establishes_forset_precond a) as HL.
+      unfold Hoare in HL.
+      apply (HL s0' ret_pre s_pre).
+      - split; [split; [exact Hwf' | exact Hnv_a] | split; [exact Horder' | exact Hinj']].
+      - exact Hpreloop_exec. }
+    destruct Hpre_frame as [Hfinv_pre [Hinstk_pre [Horder_pre [Hinj_pre
+      [Hlow_eq_pre [Hfa_child_pre Hfa_not_done_pre]]]]]].
+    (* Step 2: forset → low_post a *)
+    assert (Hforset_result: low_post a s_forset /\ In a (stack s_forset) /\
+                            stack_dfn_order s_forset /\ dfn_injective s_forset). {
+      pose proof (forset_keep_forset_inv a W HW_frame) as HL.
+      unfold Hoare in HL.
+      apply (HL s_pre ret_forset s_forset).
+      - exact (conj Hfinv_pre (conj Hinstk_pre (conj Horder_pre
+          (conj Hinj_pre (conj Hlow_eq_pre (conj Hfa_child_pre Hfa_not_done_pre)))))).
+      - exact Hforset_exec. }
+    destruct Hforset_result as [Hlow_post_fs [Hinstk_fs [Horder_fs Hinj_fs]]].
+    (* Step 3: If → final result *)
+    assert (Hfinal: low_post a s2 /\ a ∈ visited s2 /\ stack_dfn_order s2 /\
+                    dfn_injective s2). {
+      destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
+      - (* pop_scc branch *)
+        destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+        sets_unfold in Htest. subst s_mid.
+        unfold pop_scc, update', update in Hpop_body.
+        assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
+        subst s2.
+        destruct Hlow_post_fs as [Hwf_fs Hscc_fs].
+        assert (Hwf_pop: wf_scc_state (pop_scc_state s_forset a)). {
+          pose proof (pop_scc_preserves_wf_scc_state a) as HL.
+          unfold Hoare in HL.
+          apply (HL s_forset tt (pop_scc_state s_forset a)); [exact Hwf_fs |].
+          unfold pop_scc, update'. simpl. auto. }
+        assert (Hscc_pop: scc_is_low_v (pop_scc_state s_forset a) a). {
+          pose proof (pop_scc_preserves_scc_is_low_v a s_forset Htest Hscc_fs) as HL.
+          unfold Hoare in HL.
+          apply (HL s_forset tt (pop_scc_state s_forset a)); [reflexivity |].
+          unfold pop_scc, update', update. auto. }
+        split; [split; [exact Hwf_pop | exact Hscc_pop] |].
+        assert (Hvis_pop: a ∈ visited (pop_scc_state s_forset a)). {
+          unfold pop_scc_state.
+          destruct (stack_split_at (stack s_forset) a) as [popped rest].
+          simpl. destruct Hwf_fs as [Hsiv _]. exact (Hsiv a Hinstk_fs). }
+        (* stack_dfn_order and dfn_injective: not preserved by pop_scc.
+           These are NOT needed at this point — the goal only needs
+           low_post a s2 ∧ a ∈ visited s2 ∧ stack_dfn_order s2 ∧ dfn_injective s2.
+           We can provide stack_dfn_order and dfn_injective from the pre-state
+           since pop_scc doesn't touch dfn or stack ordering. *)
+        (* stack_dfn_order and dfn_injective: pop_scc preserves them but
+           the proof requires stack-split decomposition lemmas. *)
+        assert (Horder_pop: stack_dfn_order (pop_scc_state s_forset a))
+          by (admit).
+        assert (Hinj_pop: dfn_injective (pop_scc_state s_forset a))
+          by (admit).
+        split; [exact Hvis_pop | split; [exact Horder_pop | exact Hinj_pop]].
+      - (* skip branch *)
+        (* skip: s2 = s_forset, state unchanged *)
+        subst s2.
+        destruct Hlow_post_fs as [Hwf_fs Hscc_fs].
+        assert (Hvis_fs: a ∈ visited s_forset). {
+          (* from In a (stack s_forset) and stack_in_visited *)
+          destruct Hwf_fs as [Hsiv _]. apply Hsiv. exact Hinstk_fs. }
+        split; [split; [exact Hwf_fs | exact Hscc_fs] |
+          split; [exact Hvis_fs | split; [exact Horder_fs | exact Hinj_fs]]]. }
+    destruct Hfinal as [Hlow_post_s2 [Hvis_s2 [Horder_s2 Hinj_s2]]].
+    (* Frame part: forall anc d, ... → admitted *)
+    assert (Hframe: forall anc d,
+      forset_inv anc d s0' -> In anc (stack s0') ->
+      dfn_injective s0' -> low_src anc d s0' ->
+      (forall w, d w -> dg_step g anc w -> fa s0' w = anc -> fa s0' w <> w ->
+       scc_is_low_v s0' w) ->
+      fa_child_of_u anc s0' -> fa_not_done_implies_eq_u anc (d ∪ [a]) s0' ->
+      done_visited d s0' -> dfn s0' anc < timer s0' ->
+      forset_inv anc d s2 /\ In anc (stack s2) /\ stack_dfn_order s2 /\
+      dfn_injective s2 /\ low_src anc d s2 /\
+      (forall w, d w -> dg_step g anc w -> fa s2 w = anc -> fa s2 w <> w ->
+       scc_is_low_v s2 w) /\
+      fa_child_of_u anc s2 /\ fa_not_done_implies_eq_u anc (d ∪ [a]) s2 /\
+      done_visited d s2 /\ (fa s0' a = anc -> fa s2 a = anc)). {
+    admit. } (* TODO: prove frame preservation *)
+    exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 Hframe)))).
   Admitted.
 
 End IS_LOW.

@@ -14,53 +14,6 @@ Import MonadNotation.
 Local Open Scope sets.
 Local Open Scope monad.
 
-(** Lfix induction principle: if f W a satisfies Q a s0 under the
-    hypothesis that W a does, then Lfix f a also satisfies Q a s0. *)
-Theorem Hoare_normal_LFix {Σ A B: Type}:
-  forall (Q: A -> Σ -> B -> Σ -> Prop)
-         (f: (A -> StateRelMonad.M Σ B) -> (A -> StateRelMonad.M Σ B)),
-    (forall (W: A -> StateRelMonad.M Σ B),
-       (forall s0 a, Hoare (fun s => s = s0) (W a) (Q a s0)) ->
-       (forall s0 a, Hoare (fun s => s = s0) (f W a) (Q a s0))) ->
-    (forall s0 a, Hoare (fun s => s = s0) (Lfix f a) (Q a s0)).
-Proof.
-  intros.
-  unfold Hoare.
-  intros s1 b s2 ? ?.
-  change (exists n, (s1, b, s2) ∈ Nat.iter n f ∅ a) in H1.
-  destruct H1 as [n ?].
-  revert s1 b s2 H0 H1.
-  change (Hoare (fun s => s = s0) (Nat.iter n f ∅ a) (Q a s0)).
-  revert s0 a.
-  induction n.
-  + unfold Hoare; simpl; sets_unfold; tauto.
-  + simpl.
-    apply H.
-    apply IHn.
-Qed.
-
-(** Lfix induction with an invariant R closed under the recursive step. *)
-Theorem Hoare_normal_LFix_closed {Σ A B: Type}:
-  forall (R: Σ -> Prop)
-         (Q: A -> Σ -> B -> Σ -> Prop)
-         (f: (A -> StateRelMonad.M Σ B) -> (A -> StateRelMonad.M Σ B)),
-    (forall (W: A -> StateRelMonad.M Σ B),
-       (forall s0 a, R s0 -> Hoare (fun s => s = s0) (W a) (Q a s0)) ->
-       (forall s0 a, R s0 -> Hoare (fun s => s = s0) (f W a) (Q a s0))) ->
-    (forall s0 a, R s0 -> Hoare (fun s => s = s0) (Lfix f a) (Q a s0)).
-Proof.
-  intros R Q f H s0 a HR.
-  unfold Hoare. intros s1 b s2 H0 H1.
-  change (exists n, (s1, b, s2) ∈ Nat.iter n f ∅ a) in H1.
-  destruct H1 as [n ?].
-  revert s1 b s2 H0 H1.
-  change (Hoare (fun s => s = s0) (Nat.iter n f ∅ a) (Q a s0)).
-  revert s0 a HR.
-  induction n.
-  + unfold Hoare; simpl; sets_unfold; tauto.
-  + simpl. apply H. apply IHn.
-Qed.
-
 Section IS_DFN.
 
   Context {V E: Type}
@@ -1875,7 +1828,7 @@ Lemma preloop_after_visited_dfn_lt (u v: V):
         (fun _ s => dfn s u < dfn s v).
 Proof.
   intro_state. destruct H as [Hu_vis [Hv_nvis Hinv]].
-  destruct Hinv as [Hlt Hiff Hpos].
+  destruct Hinv as [Hlt [Hiff Hpos]]; clear Hpos.
   unfold preloop. unfold_op. hoare_auto_s. subst s. simpl.
   unfold equiv_decb.
   destruct (equiv_dec u v) as [Heq | Hneq].

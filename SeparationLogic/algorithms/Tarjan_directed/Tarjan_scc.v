@@ -126,11 +126,9 @@ Section TarjanSCC.
           update_low u dv)).
 
   Definition tarjan_scc_f (W: V -> program SCCSt unit) (u: V): program SCCSt unit :=
-    if_else (fun s => ~ u ∈ visited s)
-      (preloop u;;
-       forset (fun v => dg_step g u v) (process_edge u W);;
-       If (fun s => low s u = dfn s u) (pop_scc u))
-      (ret tt).
+    preloop u;;
+    forset (fun v => dg_step g u v) (process_edge u W);;
+    If (fun s => low s u = dfn s u) (pop_scc u).
 
   Definition tarjan_scc (u: V): program SCCSt unit :=
     Lfix tarjan_scc_f u.
@@ -243,39 +241,35 @@ Section TarjanSCC.
   Proof.
     unfold tarjan_scc_f.
     apply mono_cont_intro; intro u.
-    unfold if_else.
-    apply mono_cont_choice.
-    { (* first branch: test (~visited);; preloop;; forset;; If(low=dfn)(pop_scc)(skip) *)
-      apply mono_cont_bind. { apply mono_cont_const. } intros _.  (* test *)
-      apply mono_cont_bind. { apply mono_cont_const. } intros _.  (* preloop *)
-      unfold forset.
+    apply mono_cont_bind.
+    { apply mono_cont_const. }
+    intros _.
+    apply mono_cont_bind.
+    { unfold forset.
       set (univ := fun v : V => dg_step g u v).
       set (F := fun (W: V -> program SCCSt unit) =>
         forset_f (process_edge u W)).
-      apply mono_cont_bind.  (* forset ;; If *)
-      { assert (Hmono_Lfix : mono_cont (fun W => Lfix (F W))).
-        { apply mono_cont_Lfix.
-          - intro W_fixed. subst F. apply forset_f_mono_cont_body.
-          - intro b. subst F.
-            unfold forset_f.
-            split.
-            + intros W1 W2 Hincl universe'.
-              pose proof (forset_body_mono_cont u b universe') as Hfb.
-              destruct Hfb as [Hfb_mono _].
-              red in Hfb_mono. apply Hfb_mono; assumption.
-            + intros T HmonoT universe'.
-              pose proof (forset_body_mono_cont u b universe') as Hfb.
-              destruct Hfb as [_ Hfb_cont].
-              red in Hfb_cont. exact (Hfb_cont T HmonoT). }
-        destruct Hmono_Lfix as [Hmono_Lfix Hcont_Lfix].
-        split.
-        + intros W1 W2 Hincl. exact (Hmono_Lfix W1 W2 Hincl univ).
-        + intros T HmonoT. cbv [Sets.lift_indexed_union].
-          exact (Hcont_Lfix T HmonoT univ). }
-      intros _. apply mono_cont_const. }  (* If(low=dfn)(pop_scc)(skip) *)
-    { (* second branch: test (visited);; ret tt *)
-      apply mono_cont_bind. { apply mono_cont_const. } intros _.
-      apply mono_cont_const. }
+      assert (Hmono_Lfix : mono_cont (fun W => Lfix (F W))).
+      { apply mono_cont_Lfix.
+        - intro W_fixed. subst F. apply forset_f_mono_cont_body.
+        - intro b. subst F.
+          unfold forset_f.
+          split.
+          + intros W1 W2 Hincl universe'.
+            pose proof (forset_body_mono_cont u b universe') as Hfb.
+            destruct Hfb as [Hfb_mono _].
+            red in Hfb_mono. apply Hfb_mono; assumption.
+          + intros T HmonoT universe'.
+            pose proof (forset_body_mono_cont u b universe') as Hfb.
+            destruct Hfb as [_ Hfb_cont].
+            red in Hfb_cont. exact (Hfb_cont T HmonoT). }
+      destruct Hmono_Lfix as [Hmono_Lfix Hcont_Lfix].
+      split.
+      + intros W1 W2 Hincl. exact (Hmono_Lfix W1 W2 Hincl univ).
+      + intros T HmonoT. cbv [Sets.lift_indexed_union].
+        exact (Hcont_Lfix T HmonoT univ). }
+    intros _.
+    apply mono_cont_const.
   Qed.
 
   Lemma tarjan_scc_unfold (u: V):
