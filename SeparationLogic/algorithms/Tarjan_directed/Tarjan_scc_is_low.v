@@ -2501,12 +2501,41 @@ Section IS_LOW.
               (fun _ s => scc_is_low_v s a) _ _).
             { eapply Hoare_conseq_pre. 2: apply pop_scc_preserves_wf_scc_state.
               intros s1 Hs1. destruct Hs1. destruct Hlow_post_a as [Hwf _]. subst. exact Hwf. }
-            { (* scc_is_low_v a after pop_scc: the self-witness a works for the
-                 "minimum is achieved" part (low a = dfn a, preserved by pop_scc).
-                 The lower bound follows from Hlow_post_a + the fact that pop_scc
-                 only shrinks the stack, hence scc_low_tree can only shrink.
-                 TODO: prove pop_scc_preserves_scc_is_low_v lemma. *)
-              admit. }
+            { (* scc_is_low_v a after pop_scc a: use Hoare_update' *)
+              unfold pop_scc.
+              eapply (Hoare_conseq_pre (Σ := SCCSt) (A := unit)
+                (fun s => s = s0) (fun s => s = s0)
+                (update' (pop_scc_state a)) (fun _ s => scc_is_low_v s a)).
+              { auto. }
+              eapply (Hoare_conseq_post (Σ := SCCSt) (A := unit)
+                (fun s => s = s0) (update' (pop_scc_state a))
+                (fun _ s => scc_is_low_v s a) (fun _ s => s = pop_scc_state s0 a)).
+              { intros _ s1 Heq. subst s1.
+              intros _ s1 Heq. subst s1.
+              destruct Hlow_post_a as [_ Hscc0].
+              unfold scc_is_low_v, scc_is_low_v_val, min_value_of_subset.
+              unfold scc_is_low_v, scc_is_low_v_val, min_value_of_subset in Hscc0.
+              destruct Hscc0 as [Hwit Hlower].
+              split.
+              { exists a. split.
+                { unfold scc_low_tree, scc_low_reachable.
+                  exists a. split; [apply rt_refl | left; reflexivity]. }
+                { simpl. unfold equiv_decb. destruct (equiv_dec a a); [reflexivity | congruence]. } }
+              { intros x Htree3.
+                unfold scc_low_tree, scc_low_reachable in *.
+                destruct Htree3 as [z [Hreach Hz_case3]].
+                assert (Hz_case0: (z = x \/ scc_back_edge s0 z x)). {
+                  destruct Hz_case3 as [Heq_zx | Hback3].
+                  - left. exact Heq_zx.
+                  - right. destruct Hback3 as [Hdg [Hinstk Hnotree]].
+                    split; [exact Hdg | split; [| exact Hnotree]].
+                    simpl in Hinstk.
+                    destruct (stack_split_at (stack s0) a) as [popped rest] eqn:Hsplit.
+                    simpl in Hinstk.
+                    destruct (stack_split_at_partition (stack s0) a popped rest Hsplit)
+                      as [Hrest_in _].
+                    apply Hrest_in. exact Hinstk. }
+                apply Hlower. exists z. split; [exact Hreach | exact Hz_case0]. } }
           - destruct H as [Heq_s Hncond]. subst s. exact Hlow_post_a. } } }
     { (* Step 2: frame_pre a -> frame_post (F W a) *)
       intros W a IHlow IHframe.
