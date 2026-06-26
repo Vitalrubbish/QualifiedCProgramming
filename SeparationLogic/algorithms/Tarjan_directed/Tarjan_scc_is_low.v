@@ -701,6 +701,15 @@ Section IS_LOW.
     split; [exact Hwf_post | exact Hlow_valid_post].
   Qed.
 
+  (** [pop_scc_state] does not change [dfn], [low], or [state_to_dfs_tree]. *)
+  Lemma pop_scc_state_dfn_eq (s: SCCSt) (u x: V): dfn (pop_scc_state s u) x = dfn s x.
+  Proof. unfold pop_scc_state. destruct (stack_split_at (stack s) u). reflexivity. Qed.
+  Lemma pop_scc_state_low_eq (s: SCCSt) (u x: V): low (pop_scc_state s u) x = low s x.
+  Proof. unfold pop_scc_state. destruct (stack_split_at (stack s) u). reflexivity. Qed.
+  Lemma pop_scc_state_tree_eq (s: SCCSt) (u r: V):
+    state_to_dfs_tree g (pop_scc_state s u) r = state_to_dfs_tree g s r.
+  Proof. unfold pop_scc_state. destruct (stack_split_at (stack s) u). reflexivity. Qed.
+
   (** Variant of [pop_scc_keep_scc_is_low_v] for [scc_is_low_v] instead
       of [scc_low_valid_v].  When [low u = dfn u], pop_scc preserves
       [scc_is_low_v u] because the witness [u] itself works (always in
@@ -718,11 +727,41 @@ Section IS_LOW.
     refine (Hoare_conseq_post _ _ (fun _ s => scc_is_low_v s u)
       (fun _ s => s = pop_scc_state s0 u) _ _).
     { intros _ s Heq. subst s.
-      (* scc_is_low_v (pop_scc_state s0 u) u: pop_scc_state doesn't change
-         low/dfn, and the stack only shrinks so scc_low_tree ⊆ scc_low_tree(s0).
-         The self-witness u works, and the lower bound carries over.
-         TODO: finish the min_value_of_subset proof. *)
-      admit. }
+      unfold scc_is_low_v, scc_is_low_v_val, min_value_of_subset.
+      exists u. unfold min_object_of_subset.
+      assert (Hu_tree: u ∈ scc_low_tree (pop_scc_state s0 u) u). {
+        unfold scc_low_tree, scc_low_reachable.
+        exists u. split; [apply rt_refl | left; reflexivity]. }
+      assert (Hlower: forall b, b ∈ scc_low_tree (pop_scc_state s0 u) u ->
+                               Nat.le (dfn s0 u) (dfn s0 b)). {
+        unfold scc_is_low_v, scc_is_low_v_val, min_value_of_subset in Hscc0.
+        destruct Hscc0 as [a [[Ha_in Ha_lower] Ha_eq]].
+        rewrite Hlow_eq in Ha_eq.
+        intros b Hb_new.
+        unfold scc_low_tree, scc_low_reachable in *.
+        destruct Hb_new as [z [Hreach Hz_case]].
+        rewrite pop_scc_state_tree_eq in Hreach.
+        assert (Hb_old: b ∈ scc_low_tree s0 u). {
+          unfold scc_low_tree, scc_low_reachable.
+          exists z. split; [exact Hreach |].
+          destruct Hz_case as [Heq_zb | Hback_new].
+          - left. exact Heq_zb.
+          - right. destruct Hback_new as [Hdg [Hinstk Hnotree]].
+            rewrite pop_scc_state_tree_eq in Hnotree.
+            unfold pop_scc_state in Hinstk.
+            destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
+            simpl in Hinstk.
+            destruct (stack_split_at_partition (stack s0) u popped rest Hsplit)
+              as [Hrest_in _].
+            split; [exact Hdg | split; [| exact Hnotree]].
+            apply Hrest_in. exact Hinstk. }
+        apply Ha_lower in Hb_old.
+        rewrite Ha_eq in Hb_old. exact Hb_old. }
+      rewrite !pop_scc_state_dfn_eq, pop_scc_state_low_eq.
+      split; [split; [exact Hu_tree |
+        intro b; intro Hb; specialize (Hlower b Hb);
+        rewrite pop_scc_state_dfn_eq; exact Hlower]
+      | symmetry; exact Hlow_eq]. }
     refine (Hoare_update' _ _).
   Admitted.
 
