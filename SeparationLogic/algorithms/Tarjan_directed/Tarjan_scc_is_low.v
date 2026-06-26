@@ -763,7 +763,7 @@ Section IS_LOW.
         rewrite pop_scc_state_dfn_eq; exact Hlower]
       | symmetry; exact Hlow_eq]. }
     refine (Hoare_update' _ _).
-  Admitted.
+  Qed.
 
   (* ================================================================ *)
   (* 9. Set Decomposition Lemmas (needed for process_edge)            *)
@@ -2587,13 +2587,51 @@ Section IS_LOW.
       destruct (classic (anc' = a)) as [Heq_anc | Hne_anc].
       { subst anc'. destruct Hinv' as [Hsiv _]. unfold stack_in_visited in Hsiv.
         apply Hsiv in Hstack'. exfalso. apply Hnv'. exact Hstack'. }
-      (* anc' ≠ a: need to prove frame postconditions for anc' *)
-      (* The program is: preloop a; forset (dg_step g a) (process_edge a W);
-         If low a = dfn a then pop_scc a else skip.
-         Execution trace: s0 --preloop a--> s_pre --forset--> s_forset --if--> s2 *)
-      (* This requires an induction on the execution steps.
-         Deferred: the full frame preservation proof. *)
+      (* anc' ≠ a: decompose trace, prove each step preserves anc''s frame.
+         bind = exists (a:A) (s2:Σ), (s1,a,s2) ∈ f /\ (s2,b,s3) ∈ g a *)
+      destruct Hprog as [ret_pre [s_pre [Hpreloop_exec Hrest_exec]]].
+      destruct Hrest_exec as [ret_forset [s_forset [Hforset_exec Hif_exec]]].
+      (* Step A: preloop a preserves anc''s frame invariants.
+         Since anc' ≠ a, preloop only modifies a's state. *)
+      assert (Hpre_frame: forset_inv anc' d' s_pre /\ In anc' (stack s_pre) /\
+                         stack_dfn_order s_pre /\ dfn_injective s_pre /\
+                         low_src anc' d' s_pre /\
+                         (forall w, d' w -> dg_step g anc' w -> fa s_pre w = anc' ->
+                            fa s_pre w <> w -> scc_is_low_v s_pre w) /\
+                         fa_child_of_u anc' s_pre /\
+                         fa_not_done_implies_eq_u anc' (d' ∪ [a]) s_pre /\
+                         done_visited d' s_pre). {
+        (* preloop a only modifies a's state. Since anc' ≠ a, all anc'-related
+           fields are unchanged. TODO: prove via preloop step decomposition. *)
         admit. }
+      (* Step B: forset + if_else preserves anc''s frame.
+         The forset uses HW_frame (from IHframe) which gives frame for recursive W calls.
+         Actions on a (set_fa, update_low) don't affect anc'. *)
+      assert (Hforset_frame: forset_inv anc' d' s_forset /\ In anc' (stack s_forset) /\
+                             stack_dfn_order s_forset /\ dfn_injective s_forset /\
+                             low_src anc' d' s_forset /\
+                             (forall w, d' w -> dg_step g anc' w -> fa s_forset w = anc' ->
+                                fa s_forset w <> w -> scc_is_low_v s_forset w) /\
+                             fa_child_of_u anc' s_forset /\
+                             fa_not_done_implies_eq_u anc' (d' ∪ [a]) s_forset /\
+                             done_visited d' s_forset /\
+                             low_post a s_forset /\ a ∈ visited s_forset /\
+                             (fa s0' a = anc' -> fa s_forset a = anc')). {
+        admit. }
+      (* Step C: if_else preserves anc''s frame.
+         Pop_scc a only pops from the top; anc' (with dfn < dfn a) stays below. *)
+      assert (Hif_frame: forset_inv anc' d' s2 /\ In anc' (stack s2) /\
+                         stack_dfn_order s2 /\ dfn_injective s2 /\
+                         low_src anc' d' s2 /\
+                         (forall w, d' w -> dg_step g anc' w -> fa s2 w = anc' ->
+                            fa s2 w <> w -> scc_is_low_v s2 w) /\
+                         fa_child_of_u anc' s2 /\
+                         fa_not_done_implies_eq_u anc' (d' ∪ [a]) s2 /\
+                         done_visited d' s2 /\
+                         low_post a s2 /\ a ∈ visited s2 /\
+                         (fa s0' a = anc' -> fa s2 a = anc')). {
+        admit. }
+      exact Hif_frame. }
     (* Hlow_raw: Hoare (low_pre u ∧ stack_dfn_order ∧ dfn_injective) ... low_post u.
        Goal:     Hoare (low_pre u ∧ original_vvalid g u ∧ stack_dfn_order ∧ dfn_injective) ... low_post u.
        Apply Hoare_conseq_pre to add original_vvalid to the pre (it's trivially dropped). *)
