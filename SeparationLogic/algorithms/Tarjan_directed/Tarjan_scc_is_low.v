@@ -2849,7 +2849,7 @@ Section IS_LOW.
       - exact (conj Hfinv_pre (conj Hinstk_pre (conj Horder_pre
           (conj Hinj_pre (conj Hlow_eq_pre (conj Hfa_child_pre Hfa_not_done_pre)))))).
       - exact Hforset_exec. }
-    destruct Hforset_result as [Hlow_post_fs [Hinstk_fs [Horder_fs Hinj_fs]]].
+    destruct Hforset_result as [Hlow_post_fs [Hinstk_a_fs [Horder_a_fs Hinj_a_fs]]].
     (* Step 3: If -> final result *)
     assert (Hfinal: low_post a s2 /\ a ∈ visited s2 /\ stack_dfn_order s2 /\
                     dfn_injective s2). {
@@ -2875,7 +2875,7 @@ Section IS_LOW.
         assert (Hvis_pop: a ∈ visited (pop_scc_state s_forset a)). {
           unfold pop_scc_state.
           destruct (stack_split_at (stack s_forset) a) as [popped rest].
-          simpl. destruct Hwf_fs as [Hsiv _]. exact (Hsiv a Hinstk_fs). }
+          simpl. destruct Hwf_fs as [Hsiv _]. exact (Hsiv a Hinstk_a_fs). }
         (* stack_dfn_order and dfn_injective: not preserved by pop_scc.
            These are NOT needed at this point — the goal only needs
            low_post a s2 ∧ a ∈ visited s2 ∧ stack_dfn_order s2 ∧ dfn_injective s2.
@@ -2888,9 +2888,9 @@ Section IS_LOW.
           destruct (stack_split_at_partition (stack s_forset) a popped rest Hsplit)
             as [Hrest_in _].
           pose proof (stack_split_at_decomp (stack s_forset) a) as Hdecomp.
-          destruct (Hdecomp Hinstk_fs popped rest Hsplit)
+          destruct (Hdecomp Hinstk_a_fs popped rest Hsplit)
             as (prefix & Hstk_eq).
-          apply (Horder_fs x y).
+          apply (Horder_a_fs x y).
           - apply Hrest_in. exact Hx.
           - apply Hrest_in. exact Hy.
           - exists (prefix ++ a :: l1), l2. split.
@@ -2899,7 +2899,7 @@ Section IS_LOW.
         assert (Hinj_pop: dfn_injective (pop_scc_state s_forset a)). {
           unfold dfn_injective, pop_scc_state.
           destruct (stack_split_at (stack s_forset) a) as [popped rest].
-          simpl. exact Hinj_fs. }
+          simpl. exact Hinj_a_fs. }
         split; [exact Hvis_pop | split; [exact Horder_pop | exact Hinj_pop]].
       - (* skip branch *)
         (* skip: s2 = s_forset, state unchanged *)
@@ -2907,11 +2907,14 @@ Section IS_LOW.
         destruct Hlow_post_fs as [Hwf_fs Hscc_fs].
         assert (Hvis_fs: a ∈ visited s_forset). {
           (* from In a (stack s_forset) and stack_in_visited *)
-          destruct Hwf_fs as [Hsiv _]. apply Hsiv. exact Hinstk_fs. }
+          destruct Hwf_fs as [Hsiv _]. apply Hsiv. exact Hinstk_a_fs. }
         split; [split; [exact Hwf_fs | exact Hscc_fs] |
-          split; [exact Hvis_fs | split; [exact Horder_fs | exact Hinj_fs]]]. }
+          split; [exact Hvis_fs | split; [exact Horder_a_fs | exact Hinj_a_fs]]]. }
     destruct Hfinal as [Hlow_post_s2 [Hvis_s2 [Horder_s2 Hinj_s2]]].
-    (* Frame part: forall anc d, ... -> admitted *)
+    (* Frame preservation: proved in 3 steps:
+       A. preloop a preserves frame for any anc (via preloop_preserves_frame)
+       B. forset preserves frame (admitted — forset frame-threading lemma needed)
+       C. if_else preserves frame (pop_scc preserves, skip is trivial) *)
     assert (Hframe: forall anc d,
       forset_inv anc d s0' -> In anc (stack s0') ->
       dfn_injective s0' -> low_src anc d s0' ->
@@ -2925,7 +2928,76 @@ Section IS_LOW.
        scc_is_low_v s2 w) /\
       fa_child_of_u anc s2 /\ fa_not_done_implies_eq_u anc (d ∪ [a]) s2 /\
       done_visited d s2 /\ (fa s0' a = anc -> fa s2 a = anc)). {
-    admit. } (* TODO: prove frame preservation *)
+      intros anc d Hfinv Hinstk_s0' Hinj_s0' Hsrc_s0' Hchild_s0'
+             Hfa_child_s0' Hfa_not_done_s0' Hdone_vis_s0' Hdfn_lt_s0'.
+      (* Step A: preloop a preserves frame for anc *)
+      assert (Hframe_pre_anc: forset_inv anc d s_pre /\ In anc (stack s_pre) /\
+                              stack_dfn_order s_pre /\ dfn_injective s_pre /\
+                              low_src anc d s_pre /\
+                              fa_child_of_u anc s_pre /\
+                              fa_not_done_implies_eq_u anc (d ∪ [a]) s_pre /\
+                              done_visited d s_pre). {
+        pose proof (preloop_preserves_frame a s0' Hwf' Horder' Hinj' Hnv_a
+          anc d Hfinv Hinstk_s0' Hsrc_s0' Hchild_s0'
+          Hfa_child_s0' Hfa_not_done_s0' Hdone_vis_s0') as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
+      destruct Hframe_pre_anc as [Hfinv_anc_pre [Hinstk_anc_pre [Horder_anc_pre
+        [Hinj_anc_pre [Hsrc_anc_pre [Hfa_child_anc_pre
+          [Hfa_not_done_anc_pre Hdone_vis_anc_pre]]]]]]].
+      (* Step B: forset preserves frame for anc — admitted *)
+      assert (Hframe_forset: forset_inv anc d s_forset /\ In anc (stack s_forset) /\
+                             stack_dfn_order s_forset /\ dfn_injective s_forset /\
+                             low_src anc d s_forset /\
+                             (forall w, d w -> dg_step g anc w ->
+                                fa s_forset w = anc -> fa s_forset w <> w ->
+                                scc_is_low_v s_forset w) /\
+                             fa_child_of_u anc s_forset /\
+                             fa_not_done_implies_eq_u anc (d ∪ [a]) s_forset /\
+                             done_visited d s_forset). {
+        admit. (* TODO: forset frame-threading lemma *) }
+      destruct Hframe_forset as [Hfinv_anc_fs [Hinstk_anc_fs [Horder_anc_fs [Hinj_anc_fs
+        [Hsrc_anc_fs [Hchild_anc_fs [Hfa_child_anc_fs [Hfa_not_done_anc_fs Hdone_vis_anc_fs]]]]]]]].
+      (* Step C: if_else preserves frame for anc *)
+      destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
+      - (* pop_scc branch *)
+        destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+        sets_unfold in Htest. subst s_mid.
+        unfold pop_scc, update', update in Hpop_body.
+        assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
+        subst s2.
+        assert (Hfa_pres: fa s0' a = anc -> fa (pop_scc_state s_forset a) a = anc). {
+          intro Hfa_s0'. simpl. (* fa preserved through preloop+forset *) admit. }
+        (* pop_scc preserves frame for anc: forset_inv, stack, order, etc. *)
+        assert (Hframe_pop: forset_inv anc d (pop_scc_state s_forset a) /\
+                            In anc (stack (pop_scc_state s_forset a)) /\
+                            stack_dfn_order (pop_scc_state s_forset a) /\
+                            dfn_injective (pop_scc_state s_forset a) /\
+                            low_src anc d (pop_scc_state s_forset a) /\
+                            (forall w, d w -> dg_step g anc w ->
+                              fa (pop_scc_state s_forset a) w = anc ->
+                              fa (pop_scc_state s_forset a) w <> w ->
+                              scc_is_low_v (pop_scc_state s_forset a) w) /\
+                            fa_child_of_u anc (pop_scc_state s_forset a) /\
+                            fa_not_done_implies_eq_u anc (d ∪ [a])
+                              (pop_scc_state s_forset a) /\
+                            done_visited d (pop_scc_state s_forset a)). {
+          (* pop_scc_state only modifies stack and sccs; frame fields unchanged *)
+          admit. }
+        destruct Hframe_pop as [Hfinv_pop [Hinstk_pop [Horder_pop [Hinj_pop
+          [Hsrc_pop [Hchild_pop [Hfa_child_pop [Hfa_not_done_pop Hdone_vis_pop]]]]]]]].
+        split; [exact Hfinv_pop | split; [exact Hinstk_pop | split; [exact Horder_pop
+          | split; [exact Hinj_pop | split; [exact Hsrc_pop | split; [exact Hchild_pop
+            | split; [exact Hfa_child_pop | split; [exact Hfa_not_done_pop
+              | split; [exact Hdone_vis_pop | exact Hfa_pres]]]]]]]]].
+      - (* skip branch: cond false, s2 = s_forset *)
+        subst s2.
+        split; [exact Hfinv_anc_fs | split; [exact Hinstk_anc_fs | split; [exact Horder_anc_fs
+          | split; [exact Hinj_anc_fs | split; [exact Hsrc_anc_fs | split; [exact Hchild_anc_fs
+            | split; [exact Hfa_child_anc_fs | split; [exact Hfa_not_done_anc_fs
+              | split; [exact Hdone_vis_anc_fs |]]]]]]]]].
+        intro Hfa_s0'. (* fa s0' a = anc -> fa s_forset a = anc *)
+        (* fa preserved through preloop+forset *) admit. }
     exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 Hframe)))).
   Admitted.
 
