@@ -2546,9 +2546,21 @@ Section IS_LOW.
   Qed.
 
   (** [preloop_stack_eq]: [preloop a] prepends [a] to the stack. *)
+  Lemma preloop_stack_eq_hoare (a: V) (s0: SCCSt):
+    Hoare (fun s => s = s0) (preloop a) (fun _ s => stack s = a :: stack s0).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s. subst s. simpl.
+    reflexivity.
+  Qed.
+
   Lemma preloop_stack_eq (a: V) (s0 s_result: SCCSt):
     (s0, tt, s_result) ∈ preloop a -> stack s_result = a :: stack s0.
-  Proof. Admitted.
+  Proof.
+    intro Hprog.
+    pose proof (preloop_stack_eq_hoare a s0) as HL.
+    unfold Hoare in HL. sets_unfold in HL.
+    apply (HL s0 tt s_result); [reflexivity | exact Hprog].
+  Qed.
 
   (** [preloop_preserves_frame]: [preloop a] preserves the frame
       invariants for any ancestor [anc] when [anc ≠ a].  The
