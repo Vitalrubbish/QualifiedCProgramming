@@ -2881,12 +2881,25 @@ Section IS_LOW.
            low_post a s2 ∧ a ∈ visited s2 ∧ stack_dfn_order s2 ∧ dfn_injective s2.
            We can provide stack_dfn_order and dfn_injective from the pre-state
            since pop_scc doesn't touch dfn or stack ordering. *)
-        (* stack_dfn_order and dfn_injective: pop_scc preserves them but
-           the proof requires stack-split decomposition lemmas. *)
-        assert (Horder_pop: stack_dfn_order (pop_scc_state s_forset a))
-          by (admit).
-        assert (Hinj_pop: dfn_injective (pop_scc_state s_forset a))
-          by (admit).
+        assert (Horder_pop: stack_dfn_order (pop_scc_state s_forset a)). {
+          unfold stack_dfn_order, pop_scc_state.
+          destruct (stack_split_at (stack s_forset) a) as [popped rest] eqn:Hsplit.
+          simpl. intros x y Hx Hy [l1 [l2 [Hrest_eq Hy_in_l2]]].
+          destruct (stack_split_at_partition (stack s_forset) a popped rest Hsplit)
+            as [Hrest_in _].
+          pose proof (stack_split_at_decomp (stack s_forset) a) as Hdecomp.
+          destruct (Hdecomp Hinstk_fs popped rest Hsplit)
+            as (prefix & Hstk_eq).
+          apply (Horder_fs x y).
+          - apply Hrest_in. exact Hx.
+          - apply Hrest_in. exact Hy.
+          - exists (prefix ++ a :: l1), l2. split.
+            + rewrite Hstk_eq, Hrest_eq, <- List.app_assoc. reflexivity.
+            + exact Hy_in_l2. }
+        assert (Hinj_pop: dfn_injective (pop_scc_state s_forset a)). {
+          unfold dfn_injective, pop_scc_state.
+          destruct (stack_split_at (stack s_forset) a) as [popped rest].
+          simpl. exact Hinj_fs. }
         split; [exact Hvis_pop | split; [exact Horder_pop | exact Hinj_pop]].
       - (* skip branch *)
         (* skip: s2 = s_forset, state unchanged *)
