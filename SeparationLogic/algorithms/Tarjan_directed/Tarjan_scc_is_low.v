@@ -3206,6 +3206,24 @@ Section IS_LOW.
        simpl lemma for set_fa_state. *)
   Admitted.
 
+  (** [forset_keep_fa_of_visited]: forset over [a]'s neighbours preserves
+      [wf_scc_state], [stack_dfn_order], [dfn_injective], and [fa w] for
+      any [w] already visited at the start.  The heavy preconditions
+      ([wf_scc_state], [stack_dfn_order], [dfn_injective]) are carried
+      through so that the [Q_low] induction hypothesis can be invoked
+      on recursive [W] calls. *)
+  Lemma forset_keep_fa_of_visited (a: V) (W: V -> program SCCSt unit)
+        (IH: forall s0 x, Hoare (fun s => s = s0) (W x) (Q_low x s0)):
+    forall (s_pre: SCCSt) (w: V),
+      w ∈ visited s_pre -> wf_scc_state s_pre ->
+      stack_dfn_order s_pre -> dfn_injective s_pre ->
+      Hoare (fun s => s = s_pre)
+            (forset (fun v => dg_step g a v) (process_edge a W))
+            (fun _ s => wf_scc_state s /\ stack_dfn_order s /\
+                        dfn_injective s /\ fa s w = fa s_pre w).
+  Proof.
+  Admitted.
+
   Theorem tarjan_scc_keep_low_valid (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u /\
                               stack_dfn_order s /\ dfn_injective s)
@@ -3416,15 +3434,18 @@ Section IS_LOW.
           pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL.
           unfold Hoare in HL. sets_unfold in HL.
           pose proof (HL s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
-          (* forset preserves fa[a]: set_fa v a writes fa[v], not fa[a];
-             update_low a writes low[a], not fa[a]; W recursive calls
-             preserve fa[a] since a is an ancestor *)
-          (* forset preserves fa[a]: each process_edge a W v only modifies
-             fa[v] (set_fa v a) and low[a] (update_low), never fa[a].
-             Each recursive W v preserves fa[a] via strengthened Q_low.
-             Formal proof requires induction on forset trace or
-             threading fa-preservation through HW_frame (10+ lemma updates). *)
-          assert (fa s_forset a = fa s_pre a) by (admit). (* TODO: forset fa preservation *)
+          (* forset preserves fa[a]: no process_edge modifies fa[a] *)
+          assert (fa s_forset a = fa s_pre a). {
+            assert (Ha_vis_pre: a ∈ visited s_pre). {
+              destruct Hfinv_pre as [_ [Ha_vis _]]. exact Ha_vis. }
+            assert (Hwf_pre: wf_scc_state s_pre). {
+              destruct Hfinv_pre as [Hwf_pre _]. exact Hwf_pre. }
+            pose proof (forset_keep_fa_of_visited a W IH s_pre a
+              Ha_vis_pre Hwf_pre Horder_pre Hinj_pre) as Hfa_for.
+            unfold Hoare in Hfa_for. sets_unfold in Hfa_for.
+            destruct (Hfa_for s_pre ret_forset s_forset eq_refl Hforset_exec)
+              as [_ [_ [_ Hfa_a]]].
+            exact Hfa_a. }
           unfold pop_scc_state; destruct (stack_split_at (stack s_forset) a); simpl.
           rewrite H, Hfa_pre_eq. exact Hfa_s0'. }
         (* pop_scc preserves frame for anc: forset_inv, stack, order, etc. *)
@@ -3567,13 +3588,51 @@ Section IS_LOW.
         pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL.
         unfold Hoare in HL. sets_unfold in HL.
         pose proof (HL s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
-        assert (fa s_forset a = fa s_pre a) by (admit). (* TODO: forset fa preservation *)
-        rewrite H, Hfa_pre_eq. exact Hfa_s0'. }
-    (* Hfa_pres_all: fa preserved for vertices visited at s0'.
-       Preloop preserves fa; forset only changes fa for newly-discovered
-       unvisited vertices; pop_scc doesn't touch fa.
-       Admitted pending threading through process_edge_keep_fa + Hoare_forset. *)
-    assert (Hfa_pres_all: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w) by admit.
+        pose proof (forset_keep_fa_of_visited a W IH s_pre a
+          ltac:(destruct Hfinv_pre as [_ [Ha_vis _]]; exact Ha_vis)
+          ltac:(destruct Hfinv_pre as [Hwf_pre _]; exact Hwf_pre)
+          Horder_pre Hinj_pre) as Hfa_for_a.
+        unfold Hoare in Hfa_for_a. sets_unfold in Hfa_for_a.
+        destruct (Hfa_for_a s_pre ret_forset s_forset eq_refl Hforset_exec)
+          as [_ [_ [_ Hfa_a2]]].
+        rewrite Hfa_a2, Hfa_pre_eq. exact Hfa_s0'. }
+    (* Hfa_pres_all: fa preserved for vertices visited at s0' *)
+    assert (Hfa_pres_all: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w). {
+      intros w Hw_vis_s0'.
+      assert (Hw_vis_pre: w ∈ visited s_pre). {
+        assert (Ha_ne_w: a <> w). {
+          intro Heq. subst w. exfalso. exact (Hnv_a Hw_vis_s0'). }
+        set (S := fun x => x = w).
+        assert (Hneq_S: forall x, S x -> a <> x). {
+          intros x Heq_x; unfold S in Heq_x; subst x. exact Ha_ne_w. }
+        pose proof (preloop_keep_dfn_forall a S (dfn s0') Hneq_S) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        destruct (HL s0' tt s_pre) as [Hvis_S _].
+        { split; [intros x Heq_x; unfold S in Heq_x; subst x; exact Hw_vis_s0'
+                  | intros x Heq_x; unfold S in Heq_x; subst x; reflexivity]. }
+        exact Hpreloop_exec.
+        exact (Hvis_S w (eq_refl w)). }
+      assert (Hwf_pre: wf_scc_state s_pre). {
+        destruct Hfinv_pre as [Hwf_pre _]. exact Hwf_pre. }
+      pose proof (forset_keep_fa_of_visited a W IH s_pre w
+        Hw_vis_pre Hwf_pre Horder_pre Hinj_pre) as Hfa_for_w.
+      unfold Hoare in Hfa_for_w. sets_unfold in Hfa_for_w.
+      destruct (Hfa_for_w s_pre ret_forset s_forset eq_refl Hforset_exec)
+        as [_ [_ [_ Hfa_forset_w]]].
+      (* Now chain: fa s2 w = fa s_forset w = fa s_pre w = fa s0' w *)
+      assert (Hfa_pre_w: fa s_pre w = fa s0' w). {
+        pose proof (preloop_keep_fa_eq a w (fa s0' w)) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
+      destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
+      - destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+        unfold pop_scc, update', update in Hpop_body. subst s_mid.
+        assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
+        subst s2. unfold pop_scc_state.
+        destruct (stack_split_at (stack s_forset) a). simpl.
+        rewrite Hfa_forset_w. exact Hfa_pre_w.
+      - destruct Hskip_exec.
+        rewrite Hfa_forset_w. exact Hfa_pre_w. }
     exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 (conj Hframe Hfa_pres_all))))).
   Admitted.
 
