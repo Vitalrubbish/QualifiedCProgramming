@@ -468,27 +468,71 @@ Section IS_LOW.
     - apply Hoare_update'.
   Qed.
 
-  (** [update_low_preserves_wf_scc_state]: [update_low u n] is a read of
-      [low u] followed by [set_low u (min (low u) n)], so it preserves
-      [wf_scc_state] (requires [u] visited so that [low u] is defined). *)
-  Lemma update_low_preserves_wf_scc_state (u: V) (n: nat):
-    Hoare (fun s: @SCCSt V => wf_scc_state s /\ u ∈ visited s)
-          (update_low u n)
-          (fun _ s => wf_scc_state s).
+  (** [update_low_preserves_wf_scc_state]: [update_low] only modifies
+      [low], so it preserves [wf_scc_state] (which does not depend on [low]). *)
+  Lemma update_low_preserves_wf_scc_state (a: V) (lv: nat):
+    Hoare (fun s => wf_scc_state s) (update_low a lv) (fun _ s => wf_scc_state s).
   Proof.
     unfold update_low. intro_state. hoare_auto_s.
-    - (* n < low s0 u: set_low branch *)
-      destruct H as [Hwf Huvis].
-      pose (f := fun (s: SCCSt) => set low (fun low0 x => if x ==b u then n else low0 x) s).
-      apply (Hoare_conseq_post (fun s => s = s0) (update' f)
-        (fun _ s => wf_scc_state s) (fun _ s1 => s1 = f s0)).
-      intros _ s1 Heq. subst s1. unfold f, wf_scc_state.
-      destruct s0 as [vis timer fa dfn low stack sccs]. simpl.
-      unfold wf_scc_state in Hwf. simpl in Hwf. exact Hwf.
+    - pose (f := fun (s: SCCSt) => set low (fun low0 x => if equiv_decb x a then lv else low0 x) s).
+      apply (Hoare_conseq_post (fun s => s = s0) (update' f) (fun _ s => wf_scc_state s) (fun _ s1 => s1 = f s0)).
+      { intros _ s1 Heq. subst s1. unfold f, wf_scc_state. simpl. exact H. }
       apply Hoare_update'.
-    - (* ~ n < low s0 u: skip branch *)
-      destruct H1 as [Heq _]. subst s. destruct H as [Hwf _]. exact Hwf.
+    - destruct H1 as [Heq_s _]. subst s. exact H.
   Qed.
+
+  (* ================================================================ *)
+  (* Group C: get'/update_low preservation lemmas (L14–L19)          *)
+  (* ================================================================ *)
+
+  (** [get'] only reads state; it does not modify any field. *)
+  Lemma get_low_preserves_fa (v w: V) (p: V):
+    Hoare (fun s => fa s w = p) (get' (fun s' => low s' v)) (fun _ s => fa s w = p).
+  Proof. unfold get'. intro_state. hoare_auto_s. destruct H1 as [Heq _]. subst s. exact H. Qed.
+
+  Lemma get_low_preserves_visited (v w: V):
+    Hoare (fun s => w ∈ visited s) (get' (fun s' => low s' v)) (fun _ s => w ∈ visited s).
+  Proof. unfold get'. intro_state. hoare_auto_s. destruct H1 as [Heq _]. subst s. exact H. Qed.
+
+  Lemma get_low_preserves_wf_scc_state (v: V):
+    Hoare (fun s => wf_scc_state s) (get' (fun s' => low s' v)) (fun _ s => wf_scc_state s).
+  Proof. unfold get'. intro_state. hoare_auto_s. destruct H1 as [Heq _]. subst s. exact H. Qed.
+
+  (** [update_low] only modifies [low], so properties that do not
+      depend on [low] are preserved. *)
+  Lemma update_low_preserves_stack_dfn_order (a: V) (lv: nat):
+    Hoare (fun s => stack_dfn_order s) (update_low a lv) (fun _ s => stack_dfn_order s).
+  Proof.
+    unfold update_low. intro_state. hoare_auto_s.
+    - pose (f := fun (s: SCCSt) => set low (fun low0 x => if equiv_decb x a then lv else low0 x) s).
+      apply (Hoare_conseq_post (fun s => s = s0) (update' f) (fun _ s => stack_dfn_order s) (fun _ s1 => s1 = f s0)).
+      { intros _ s1 Heq. subst s1. unfold f. simpl. exact H. }
+      apply Hoare_update'.
+    - destruct H1 as [Heq_s _]. subst s. exact H.
+  Qed.
+
+  Lemma update_low_preserves_dfn_injective (a: V) (lv: nat):
+    Hoare (fun s => dfn_injective s) (update_low a lv) (fun _ s => dfn_injective s).
+  Proof.
+    unfold update_low. intro_state. hoare_auto_s.
+    - pose (f := fun (s: SCCSt) => set low (fun low0 x => if equiv_decb x a then lv else low0 x) s).
+      apply (Hoare_conseq_post (fun s => s = s0) (update' f) (fun _ s => dfn_injective s) (fun _ s1 => s1 = f s0)).
+      { intros _ s1 Heq. subst s1. unfold f. simpl. exact H. }
+      apply Hoare_update'.
+    - destruct H1 as [Heq_s _]. subst s. exact H.
+  Qed.
+
+  Lemma update_low_preserves_visited (a w: V) (lv: nat):
+    Hoare (fun s => w ∈ visited s) (update_low a lv) (fun _ s => w ∈ visited s).
+  Proof.
+    unfold update_low. intro_state. hoare_auto_s.
+    - pose (f := fun (s: SCCSt) => set low (fun low0 x => if equiv_decb x a then lv else low0 x) s).
+      apply (Hoare_conseq_post (fun s => s = s0) (update' f) (fun _ s => w ∈ visited s) (fun _ s1 => s1 = f s0)).
+      { intros _ s1 Heq. subst s1. unfold f. simpl. exact H. }
+      apply Hoare_update'.
+    - destruct H1 as [Heq_s _]. subst s. exact H.
+  Qed.
+
 
 
   (* ================================================================ *)
