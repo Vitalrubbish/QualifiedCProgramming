@@ -2585,9 +2585,8 @@ Section IS_LOW.
       assert (Hstep: forall (done: V -> Prop) (v: V),
         done ⊆ (fun x => dg_step g a x) -> v ∈ (fun x => dg_step g a x) ->
         ~ v ∈ done -> Hoare (fun s => J done s) (process_edge a W v) (fun _ s => J (done ∪ [v]) s)). {
-        (* tree_edge_preserves_fa for tree edge, get_keep_fa+update_low_keep_fa for back edge.
-           Requires Hoare_state_intro → Hoare_assume_bind → apply tree_edge_preserves_fa.
-           Admitted pending correct Hoare combinator threading. *)
+        (* tree_edge_preserves_fa for tree edge; get_keep_fa+update_low_keep_fa for back edge.
+           intro_state pattern needs correct matching with Hoare_choice subgoals. *)
         admit. }
       pose proof (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ Hstep) as Hforall.
       unfold Hoare in Hforall.
