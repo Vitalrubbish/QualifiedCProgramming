@@ -2795,6 +2795,72 @@ Section IS_LOW.
       (conj Hsrc_res (conj Hfa_child_res (conj Hfa_not_done_res Hdone_vis_res))))))).
   Qed.
 
+  (** [forset_keeps_anc_frame]: forset preserves anc's frame invariant.
+      Structure: [Hoare_forset] with constant invariant [I_anc].
+      Body: process_edge branches — tree edges use HW_frame,
+      back/cross edges only modify low[a].  Body admitted pending
+      RecordUpdate simpl lemma for set_fa_state. *)
+  Lemma forset_keeps_anc_frame (a anc: V) (d: V -> Prop) (s_pre: SCCSt)
+        (W: V -> program (@SCCSt V) unit)
+        (HW_frame: forall v (anc': V) (d': V -> Prop) (s0: SCCSt),
+          forset_inv anc' d' s0 -> In anc' (stack s0) -> stack_dfn_order s0 ->
+          dfn_injective s0 -> low_src anc' d' s0 ->
+          (forall w, d' w -> dg_step g anc' w -> fa s0 w = anc' -> fa s0 w <> w ->
+           scc_is_low_v s0 w) ->
+          fa_child_of_u anc' s0 -> fa_not_done_implies_eq_u anc' (d' ∪ [v]) s0 ->
+          done_visited d' s0 -> dfn s0 anc' < timer s0 -> ~ v ∈ visited s0 ->
+          Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
+            forset_inv anc' d' s' /\ In anc' (stack s') /\ stack_dfn_order s' /\
+            dfn_injective s' /\ low_src anc' d' s' /\
+            (forall w, d' w -> dg_step g anc' w -> fa s' w = anc' -> fa s' w <> w ->
+             scc_is_low_v s' w) /\
+            fa_child_of_u anc' s' /\ fa_not_done_implies_eq_u anc' (d' ∪ [v]) s' /\
+            done_visited d' s' /\ low_post v s' /\ v ∈ visited s' /\
+            (fa s0 v = anc' -> fa s' v = anc'))):
+    forset_inv anc d s_pre -> In anc (stack s_pre) ->
+    stack_dfn_order s_pre -> dfn_injective s_pre ->
+    low_src anc d s_pre ->
+    (forall w, d w -> dg_step g anc w -> fa s_pre w = anc -> fa s_pre w <> w ->
+     scc_is_low_v s_pre w) ->
+    fa_child_of_u anc s_pre ->
+    fa_not_done_implies_eq_u anc (d ∪ [a]) s_pre ->
+    done_visited d s_pre ->
+    Hoare (fun s => s = s_pre) (forset (fun v => dg_step g a v) (process_edge a W))
+      (fun _ s => forset_inv anc d s /\ In anc (stack s) /\
+                  stack_dfn_order s /\ dfn_injective s /\
+                  low_src anc d s /\
+                  (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
+                   scc_is_low_v s w) /\
+                  fa_child_of_u anc s /\
+                  fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
+                  done_visited d s).
+  Proof.
+    intros Hfinv Hinstk Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done Hdone_vis.
+    set (S := fun v => dg_step g a v).
+    set (I_anc := fun (_: V -> Prop) (s: SCCSt) =>
+      forset_inv anc d s /\ In anc (stack s) /\
+      stack_dfn_order s /\ dfn_injective s /\
+      low_src anc d s /\
+      (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
+       scc_is_low_v s w) /\
+      fa_child_of_u anc s /\
+      fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
+      done_visited d s).
+    apply Hoare_state_intro. intros s_init H_init. subst s_init.
+    assert (HI: I_anc ∅ s_pre). {
+      unfold I_anc. split; [exact Hfinv | split; [exact Hinstk
+        | split; [exact Horder | split; [exact Hinj | split; [exact Hsrc
+          | split; [exact Hchild | split; [exact Hfa_child
+            | split; [exact Hfa_not_done | exact Hdone_vis]]]]]]]]. }
+    eapply Hoare_conseq_pre.
+    { intros s Hs. subst s. exact HI. }
+    apply (Hoare_forset I_anc S (process_edge a W)).
+    { unfold I_anc. intros d1 d2 Hequiv s1 s2 Heqs. subst s2. reflexivity. }
+    (* Body: process_edge preserves I_anc.  Tree edge uses HW_frame;
+       back/cross edges only modify low[a].  Requires RecordUpdate
+       simpl lemma for set_fa_state. *)
+  Admitted.
+
   Theorem tarjan_scc_keep_low_valid (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u /\
                               stack_dfn_order s /\ dfn_injective s)
