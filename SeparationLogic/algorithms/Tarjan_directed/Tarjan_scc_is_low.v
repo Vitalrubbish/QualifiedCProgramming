@@ -3140,28 +3140,34 @@ Section IS_LOW.
                               (pop_scc_state s_forset a) /\
                             done_visited d (pop_scc_state s_forset a)). {
           unfold pop_scc_state.
-          destruct (stack_split_at (stack s_forset) a) as [popped rest]. simpl.
-          (* forset_inv: needs stack-split reasoning (anc stays in rest since
-             dfn anc < dfn a).  Other 8 conjuncts trivially preserved. *)
-          assert (Hfinv_pop: forset_inv anc d
-            {| visited := visited s_forset; timer := timer s_forset;
-               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
-               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |}). {
-            (* forset_inv: wf_scc_state preserved, anc visited preserved,
-               low/dfn unchanged.  In anc stack requires anc ∈ rest.
-               The forall over d: fa unchanged, stack → In v rest
-               if v ∈ d and v ∈ stack s_forset and v not popped. *)
-            admit. }
-          split; [exact Hfinv_pop |].
-          (* All 8 remaining conjuncts: record projections don't simpl,
-             but pop_scc_state only modifies stack/sccs.  Everything
-             else (dfn, low, fa, visited, timer) unchanged. *)
-          assert (Hinstk_pop: In anc rest) by (admit).
+          destruct (stack_split_at (stack s_forset) a) as [popped rest] eqn:Hsplit. simpl.
+          (* dfn preserved through forset *)
+          assert (Hdfn_fs_lt: dfn s_forset anc < dfn s_forset a) by admit. (* TODO: dfn preservation *)
+          (* In anc rest via stack_split_at_df_lt_rest *)
+          assert (Hinstk_pop: In anc rest). {
+            apply (stack_split_at_df_lt_rest s_forset anc a popped rest
+              Horder_anc_fs Hinstk_anc_fs Hinstk_a_fs Hdfn_fs_lt Hsplit). }
+          (* stack_dfn_order for rest *)
           assert (Horder_pop: stack_dfn_order
             {| visited := visited s_forset; timer := timer s_forset;
                fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |}). {
+            unfold stack_dfn_order. simpl.
+            intros x y Hx Hy [l1 [l2 [Hrest_eq Hy_in]]].
+            destruct (stack_split_at_partition (stack s_forset) a popped rest Hsplit)
+              as [Hrest_in _].
+            apply (Horder_anc_fs x y (Hrest_in _ Hx) (Hrest_in _ Hy)).
+            destruct (stack_split_at_decomp (stack s_forset) a Hinstk_a_fs popped rest Hsplit)
+              as (prefix & Hstk_eq).
+            exists (prefix ++ a :: l1), l2. split.
+            { rewrite Hstk_eq, Hrest_eq, <- List.app_assoc. reflexivity. }
+            { exact Hy_in. } }
+          (* forset_inv + other fields: admitted for stack-dependent parts *)
+          assert (Hfinv_pop: forset_inv anc d
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
                stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |})
-            by (admit).
+            by (admit). (* forset_inv with rest stack *)
           assert (Hrest_pop: (low_src anc d
             {| visited := visited s_forset; timer := timer s_forset;
                fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
@@ -3198,9 +3204,11 @@ Section IS_LOW.
             by (admit). (* record projections don't simpl; all fields except stack unchanged *)
           destruct Hrest_pop as [Hsrc_pop [Hinj_pop [Hchild_pop
             [Hfa_child_pop [Hfa_not_done_pop Hdone_vis_pop]]]]].
-          exact (conj Hinstk_pop (conj Horder_pop (conj Hinj_pop
-            (conj Hsrc_pop (conj Hchild_pop (conj Hfa_child_pop
-              (conj Hfa_not_done_pop Hdone_vis_pop))))))). }
+          split; [exact Hfinv_pop | split; [exact Hinstk_pop
+            | split; [exact Horder_pop | split; [exact Hinj_pop
+              | split; [exact Hsrc_pop | split; [exact Hchild_pop
+                | split; [exact Hfa_child_pop | split; [exact Hfa_not_done_pop
+                  | exact Hdone_vis_pop]]]]]]]]. }
         destruct Hframe_pop as [Hfinv_pop [Hinstk_pop [Horder_pop [Hinj_pop
           [Hsrc_pop [Hchild_pop [Hfa_child_pop [Hfa_not_done_pop Hdone_vis_pop]]]]]]]].
         split; [exact Hfinv_pop | split; [exact Hinstk_pop | split; [exact Horder_pop
