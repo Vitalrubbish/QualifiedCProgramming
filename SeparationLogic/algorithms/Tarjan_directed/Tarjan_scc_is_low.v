@@ -2646,10 +2646,8 @@ Section IS_LOW.
           + exact Hfa_s0.
           + exact Hnv_s1.
           + exact Hv'S.
-        - (* Non-tree edge *)
-          intro_state. hoare_auto_s.
-          + (* Back edge *) admit.
-          + (* Cross edge *) admit. }
+        - (* Non-tree edge: v' visited — admit pending assume_bind matching *)
+          admit. }
       pose proof (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ Hstep) as Hforall.
       unfold Hoare in Hforall.
       apply (Hforall s_pre ret_forset s_forset); [| exact Hforset_exec].
