@@ -2440,72 +2440,6 @@ Section IS_LOW.
           apply Hfa_not_done; [intro Hv; apply Hnv; left; exact Hv | exact Hfa_v]. }
   Qed.
 
-  (** [forset_keeps_anc_frame]: the forset over [a]'s neighbors
-      preserves the frame invariants for an arbitrary ancestor [anc].
-      Uses [HW_frame] for recursive [W v] calls; non-recursive branches
-      ([set_fa], [update_low]) only modify [a]'s state, leaving [anc]
-      untouched. *)
-  Lemma forset_keeps_anc_frame (a anc: V) (d: V -> Prop) (s_pre: SCCSt)
-        (W: V -> program (@SCCSt V) unit)
-        (HW_frame: forall v (anc': V) (d': V -> Prop) (s0: SCCSt),
-          forset_inv anc' d' s0 -> In anc' (stack s0) -> stack_dfn_order s0 ->
-          dfn_injective s0 -> low_src anc' d' s0 ->
-          (forall w, d' w -> dg_step g anc' w -> fa s0 w = anc' -> fa s0 w <> w ->
-           scc_is_low_v s0 w) ->
-          fa_child_of_u anc' s0 -> fa_not_done_implies_eq_u anc' (d' ∪ [v]) s0 ->
-          done_visited d' s0 -> dfn s0 anc' < timer s0 -> ~ v ∈ visited s0 ->
-          Hoare (fun s' => s' = s0) (W v) (fun _ s' =>
-            forset_inv anc' d' s' /\ In anc' (stack s') /\ stack_dfn_order s' /\
-            dfn_injective s' /\ low_src anc' d' s' /\
-            (forall w, d' w -> dg_step g anc' w -> fa s' w = anc' -> fa s' w <> w ->
-             scc_is_low_v s' w) /\
-            fa_child_of_u anc' s' /\ fa_not_done_implies_eq_u anc' (d' ∪ [v]) s' /\
-            done_visited d' s' /\ low_post v s' /\ v ∈ visited s' /\
-            (fa s0 v = anc' -> fa s' v = anc'))):
-    forset_inv anc d s_pre -> In anc (stack s_pre) ->
-    stack_dfn_order s_pre -> dfn_injective s_pre ->
-    low_src anc d s_pre ->
-    (forall w, d w -> dg_step g anc w -> fa s_pre w = anc -> fa s_pre w <> w ->
-     scc_is_low_v s_pre w) ->
-    fa_child_of_u anc s_pre ->
-    fa_not_done_implies_eq_u anc (d ∪ [a]) s_pre ->
-    done_visited d s_pre ->
-    Hoare (fun s => s = s_pre) (forset (fun v => dg_step g a v) (process_edge a W))
-      (fun _ s => forset_inv anc d s /\ In anc (stack s) /\
-                  stack_dfn_order s /\ dfn_injective s /\
-                  low_src anc d s /\
-                  (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
-                   scc_is_low_v s w) /\
-                  fa_child_of_u anc s /\
-                  fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
-                  done_visited d s).
-  Proof.
-    intros Hfinv Hinstk Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done Hdone_vis.
-    set (S := fun v => dg_step g a v).
-    set (I_anc := fun (done: V -> Prop) (s: SCCSt) =>
-      forset_inv anc d s /\
-      In anc (stack s) /\
-      stack_dfn_order s /\
-      dfn_injective s /\
-      low_src anc d s /\
-      (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
-       scc_is_low_v s w) /\
-      fa_child_of_u anc s /\
-      fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
-      done_visited d s).
-    apply Hoare_state_intro. intros s_init Heq. subst s_init.
-    assert (Hpre: I_anc ∅ s_pre). { unfold I_anc; tauto. }
-    refine (Hoare_conseq_pre _ (I_anc ∅) _ (fun _ s => I_anc S s) _ _).
-    { intros s Hs. subst s. exact Hpre. }
-    apply (Hoare_forset I_anc S (process_edge a W)).
-    { unfold I_anc. intros done1 done2 Hequiv s1 s2 Heqs. subst s2.
-      split; intros H; exact H. }
-    intros done v Hdone_sub Hv_S Hv_not_done.
-    (* process_edge a W v preserves I_anc: tree edges use HW_frame,
-       back/cross edges only modify low[a], not anc's state. *)
-    admit.
-  Admitted.
-
   (* ================================================================ *)
   (* 8.5. Preloop Stability Lemmas (for Normal-Form Proof)            *)
   (* ================================================================ *)
@@ -2916,15 +2850,6 @@ Section IS_LOW.
           (conj Hinj_pre (conj Hlow_eq_pre (conj Hfa_child_pre Hfa_not_done_pre)))))).
       - exact Hforset_exec. }
     destruct Hforset_result as [Hlow_post_fs [Hinstk_a_fs [Horder_a_fs Hinj_a_fs]]].
-    (* fa[a] preserved through forset: set_fa v a writes fa[v] not fa[a];
-       update_low a writes low[a] not fa[a]; W v preserves invariants *)
-    assert (Hfa_forset_eq: fa s_forset a = fa s_pre a). {
-      (* process_edge a W v never writes fa[a].  Prove by Hoare_forset with
-         invariant fa s a = fa s_pre a.  Tree-edge: set_fa v a → fa[v]=a
-         (not fa[a]); W v preserves fa[a] (ancestor); get_low/update_low
-         → low[a] (not fa[a]).  Non-tree: update_low → low[a] only.
-         Cross-edge: skip. *)
-      admit. }
     (* Step 3: If -> final result *)
     assert (Hfinal: low_post a s2 /\ a ∈ visited s2 /\ stack_dfn_order s2 /\
                     dfn_injective s2). {
@@ -3042,13 +2967,17 @@ Section IS_LOW.
         assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
         subst s2.
         assert (Hfa_pres: fa s0' a = anc -> fa (pop_scc_state s_forset a) a = anc). {
-          intro Hfa_s0'. simpl.
+          intro Hfa_s0'.
           (* preloop preserves fa[a] *)
           pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL.
           unfold Hoare in HL. sets_unfold in HL.
           pose proof (HL s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
+          (* forset preserves fa[a]: set_fa v a writes fa[v], not fa[a];
+             update_low a writes low[a], not fa[a]; W recursive calls
+             preserve fa[a] since a is an ancestor *)
+          assert (fa s_forset a = fa s_pre a) by (admit). (* TODO: forset fa preservation *)
           unfold pop_scc_state; destruct (stack_split_at (stack s_forset) a); simpl.
-          rewrite Hfa_forset_eq, Hfa_pre_eq. exact Hfa_s0'. }
+          rewrite H, Hfa_pre_eq. exact Hfa_s0'. }
         (* pop_scc preserves frame for anc: forset_inv, stack, order, etc. *)
         assert (Hframe_pop: forset_inv anc d (pop_scc_state s_forset a) /\
                             In anc (stack (pop_scc_state s_forset a)) /\
@@ -3063,8 +2992,68 @@ Section IS_LOW.
                             fa_not_done_implies_eq_u anc (d ∪ [a])
                               (pop_scc_state s_forset a) /\
                             done_visited d (pop_scc_state s_forset a)). {
-          (* pop_scc_state only modifies stack and sccs; frame fields unchanged *)
-          admit. }
+          unfold pop_scc_state.
+          destruct (stack_split_at (stack s_forset) a) as [popped rest]. simpl.
+          (* forset_inv: needs stack-split reasoning (anc stays in rest since
+             dfn anc < dfn a).  Other 8 conjuncts trivially preserved. *)
+          assert (Hfinv_pop: forset_inv anc d
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |}). {
+            (* forset_inv: wf_scc_state preserved, anc visited preserved,
+               low/dfn unchanged.  In anc stack requires anc ∈ rest.
+               The forall over d: fa unchanged, stack → In v rest
+               if v ∈ d and v ∈ stack s_forset and v not popped. *)
+            admit. }
+          split; [exact Hfinv_pop |].
+          (* All 8 remaining conjuncts: record projections don't simpl,
+             but pop_scc_state only modifies stack/sccs.  Everything
+             else (dfn, low, fa, visited, timer) unchanged. *)
+          assert (Hinstk_pop: In anc rest) by (admit).
+          assert (Horder_pop: stack_dfn_order
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |})
+            by (admit).
+          assert (Hrest_pop: (low_src anc d
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |} /\
+            dfn_injective
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |} /\
+            (forall w, d w -> dg_step g anc w ->
+              (fa {| visited := visited s_forset; timer := timer s_forset;
+                    fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+                    stack := rest;
+                    sccs := (fun v => In v popped) :: sccs s_forset |} w = anc ->
+               fa {| visited := visited s_forset; timer := timer s_forset;
+                    fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+                    stack := rest;
+                    sccs := (fun v => In v popped) :: sccs s_forset |} w <> w ->
+               scc_is_low_v {| visited := visited s_forset; timer := timer s_forset;
+                              fa := fa s_forset; dfn := dfn s_forset;
+                              low := low s_forset; stack := rest;
+                              sccs := (fun v => In v popped) :: sccs s_forset |} w)) /\
+            fa_child_of_u anc
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |} /\
+            fa_not_done_implies_eq_u anc (d ∪ [a])
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |} /\
+            done_visited d
+            {| visited := visited s_forset; timer := timer s_forset;
+               fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |}))
+            by (admit). (* record projections don't simpl; all fields except stack unchanged *)
+          destruct Hrest_pop as [Hsrc_pop [Hinj_pop [Hchild_pop
+            [Hfa_child_pop [Hfa_not_done_pop Hdone_vis_pop]]]]].
+          exact (conj Hinstk_pop (conj Horder_pop (conj Hinj_pop
+            (conj Hsrc_pop (conj Hchild_pop (conj Hfa_child_pop
+              (conj Hfa_not_done_pop Hdone_vis_pop))))))). }
         destruct Hframe_pop as [Hfinv_pop [Hinstk_pop [Horder_pop [Hinj_pop
           [Hsrc_pop [Hchild_pop [Hfa_child_pop [Hfa_not_done_pop Hdone_vis_pop]]]]]]]].
         split; [exact Hfinv_pop | split; [exact Hinstk_pop | split; [exact Horder_pop
@@ -3078,11 +3067,11 @@ Section IS_LOW.
             | split; [exact Hfa_child_anc_fs | split; [exact Hfa_not_done_anc_fs
               | split; [exact Hdone_vis_anc_fs |]]]]]]]]].
         intro Hfa_s0'. (* fa s0' a = anc -> fa s_forset a = anc *)
-        (* preloop preserves fa[a]: fa s_pre a = fa s0' a *)
-        pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL_fa_pre.
-        unfold Hoare in HL_fa_pre. sets_unfold in HL_fa_pre.
-        pose proof (HL_fa_pre s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
-        rewrite Hfa_forset_eq, Hfa_pre_eq. exact Hfa_s0'. }
+        pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        pose proof (HL s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
+        assert (fa s_forset a = fa s_pre a) by (admit). (* TODO: forset fa preservation *)
+        rewrite H, Hfa_pre_eq. exact Hfa_s0'. }
     exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 Hframe)))).
   Admitted.
 
