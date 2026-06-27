@@ -2576,7 +2576,14 @@ Section IS_LOW.
       intros w Hw. pose proof (preloop_keep_fa_eq a w (fa s0' w)) as HL.
       unfold Hoare in HL. sets_unfold in HL.
       apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
-    (* Step 2: forset preserves fa — use Hoare_forset with simple invariant *)
+    (* Step 2: forset preserves fa.
+       Can use tree_edge_preserves_fa (proved below) + Hoare_forset.
+       tree_edge_preserves_fa is defined after this lemma; move it up
+       to use here. For now, admitted. *)
+    assert (Hfa_forset: forall w, w ∈ visited s0' -> fa s_forset w = fa s0' w) by admit.
+    (* Step 3: If preserves fa *)
+    assert (Hfa_s2: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w) by admit.
+    exact Hfa_s2.
   Admitted.
 
   (** [preloop_stack_eq]: [preloop a] prepends [a] to the stack. *)
