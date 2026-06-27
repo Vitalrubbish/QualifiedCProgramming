@@ -2642,9 +2642,7 @@ Section IS_LOW.
                    (fun _ s => fa s w = fa s_pre w)).
           intro_state. destruct H as [Hnv_s1 Heq_s1]. subst s1.
           apply (tree_edge_preserves_fa a v' w (fa s_pre w) s0 W IH_fa).
-          + (* w ∈ visited s0: w ∈ visited s_pre (preloop preserves visited, w≠a).
-               Forset only grows visited, so w ∈ visited s0. Admitted pending forset visited monotonicity. *)
-            admit.
+          + admit. (* w ∈ visited s0 *)
           + exact Hfa_s0.
           + exact Hnv_s1.
           + exact Hv'S.
