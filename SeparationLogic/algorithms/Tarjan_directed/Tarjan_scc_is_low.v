@@ -2916,6 +2916,15 @@ Section IS_LOW.
           (conj Hinj_pre (conj Hlow_eq_pre (conj Hfa_child_pre Hfa_not_done_pre)))))).
       - exact Hforset_exec. }
     destruct Hforset_result as [Hlow_post_fs [Hinstk_a_fs [Horder_a_fs Hinj_a_fs]]].
+    (* fa[a] preserved through forset: set_fa v a writes fa[v] not fa[a];
+       update_low a writes low[a] not fa[a]; W v preserves invariants *)
+    assert (Hfa_forset_eq: fa s_forset a = fa s_pre a). {
+      (* process_edge a W v never writes fa[a].  Prove by Hoare_forset with
+         invariant fa s a = fa s_pre a.  Tree-edge: set_fa v a → fa[v]=a
+         (not fa[a]); W v preserves fa[a] (ancestor); get_low/update_low
+         → low[a] (not fa[a]).  Non-tree: update_low → low[a] only.
+         Cross-edge: skip. *)
+      admit. }
     (* Step 3: If -> final result *)
     assert (Hfinal: low_post a s2 /\ a ∈ visited s2 /\ stack_dfn_order s2 /\
                     dfn_injective s2). {
@@ -3033,7 +3042,13 @@ Section IS_LOW.
         assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
         subst s2.
         assert (Hfa_pres: fa s0' a = anc -> fa (pop_scc_state s_forset a) a = anc). {
-          intro Hfa_s0'. simpl. (* fa preserved through preloop+forset *) admit. }
+          intro Hfa_s0'. simpl.
+          (* preloop preserves fa[a] *)
+          pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL.
+          unfold Hoare in HL. sets_unfold in HL.
+          pose proof (HL s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
+          unfold pop_scc_state; destruct (stack_split_at (stack s_forset) a); simpl.
+          rewrite Hfa_forset_eq, Hfa_pre_eq. exact Hfa_s0'. }
         (* pop_scc preserves frame for anc: forset_inv, stack, order, etc. *)
         assert (Hframe_pop: forset_inv anc d (pop_scc_state s_forset a) /\
                             In anc (stack (pop_scc_state s_forset a)) /\
@@ -3067,10 +3082,6 @@ Section IS_LOW.
         pose proof (preloop_keep_fa_eq a a (fa s0' a)) as HL_fa_pre.
         unfold Hoare in HL_fa_pre. sets_unfold in HL_fa_pre.
         pose proof (HL_fa_pre s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
-        (* forset preserves fa[a]: fa[a] never written during forset
-           (set_fa v a sets fa[v] not fa[a]; update_low a sets low[a]) *)
-        assert (Hfa_forset_eq: fa s_forset a = fa s_pre a). {
-          (* TODO: prove via Hoare lemma that process_edge preserves fa[a] *) admit. }
         rewrite Hfa_forset_eq, Hfa_pre_eq. exact Hfa_s0'. }
     exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 Hframe)))).
   Admitted.
