@@ -2795,6 +2795,53 @@ Section IS_LOW.
       (conj Hsrc_res (conj Hfa_child_res (conj Hfa_not_done_res Hdone_vis_res))))))).
   Qed.
 
+  (* ================================================================ *)
+  (* 9.5. Phase-1 Foundational Lemmas                                  *)
+  (* ================================================================ *)
+
+  Lemma preloop_df_eq_old_timer (u: V):
+    forall s0, Hoare (fun s => s = s0) (preloop u)
+      (fun _ s => dfn s u = timer s0).
+  Proof.
+    intros s0. unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    unfold equiv_decb. destruct (equiv_dec u u) as [_|Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
+  Qed.
+
+  Lemma stack_split_at_df_lt_rest (s: SCCSt) (anc a: V) (popped rest: list V):
+    stack_dfn_order s -> In anc (stack s) -> In a (stack s) ->
+    dfn s anc < dfn s a ->
+    stack_split_at (stack s) a = (popped, rest) ->
+    In anc rest.
+  Proof.
+    intros Horder Hanc_in Ha_in Hdfn_lt Hsplit.
+    destruct (stack_split_at_decomp (stack s) a Ha_in popped rest Hsplit)
+      as (prefix & Hstk_eq).
+    destruct (classic (In anc prefix)) as [Hanc_prefix | Hanc_not_prefix].
+    - destruct (List.in_split _ _ Hanc_prefix) as (l1 & l2 & Hprefix_eq).
+      assert (Hanc_before_a: exists l1' l2', stack s = l1' ++ anc :: l2' /\ In a l2'). {
+        exists l1. exists (l2 ++ a :: rest). split.
+        { rewrite Hstk_eq, Hprefix_eq. rewrite <- !List.app_assoc. simpl. reflexivity. }
+        { apply List.in_or_app. right. simpl. auto. } }
+      pose proof (Horder anc a Hanc_in Ha_in Hanc_before_a) as Hdfn_le.
+      exfalso. apply (Nat.lt_irrefl (dfn s anc)).
+      apply (Nat.lt_le_trans _ _ _ Hdfn_lt Hdfn_le).
+    - rewrite Hstk_eq in Hanc_in. apply List.in_app_or in Hanc_in.
+      destruct Hanc_in as [Hanc_pref | Hanc_tail].
+      { exfalso. apply Hanc_not_prefix. exact Hanc_pref. }
+      simpl in Hanc_tail. destruct Hanc_tail as [Heq | Hanc_rest].
+      + subst anc. exfalso. apply (Nat.lt_irrefl (dfn s a)). exact Hdfn_lt.
+      + exact Hanc_rest.
+  Qed.
+
+  Lemma preloop_keep_scc_is_low_v_for_d (a anc: V) (d: V -> Prop) (s0 s_pre: SCCSt):
+    wf_scc_state s0 -> (forall w, d w -> w ∈ visited s0) ->
+    stack_dfn_order s0 -> dfn_injective s0 -> ~ a ∈ visited s0 ->
+    (s0, tt, s_pre) ∈ preloop a ->
+    (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
+      scc_is_low_v s0 w -> scc_is_low_v s_pre w).
+  Proof. Admitted. (* scc_low_tree preservation through preloop *)
+
   (** [forset_keeps_anc_frame]: forset preserves anc's frame invariant.
       Structure: [Hoare_forset] with constant invariant [I_anc].
       Body: process_edge branches — tree edges use HW_frame,
@@ -2825,6 +2872,7 @@ Section IS_LOW.
     fa_child_of_u anc s_pre ->
     fa_not_done_implies_eq_u anc (d ∪ [a]) s_pre ->
     done_visited d s_pre ->
+    dfn s_pre anc < dfn s_pre a ->
     Hoare (fun s => s = s_pre) (forset (fun v => dg_step g a v) (process_edge a W))
       (fun _ s => forset_inv anc d s /\ In anc (stack s) /\
                   stack_dfn_order s /\ dfn_injective s /\
@@ -2835,7 +2883,7 @@ Section IS_LOW.
                   fa_not_done_implies_eq_u anc (d ∪ [a]) s /\
                   done_visited d s).
   Proof.
-    intros Hfinv Hinstk Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done Hdone_vis.
+    intros Hfinv Hinstk Horder Hinj Hsrc Hchild Hfa_child Hfa_not_done Hdone_vis Hdfn_lt.
     set (S := fun v => dg_step g a v).
     set (I_anc := fun (_: V -> Prop) (s: SCCSt) =>
       forset_inv anc d s /\ In anc (stack s) /\
@@ -3011,7 +3059,35 @@ Section IS_LOW.
       destruct Hframe_pre_anc as [Hfinv_anc_pre [Hinstk_anc_pre [Horder_anc_pre
         [Hinj_anc_pre [Hsrc_anc_pre [Hfa_child_anc_pre
           [Hfa_not_done_anc_pre Hdone_vis_anc_pre]]]]]]].
-      (* Step B: forset preserves frame for anc — admitted *)
+      (* Hdfn_lt_pre: dfn s_pre anc < dfn s_pre a *)
+      assert (Hdfn_lt_pre: dfn s_pre anc < dfn s_pre a). {
+        assert (Hanc_ne_a: anc <> a). {
+          intro Heq; subst anc. apply Hnv_a.
+          destruct Hfinv as [_ [Hanc_vis_s0' _]]; exact Hanc_vis_s0'. }
+        assert (Hdfn_pres: dfn s_pre anc = dfn s0' anc). {
+          set (S := fun x => x = anc).
+          assert (Hneq: forall x, S x -> a <> x). {
+            intros x Heq_x; unfold S in Heq_x; subst x.
+            intro Heq; symmetry in Heq; exact (Hanc_ne_a Heq). }
+          pose proof (preloop_keep_dfn_forall a S (dfn s0') Hneq) as HL.
+          unfold Hoare in HL. sets_unfold in HL.
+          destruct (HL s0' tt s_pre) as [_ Hdfn_S].
+          { split; [intros x Heq_x; unfold S in Heq_x; subst x;
+              destruct Hfinv as [_ [Hanc_vis_s0' _]]; exact Hanc_vis_s0'
+            | intros x Heq_x; unfold S in Heq_x; subst x; reflexivity]. }
+          { exact Hpreloop_exec. }
+          apply (Hdfn_S anc). unfold S. reflexivity. }
+        rewrite Hdfn_pres.
+        assert (Hdfn_a_eq: dfn s_pre a = timer s0'). {
+          pose proof (preloop_df_eq_old_timer a s0') as HL.
+          unfold Hoare in HL. sets_unfold in HL.
+          apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
+        rewrite Hdfn_a_eq.
+        exact Hdfn_lt_s0'. }
+      (* Hchild_anc_pre: admitted for scc_low_tree *)
+      assert (Hchild_anc_pre: forall w, d w -> dg_step g anc w ->
+        fa s_pre w = anc -> fa s_pre w <> w -> scc_is_low_v s_pre w) by admit.
+      (* Step B: forset preserves frame for anc *)
       assert (Hframe_forset: forset_inv anc d s_forset /\ In anc (stack s_forset) /\
                              stack_dfn_order s_forset /\ dfn_injective s_forset /\
                              low_src anc d s_forset /\
@@ -3021,7 +3097,12 @@ Section IS_LOW.
                              fa_child_of_u anc s_forset /\
                              fa_not_done_implies_eq_u anc (d ∪ [a]) s_forset /\
                              done_visited d s_forset). {
-        admit. (* TODO: forset frame-threading lemma *) }
+        pose proof (forset_keeps_anc_frame a anc d s_pre W HW_frame
+          Hfinv_anc_pre Hinstk_anc_pre Horder_anc_pre Hinj_anc_pre
+          Hsrc_anc_pre Hchild_anc_pre Hfa_child_anc_pre Hfa_not_done_anc_pre
+          Hdone_vis_anc_pre Hdfn_lt_pre) as HL.
+        unfold Hoare in HL.
+        apply (HL s_pre ret_forset s_forset); [reflexivity | exact Hforset_exec]. }
       destruct Hframe_forset as [Hfinv_anc_fs [Hinstk_anc_fs [Horder_anc_fs [Hinj_anc_fs
         [Hsrc_anc_fs [Hchild_anc_fs [Hfa_child_anc_fs [Hfa_not_done_anc_fs Hdone_vis_anc_fs]]]]]]]].
       (* Step C: if_else preserves frame for anc *)
