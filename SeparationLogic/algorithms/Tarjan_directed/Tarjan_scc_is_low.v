@@ -3222,7 +3222,84 @@ Section IS_LOW.
             (fun _ s => wf_scc_state s /\ stack_dfn_order s /\
                         dfn_injective s /\ fa s w = fa s_pre w).
   Proof.
-  Admitted.
+    intros s_pre w Hw_vis Hwf Horder Hinj.
+    set (J := fun (done: V -> Prop) (s: SCCSt) =>
+                wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
+                w ∈ visited s /\ fa s w = fa s_pre w).
+    assert (ProperJ: Proper (Sets.equiv ==> eq ==> iff) J). {
+      unfold J. intros d1 d2 Heq s1 s2 Heqs. subst s2. reflexivity. }
+    refine (Hoare_conseq (fun s => s = s_pre) (J ∅)
+              (forset (fun v => dg_step g a v) (process_edge a W))
+              (fun _ s => wf_scc_state s /\ stack_dfn_order s /\
+                          dfn_injective s /\ fa s w = fa s_pre w)
+              (fun _ s => J (fun v => dg_step g a v) s) _ _ _).
+    { intros s Heq. subst s. unfold J.
+      split; [| split; [| split; [| split]]].
+      - exact Hwf. - exact Horder. - exact Hinj. - exact Hw_vis. - reflexivity. }
+    { intros _ s HJ. unfold J in HJ. tauto. }
+    apply (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ).
+    intros done v Hdone_sub Hv_S Hv_not_done.
+    unfold J, process_edge, if_else. intro_state.
+    destruct H as [Hwf_s0 [Horder_s0 [Hinj_s0 [Hw_vis_s0 Hfa_s0]]]].
+    apply Hoare_choice.
+    - (* Tree edge: follows tree_edge_preserves_fa pattern *)
+      intro_state. subst s1.
+      apply (Hoare_assume_bind (fun s => s = s0) (fun s => ~ v ∈ visited s)
+               (set_fa v a ;; W v ;; lv <- get' (fun s => low s v) ;; update_low a lv)
+               (fun _ s => J (done ∪ [v]) s)).
+      intro_state. destruct H as [Hnv_s1 Heq_s1]. subst s1.
+      (* set_fa v a — use rename trick to avoid s0 shadowing *)
+      rename s0 into s_forset.
+      unfold set_fa. intro_state. hoare_auto_s. subst s0. simpl.
+      rename s_forset into s0.
+      (* W v via IH *)
+      eapply Hoare_bind.
+      { apply (IH (set_fa_state s0 v a) v). }
+    { intros []. simpl.
+      (* Extract J from Q_low *)
+      set (T := set_fa_state s0 v a).
+      set (P_J := J (done ∪ [v])).
+      refine (Hoare_conseq_pre (Q_low v T tt) P_J
+                (lv <- get' (fun s' => low s' v);; update_low a lv)
+                (fun _ s' => P_J s') _ _).
+      { intros s' HQ. unfold Q_low, P_J, J in *.
+        (* Prove Q_low antecedent *)
+        assert (Hant: ~ v ∈ visited T /\ wf_scc_state T /\
+                      stack_dfn_order T /\ dfn_injective T). {
+          unfold T. unfold set_fa_state. simpl.
+          split; [| split; [| split]].
+          - exact Hnv_s1.
+          - admit. (* wf_scc_state through set_fa — TODO *)
+          - exact Horder_s0.
+          - exact Hinj_s0. }
+        destruct (HQ Hant) as [Hlow_post [_ [Horder_s' [Hinj_s' [_ Hfa_all]]]]].
+        destruct Hlow_post as [Hwf_s' _].
+        split; [| split; [| split; [| split]]].
+        - exact Hwf_s'.
+        - exact Horder_s'.
+        - exact Hinj_s'.
+        - admit. (* w ∈ visited through W v — TODO *)
+        - (* fa s' w = fa s_pre w *)
+          assert (Hv_ne_w: v <> w). {
+            intro Heq. subst w. exfalso. apply Hnv_s1. exact Hw_vis_s0. }
+          assert (Hfa_T_w: fa T w = fa s0 w). {
+            unfold T.
+            pose proof (set_fa_keep_other_fa v w a (fa s0 w)) as Hlem.
+            unfold Hoare in Hlem. sets_unfold in Hlem.
+            apply (Hlem s0 tt (set_fa_state s0 v a)).
+            - split; [exact Hv_ne_w | reflexivity].
+            - unfold set_fa. simpl. constructor. }
+          assert (Hw_vis_T: w ∈ visited T). {
+            unfold T. simpl. exact Hw_vis_s0. }
+          pose proof (Hfa_all w Hw_vis_T) as Heq_fa.
+          rewrite Hfa_T_w in Heq_fa.
+          rewrite Hfa_s0 in Heq_fa.
+          exact Heq_fa. }
+      { (* get' (low v) ;; update_low a lv — TODO: Hoare decomposition *)
+        admit. } }
+    - (* Non-tree edge *)
+      admit.
+  Admitted. (* 3 TODOs: wf_scc_state through set_fa, w ∈ visited through W v, update_low naming *)
 
   Theorem tarjan_scc_keep_low_valid (u: V):
     Hoare (fun s: @SCCSt V => low_pre u s /\ original_vvalid g u /\
