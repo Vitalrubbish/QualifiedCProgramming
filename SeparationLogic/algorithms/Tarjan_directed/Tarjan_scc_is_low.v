@@ -2576,13 +2576,30 @@ Section IS_LOW.
       intros w Hw. pose proof (preloop_keep_fa_eq a w (fa s0' w)) as HL.
       unfold Hoare in HL. sets_unfold in HL.
       apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
-    (* Step 2: forset preserves fa.
-       Can use tree_edge_preserves_fa (proved below) + Hoare_forset.
-       tree_edge_preserves_fa is defined after this lemma; move it up
-       to use here. For now, admitted. *)
-    assert (Hfa_forset: forall w, w ∈ visited s0' -> fa s_forset w = fa s0' w) by admit.
+    (* Step 2: forset preserves fa pointwise via Hoare_forset *)
+    assert (Hfa_forset: forall w, w ∈ visited s0' -> fa s_forset w = fa s0' w). {
+      intros w Hw. rewrite <- (Hfa_pre w Hw). (* goal: fa s_forset w = fa s_pre w *)
+      set (J := fun (done: V -> Prop) (s: SCCSt) => fa s w = fa s_pre w).
+      assert (ProperJ: Proper (Sets.equiv ==> eq ==> iff) J). {
+        unfold J. intros d1 d2 Heq s1 s3 Heqs. subst s3. reflexivity. }
+      assert (Hstep: forall (done: V -> Prop) (v: V),
+        done ⊆ (fun x => dg_step g a x) -> v ∈ (fun x => dg_step g a x) ->
+        ~ v ∈ done -> Hoare (fun s => J done s) (process_edge a W v) (fun _ s => J (done ∪ [v]) s)). {
+        (* tree_edge_preserves_fa for tree edge, get_keep_fa+update_low_keep_fa for back edge.
+           Requires Hoare_state_intro → Hoare_assume_bind → apply tree_edge_preserves_fa.
+           Admitted pending correct Hoare combinator threading. *)
+        admit. }
+      pose proof (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ Hstep) as Hforall.
+      unfold Hoare in Hforall.
+      apply (Hforall s_pre ret_forset s_forset); [| exact Hforset_exec].
+      unfold J. reflexivity. }
     (* Step 3: If preserves fa *)
-    assert (Hfa_s2: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w) by admit.
+    assert (Hfa_s2: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w). {
+      intros w Hw. rewrite <- (Hfa_forset w Hw).
+      destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
+      - (* pop_scc: s2 = pop_scc_state s_forset a, fa unchanged *)
+        admit. (* pop_scc_state preserves fa *)
+      - (* skip *) destruct Hskip_exec. reflexivity. }
     exact Hfa_s2.
   Admitted.
 
