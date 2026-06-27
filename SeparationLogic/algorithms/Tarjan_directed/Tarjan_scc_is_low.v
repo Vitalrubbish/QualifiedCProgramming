@@ -2546,6 +2546,54 @@ Section IS_LOW.
           (conj Hdone_vis_s (conj Hlow_post (conj Hvis Hfa_pres))))))))))).
   Qed.
 
+  (* ================================================================ *)
+  (* 9.6. Independent Fa Preservation (Separate Lfix Induction)       *)
+  (* ================================================================ *)
+
+  (** [Q_fa u s0]: after [tarjan_scc_f g u] from state [s0],
+      fa is preserved for all vertices visited at [s0].
+      Minimal antecedent: only requires u unvisited at s0. *)
+  Definition Q_fa (u: V) (s0: SCCSt) (_: unit) (s: SCCSt): Prop :=
+    (~ u ∈ visited s0) ->
+    (forall w, w ∈ visited s0 -> fa s w = fa s0 w).
+
+  Theorem tarjan_scc_keep_fa (u: V) (s_init: SCCSt):
+    Hoare (fun s => s = s_init)
+          (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
+          (Q_fa u s_init).
+  Proof.
+    unfold tarjan_scc.
+    apply (Hoare_normal_LFix Q_fa (tarjan_scc_f g)).
+    intros W IH_fa s0' a.
+    unfold tarjan_scc_f.
+    unfold Hoare. sets_unfold. intros s1 ret s2 Heq Hprog.
+    sets_unfold in Heq. subst s1.
+    unfold Q_fa. intro Hnv_a.
+    destruct Hprog as [ret_pre [s_pre [Hpreloop_exec Hrest]]].
+    destruct Hrest as [ret_forset [s_forset [Hforset_exec Hif_exec]]].
+    (* Step 1: preloop preserves fa (preloop_keep_fa_eq) *)
+    assert (Hfa_pre: forall w, w ∈ visited s0' -> fa s_pre w = fa s0' w). {
+      intros w Hw. pose proof (preloop_keep_fa_eq a w (fa s0' w)) as HL.
+      unfold Hoare in HL. sets_unfold in HL.
+      apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
+    (* Step 2: forset preserves fa.
+       Each process_edge only modifies fa[v] (unvisited child) or low[a].
+       Recursive W v preserves fa via IH_fa since v unvisited at call state.
+       Admitted pending forset trace induction or Hoare_forset step proof. *)
+    assert (Hfa_forset: forall w, w ∈ visited s0' -> fa s_forset w = fa s0' w) by admit.
+    (* Step 3: If preserves fa (pop_scc doesn't change fa; skip trivial) *)
+    assert (Hfa_s2: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w). {
+      intros w Hw. rewrite <- (Hfa_forset w Hw).
+      destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
+      - (* pop_scc: pop_scc_state doesn't change fa *)
+        destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+        unfold pop_scc, update', update in Hpop_body.
+        admit. (* s2 = pop_scc_state s_forset a, fa unchanged *)
+      - (* skip: s2 = s_forset, goal becomes fa s_forset w = fa s_forset w *)
+        destruct Hskip_exec. reflexivity. }
+    exact Hfa_s2.
+  Admitted.
+
   (** [preloop_stack_eq]: [preloop a] prepends [a] to the stack. *)
   Lemma preloop_stack_eq_hoare (a: V) (s0: SCCSt):
     Hoare (fun s => s = s0) (preloop a) (fun _ s => stack s = a :: stack s0).
