@@ -2557,12 +2557,36 @@ Section IS_LOW.
     (~ u ∈ visited s0) ->
     (forall w, w ∈ visited s0 -> fa s w = fa s0 w).
 
+  (** [Q_fa_rich]: strengthened postcondition that additionally
+      provides [visited] preservation.  Used in the Lfix induction
+      of [tarjan_scc_keep_fa] so that recursive calls preserve
+      [w ∈ visited] for already-visited [w]. *)
+  Definition Q_fa_rich (u: V) (s0: SCCSt) (_: unit) (s: SCCSt): Prop :=
+    (~ u ∈ visited s0) ->
+    (forall w, w ∈ visited s0 -> w ∈ visited s) /\
+    (forall w, w ∈ visited s0 -> fa s w = fa s0 w).
+
+  Lemma Q_fa_rich_implies_visited (u: V) (s0: SCCSt) (w: V) (b: unit) (s: SCCSt):
+    ~ u ∈ visited s0 -> w ∈ visited s0 -> Q_fa_rich u s0 b s -> w ∈ visited s.
+  Proof.
+    unfold Q_fa_rich. intros Hnu Hw H. destruct (H Hnu) as [Hvis _].
+    apply Hvis. exact Hw.
+  Qed.
+
     (** [get_keep_fa]: [get'] preserves fa. *)
   Lemma get_keep_fa (f: SCCSt -> nat) (w p: V):
     Hoare (fun s => fa s w = p) (get' f) (fun _ s => fa s w = p).
   Proof.
     unfold get'. intro_state. hoare_auto_s.
     destruct H1 as [Heq_s Hf_eq]. rewrite Heq_s. auto.
+  Qed.
+
+  (** [get_keep_visited]: [get'] preserves [visited]. *)
+  Lemma get_keep_visited (f: SCCSt -> nat) (w: V):
+    Hoare (fun s => w ∈ visited s) (get' f) (fun _ s => w ∈ visited s).
+  Proof.
+    unfold get'. intro_state. hoare_auto_s.
+    destruct H1 as [Heq_s _]. rewrite Heq_s. auto.
   Qed.
 
   (** [tree_edge_preserves_fa]: tree-edge branch of process_edge
@@ -2579,14 +2603,11 @@ Section IS_LOW.
     intros Hvis_w Hfa_w Hnv_vis Hdg.
     assert (Hneq_wv: w <> v). {
       intro Heq. subst w. exfalso. apply Hnv_vis. exact Hvis_w. }
-    (* Step 1: set_fa v a; check fa[w] unchanged (w≠v) *)
-    unfold set_fa. intro_state. hoare_auto_s. subst s0.
-    simpl. unfold equiv_decb.
+    unfold set_fa. intro_state. hoare_auto_s. subst s0. simpl.
+    unfold equiv_decb.
     destruct (equiv_dec w v) as [Heq_wv|Hneq_wv']; [exfalso; apply Hneq_wv; apply Heq_wv|].
-    (* Step 2: W v via IH_fa at set_fa_state s v a *)
     eapply Hoare_bind.
     { apply (IH_fa (set_fa_state s v a) v). }
-    (* Step 3: Q_fa → fa w = p → get' ;; update_low preserves fa *)
     intros []. simpl.
     eapply Hoare_conseq_pre.
     { intros s' HQ. unfold Q_fa in HQ.
@@ -2595,10 +2616,36 @@ Section IS_LOW.
       simpl in HQ. unfold equiv_decb in HQ.
       destruct (equiv_dec w v); [exfalso; apply Hneq_wv; auto|].
       simpl in HQ. rewrite Hfa_w in HQ. exact HQ. }
-    (* Goal: Hoare (fa s' w = p) (get' low v ;; update_low a lv) (fa _ w = p) *)
     eapply Hoare_bind.
     { apply (get_keep_fa (fun s' => low s' v) w p). }
     simpl. intro lv. apply (update_low_keep_fa a w lv p).
+  Qed.
+
+  (** [tree_edge_preserves_visited]: tree-edge branch of process_edge
+      preserves [w ∈ visited] for any already-visited [w].
+      Uses [Q_fa_rich] in the induction hypothesis. *)
+  Lemma tree_edge_preserves_visited (a v w: V) (s: SCCSt)
+        (W: V -> program SCCSt unit)
+        (IH_rich: forall s0 x, Hoare (fun s' => s' = s0) (W x) (Q_fa_rich x s0)):
+    w ∈ visited s -> ~ v ∈ visited s ->
+    Hoare (fun s' => s' = s)
+      (set_fa v a ;; W v ;; lv <- get' (fun s' => low s' v) ;; update_low a lv)
+      (fun _ s' => w ∈ visited s').
+  Proof.
+    intros Hvis_w Hnv_vis.
+    unfold set_fa. intro_state. hoare_auto_s. subst s0. simpl.
+    eapply Hoare_bind.
+    { apply (IH_rich (set_fa_state s v a) v). }
+    intros []. simpl.
+    eapply Hoare_conseq_pre.
+    { intros s' HQ.
+      apply (Q_fa_rich_implies_visited v (set_fa_state s v a) w tt s').
+      - unfold set_fa_state. simpl. exact Hnv_vis.
+      - unfold set_fa_state. simpl. exact Hvis_w.
+      - exact HQ. }
+    eapply Hoare_bind.
+    { apply (get_keep_visited (fun s' => low s' v) w). }
+    simpl. intro lv. apply (update_low_keep_visited a w lv).
   Qed.
 
   Theorem tarjan_scc_keep_fa (u: V) (s_init: SCCSt):
@@ -2607,65 +2654,170 @@ Section IS_LOW.
           (Q_fa u s_init).
   Proof.
     unfold tarjan_scc.
-    apply (Hoare_normal_LFix Q_fa (tarjan_scc_f g)).
-    intros W IH_fa s0' a.
+    cut (Hoare (fun s => s = s_init)
+               (Lfix (tarjan_scc_f g) u)
+               (Q_fa_rich u s_init)).
+    { intros Hrich. eapply Hoare_conseq_post; [| exact Hrich].
+      intros b s HQ. unfold Q_fa_rich, Q_fa in *.
+      intros Hnv. destruct (HQ Hnv) as [_ Hfa]. exact Hfa. }
+    apply (Hoare_normal_LFix Q_fa_rich (tarjan_scc_f g)).
+    intros W IH_rich s0' a.
+    assert (IH_fa: forall s0 x, Hoare (fun s' => s' = s0) (W x) (Q_fa x s0)). {
+      intros s0 x. refine (Hoare_conseq_post _ _ _ _ _ (IH_rich s0 x)).
+      intros b s HQ. unfold Q_fa_rich, Q_fa in *.
+      intros Hnv. destruct (HQ Hnv) as [_ Hfa]. exact Hfa. }
     unfold tarjan_scc_f.
     unfold Hoare. sets_unfold. intros s1 ret s2 Heq Hprog.
     sets_unfold in Heq. subst s1.
-    unfold Q_fa. intro Hnv_a.
     destruct Hprog as [ret_pre [s_pre [Hpreloop_exec Hrest]]].
     destruct Hrest as [ret_forset [s_forset [Hforset_exec Hif_exec]]].
-    (* Step 1: preloop preserves fa (preloop_keep_fa_eq) *)
-    assert (Hfa_pre: forall w, w ∈ visited s0' -> fa s_pre w = fa s0' w). {
-      intros w Hw. pose proof (preloop_keep_fa_eq a w (fa s0' w)) as HL.
-      unfold Hoare in HL. sets_unfold in HL.
-      apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
-    (* Step 2: forset preserves fa pointwise via Hoare_forset *)
-    assert (Hfa_forset: forall w, w ∈ visited s0' -> fa s_forset w = fa s0' w). {
-      intros w Hw. rewrite <- (Hfa_pre w Hw). (* goal: fa s_forset w = fa s_pre w *)
-      set (J := fun (done: V -> Prop) (s: SCCSt) => fa s w = fa s_pre w).
-      assert (ProperJ: Proper (Sets.equiv ==> eq ==> iff) J). {
-        unfold J. intros d1 d2 Heq s1 s3 Heqs. subst s3. reflexivity. }
-      assert (Hstep: forall (done: V -> Prop) (v: V),
-        done ⊆ (fun x => dg_step g a x) -> v ∈ (fun x => dg_step g a x) ->
-        ~ v ∈ done -> Hoare (fun s => J done s) (process_edge a W v) (fun _ s => J (done ∪ [v]) s)). {
-        intros done' v' Hsub Hv'S Hnv_done.
-        unfold J, process_edge, if_else.
-        intro_state.
-        (* intro_state auto-names: s0 and H: fa s0 w = fa s_pre w *)
-        rename H into Hfa_s0.
-        apply Hoare_choice.
-        - (* Tree edge *)
-          intro_state. subst s1.
-          apply (Hoare_assume_bind (fun s => s = s0) (fun s => ~ v' ∈ visited s)
-                   (set_fa v' a ;; W v' ;; lv <- get' (fun s => low s v') ;; update_low a lv)
-                   (fun _ s => fa s w = fa s_pre w)).
-          intro_state. destruct H as [Hnv_s1 Heq_s1]. subst s1.
-          apply (tree_edge_preserves_fa a v' w (fa s_pre w) s0 W IH_fa).
-          + admit. (* w ∈ visited s0 *)
-          + exact Hfa_s0.
-          + exact Hnv_s1.
-          + exact Hv'S.
-        - (* Non-tree edge: v' visited, back/cross edge cases — admit *)
-          admit. }
-      pose proof (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ Hstep) as Hforall.
-      unfold Hoare in Hforall.
-      apply (Hforall s_pre ret_forset s_forset); [| exact Hforset_exec].
-      unfold J. reflexivity. }
-    (* Step 3: If preserves fa *)
-    assert (Hfa_s2: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w). {
-      intros w Hw. rewrite <- (Hfa_forset w Hw).
+    unfold Q_fa_rich. intro Hnv_a. split.
+    - (* visited preservation *)
+      intros w Hw.
+      assert (Ha_ne_w: a <> w). {
+        intro Heq. subst w. exfalso. exact (Hnv_a Hw). }
+      (* preloop preserves visited *)
+      assert (Hw_vis_pre: w ∈ visited s_pre). {
+        set (S := fun x => x = w).
+        assert (Hneq_S: forall x, S x -> a <> x). {
+          intros x Heq_x; unfold S in Heq_x; subst x. exact Ha_ne_w. }
+        pose proof (preloop_keep_dfn_forall a S (dfn s0') Hneq_S) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        destruct (HL s0' tt s_pre) as [Hvis_S _].
+        { split; [intros x Heq_x; unfold S in Heq_x; subst x; exact Hw
+          | intros x Heq_x; unfold S in Heq_x; subst x; reflexivity]. }
+        exact Hpreloop_exec.
+        apply (Hvis_S w). unfold S. reflexivity. }
+      (* forset preserves visited using a separate Hoare_forset *)
+      assert (Hw_vis_forset: w ∈ visited s_forset). {
+        set (J_vis := fun (done: V -> Prop) (s: SCCSt) => w ∈ visited s).
+        assert (Proper_J_vis: Proper (Sets.equiv ==> eq ==> iff) J_vis). {
+          unfold J_vis. intros d1 d2 Heq s1 s3 Heqs. subst s3. reflexivity. }
+        assert (Hstep_vis: forall (done: V -> Prop) (v: V),
+          done ⊆ (fun x => dg_step g a x) -> v ∈ (fun x => dg_step g a x) ->
+          ~ v ∈ done -> Hoare (fun s => J_vis done s) (process_edge a W v)
+                              (fun _ s => J_vis (done ∪ [v]) s)). {
+          intros done' v' Hsub Hv'S Hnv_done.
+          unfold J_vis, process_edge, if_else. intro_state.
+          rename H into Hw_vis_s0.
+          apply Hoare_choice.
+          - (* Tree edge *)
+            intro_state. subst s1.
+            apply (Hoare_assume_bind (fun s => s = s0) (fun s => ~ v' ∈ visited s)
+                     (set_fa v' a ;; W v' ;; lv <- get' (fun s => low s v') ;; update_low a lv)
+                     (fun _ s => w ∈ visited s)).
+            intro_state. destruct H as [Hnv_s1 Heq_s1]. subst s1.
+            apply (tree_edge_preserves_visited a v' w s0 W IH_rich Hw_vis_s0 Hnv_s1).
+          - (* Non-tree edge: v ∈ visited — follows process_edge_keep_fa_visited pattern *)
+            intro_state. hoare_auto_s.
+            + (* Back edge: In v' (stack ...) — update_low a (dfn s0 v') *)
+              refine (Hoare_conseq (fun s => s = s0) (fun s => w ∈ visited s)
+                        (update_low a (dfn s0 v')) (fun _ s => w ∈ visited s)
+                        (fun _ s => w ∈ visited s) _ _ _).
+              * { intros s' Heq. subst s'. exact Hw_vis_s0. }
+              * { intros _ s' Hvis. exact Hvis. }
+              * apply (update_low_keep_visited a w (dfn s0 v')).
+            + (* Cross edge: ~ In v' (stack ...), skip *)
+              destruct H2 as [Heq _]. subst s. subst s1. exact Hw_vis_s0. }
+        pose proof (Hoare_forset J_vis (fun v => dg_step g a v)
+                      (process_edge a W) Proper_J_vis Hstep_vis) as Hforall_vis.
+        unfold Hoare in Hforall_vis.
+        apply (Hforall_vis s_pre ret_forset s_forset);
+          [unfold J_vis; exact Hw_vis_pre | exact Hforset_exec]. }
+      (* if_else preserves visited *)
       destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
-      - (* pop_scc: s2 = pop_scc_state s_forset a, fa unchanged *)
-        destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+      + destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
         unfold pop_scc, update', update in Hpop_body. subst s_mid.
-        cut (s2 = pop_scc_state s_forset a).
-        { intro Heq. subst s2. unfold pop_scc_state.
-          destruct (stack_split_at (stack s_forset) a). reflexivity. }
-        apply Hpop_body.
-      - (* skip *) destruct Hskip_exec. reflexivity. }
-    exact Hfa_s2.
-  Admitted.
+        assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
+        subst s2. unfold pop_scc_state.
+        destruct (stack_split_at (stack s_forset) a). simpl.
+        exact Hw_vis_forset.
+      + destruct Hskip_exec. exact Hw_vis_forset.
+    - (* fa preservation *)
+      intros w Hw.
+      assert (Hfa_pre: fa s_pre w = fa s0' w). {
+        pose proof (preloop_keep_fa_eq a w (fa s0' w)) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        apply (HL s0' tt s_pre); [reflexivity | exact Hpreloop_exec]. }
+      assert (Ha_ne_w: a <> w). {
+        intro Heq. subst w. exfalso. exact (Hnv_a Hw). }
+      assert (Hw_vis_pre: w ∈ visited s_pre). {
+        set (S := fun x => x = w).
+        assert (Hneq_S: forall x, S x -> a <> x). {
+          intros x Heq_x; unfold S in Heq_x; subst x. exact Ha_ne_w. }
+        pose proof (preloop_keep_dfn_forall a S (dfn s0') Hneq_S) as HL.
+        unfold Hoare in HL. sets_unfold in HL.
+        destruct (HL s0' tt s_pre) as [Hvis_S _].
+        { split; [intros x Heq_x; unfold S in Heq_x; subst x; exact Hw
+          | intros x Heq_x; unfold S in Heq_x; subst x; reflexivity]. }
+        exact Hpreloop_exec.
+        apply (Hvis_S w). unfold S. reflexivity. }
+      assert (Hfa_forset: fa s_forset w = fa s_pre w). {
+        set (J := fun (done: V -> Prop) (s: SCCSt) =>
+                    w ∈ visited s /\ fa s w = fa s_pre w).
+        assert (ProperJ: Proper (Sets.equiv ==> eq ==> iff) J). {
+          unfold J. intros d1 d2 Heq s1 s3 Heqs. subst s3. reflexivity. }
+        assert (J_init: J ∅ s_pre). {
+          unfold J. split; [exact Hw_vis_pre | reflexivity]. }
+        assert (Hstep: forall (done: V -> Prop) (v: V),
+          done ⊆ (fun x => dg_step g a x) -> v ∈ (fun x => dg_step g a x) ->
+          ~ v ∈ done -> Hoare (fun s => J done s) (process_edge a W v)
+                              (fun _ s => J (done ∪ [v]) s)). {
+          intros done' v' Hsub Hv'S Hnv_done.
+          unfold J, process_edge, if_else. intro_state.
+          destruct H as [Hw_vis_s0 Hfa_s0].
+          apply Hoare_choice.
+          - (* Tree edge *)
+            intro_state. subst s1.
+            apply (Hoare_assume_bind (fun s => s = s0) (fun s => ~ v' ∈ visited s)
+                     (set_fa v' a ;; W v' ;; lv <- get' (fun s => low s v') ;; update_low a lv)
+                     (fun _ s => w ∈ visited s /\ fa s w = fa s_pre w)).
+            intro_state. destruct H as [Hnv_s1 Heq_s1]. subst s1.
+            apply Hoare_conj with
+              (Q1 := fun _ s => w ∈ visited s)
+              (Q2 := fun _ s => fa s w = fa s_pre w).
+            { apply (tree_edge_preserves_visited a v' w s0 W IH_rich Hw_vis_s0 Hnv_s1). }
+            { apply (tree_edge_preserves_fa a v' w (fa s_pre w) s0 W IH_fa).
+              - exact Hw_vis_s0.
+              - exact Hfa_s0.
+              - exact Hnv_s1.
+              - exact Hv'S. }
+          - (* Non-tree edge: v ∈ visited — follows process_edge_keep_fa_visited pattern *)
+            intro_state. hoare_auto_s.
+            + (* Back edge: In v' (stack ...) — update_low preserves visited ∧ fa *)
+              apply Hoare_conj with
+                (Q1 := fun _ s => w ∈ visited s)
+                (Q2 := fun _ s => fa s w = fa s_pre w).
+              * refine (Hoare_conseq (fun s => s = s0) (fun s => w ∈ visited s)
+                          (update_low a (dfn s0 v')) (fun _ s => w ∈ visited s)
+                          (fun _ s => w ∈ visited s) _ _ _).
+                { intros s' Heq. subst s'. exact Hw_vis_s0. }
+                { intros _ s' Hvis. exact Hvis. }
+                apply (update_low_keep_visited a w (dfn s0 v')).
+              * refine (Hoare_conseq (fun s => s = s0) (fun s => fa s w = fa s_pre w)
+                          (update_low a (dfn s0 v')) (fun _ s => fa s w = fa s_pre w)
+                          (fun _ s => fa s w = fa s_pre w) _ _ _).
+                { intros s' Heq. subst s'. exact Hfa_s0. }
+                { intros _ s' Hfa'. exact Hfa'. }
+                apply (update_low_keep_fa a w (dfn s0 v') (fa s_pre w)).
+            + (* Cross edge: ~ In v' (stack ...), skip *)
+              destruct H2 as [Heq _]. subst s. subst s1.
+              split; [exact Hw_vis_s0 | exact Hfa_s0]. }
+        pose proof (Hoare_forset J (fun v => dg_step g a v)
+                      (process_edge a W) ProperJ Hstep) as Hforall.
+        unfold Hoare in Hforall.
+        destruct (Hforall s_pre ret_forset s_forset J_init Hforset_exec) as [_ Hfa].
+        exact Hfa. }
+      destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
+      + destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+        unfold pop_scc, update', update in Hpop_body. subst s_mid.
+        assert (Heq_s2: s2 = pop_scc_state s_forset a) by (apply Hpop_body).
+        subst s2. unfold pop_scc_state.
+        destruct (stack_split_at (stack s_forset) a). simpl.
+        rewrite Hfa_forset. rewrite Hfa_pre. reflexivity.
+      + destruct Hskip_exec.
+        rewrite Hfa_forset. rewrite Hfa_pre. reflexivity.
+  Qed.
 
   (** [preloop_stack_eq]: [preloop a] prepends [a] to the stack. *)
   Lemma preloop_stack_eq_hoare (a: V) (s0: SCCSt):
