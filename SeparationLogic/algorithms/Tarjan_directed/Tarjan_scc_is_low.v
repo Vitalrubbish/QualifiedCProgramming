@@ -2876,6 +2876,14 @@ Section IS_LOW.
       scc_is_low_v s0 w -> scc_is_low_v s_pre w).
   Proof. Admitted. (* scc_low_tree preservation through preloop *)
 
+  (** [get_keep_fa]: [get'] preserves fa. *)
+  Lemma get_keep_fa (f: SCCSt -> nat) (w p: V):
+    Hoare (fun s => fa s w = p) (get' f) (fun _ s => fa s w = p).
+  Proof.
+    unfold get'. intro_state. hoare_auto_s.
+    destruct H1 as [Heq_s Hf_eq]. rewrite Heq_s. auto.
+  Qed.
+
   (** [tree_edge_preserves_fa]: tree-edge branch of process_edge
       preserves fa for any visited vertex w.  Mirrors the pattern
       of [tree_edge_preserves_I] but specialized to fa-preservation. *)
@@ -2900,12 +2908,17 @@ Section IS_LOW.
     (* Step 3: Q_fa → fa w = p → get' ;; update_low preserves fa *)
     intros []. simpl.
     eapply Hoare_conseq_pre.
-    { intros s' HQ. unfold Q_fa in HQ. apply HQ; [simpl; exact Hnv_vis | simpl; exact Hvis_w]. }
-    (* get' low v ;; update_low a lv: both preserve fa.
-       update_low_keep_fa from basics gives the update_low part.
-       get' requires Hoare_conseq_pre threading. Admitted. *)
-    admit.
-  Admitted.
+    { intros s' HQ. unfold Q_fa in HQ.
+      specialize (HQ Hnv_vis).
+      specialize (HQ w Hvis_w).
+      simpl in HQ. unfold equiv_decb in HQ.
+      destruct (equiv_dec w v); [exfalso; apply Hneq_wv; auto|].
+      simpl in HQ. rewrite Hfa_w in HQ. exact HQ. }
+    (* Goal: Hoare (fa s' w = p) (get' low v ;; update_low a lv) (fa _ w = p) *)
+    eapply Hoare_bind.
+    { apply (get_keep_fa (fun s' => low s' v) w p). }
+    simpl. intro lv. apply (update_low_keep_fa a w lv p).
+  Qed.
 
   (** [forset_keep_fa_a]: forset over a's children preserves fa[a].
       Uses strengthened Q_low to get fa preservation through W v.
