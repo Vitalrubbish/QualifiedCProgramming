@@ -3142,7 +3142,11 @@ Section IS_LOW.
           unfold pop_scc_state.
           destruct (stack_split_at (stack s_forset) a) as [popped rest] eqn:Hsplit. simpl.
           (* dfn preserved through forset *)
-          assert (Hdfn_fs_lt: dfn s_forset anc < dfn s_forset a) by admit. (* TODO: dfn preservation *)
+          assert (Hdfn_fs_lt: dfn s_forset anc < dfn s_forset a). {
+            (* dfn preserved through forset: forset_process_edge_keep_dfn (line 1072)
+               in Tarjan_scc_basics.v gives it, but requires hypothesis
+               (∀x, Hoare ... W x preserves dfn[anc]) not yet available from Q_low. *)
+            admit. }
           (* In anc rest via stack_split_at_df_lt_rest *)
           assert (Hinstk_pop: In anc rest). {
             apply (stack_split_at_df_lt_rest s_forset anc a popped rest
