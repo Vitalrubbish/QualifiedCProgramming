@@ -3166,12 +3166,39 @@ Section IS_LOW.
             exists (prefix ++ a :: l1), l2. split.
             { rewrite Hstk_eq, Hrest_eq, <- List.app_assoc. reflexivity. }
             { exact Hy_in. } }
-          (* forset_inv + other fields: admitted for stack-dependent parts *)
+          (* forset_inv for popped state *)
           assert (Hfinv_pop: forset_inv anc d
             {| visited := visited s_forset; timer := timer s_forset;
                fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
-               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |})
-            by (admit). (* forset_inv with rest stack *)
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |}). {
+            destruct Hfinv_anc_fs as [Hwf [Hanc_vis [Hanc_stk [Hlow_le Hforall]]]].
+            unfold forset_inv. simpl.
+            split. { (* wf_scc_state: stack_in_visited for rest *)
+              destruct Hwf as [Hsiv [Hinv_df [Hvalid Hfa_vis]]].
+              unfold wf_scc_state. simpl.
+              split; [| split; [| split]].
+              - (* stack_in_visited: rest ⊆ stack ⊆ visited *)
+                intros x Hx. apply Hsiv.
+                destruct (stack_split_at_partition (stack s_forset) a popped rest Hsplit)
+                  as [Hrest_in _]. apply Hrest_in. exact Hx.
+              - exact Hinv_df.
+              - exact Hvalid.
+              - exact Hfa_vis. }
+            split. exact Hanc_vis. (* anc ∈ visited *)
+            split. exact Hinstk_pop. (* In anc rest *)
+            split. exact Hlow_le. (* low anc <= dfn anc *)
+            (* forall v, d v -> dg_step g anc v -> ... *)
+            intros w Hdw Hdg. simpl.
+            destruct (Hforall w Hdw Hdg) as [Hfa_part Hstk_part].
+            split.
+            - (* fa-dependent: unchanged *)
+              exact Hfa_part.
+            - (* stack-dependent: In w rest -> In w (stack s_forset) *)
+              intro Hw_rest.
+              apply Hstk_part.
+              destruct (stack_split_at_partition (stack s_forset) a popped rest Hsplit)
+                as [Hrest_in _].
+              apply Hrest_in. exact Hw_rest. }
           assert (Hrest_pop: (low_src anc d
             {| visited := visited s_forset; timer := timer s_forset;
                fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
@@ -3204,8 +3231,17 @@ Section IS_LOW.
             done_visited d
             {| visited := visited s_forset; timer := timer s_forset;
                fa := fa s_forset; dfn := dfn s_forset; low := low s_forset;
-               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |}))
-            by (admit). (* record projections don't simpl; all fields except stack unchanged *)
+               stack := rest; sccs := (fun v => In v popped) :: sccs s_forset |})). {
+            split. { admit. (* low_src: uses In w (stack ...) — stack-dependent *) }
+            split. { (* dfn_injective: stack-independent, same fields *)
+              unfold dfn_injective. simpl. exact Hinj_anc_fs. }
+            split. { admit. (* child IH: scc_is_low_v — stack-dependent *) }
+            split. { (* fa_child_of_u: stack-independent *)
+              unfold fa_child_of_u. simpl. exact Hfa_child_anc_fs. }
+            split. { (* fa_not_done: stack-independent *)
+              unfold fa_not_done_implies_eq_u. simpl. exact Hfa_not_done_anc_fs. }
+            (* done_visited: stack-independent *)
+            unfold done_visited. simpl. exact Hdone_vis_anc_fs. }
           destruct Hrest_pop as [Hsrc_pop [Hinj_pop [Hchild_pop
             [Hfa_child_pop [Hfa_not_done_pop Hdone_vis_pop]]]]].
           split; [exact Hfinv_pop | split; [exact Hinstk_pop
