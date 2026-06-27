@@ -3146,6 +3146,11 @@ Section IS_LOW.
           (* forset preserves fa[a]: set_fa v a writes fa[v], not fa[a];
              update_low a writes low[a], not fa[a]; W recursive calls
              preserve fa[a] since a is an ancestor *)
+          (* forset preserves fa[a]: each process_edge a W v only modifies
+             fa[v] (set_fa v a) and low[a] (update_low), never fa[a].
+             Each recursive W v preserves fa[a] via strengthened Q_low.
+             Formal proof requires induction on forset trace or
+             threading fa-preservation through HW_frame (10+ lemma updates). *)
           assert (fa s_forset a = fa s_pre a) by (admit). (* TODO: forset fa preservation *)
           unfold pop_scc_state; destruct (stack_split_at (stack s_forset) a); simpl.
           rewrite H, Hfa_pre_eq. exact Hfa_s0'. }
