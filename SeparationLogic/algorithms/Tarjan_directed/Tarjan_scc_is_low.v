@@ -1706,6 +1706,58 @@ Section IS_LOW.
     - right; right; exists w; split; [apply Hequiv; exact Hw | auto].
   Qed.
 
+  (** [I u done s]: the full forset-body invariant, packaging together
+      [forset_inv] with the additional frame properties needed by the
+      [Q_low] induction hypothesis and [forset_keep_forset_inv].
+      This is the single-carrier invariant that replaces the old
+      9-premise → 10-conclusion expansion.
+
+      Note: [fa_not_done_implies_eq_u] is deliberately NOT included here
+      because in the [Q_low] FRAME it requires a [(d ∪ [u])] modifier
+      (to exclude the child vertex being processed) while the other
+      conjuncts use [d] directly.  It is handled as a separate parameter
+      in the FRAME. *)
+  Definition I (u: V) (done: V -> Prop) (s: SCCSt): Prop :=
+    forset_inv u done s /\
+    done_visited done s /\
+    In u (stack s) /\
+    stack_dfn_order s /\
+    dfn_injective s /\
+    low_src u done s /\
+    (forall v, done v -> dg_step g u v -> fa s v = u -> fa s v <> v -> scc_is_low_v s v) /\
+    fa_child_of_u u s /\
+    dfn s u < timer s.
+
+  Lemma I_proper (u: V) (s: SCCSt): Proper (Sets.equiv ==> iff) (fun done => I u done s).
+  Proof.
+    intros done1 done2 Hequiv. unfold I.
+    pose proof (forset_inv_proper u done1 done2 Hequiv s s eq_refl) as [Hfinv12 Hfinv21].
+    pose proof (low_src_proper u s done1 done2 Hequiv) as [Hsrc12 Hsrc21].
+    split.
+    - intros H. destruct H as [Hfinv [Hdonevis [Hinstk [Horder [Hinj [Hsrc [Hchild [Hfa_child Hdfn_lt]]]]]]]].
+      refine (conj _ (conj _ (conj _ (conj _ (conj _ (conj _ (conj _ (conj _ _)))))))).
+      + apply Hfinv12; exact Hfinv.
+      + intros v Hv; apply Hdonevis; apply Hequiv; exact Hv.
+      + exact Hinstk.
+      + exact Horder.
+      + exact Hinj.
+      + apply Hsrc12; exact Hsrc.
+      + intros v Hv Hdg Hfa Hfa_ne. apply Hchild; [apply Hequiv; exact Hv | exact Hdg | exact Hfa | exact Hfa_ne].
+      + exact Hfa_child.
+      + exact Hdfn_lt.
+    - intros H. destruct H as [Hfinv [Hdonevis [Hinstk [Horder [Hinj [Hsrc [Hchild [Hfa_child Hdfn_lt]]]]]]]].
+      refine (conj _ (conj _ (conj _ (conj _ (conj _ (conj _ (conj _ (conj _ _)))))))).
+      + apply Hfinv21; exact Hfinv.
+      + intros v Hv; apply Hdonevis; apply Hequiv; exact Hv.
+      + exact Hinstk.
+      + exact Horder.
+      + exact Hinj.
+      + apply Hsrc21; exact Hsrc.
+      + intros v Hv Hdg Hfa Hfa_ne. apply Hchild; [apply Hequiv; exact Hv | exact Hdg | exact Hfa | exact Hfa_ne].
+      + exact Hfa_child.
+      + exact Hdfn_lt.
+  Qed.
+
   Lemma set_low_back_preserves_I (u a: V) (done: V -> Prop) (s: SCCSt):
     wf_scc_state s -> u ∈ visited s -> In u (stack s) ->
     (forall v, done v -> dg_step g u v -> (fa s v = u -> low s u <= low s v) /\ (In v (stack s) -> low s u <= dfn s v)) ->
@@ -2494,18 +2546,9 @@ Section IS_LOW.
     (~ u ∈ visited s0 /\ wf_scc_state s0 /\ stack_dfn_order s0 /\ dfn_injective s0) ->
     (low_post u s /\ u ∈ visited s /\ stack_dfn_order s /\ dfn_injective s /\
      (forall anc d,
-        forset_inv anc d s0 -> In anc (stack s0) ->
-        dfn_injective s0 -> low_src anc d s0 ->
-        (forall w, d w -> dg_step g anc w -> fa s0 w = anc -> fa s0 w <> w ->
-         scc_is_low_v s0 w) ->
-        fa_child_of_u anc s0 -> fa_not_done_implies_eq_u anc (d ∪ [u]) s0 ->
-        done_visited d s0 -> dfn s0 anc < timer s0 ->
-        forset_inv anc d s /\ In anc (stack s) /\ stack_dfn_order s /\
-        dfn_injective s /\ low_src anc d s /\
-        (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
-         scc_is_low_v s w) /\
-        fa_child_of_u anc s /\ fa_not_done_implies_eq_u anc (d ∪ [u]) s /\
-        done_visited d s /\ (fa s0 u = anc -> fa s u = anc)) /\
+        I anc d s0 -> fa_not_done_implies_eq_u anc (d ∪ [u]) s0 ->
+        I anc d s /\ fa_not_done_implies_eq_u anc (d ∪ [u]) s) /\
+     (forall anc d, I anc d s0 -> fa s0 u = anc -> fa s u = anc) /\
      (forall w, w ∈ visited s0 -> fa s w = fa s0 w)).
 
   (** Convert the normal-form [Q_low] induction hypothesis into the
@@ -2530,20 +2573,27 @@ Section IS_LOW.
   Proof.
     intros v anc d s0 Hinv Hstack Horder Hinj Hsrc Hchild
            Hfa_child Hfa_not_done Hdone_vis Hdfn_lt Hnv.
+    (* Pack the 9 common premises into the I carrier.
+       [fa_not_done_implies_eq_u] stays separate because it uses [(d ∪ [v])]. *)
+    assert (HI_s0: I anc d s0). {
+      unfold I.
+      refine (conj Hinv (conj Hdone_vis (conj Hstack (conj Horder (conj Hinj
+        (conj Hsrc (conj Hchild (conj Hfa_child Hdfn_lt)))))))). }
     specialize (IH s0 v).
     refine (Hoare_conseq_post _ _ _ _ _ IH).
     intros b s' HQ. unfold Q_low in HQ.
-      assert (Hant: ~ v ∈ visited s0 /\ wf_scc_state s0 /\ stack_dfn_order s0 /\ dfn_injective s0). {
-        split; [exact Hnv |].
-        destruct Hinv as [Hwf _]. split; [exact Hwf | split; [exact Horder | exact Hinj]]. }
-      destruct (HQ Hant) as [Hlow_post [Hvis [Horder_s [Hinj_s [Hframe Hfa_pres_all]]]]].
-      specialize (Hframe anc d Hinv Hstack Hinj Hsrc Hchild
-        Hfa_child Hfa_not_done Hdone_vis Hdfn_lt).
-      destruct Hframe as [Hfinv [Hinstk_s [Horder_s2 [Hinj_s2 [Hsrc_s [Hchild_s
-        [Hfa_child_s [Hfa_not_done_s [Hdone_vis_s Hfa_pres]]]]]]]]].
-      exact (conj Hfinv (conj Hinstk_s (conj Horder_s2 (conj Hinj_s2
-        (conj Hsrc_s (conj Hchild_s (conj Hfa_child_s (conj Hfa_not_done_s
-          (conj Hdone_vis_s (conj Hlow_post (conj Hvis Hfa_pres))))))))))).
+    assert (Hant: ~ v ∈ visited s0 /\ wf_scc_state s0 /\ stack_dfn_order s0 /\ dfn_injective s0). {
+      split; [exact Hnv |].
+      destruct Hinv as [Hwf _]. split; [exact Hwf | split; [exact Horder | exact Hinj]]. }
+    destruct (HQ Hant) as [Hlow_post [Hvis [Horder_s [Hinj_s [Hframe [Hfa_trans Hfa_pres_all]]]]]].
+    specialize (Hframe anc d HI_s0 Hfa_not_done).
+    destruct Hframe as [HI_s Hfa_not_done_s].
+    destruct HI_s as [Hfinv_s [Hdonevis_s [Hinstk_s [Horder_s2 [Hinj_s2 [Hsrc_s [Hchild_s [Hfa_child_s Hdfn_lt_s]]]]]]]].
+    assert (Hfa_pres: fa s0 v = anc -> fa s' v = anc). {
+      intro Hfa_s0. apply Hfa_trans with (anc := anc) (d := d); [exact HI_s0 | exact Hfa_s0]. }
+    exact (conj Hfinv_s (conj Hinstk_s (conj Horder_s2 (conj Hinj_s2
+      (conj Hsrc_s (conj Hchild_s (conj Hfa_child_s (conj Hfa_not_done_s
+        (conj Hdonevis_s (conj Hlow_post (conj Hvis Hfa_pres))))))))))).
   Qed.
 
   (* ================================================================ *)
@@ -3272,7 +3322,7 @@ Section IS_LOW.
           - admit. (* wf_scc_state through set_fa — TODO *)
           - exact Horder_s0.
           - exact Hinj_s0. }
-        destruct (HQ Hant) as [Hlow_post [_ [Horder_s' [Hinj_s' [_ Hfa_all]]]]].
+        destruct (HQ Hant) as [Hlow_post [_ [Horder_s' [Hinj_s' [_ [_ Hfa_pres_all]]]]]].
         destruct Hlow_post as [Hwf_s' _].
         split; [| split; [| split; [| split]]].
         - exact Hwf_s'.
@@ -3291,7 +3341,7 @@ Section IS_LOW.
             - unfold set_fa. simpl. constructor. }
           assert (Hw_vis_T: w ∈ visited T). {
             unfold T. simpl. exact Hw_vis_s0. }
-          pose proof (Hfa_all w Hw_vis_T) as Heq_fa.
+          pose proof (Hfa_pres_all w Hw_vis_T) as Heq_fa.
           rewrite Hfa_T_w in Heq_fa.
           rewrite Hfa_s0 in Heq_fa.
           exact Heq_fa. }
@@ -3710,7 +3760,29 @@ Section IS_LOW.
         rewrite Hfa_forset_w. exact Hfa_pre_w.
       - destruct Hskip_exec.
         rewrite Hfa_forset_w. exact Hfa_pre_w. }
-    exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 (conj Hframe Hfa_pres_all))))).
+    (* Build the new Q_low shape from the old Hframe.
+       Two small admits for dfn/timer threading and fa-trans through forset;
+       these are blocked on the same lemmas (forset_keep_fa_a, Hdfn_fs_lt)
+       that already block the main theorem. *)
+    assert (Hframe_new: forall anc d, I anc d s0' -> fa_not_done_implies_eq_u anc (d ∪ [a]) s0' -> I anc d s2 /\ fa_not_done_implies_eq_u anc (d ∪ [a]) s2). {
+      intros anc' d' HI' Hfa_not_done'.
+      destruct HI' as [Hfinv_I [Hdonevis_I [Hinstk_I [Horder_I [Hinj_I [Hsrc_I [Hchild_I [Hfa_child_I Hdfn_lt_I]]]]]]]].
+      pose proof (Hframe anc' d' Hfinv_I Hinstk_I Hinj_I Hsrc_I Hchild_I Hfa_child_I Hfa_not_done' Hdonevis_I Hdfn_lt_I)
+        as [Hfinv_a2 [Hinstk_a2 [Horder_a2 [Hinj_a2 [Hsrc_a2 [Hchild_a2 [Hfa_child_a2 [Hfa_not_done_a2 [Hdonevis_a2 Hfa_pres_a2]]]]]]]]].
+      assert (Hdfn_a2_lt: dfn s2 anc' < timer s2). {
+        (* dfn and timer preserved through preloop, forset, pop_scc/skip;
+           blocked on forset-level dfn/timer lemmas (Rounds 8-9). *)
+        admit. }
+      split.
+      - unfold I.
+        refine (conj Hfinv_a2 (conj Hdonevis_a2 (conj Hinstk_a2 (conj Horder_a2 (conj Hinj_a2 (conj Hsrc_a2 (conj Hchild_a2 (conj Hfa_child_a2 Hdfn_a2_lt)))))))).
+      - exact Hfa_not_done_a2. }
+    assert (Hfa_trans: forall anc d, I anc d s0' -> fa s0' a = anc -> fa s2 a = anc). {
+      intros anc' d' HI' Hfa_s0'_a'.
+      (* fa[a] preserved through preloop, forset, pop_scc.
+         Blocked on forset_keep_fa_a (line 3140 admitted). *)
+      admit. }
+    exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 (conj Hframe_new (conj Hfa_trans Hfa_pres_all)))))).
   Admitted.
 
 End IS_LOW.
