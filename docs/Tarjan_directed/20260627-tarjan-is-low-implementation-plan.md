@@ -90,7 +90,8 @@ L8:  Lemma set_fa_state_fa_other s v p w: w ≠ v -> fa (set_fa_state s v p) w =
 
 (* 复合性质 — 使用 L1-L8 展开 *)
 L9:  Lemma set_fa_state_wf_scc_state s v a:
-       wf_scc_state s -> a ∈ visited s -> wf_scc_state (set_fa_state s v a).
+       wf_scc_state s -> a ∈ visited s -> ~ v ∈ visited s ->
+       wf_scc_state (set_fa_state s v a).
 L10: Lemma set_fa_state_stack_dfn_order s v p:
        stack_dfn_order s -> stack_dfn_order (set_fa_state s v p).
 L11: Lemma set_fa_state_dfn_injective s v p:

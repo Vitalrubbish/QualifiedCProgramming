@@ -1122,6 +1122,106 @@ Section IS_LOW.
       precondition [~ u ∈ visited s] ensures [u] is still unvisited, so
       after [preloop u] we have [dfn s x < dfn s u] and can apply
       [pop_scc_preserves_stack_below] at the end. *)
+
+  (* ================================================================ *)
+  (* Group A: set_fa_state field-projection lemmas (L1–L11)          *)
+  (* ================================================================ *)
+
+  (** [set_fa_state s v p] updates [fa v] to [p], leaving all other fields
+      unchanged.  These lemmas make the record projections computable so
+      that [simpl] can reduce them. *)
+
+  Lemma set_fa_state_visited (s: SCCSt) (v p: V):
+    visited (set_fa_state s v p) = visited s.
+  Proof. unfold set_fa_state. simpl. reflexivity. Qed.
+
+  Lemma set_fa_state_timer (s: SCCSt) (v p: V):
+    timer (set_fa_state s v p) = timer s.
+  Proof. unfold set_fa_state. simpl. reflexivity. Qed.
+
+  Lemma set_fa_state_dfn (s: SCCSt) (v p: V):
+    dfn (set_fa_state s v p) = dfn s.
+  Proof. unfold set_fa_state. simpl. reflexivity. Qed.
+
+  Lemma set_fa_state_low (s: SCCSt) (v p: V):
+    low (set_fa_state s v p) = low s.
+  Proof. unfold set_fa_state. simpl. reflexivity. Qed.
+
+  Lemma set_fa_state_stack (s: SCCSt) (v p: V):
+    stack (set_fa_state s v p) = stack s.
+  Proof. unfold set_fa_state. simpl. reflexivity. Qed.
+
+  Lemma set_fa_state_sccs (s: SCCSt) (v p: V):
+    sccs (set_fa_state s v p) = sccs s.
+  Proof. unfold set_fa_state. simpl. reflexivity. Qed.
+
+  Lemma set_fa_state_fa_self (s: SCCSt) (v p: V):
+    fa (set_fa_state s v p) v = p.
+  Proof. unfold set_fa_state. simpl. unfold equiv_decb. destruct (equiv_dec v v); [reflexivity | congruence]. Qed.
+
+  Lemma set_fa_state_fa_other (s: SCCSt) (v p w: V):
+    w <> v -> fa (set_fa_state s v p) w = fa s w.
+  Proof. intros Hne. unfold set_fa_state. simpl. unfold equiv_decb. destruct (equiv_dec w v); [congruence | reflexivity]. Qed.
+
+  Lemma set_fa_state_wf_scc_state (s: SCCSt) (v a: V):
+    wf_scc_state s -> a ∈ visited s -> ~ v ∈ visited s -> wf_scc_state (set_fa_state s v a).
+  Proof.
+    intros [Hsiv [Hinv [Hvalid Hfa_vis]]] Ha_vis Hnv.
+    unfold wf_scc_state, set_fa_state; simpl.
+    split; [| split; [| split]].
+    - (* stack_in_visited *)
+      exact Hsiv.
+    - (* dfn_inv *)
+      exact Hinv.
+    - (* dfn_valid *)
+      unfold dfn_valid in *.
+      intros x y Hstep.
+      unfold dg_step, original_step in Hstep.
+      destruct Hstep as [e [[w [Hw_vis_setfa [Hw_fa_ne [Hwfst Hwsnd]]]] [Hfst Hsnd]]].
+      unfold set_fa_state in Hw_vis_setfa, Hw_fa_ne, Hwfst; simpl in Hw_vis_setfa, Hw_fa_ne, Hwfst.
+      unfold equiv_decb in Hw_fa_ne, Hwfst.
+      (* Simplify the nested if-then-else in Hw_fa_ne and Hwfst.
+         After unfold+simpl, fa(set_fa_state s v a) w = (if w==v then a else fa s w). *)
+      destruct (equiv_dec w v) as [Heqw | Hneqw].
+      + (* w === v: the tree-edge child is v, but v is unvisited — contradiction *)
+        rewrite Heqw in Hw_vis_setfa.
+        exfalso. apply Hnv. exact Hw_vis_setfa.
+      + (* w ≠ v: fa[w] unchanged, so we have a tree edge in the old dfs tree *)
+        simpl in Hw_fa_ne, Hwfst.
+        simpl. (* reduces dfn (set_fa_state ...) to dfn s *)
+        apply Hvalid.
+        unfold dg_step.
+        unfold state_to_dfs_tree; simpl.
+        exists e. split.
+        { exists w. split; [exact Hw_vis_setfa |].
+          split; [exact Hw_fa_ne | split; [exact Hwfst | exact Hwsnd]]. }
+        { split; [exact Hfst | exact Hsnd]. }
+    - (* fa_visited *)
+      unfold fa_visited. intros x Hfa_ne.
+      simpl in Hfa_ne. unfold equiv_decb in Hfa_ne.
+      destruct (equiv_dec x v) as [Heq | Hne].
+      + (* x === v *)
+        rewrite Heq. simpl. unfold equiv_decb. destruct (equiv_dec v v); [exact Ha_vis | congruence].
+      + (* x ≠ v, so fa[x] unchanged *)
+        simpl. unfold equiv_decb. destruct (equiv_dec x v); [congruence | apply Hfa_vis; exact Hfa_ne].
+  Qed.
+
+  Lemma set_fa_state_stack_dfn_order (s: SCCSt) (v p: V):
+    stack_dfn_order s -> stack_dfn_order (set_fa_state s v p).
+  Proof.
+    intros Horder. unfold stack_dfn_order in *.
+    rewrite set_fa_state_stack.
+    intros x y Hx Hy. apply Horder; assumption.
+  Qed.
+
+  Lemma set_fa_state_dfn_injective (s: SCCSt) (v p: V):
+    dfn_injective s -> dfn_injective (set_fa_state s v p).
+  Proof.
+    intros Hinj. unfold dfn_injective in *.
+    rewrite set_fa_state_dfn.
+    exact Hinj.
+  Qed.
+
   Lemma set_fa_state_preserves_dg_step (v u rt: V) (s: SCCSt):
     ~ v ∈ visited s ->
     forall x y, dg_step (state_to_dfs_tree g (set_fa_state s v u) rt) x y ->
