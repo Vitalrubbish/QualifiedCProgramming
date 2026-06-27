@@ -2843,6 +2843,29 @@ Section IS_LOW.
       scc_is_low_v s0 w -> scc_is_low_v s_pre w).
   Proof. Admitted. (* scc_low_tree preservation through preloop *)
 
+  (** [forset_keep_fa_a]: forset over a's children preserves fa[a].
+      Uses strengthened Q_low to get fa preservation through W v.
+      Admitted pending W-hypothesis threading through process_edge_keep_fa. *)
+  Lemma forset_keep_fa_a (a p: V) (W: V -> program SCCSt unit)
+    (IH_Qlow: forall s0 x, Hoare (fun s => s = s0) (W x) (Q_low x s0)):
+    Hoare (fun s => a ∈ visited s /\ fa s a = p)
+      (forset (fun v => dg_step g a v) (process_edge a W))
+      (fun _ s => a ∈ visited s /\ fa s a = p).
+  Proof.
+    set (J := fun (done: V -> Prop) (s: SCCSt) => a ∈ visited s /\ fa s a = p).
+    assert (ProperJ: Proper (Sets.equiv ==> eq ==> iff) J). {
+      unfold J. intros d1 d2 Heq s1 s2 Heqs. subst s2. reflexivity. }
+    apply (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ).
+    intros done v Hdone_sub Hv_S Hv_not_done.
+    apply (process_edge_keep_fa a v a W p).
+    (* W hypothesis: forall x, Hoare (x<>a /\ a∈visited /\ fa a=p) (W x) (a∈visited /\ fa a=p) *)
+    intros x.
+    apply Hoare_conseq_pre with (P2 := fun s => x <> a /\ a ∈ visited s /\ fa s a = p).
+    { intros s Hpre. exact Hpre. }
+    (* Need to prove W x preserves a∈visited and fa a=p, using strengthened IH *)
+    admit.
+  Admitted.
+
   (** [forset_keeps_anc_frame]: forset preserves anc's frame invariant.
       Structure: [Hoare_forset] with constant invariant [I_anc].
       Body: process_edge branches — tree edges use HW_frame,
