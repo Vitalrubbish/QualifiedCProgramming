@@ -2931,6 +2931,46 @@ Section IS_LOW.
       scc_is_low_v s0 w -> scc_is_low_v s_pre w).
   Proof. Admitted. (* scc_low_tree preservation through preloop *)
 
+  (** [tree_edge_preserves_fa]: tree-edge branch of process_edge
+      preserves fa for any visited vertex w.  Mirrors the pattern
+      of [tree_edge_preserves_I] but specialized to fa-preservation. *)
+  Lemma tree_edge_preserves_fa (a v w: V) (p: V) (s: SCCSt)
+        (W: V -> program SCCSt unit)
+        (IH_fa: forall s0 x, Hoare (fun s' => s' = s0) (W x) (Q_fa x s0)):
+    w ∈ visited s -> fa s w = p -> ~ v ∈ visited s -> dg_step g a v ->
+    Hoare (fun s' => s' = s)
+      (set_fa v a ;; W v ;; lv <- get' (fun s' => low s' v) ;; update_low a lv)
+      (fun _ s' => fa s' w = p).
+  Proof.
+    intros Hvis_w Hfa_w Hnv_vis Hdg.
+    (* Step 1: set_fa v a *)
+    unfold set_fa. intro_state. hoare_auto_s. subst s0.
+    simpl. unfold equiv_decb.
+    destruct (equiv_dec w v) as [Heq_wv|Hneq_wv].
+    { (* w = v: impossible, w visited, v unvisited *)
+      assert (Heq_eq: w = v) by apply Heq_wv. subst w.
+      exfalso. apply Hnv_vis. exact Hvis_w. }
+    (* Step 2: W v via IH_fa — use the original state s *)
+    eapply Hoare_bind.
+    { apply (IH_fa (set_fa_state s v a) v). }
+    simpl. intros _.
+    (* Step 3: update_low a lv — doesn't touch fa *)
+    eapply Hoare_bind. { eapply Hoare_get'. }
+    simpl. intro lv.
+    unfold update_low. intro_state. hoare_auto_s.
+    { (* set_low branch: low[a] := lv, fa unchanged *)
+      rename H into Hlt_low. destruct Hlt_low as [Heq_s' Hlv_eq]. subst s'.
+      pose (f := fun (st: SCCSt) => set low (fun low0 x => if x ==b a then lv else low0 x) st).
+      apply (Hoare_conseq_post (fun st' => st' = s0) (update' f)
+        (fun _ st' => fa st' w = p) (fun _ st' => st' = f s0)).
+      { intros _ st' Heq. subst st'. unfold f. simpl.
+        unfold equiv_decb. destruct (equiv_dec w a); reflexivity. }
+      apply Hoare_update'. }
+    { (* skip branch: state unchanged *)
+      destruct H as [Heq_s' Hnlt']. destruct H0 as [Heq_s'' Hnlt''].
+      subst s'. subst s''. simpl. reflexivity. }
+  Qed.
+
   (** [forset_keep_fa_a]: forset over a's children preserves fa[a].
       Uses strengthened Q_low to get fa preservation through W v.
       Admitted pending W-hypothesis threading through process_edge_keep_fa. *)
