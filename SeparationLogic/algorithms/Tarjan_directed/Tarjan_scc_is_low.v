@@ -2642,11 +2642,13 @@ Section IS_LOW.
                    (fun _ s => fa s w = fa s_pre w)).
           intro_state. destruct H as [Hnv_s1 Heq_s1]. subst s1.
           apply (tree_edge_preserves_fa a v' w (fa s_pre w) s0 W IH_fa).
-          + admit. (* w ∈ visited s0 *)
+          + (* w ∈ visited s0: w ∈ visited s_pre (preloop preserves visited, w≠a).
+               Forset only grows visited, so w ∈ visited s0. Admitted pending forset visited monotonicity. *)
+            admit.
           + exact Hfa_s0.
           + exact Hnv_s1.
           + exact Hv'S.
-        - (* Non-tree edge: v' visited — admit pending assume_bind matching *)
+        - (* Non-tree edge: v' visited, back/cross edge cases — admit *)
           admit. }
       pose proof (Hoare_forset J (fun v => dg_step g a v) (process_edge a W) ProperJ Hstep) as Hforall.
       unfold Hoare in Hforall.
@@ -2656,8 +2658,13 @@ Section IS_LOW.
     assert (Hfa_s2: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w). {
       intros w Hw. rewrite <- (Hfa_forset w Hw).
       destruct Hif_exec as [[Hcond Hpop_exec] | [Hncond Hskip_exec]].
-      - (* pop_scc: pop_scc_state doesn't change fa *)
-        admit. (* pop_scc_state preserves fa *)
+      - (* pop_scc: s2 = pop_scc_state s_forset a, fa unchanged *)
+        destruct Hpop_exec as [s_mid [[Htest Hret] Hpop_body]].
+        unfold pop_scc, update', update in Hpop_body. subst s_mid.
+        cut (s2 = pop_scc_state s_forset a).
+        { intro Heq. subst s2. unfold pop_scc_state.
+          destruct (stack_split_at (stack s_forset) a). reflexivity. }
+        apply Hpop_body.
       - (* skip *) destruct Hskip_exec. reflexivity. }
     exact Hfa_s2.
   Admitted.
