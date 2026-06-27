@@ -2888,10 +2888,23 @@ Section IS_LOW.
       (fun _ s' => fa s' w = p).
   Proof.
     intros Hvis_w Hfa_w Hnv_vis Hdg.
-    (* set_fa v a → W v (via IH_fa) → update_low a lv.
-       IH_fa gives Q_fa v at set_fa_state s v a.
-       Q_fa postcondition extraction + update_low_keep_fa complete this.
-       Admitted pending Hoare_bind Q_fa threading. *)
+    assert (Hneq_wv: w <> v). {
+      intro Heq. subst w. exfalso. apply Hnv_vis. exact Hvis_w. }
+    (* Step 1: set_fa v a; check fa[w] unchanged (w≠v) *)
+    unfold set_fa. intro_state. hoare_auto_s. subst s0.
+    simpl. unfold equiv_decb.
+    destruct (equiv_dec w v) as [Heq_wv|Hneq_wv']; [exfalso; apply Hneq_wv; apply Heq_wv|].
+    (* Step 2: W v via IH_fa at set_fa_state s v a *)
+    eapply Hoare_bind.
+    { apply (IH_fa (set_fa_state s v a) v). }
+    (* Step 3: Q_fa → fa w = p → get' ;; update_low preserves fa *)
+    intros []. simpl.
+    eapply Hoare_conseq_pre.
+    { intros s' HQ. unfold Q_fa in HQ. apply HQ; [simpl; exact Hnv_vis | simpl; exact Hvis_w]. }
+    (* get' low v ;; update_low a lv: both preserve fa.
+       update_low_keep_fa from basics gives the update_low part.
+       get' requires Hoare_conseq_pre threading. Admitted. *)
+    admit.
   Admitted.
 
   (** [forset_keep_fa_a]: forset over a's children preserves fa[a].
