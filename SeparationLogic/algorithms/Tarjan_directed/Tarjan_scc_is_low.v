@@ -2505,7 +2505,8 @@ Section IS_LOW.
         (forall w, d w -> dg_step g anc w -> fa s w = anc -> fa s w <> w ->
          scc_is_low_v s w) /\
         fa_child_of_u anc s /\ fa_not_done_implies_eq_u anc (d ∪ [u]) s /\
-        done_visited d s /\ (fa s0 u = anc -> fa s u = anc))).
+        done_visited d s /\ (fa s0 u = anc -> fa s u = anc)) /\
+     (forall w, w ∈ visited s0 -> fa s w = fa s0 w)).
 
   (** Convert the normal-form [Q_low] induction hypothesis into the
       concrete [HW_frame] form that [forset_keep_forset_inv] expects. *)
@@ -2535,7 +2536,7 @@ Section IS_LOW.
       assert (Hant: ~ v ∈ visited s0 /\ wf_scc_state s0 /\ stack_dfn_order s0 /\ dfn_injective s0). {
         split; [exact Hnv |].
         destruct Hinv as [Hwf _]. split; [exact Hwf | split; [exact Horder | exact Hinj]]. }
-      destruct (HQ Hant) as [Hlow_post [Hvis [Horder_s [Hinj_s Hframe]]]].
+      destruct (HQ Hant) as [Hlow_post [Hvis [Horder_s [Hinj_s [Hframe Hfa_pres_all]]]]].
       specialize (Hframe anc d Hinv Hstack Hinj Hsrc Hchild
         Hfa_child Hfa_not_done Hdone_vis Hdfn_lt).
       destruct Hframe as [Hfinv [Hinstk_s [Horder_s2 [Hinj_s2 [Hsrc_s [Hchild_s
@@ -3267,7 +3268,12 @@ Section IS_LOW.
         pose proof (HL s0' tt s_pre eq_refl Hpreloop_exec) as Hfa_pre_eq.
         assert (fa s_forset a = fa s_pre a) by (admit). (* TODO: forset fa preservation *)
         rewrite H, Hfa_pre_eq. exact Hfa_s0'. }
-    exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 Hframe)))).
+    (* Hfa_pres_all: fa preserved for vertices visited at s0'.
+       Preloop preserves fa; forset only changes fa for newly-discovered
+       unvisited vertices; pop_scc doesn't touch fa.
+       Admitted pending threading through process_edge_keep_fa + Hoare_forset. *)
+    assert (Hfa_pres_all: forall w, w ∈ visited s0' -> fa s2 w = fa s0' w) by admit.
+    exact (conj Hlow_post_s2 (conj Hvis_s2 (conj Horder_s2 (conj Hinj_s2 (conj Hframe Hfa_pres_all))))).
   Admitted.
 
 End IS_LOW.
