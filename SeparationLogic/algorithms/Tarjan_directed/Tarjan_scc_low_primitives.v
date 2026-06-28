@@ -253,7 +253,74 @@ Section LOW_PRIMITIVES.
     scc_low_valid_v g root s v ->
     scc_low_valid_v g root
       (RecordSet.set low (fun low0 x => if equiv_decb x a then n else low0 x) s) v.
-  Admitted.
+  Proof.
+    intros Hneq_va Hnot_child Hvalid.
+    unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset in *.
+    destruct Hvalid as [m [[Hm_src Hm_min] Hm_eq]].
+    exists m. split.
+    - split.
+      + destruct Hm_src as [Hm_child | Hm_back].
+        * left. destruct Hm_child as [x [[Htree_x Hmin_x] Hx_eq]].
+          exists x. split.
+          -- split.
+             ++ simpl. exact Htree_x.
+             ++ intros y Htree_y. simpl in Htree_y |- *.
+                assert (Hx_ne_a: x <> a).
+                { intro Hxa. subst x. apply Hnot_child. exact Htree_x. }
+                assert (Hy_ne_a: y <> a).
+                { intro Hya. subst y. apply Hnot_child. exact Htree_y. }
+                simpl. unfold equiv_decb.
+                destruct (equiv_dec x a) as [Heq_xa | Hneq_xa];
+                  [exfalso; apply Hx_ne_a; exact Heq_xa |].
+                destruct (equiv_dec y a) as [Heq_ya | Hneq_ya];
+                  [exfalso; apply Hy_ne_a; exact Heq_ya |].
+                apply Hmin_x. exact Htree_y.
+          -- simpl. unfold equiv_decb.
+             destruct (equiv_dec x a) as [Heq_xa | Hneq_xa].
+             ++ exfalso. apply Hnot_child. rewrite Heq_xa in Htree_x. exact Htree_x.
+             ++ exact Hx_eq.
+        * right. destruct Hm_back as [x [[Hx Hmin_x] Hx_eq]].
+          exists x. split.
+          -- split.
+             ++ simpl. exact Hx.
+             ++ intros y Hy. simpl in Hy |- *. apply Hmin_x. exact Hy.
+          -- simpl. exact Hx_eq.
+      + intros k Hk.
+        apply Hm_min.
+        destruct Hk as [Hk_child | Hk_back].
+        * left. destruct Hk_child as [x [[Htree_x Hmin_x] Hx_eq]].
+          exists x. split.
+          -- split.
+             ++ simpl in Htree_x. exact Htree_x.
+             ++ intros y Htree_y.
+                simpl in Htree_y.
+                specialize (Hmin_x y Htree_y).
+                simpl in Hmin_x.
+                assert (Hx_ne_a: x <> a).
+                { intro Hxa. subst x. apply Hnot_child. exact Htree_x. }
+                assert (Hy_ne_a: y <> a).
+                { intro Hya. subst y. apply Hnot_child. exact Htree_y. }
+                unfold equiv_decb in Hmin_x.
+                destruct (equiv_dec x a) as [Heq_xa | Hneq_xa];
+                  [exfalso; apply Hx_ne_a; exact Heq_xa |].
+                destruct (equiv_dec y a) as [Heq_ya | Hneq_ya];
+                  [exfalso; apply Hy_ne_a; exact Heq_ya |].
+                exact Hmin_x.
+          -- simpl in Hx_eq. unfold equiv_decb in Hx_eq.
+             destruct (equiv_dec x a) as [Heq_xa | Hneq_xa].
+             ++ exfalso. apply Hnot_child. rewrite Heq_xa in Htree_x. exact Htree_x.
+             ++ exact Hx_eq.
+        * right. destruct Hk_back as [x [[Hx Hmin_x] Hx_eq]].
+          exists x. split.
+          -- split.
+             ++ simpl in Hx. exact Hx.
+             ++ intros y Hy. simpl in Hy. apply Hmin_x. exact Hy.
+          -- simpl in Hx_eq. exact Hx_eq.
+    - simpl. unfold equiv_decb.
+      destruct (equiv_dec v a) as [Heq_va | Hneq_va'].
+      + exfalso. apply Hneq_va. exact Heq_va.
+      + exact Hm_eq.
+  Qed.
 
   Lemma update_low_preserves_children_low_valid_when_not_tree_child
         (u a: V) (done: V -> Prop) (n: nat):
@@ -299,7 +366,37 @@ Section LOW_PRIMITIVES.
                 ~ dg_step (state_to_dfs_tree g s root) v a))
           (update_low a n)
           (fun _ s => low_iteration_inv g root u done s).
-  Admitted.
+  Proof.
+    intros Hneq Hndone.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj with
+        (Q1 := fun _ s =>
+          wf_scc_state g root s /\
+          u ∈ visited s /\
+          In u (stack s) /\
+          done_visited done s /\
+          low_frontier g u done s /\
+          low_src g u done s /\
+          fa_child_of_u g u s /\
+          fa_not_done_implies_eq_u u done s)
+        (Q2 := fun _ s => children_low_valid g root u done s).
+      - eapply Hoare_conseq_pre.
+        2: apply (update_low_other_preserves_low_iteration_frame u a done n Hneq Hndone).
+        intros s [Hiter _]. exact Hiter.
+      - eapply Hoare_conseq_pre.
+        2: apply (update_low_preserves_children_low_valid_when_not_tree_child u a done n Hndone).
+        intros s Hpre.
+        destruct Hpre as [Hiter Hnot_child].
+        destruct Hiter as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+        split; [exact Hchild | exact Hnot_child]. }
+    intros _ s [Hframe Hchild].
+    destruct Hframe as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hfa_child & Hfa_not).
+    unfold low_iteration_inv.
+    split; [exact Hwf | split; [exact Huvis | split; [exact Hustack |
+      split; [exact Hdonevis | split; [exact Hfront | split; [exact Hsrc |
+        split; [exact Hchild | split; [exact Hfa_child | exact Hfa_not]]]]]]]].
+  Qed.
 
   (* ================================================================ *)
   (* Tree-edge setup contracts                                       *)
@@ -345,7 +442,86 @@ Section LOW_PRIMITIVES.
     scc_low_valid_v g root s v ->
     scc_low_valid_v g root
       (RecordSet.set fa (fun fa0 x => if equiv_decb x a then p else fa0 x) s) v.
-  Admitted.
+  Proof.
+    intros Hnv Hvalid.
+    unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset in *.
+    destruct Hvalid as [m [[Hm_src Hm_min] Hm_eq]].
+    exists m. split; [| simpl; exact Hm_eq].
+    split.
+    - destruct Hm_src as [Hm_child | Hm_back].
+      + left. destruct Hm_child as [x [[Htree_x Hmin_x] Hx_eq]].
+        exists x. split; [| simpl; exact Hx_eq].
+        split.
+        * apply (proj2 (set_fa_unvisited_preserves_tree_step a p v x s Hnv)).
+          exact Htree_x.
+        * intros y Htree_y.
+          simpl.
+          apply Hmin_x.
+          apply (proj1 (set_fa_unvisited_preserves_tree_step a p v y s Hnv)).
+          exact Htree_y.
+      + right. destruct Hm_back as [x [[Hx Hmin_x] Hx_eq]].
+        exists x. split; [| simpl; exact Hx_eq].
+        split.
+        * sets_unfold in Hx. sets_unfold.
+          destruct Hx as [Hback | Heq_x].
+          -- left. unfold scc_back_edge in Hback |- *.
+             destruct Hback as [Hdg_x [Hstk_x Hnot_tree_x]].
+             split; [exact Hdg_x | split; [exact Hstk_x |]].
+             intro Htree_new. apply Hnot_tree_x.
+             apply (proj1 (set_fa_unvisited_preserves_tree_step a p v x s Hnv)).
+             exact Htree_new.
+          -- right. exact Heq_x.
+        * intros y Hy.
+          simpl.
+          apply Hmin_x.
+          sets_unfold in Hy. sets_unfold.
+          destruct Hy as [Hback | Heq_y].
+          -- left. unfold scc_back_edge in Hback |- *.
+             destruct Hback as [Hdg_y [Hstk_y Hnot_tree_y]].
+             split; [exact Hdg_y | split; [exact Hstk_y |]].
+             intro Htree_old. apply Hnot_tree_y.
+             apply (proj2 (set_fa_unvisited_preserves_tree_step a p v y s Hnv)).
+             exact Htree_old.
+          -- right. exact Heq_y.
+    - intros n Hn.
+      apply Hm_min.
+      destruct Hn as [Hn_child | Hn_back].
+      + left. destruct Hn_child as [x [[Htree_x Hmin_x] Hx_eq]].
+        exists x. split; [| simpl in Hx_eq; exact Hx_eq].
+        split.
+        * apply (proj1 (set_fa_unvisited_preserves_tree_step a p v x s Hnv)).
+          exact Htree_x.
+        * intros y Htree_y.
+          specialize (Hmin_x y).
+          simpl in Hmin_x.
+          apply Hmin_x.
+          apply (proj2 (set_fa_unvisited_preserves_tree_step a p v y s Hnv)).
+          exact Htree_y.
+      + right. destruct Hn_back as [x [[Hx Hmin_x] Hx_eq]].
+        exists x. split; [| simpl in Hx_eq; exact Hx_eq].
+        split.
+        * sets_unfold in Hx. sets_unfold.
+          destruct Hx as [Hback | Heq_x].
+          -- left. unfold scc_back_edge in Hback |- *.
+             destruct Hback as [Hdg_x [Hstk_x Hnot_tree_x]].
+             split; [exact Hdg_x | split; [exact Hstk_x |]].
+             intro Htree_old. apply Hnot_tree_x.
+             apply (proj2 (set_fa_unvisited_preserves_tree_step a p v x s Hnv)).
+             exact Htree_old.
+          -- right. exact Heq_x.
+        * intros y Hy.
+          simpl in Hmin_x.
+          apply Hmin_x.
+          sets_unfold in Hy. sets_unfold.
+          destruct Hy as [Hback | Heq_y].
+          -- left. unfold scc_back_edge in Hback |- *.
+             destruct Hback as [Hdg_y [Hstk_y Hnot_tree_y]].
+             split; [exact Hdg_y | split; [exact Hstk_y |]].
+             intro Htree_new. apply Hnot_tree_y.
+             apply (proj1 (set_fa_unvisited_preserves_tree_step a p v y s Hnv)).
+             exact Htree_new.
+          -- right. exact Heq_y.
+  Qed.
 
   Lemma set_fa_establishes_new_child_parent
         (u a: V):
@@ -519,7 +695,7 @@ Section LOW_PRIMITIVES.
     - (* fa s a = u *)
       simpl. unfold equiv_decb.
       destruct (equiv_dec a a) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
-  Admitted.
+  Qed.
 
   (* ================================================================ *)
   (* Pop phase contracts                                             *)
