@@ -125,7 +125,7 @@ L20: Lemma update_low_preserves_wf_scc_state (a: V) (lv: nat):
 
 **证明方式**：`get'` 不修改状态（`unfold get'; hoare_auto_s`）；`update_low` 只修改 `low` 字段（`unfold update_low, update'; hoare_auto_s`，然后 simpl）。
 
-### Round 4: 组 D — process_edge 保持 J（L21–L23）
+### Round 4: 组 D — process_edge 保持 J（L21–L22）✅ 已完成
 
 **文件**：`Tarjan_scc_is_low.v`
 
@@ -135,6 +135,13 @@ L20: Lemma update_low_preserves_wf_scc_state (a: V) (lv: nat):
 Definition J (w: V) (s_pre: SCCSt) (done: V -> Prop) (s: SCCSt): Prop :=
   wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
   w ∈ visited s /\ fa s w = fa s_pre w.
+```
+
+**辅助引理**（计划外，L21 证明必需）：
+
+```coq
+Lemma update_low_preserves_fa (a w q: V) (lv: nat):
+  Hoare (fun s => fa s w = q) (update_low a lv) (fun _ s => fa s w = q).
 ```
 
 **引理**：
@@ -150,18 +157,15 @@ L22: Lemma cross_edge_preserves_J (a v w: V) (done: V -> Prop) (s_pre: SCCSt):
        Hoare (fun s => J w s_pre done s /\ v ∈ visited s /\ ~ In v (stack s))
              skip
              (fun _ s => J w s_pre (done ∪ [v]) s).
-
-L23: Lemma tree_edge_preserves_J (a v w: V) (done: V -> Prop) (s_pre: SCCSt)
-       (W: V -> program SCCSt unit)
-       (IH: forall s0 x, Hoare (fun s => s = s0) (W x) (Q_low x s0)):
-       Hoare (fun s => s = s0 /\ J w s_pre done s /\ ~ v ∈ visited s /\ dg_step g a v)
-             (set_fa v a ;; W v ;; lv <- get' (fun s' => low s' v) ;; update_low a lv)
-             (fun _ s => J w s_pre (done ∪ [v]) s).
 ```
 
-### Round 5: 组 B — preloop 语义（L12–L13）
+**注**：L23 (`tree_edge_preserves_J`) 因依赖 `Q_low`（定义在文件后半），推迟至 Round 9 与 L27 并列补位（两者命令结构相同：`set_fa;;W;;get_low;;update_low`）。
+
+### Round 5: 组 B — preloop 语义（L12–L13）🔧 桩已放置
 
 **文件**：`Tarjan_scc_is_low.v`
+
+**状态**：签名已定义，证明 Admitted（需要 `sibling_not_reachable` 辅助引理）。
 
 **引理**：
 
@@ -265,6 +269,14 @@ Definition HW_frame_I (W: V -> program SCCSt unit) :=
     Hoare (fun s' => s' = s0) (W v)
           (fun _ s' => I anc d s' /\ low_post v s' /\ v ∈ visited s').
 
+L23: Lemma tree_edge_preserves_J (a v w: V) (done: V -> Prop) (s_pre: SCCSt)
+       (W: V -> program SCCSt unit)
+       (IH: forall s0 x, Hoare (fun s => s = s0) (W x) (Q_low x s0)):
+       Hoare (fun s => s = s0 /\ J w s_pre done s /\ ~ v ∈ visited s /\ dg_step g a v)
+             (set_fa v a ;; W v ;; lv <- get' (fun s' => low s' v) ;; update_low a lv)
+             (fun _ s => J w s_pre (done ∪ [v]) s).
+  (** 注：L23 从 Round 4 推迟至此 — 依赖 Q_low，与 L27 命令结构相同。 *)
+
 L27: Lemma tree_edge_preserves_I_anc (a anc v: V) (d: V -> Prop) (s0: SCCSt)
        (W: V -> program SCCSt unit) (HW: HW_frame_I W):
        I anc d s0 -> ~ v ∈ visited s0 -> dg_step g a v -> dfn s0 anc < timer s0 ->
@@ -302,6 +314,7 @@ L30: Lemma forset_keeps_anc_frame_proved (a anc: V) (d: V -> Prop) (s_pre: SCCSt
 | `forset_keep_fa_of_visited` TODO #1 | L9, L10, L11 | Round 10 |
 | `forset_keep_fa_of_visited` TODO #2 | L24 | Round 10 |
 | `forset_keep_fa_of_visited` TODO #3 | L14–L20 | Round 10 |
+| `forset_keep_fa_of_visited` 树边分支 | L23 | Round 10 |
 | `forset_keep_fa_of_visited` 非树边分支 | L21, L22 | Round 10 |
 | `Hchild_anc_pre` | L12, L13 | Round 10 |
 | `Hdfn_fs_lt` | L25 | Round 10 |

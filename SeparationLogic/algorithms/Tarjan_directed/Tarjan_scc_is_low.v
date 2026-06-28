@@ -534,6 +534,122 @@ Section IS_LOW.
   Qed.
 
 
+  (* ================================================================ *)
+  (* Group D: process_edge preserves J (L21–L23)                      *)
+  (* ================================================================ *)
+
+  (** [update_low] does not modify [fa]; needed for J's last component. *)
+  Lemma update_low_preserves_fa (a w q: V) (lv: nat):
+    Hoare (fun s => fa s w = q) (update_low a lv) (fun _ s => fa s w = q).
+  Proof.
+    unfold update_low. intro_state. hoare_auto_s.
+    - (* set_low: fa is unchanged by low-update *)
+      pose (f := fun (s: SCCSt) => set low (fun low0 x => if equiv_decb x a then lv else low0 x) s).
+      apply (Hoare_conseq_post (fun s => s = s0) (update' f) (fun _ s => fa s w = fa s0 w) (fun _ s1 => s1 = f s0)).
+      { intros _ s1 Heq. subst s1. unfold f. simpl. reflexivity. }
+      apply Hoare_update'.
+    - (* skip *)
+      destruct H as [Heq_s _]. subst s. reflexivity.
+  Qed.
+
+  (** [J w s_pre done s]: the lightweight invariant carried through
+      [process_edge]'s non-tree-edge branches in [forset_keep_fa_of_visited]. *)
+  Definition J (w: V) (s_pre: SCCSt) (done: V -> Prop) (s: SCCSt): Prop :=
+    wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\
+    w ∈ visited s /\ fa s w = fa s_pre w.
+
+  Lemma back_edge_preserves_J (a v w: V) (done: V -> Prop) (s_pre s0: SCCSt):
+    Hoare (fun s => s = s0 /\ J w s_pre done s /\ v ∈ visited s
+                 /\ In v (stack s) /\ dg_step g a v)
+          (update_low a (dfn s0 v))
+          (fun _ s => J w s_pre (done ∪ [v]) s).
+  Proof.
+    intro_state. destruct H as [Heq_s0 [HJ [Hvvis [Hinstk Hdg]]]]. subst s0.
+    unfold J in HJ. destruct HJ as [Hwf [Horder [Hinj [Hvis Hfa]]]].
+    refine (Hoare_conseq_pre (fun s => s = s1)
+      (fun s => wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\ w ∈ visited s /\ fa s w = fa s_pre w)
+      (update_low a (dfn s1 v))
+      (fun _ s => J w s_pre (done ∪ [v]) s) _ _).
+    { intros s Heq. subst s. exact (conj Hwf (conj Horder (conj Hinj (conj Hvis Hfa)))). }
+    unfold J.
+    refine (Hoare_conj
+      (fun s => wf_scc_state s /\ stack_dfn_order s /\ dfn_injective s /\ w ∈ visited s /\ fa s w = fa s_pre w)
+      (update_low a (dfn s1 v))
+      (fun _ s => wf_scc_state s)
+      (fun _ s => stack_dfn_order s /\ dfn_injective s /\ w ∈ visited s /\ fa s w = fa s_pre w) _ _).
+    - (* wf_scc_state *)
+      refine (Hoare_conseq_pre _ (fun s => wf_scc_state s) _ _ _ _).
+      { intros s [Hwf' _]. exact Hwf'. }
+      apply update_low_preserves_wf_scc_state.
+    - (* stack_dfn_order, dfn_injective, visited, fa *)
+      refine (Hoare_conseq_pre _ (fun s => stack_dfn_order s /\ dfn_injective s /\ w ∈ visited s /\ fa s w = fa s_pre w) _ _ _ _).
+      { intros s [_ Hrest]. exact Hrest. }
+      refine (Hoare_conj _ _ (fun _ s => stack_dfn_order s) (fun _ s => dfn_injective s /\ w ∈ visited s /\ fa s w = fa s_pre w) _ _).
+      + (* stack_dfn_order *)
+        refine (Hoare_conseq_pre _ (fun s => stack_dfn_order s) _ _ _ _).
+        { intros s [Horder' _]. exact Horder'. }
+        apply update_low_preserves_stack_dfn_order.
+      + (* dfn_injective, visited, fa *)
+        refine (Hoare_conseq_pre _ (fun s => dfn_injective s /\ w ∈ visited s /\ fa s w = fa s_pre w) _ _ _ _).
+        { intros s [_ [Hinj' [Hvis' Hfa']]]. exact (conj Hinj' (conj Hvis' Hfa')). }
+        refine (Hoare_conj _ _ (fun _ s => dfn_injective s) (fun _ s => w ∈ visited s /\ fa s w = fa s_pre w) _ _).
+        * (* dfn_injective *)
+          refine (Hoare_conseq_pre _ (fun s => dfn_injective s) _ _ _ _).
+          { intros s [Hinj'' _]. exact Hinj''. }
+          apply update_low_preserves_dfn_injective.
+        * (* visited, fa *)
+          refine (Hoare_conseq_pre _ (fun s => w ∈ visited s /\ fa s w = fa s_pre w) _ _ _ _).
+          { intros s [_ [Hvis'' Hfa'']]. exact (conj Hvis'' Hfa''). }
+          refine (Hoare_conj _ _ (fun _ s => w ∈ visited s) (fun _ s => fa s w = fa s_pre w) _ _).
+          { (* visited *)
+            refine (Hoare_conseq_pre _ (fun s => w ∈ visited s) _ _ _ _).
+            { intros s [Hvis''' _]. exact Hvis'''. }
+            apply update_low_preserves_visited. }
+          { (* fa *)
+            refine (Hoare_conseq_pre _ (fun s => fa s w = fa s_pre w) _ _ _ _).
+            { intros s [_ Hfa''']. exact Hfa'''. }
+            apply update_low_preserves_fa. }
+  Qed.
+
+  Lemma cross_edge_preserves_J (a v w: V) (done: V -> Prop) (s_pre: SCCSt):
+    Hoare (fun s => J w s_pre done s /\ v ∈ visited s /\ ~ In v (stack s))
+          (ret tt)
+          (fun _ s => J w s_pre (done ∪ [v]) s).
+  Proof.
+    unfold J. intro_state. hoare_auto_s.
+    destruct H as [[Hwf [Horder [Hinj [Hvis Hfa]]]] [Hvvis Hnstk]].
+    subst s. simpl. exact (conj Hwf (conj Horder (conj Hinj (conj Hvis Hfa)))).
+  Qed.
+
+  (* L23 (tree_edge_preserves_J) is deferred to after Q_low's definition.) *)
+
+
+  (* ================================================================ *)
+  (* Group B: preloop semantic lemmas (L12–L13)                       *)
+  (* ================================================================ *)
+
+  (** Proof strategy: [preloop a] changes visited[a], dfn[a], low[a],
+      timer, stack.  [fa] is unchanged.  For [w <> a], the key is that
+      [w] cannot reach [fa s0 a] via tree edges in the calling context
+      (both are children of the same ancestor, and tree edges go parent→child
+      downward).  Hence the new vertex [a] and its back-edges are unreachable
+      from [w], so [scc_low_tree s w] is unchanged.  Combined with dfn/low
+      preservation for [w <> a] (via [preloop_keep_dfn_forall] etc.),
+      [scc_is_low_v s w] is preserved.
+
+      A helper lemma [sibling_not_reachable] is needed to establish the
+      non-reachability condition in the forset context. *)
+
+  Lemma preloop_preserves_scc_low_tree (a w: V) (s0 s_pre: SCCSt):
+    w <> a -> (s0, tt, s_pre) ∈ preloop a ->
+    scc_low_tree s0 w == scc_low_tree s_pre w.
+  Proof. Admitted.
+
+  Lemma preloop_preserves_scc_is_low_v (a w: V) (s0 s_pre: SCCSt):
+    w <> a -> (s0, tt, s_pre) ∈ preloop a ->
+    scc_is_low_v s0 w -> scc_is_low_v s_pre w.
+  Proof. Admitted.
+
 
   (* ================================================================ *)
   (* 6. Invariant Definitions                                         *)
