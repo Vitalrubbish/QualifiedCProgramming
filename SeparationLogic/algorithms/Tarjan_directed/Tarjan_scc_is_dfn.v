@@ -1868,12 +1868,7 @@ Proof.
   eapply tree_step_char_backward with (s := s) (x := u) (y := v); eauto.
 Qed.
 
-(** [tarjan_scc_keep_in_stack_below]: [tarjan_scc g u] preserves
-    [In w (stack s)] for any vertex [w] that is on the stack and
-    visited (hence has [dfn s w < timer s]).  After [preloop u],
-    [dfn s u] becomes the old timer, so [dfn s w < dfn s u] and
-    [pop_scc u] (if called) does not remove [w] because [w] lies
-    below [u] on the stack. *)
+(** Primitive and forset-level stack-membership preservation helpers. *)
 Lemma preloop_keep_in_stack (u w: V):
   Hoare (fun s: @SCCSt V => In w (stack s))
         (preloop u)
@@ -1977,20 +1972,6 @@ Proof.
     apply (process_edge_keep_in_stack u a w W). intros x. apply HW. }
   simpl. intros _. apply IH0.
 Qed.
-
-Lemma tarjan_scc_keep_in_stack_below (u w: V):
-  Hoare (fun s: @SCCSt V => In w (stack s) /\ ~ u ∈ visited s /\
-          dfn_inv s /\ stack_in_visited s /\ stack_dfn_order s)
-        (tarjan_scc (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g u)
-        (fun _ s => In w (stack s)).
-Proof.
-  (* TODO: Full proof via [hoare_fix_nolv_auto] with
-     process_edge_keep_in_stack composed from set_fa_keep_in_stack
-     and IH.  The critical sub-lemma is that after preloop u,
-     u is on top and w is below u, so pop_scc u (if called) removes
-     only vertices above w.  Admitted pending stack_dfn_order
-     integration. *)
-Admitted.
 
 Lemma set_fa_keep_stack_dfn_order (v p: V):
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
