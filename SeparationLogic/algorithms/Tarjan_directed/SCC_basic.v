@@ -124,6 +124,55 @@ Section SCC_DEFS.
     - exact Hreach.
   Qed.
 
+  (** [dg_reachable_reverse_lift]: Reverse direction of lifting.
+      If [g'] only adds edges whose target is [a], and [a] has no
+      outgoing edges in [g'], then reachability to any [y ≠ a]
+      lifts backwards from [g'] to [g]. *)
+  (** If [x] has no outgoing [dg_step] edges, then [dg_reachable x y]
+      implies [x = y]. *)
+  Lemma no_out_reaches_self (g': OriginalGraphType V E) (x y: V):
+    (forall v, ~ dg_step g' x v) ->
+    dg_reachable g' x y -> x = y.
+  Proof.
+    intros Hno_out Hreach.
+    unfold dg_reachable in Hreach.
+    induction Hreach as [u v Hstep | u | u v w Hr1 IH1 Hr2 IH2].
+    - exfalso. eapply Hno_out. exact Hstep.
+    - reflexivity.
+    - pose proof Hno_out as Hno_out'.
+      apply IH1 in Hno_out. subst v.
+      apply IH2 in Hno_out'. exact Hno_out'.
+  Qed.
+
+  Lemma dg_reachable_reverse_lift (g': OriginalGraphType V E) (x y a: V):
+    (forall u v, dg_step g' u v -> v <> a -> dg_step g u v) ->
+    (forall v, ~ dg_step g' a v) ->
+    dg_reachable g' x y -> y <> a ->
+    dg_reachable g x y.
+  Proof.
+    intros Hstep_rev Ha_no_out Hreach Hne_y.
+    unfold dg_reachable in *.
+    revert Hne_y.
+    pattern x, y. apply Coq.Relations.Relation_Operators.clos_refl_trans_ind
+      with (R := dg_step g').
+    - (* rt_step *)
+      intros x0 y0 Hstep Hne_y0.
+      apply Relation_Operators.rt_step. apply Hstep_rev; [exact Hstep | exact Hne_y0].
+    - (* rt_refl *)
+      intros x0 Hne_x0.
+      apply Relation_Operators.rt_refl.
+    - (* rt_trans *)
+      intros x0 y0 z0 Hr1 IH1 Hr2 IH2 Hne_z0.
+      destruct (classic (y0 = a)).
+      + subst y0.
+        exfalso. apply Hne_z0.
+        symmetry. apply (no_out_reaches_self g' a z0 Ha_no_out Hr2).
+      + apply Relation_Operators.rt_trans with y0.
+        * apply IH1. exact H.
+        * apply IH2. exact Hne_z0.
+    - exact Hreach.
+  Qed.
+
   (* ================================================================ *)
   (* Section 2: mutually_reachable — Mutual reachability              *)
   (* ================================================================ *)

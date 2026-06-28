@@ -478,6 +478,27 @@ Proof.
   subst s. simpl. right. exact H.
 Qed.
 
+(** [preloop_visited_reverse]: preloop [u] only adds [u] to [visited];
+    all other vertices in [visited] after preloop were already visited.
+    Proof sketch: preloop = get;; set_dfn u;; set_low u;; incr_timer;;
+    push_stack u;; visit u.  Only [visit u] touches [visited], and only
+    sets [u] to true.  Induction on the trace gives the result. *)
+Lemma preloop_visited_reverse (u v: V) (s0 s_pre: @SCCSt V):
+  (s0, tt, s_pre) ∈ preloop u ->
+  v ∈ visited s_pre -> v <> u -> v ∈ visited s0.
+Proof. Admitted.
+
+(** [preloop_a_no_child]: after preloop [a], the vertex [a] has no
+    outgoing tree edges in [state_to_dfs_tree] — it is a leaf.
+    Proof sketch: a tree edge [a → v] requires [fa s_pre v = a].
+    But [fa] is unchanged by preloop, and no [set_fa child a] has been
+    called yet, so the only vertex satisfying [fa s0 v = a] is [v = a].
+    Then [fa_ne] fails. *)
+Lemma preloop_a_no_child (a v root: V) (s0 s_pre: @SCCSt V):
+  (s0, tt, s_pre) ∈ preloop a ->
+  ~ dg_step (state_to_dfs_tree g s_pre root) a v.
+Proof. Admitted.
+
 (** [preloop_keep_stack_in_visited]: preloop u preserves [stack_in_visited]
     because it visits u before pushing it. *)
 Lemma preloop_keep_stack_in_visited (u: V):

@@ -70,78 +70,6 @@ Section IS_LOW.
   (* ================================================================ *)
   (* 2. SCC Low Witness / Bound Lemmas                                *)
   (* ================================================================ *)
-(** * Framework overview for the low-link correctness proof
-
-    The file is organized into the following layers:
-
-    1. [SCC-low definitions and induction lemmas]
-       ([scc_low_witness], [scc_low_bound], [scc_is_low_induction], ...)
-       Define [scc_is_low_v] and show that it implies the global
-       [scc_is_low] property.
-
-    2. [Empty-set and low-equals-dfn facts]
-       ([preloop_low_eq_dfn], [children_done_empty], [low_eq_dfn_to_min_empty])
-       Small algebraic facts used when a vertex has no processed children
-       or back edges.
-
-    3. [Primitive-operation invariants]
-       ([preloop_establishes_low_forset_inv], [pop_scc_keep_scc_is_low_v],
-       [children_done_add], ...)
-       What each basic state transition does to the components of
-       [low_forset_inv].
-
-    4. [set_fa / set_low helpers]
-       ([set_fa_preserves_wf_scc_state_pre], [set_low_preserves_low_forset_inv])
-       Hoare lemmas for the two assignment primitives.
-
-    5. [update_low concrete cases / edge classification]
-       ([update_low_tree_edge], [update_low_back_edge],
-        [cross_edge_preserves_low_forset_inv])
-       Reasoning about how [low] is updated on tree edges, back edges, and
-       how cross edges preserve the invariant by only extending [done].
-
-    6. [low_forset_inv for "other" vertices]
-       Lemmas showing that operations on vertex [a] preserve
-       [low_forset_inv u done] for [u <> a].
-
-    7. [fa preservation]
-       Each transition preserves the [fa] relation for vertices already
-       assigned a parent.
-
-    8. [Min-value, visited, and done-visited preservation]
-       ([set_fa_preserves_min], [pop_scc_preserves_done_visited], ...)
-
-    9. [Ancestor preservation]
-       ([pop_scc_preserves_ancestor_inv], [preloop_preserves_ancestor_inv])
-       Preservation of [low_forset_inv] along the parent chain.
-
-    10. [Stack ordering]
-        Structural lemmas about [stack_split_at] and dfn ordering on the
-        DFS stack.
-
-    11. [W preserves ancestor invariant]
-        ([W_preserves_ancestor_inv])
-        Combining the above to show a recursive call preserves the
-        ancestor invariant.
-
-    12. [Properness]
-        ([low_forset_inv_proper], ...)
-        Setoid properness needed for the forset fixpoint rule.
-
-    13. [fa_children and full_eq]
-        Lemmas connecting [children_done] / [back_edges_done] with their
-        unrestricted versions.
-
-    14. [Convergence to scc_is_low_v]
-        ([low_forset_inv_to_scc_is_low], [tree_edge_preserves_low_forset_inv_lowlink],
-         [forset_keep_low_forset_inv])
-        Closing the loop: after the forset over children, [scc_is_low_v]
-        holds.
-
-    15. [Main theorems]
-        ([tarjan_scc_keep_low_valid], [tarjan_scc_all_scc_is_low],
-        [tarjan_scc_all_scc_is_low]). *)
-
 
   Lemma scc_low_witness (s: @SCCSt V) (w: V) (n: nat):
     scc_is_low_v_val s w n ->
@@ -994,33 +922,6 @@ Section IS_LOW.
     exists (@nil V). exists (stack s0). split; [reflexivity | exact H].
   Qed.
 
-  (** [W_preserves_ancestor_inv]: During [W cur] (= [tarjan_scc g cur]),
-      the ancestor invariant for an arbitrary ancestor [ancestor] of [cur]
-      is preserved.
-
-      The parameters are:
-      - [ancestor]: the vertex whose [low_forset_inv] we preserve;
-      - [parent]: the direct DFS parent of [cur] (so [fa s cur = parent]);
-      - [cur]: the vertex being recursively processed.
-
-      The invariant is:
-        - [low_forset_inv ancestor done s]
-        - [fa s cur = parent]
-        - [~ cur ∈ visited s], [~ done cur], [done_visited done s]
-        - [In ancestor (stack s)]
-        - [stack_dfn_order s]
-        - [dfn_injective s]
-      and the postcondition additionally records
-        - [dfn s ancestor < dfn s cur]  (needed for [pop_scc_preserves_ancestor_inv])
-        - every [done] vertex still on the stack has dfn strictly smaller than [cur].
-
-      Importantly, the precondition does *not* require
-      [dfn s ancestor < dfn s cur]; that ordering is established by the
-      [preloop cur] step inside [W cur] (which assigns [dfn cur] a fresh
-      value larger than [dfn ancestor]).  Requiring it in the precondition
-      would make the lemma unusable at the entry of [W cur], because [cur]
-      is then unvisited and [dfn s cur = 0] by [dfn_inv]. *)
-
   (** [preloop_establishes_ancestor_inv]: Like [preloop_preserves_ancestor_inv]
       but does *not* require [dfn s ancestor < dfn s cur] in the precondition.
       [preloop cur] assigns [dfn cur] the current timer, which is strictly
@@ -1113,8 +1014,49 @@ Section IS_LOW.
           - rewrite Hsnd_v_pre in Hsnd_eq. rewrite Hsnd_eq. apply Hsiv. exact Hinstk.
           - split; [rewrite (Hfa_eq v) in Hv_fa_ne_pre; exact Hv_fa_ne_pre | split; [rewrite (Hfa_eq v) in Hfst_fa_pre; exact Hfst_fa_pre | exact Hsnd_v_pre]]. }
         { split; [exact Hfst_eq | exact Hsnd_eq]. }
-    - (* ←: s_pre ⊆ s0 — admitted. *)
-      admit.
+    - (* ←: s_pre ⊆ s0 — via dg_reachable_reverse_lift *)
+      intros [z [Hz_reach Hz_end]].
+      (* Build the reverse-step-lift premise for dg_reachable_reverse_lift *)
+      assert (Hstep_rev: forall u v, dg_step (state_to_dfs_tree g s_pre root) u v ->
+        v <> a -> dg_step (state_to_dfs_tree g s0 root) u v). {
+        intros u v Hstep Hne_v.
+        unfold dg_step, original_step, state_to_dfs_tree in *; simpl in *.
+        destruct Hstep as [e [[v' [Hvis_pre [Hfa_ne [Hfst_fa Hsnd_v']]]] [Hfst_eq Hsnd_eq]]].
+        exists e. split.
+        - exists v'. split.
+          + apply (preloop_visited_reverse a v' s0 s_pre); [exact Hpreloop | exact Hvis_pre |].
+            rewrite <- Hsnd_v'. exact Hne_v.
+          + split; [| split; [| exact Hsnd_v']].
+            * rewrite <- (Hfa_eq v'). exact Hfa_ne.
+            * rewrite <- (Hfa_eq v'). exact Hfst_fa.
+        - split; [exact Hfst_eq | exact Hsnd_eq]. }
+      (* a has no outgoing tree edges after preloop *)
+      assert (Ha_no_out: forall v, ~ dg_step (state_to_dfs_tree g s_pre root) a v). {
+        intros v. apply (preloop_a_no_child a v root s0 s_pre Hpreloop). }
+      (* Now handle both cases of Hz_end *)
+      destruct Hz_end as [Heq | [Hdg_step [Hinstk Hnotree]]].
+      + (* z = y: lift reachability from s_pre to s0 *)
+        exists z. split; [| left; exact Heq].
+        apply (dg_reachable_reverse_lift
+          (state_to_dfs_tree g s_pre root) w z a Hstep_rev Ha_no_out Hz_reach).
+        (* Need: z <> a.  If z = a, then w reaches a in s_pre.
+           But a is only reachable via fa[a], and Hnot_reach says
+           w cannot reach fa[a] in s0.  Since s0 and s_pre have
+           same edges (except a has no children), w cannot reach
+           fa[a] in s_pre either, so w cannot reach a. *)
+        { intro Heq_z. subst z. (* w → a in s_pre, derive contradiction *)
+          admit. }
+      + (* back-edge: same lifting for reachability *)
+        exists z. split.
+        * apply (dg_reachable_reverse_lift
+            (state_to_dfs_tree g s_pre root) w z a Hstep_rev Ha_no_out Hz_reach).
+          intro Heq_z. subst z. admit.  (* same as above *)
+        * right. split; [exact Hdg_step | split].
+          { (* In y (stack s0): preloop only pushes a, doesn't pop.
+               Since y is a back-edge target in s_pre, y ∈ stack s_pre.
+               If y ≠ a, then y was in stack s0 too. *)
+            admit. }
+          { (* ~dg_step(tree(s0), z, y): same as forward direction argument *) admit. }
   Admitted.
 
   Lemma preloop_preserves_scc_is_low_v (a w: V) (s0 s_pre: SCCSt):
