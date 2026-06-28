@@ -507,7 +507,13 @@ Section IS_LOW.
     Hoare (Q_stack_frame cur s0 tt)
           (dv <- get' (fun s => dfn s v);; update_low u dv)
           (Q_stack_frame cur s0).
-  Admitted.
+  Proof.
+    unfold Hoare. intros s1 r s2 Hframe Hrun anc Hanc Hlt.
+    assert (Hin1: In anc (stack s1)) by (apply Hframe; auto).
+    pose proof (get_dfn_update_low_keep_in_stack u v anc) as Hkeep.
+    unfold Hoare in Hkeep.
+    exact (Hkeep s1 r s2 Hin1 Hrun).
+  Qed.
 
   Lemma process_edge_preserves_Q_stack_frame
         (u v cur: V) (s0: @SCCSt V)

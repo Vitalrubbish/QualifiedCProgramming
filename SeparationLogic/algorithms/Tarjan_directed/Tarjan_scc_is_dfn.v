@@ -1931,7 +1931,12 @@ Lemma get_dfn_update_low_keep_in_stack (u v w: V):
   Hoare (fun s: @SCCSt V => In w (stack s))
         (dv <- get' (fun s => dfn s v);; update_low u dv)
         (fun _ s => In w (stack s)).
-Admitted.
+Proof.
+  intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+  apply Hoare_conseq_pre with (P2 := fun s => In w (stack s)).
+  { intros s' Hs'. destruct Hs'. subst s'. exact H. }
+  apply (update_low_keep_in_stack u w dv).
+Qed.
 
 Lemma process_edge_keep_in_stack (u v w: V) (W: V -> program (@SCCSt V) unit):
   (forall x, Hoare (fun s => In w (stack s)) (W x) (fun _ s => In w (stack s))) ->
