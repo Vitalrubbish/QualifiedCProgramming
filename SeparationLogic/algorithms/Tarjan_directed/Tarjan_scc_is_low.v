@@ -37,6 +37,30 @@ Section IS_LOW.
       dfn s0 anc < dfn s0 u ->
       In anc (stack s).
 
+  Definition Q_active_stack_frame (u: V) (s0: @SCCSt V) (_: unit) (s: @SCCSt V): Prop :=
+    In u (stack s) /\
+    dfn s u = dfn s0 u /\
+    Q_stack_frame u s0 tt s /\
+    (forall anc,
+       In anc (stack s0) ->
+       dfn s0 anc < dfn s0 u ->
+       dfn s anc = dfn s0 anc).
+
+  Definition active_stack_frames
+             (frames: list (V * @SCCSt V)) (s: @SCCSt V): Prop :=
+    forall cur s0, In (cur, s0) frames -> Q_active_stack_frame cur s0 tt s.
+
+  Definition active_stack_frames_below
+             (frames: list (V * @SCCSt V)) (u: V) (s: @SCCSt V): Prop :=
+    forall cur s0, In (cur, s0) frames -> dfn s cur < dfn s u.
+
+  Definition active_base
+             (frames: list (V * @SCCSt V)) (s: @SCCSt V): Prop :=
+    active_stack_frames frames s /\
+    wf_scc_state g root s /\
+    stack_dfn_order s /\
+    dfn_injective s.
+
   Definition Q_low_valid (u: V) (s0: @SCCSt V) (_: unit) (s: @SCCSt V): Prop :=
     low_valid_post g root u s /\
     u ∈ visited s /\
@@ -392,7 +416,6 @@ Section IS_LOW.
   Proof.
     intros Hframe Hanc Hlt. apply Hframe; auto.
   Qed.
-
   Lemma stack_split_at_keeps_lower_dfn_vertex
         (s: @SCCSt V) (u anc: V) (popped rest: list V):
     stack_dfn_order s ->
@@ -449,7 +472,6 @@ Section IS_LOW.
     intros anc Hanc Hlt.
     apply pop_scc_keeps_older_stack_vertex; auto.
   Qed.
-
   Lemma preloop_preserves_Q_stack_frame
         (u cur: V) (s0: @SCCSt V):
     Hoare (Q_stack_frame cur s0 tt)
@@ -523,7 +545,34 @@ Section IS_LOW.
     Hoare (Q_stack_frame cur s0 tt)
           (process_edge u W v)
           (Q_stack_frame cur s0).
-  Admitted.
+  Proof.
+    intros HW.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    (* Tree edge *)
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := Q_stack_frame cur s0 tt).
+      { intros st [Hnv Heq_st]. subst st. exact H. }
+      intro_state.
+      apply Hoare_conseq_pre with (P2 := Q_stack_frame cur s0 tt).
+      { intros st Heq_st. subst st. exact H1. }
+      eapply Hoare_bind with (R := fun (_: unit) s => Q_stack_frame cur s0 tt s).
+      * apply (set_fa_preserves_Q_stack_frame v u cur s0).
+      * intro u_; destruct u_.
+        eapply Hoare_bind with (R := fun (_: unit) s => Q_stack_frame cur s0 tt s);
+          [ apply (HW v)
+          | intro u_'; destruct u_'; apply (get_low_update_low_preserves_Q_stack_frame u v cur s0) ].
+    (* Non-tree edge *)
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := Q_stack_frame cur s0 tt).
+      { intros st [Hnv Heq_st]. subst st. exact H. }
+      intro_state. hoare_auto_s.
+      + eapply Hoare_conseq_pre with (P2 := Q_stack_frame cur s0 tt).
+        2: { eapply (update_low_preserves_Q_stack_frame u cur _ s0). }
+        simpl. intros st Heq_st. subst st. exact H1.
+      + destruct H2 as [Heq _]. subst s. exact H1.
+  Qed.
 
   Lemma forset_preserves_Q_stack_frame
         (u cur: V) (s0: @SCCSt V)
@@ -533,28 +582,551 @@ Section IS_LOW.
     Hoare (Q_stack_frame cur s0 tt)
           (forset (fun v => dg_step g u v) (process_edge u W))
           (Q_stack_frame cur s0).
-  Admitted.
+  Proof.
+    intros HW.
+    unfold forset. hoare_fix_nolv_auto (V -> Prop).
+    simpl. intros W0 IH0 todo.
+    unfold forset_f. hoare_auto_s. intro_state. hoare_auto_s.
+    eapply Hoare_bind with (R := fun (_: unit) s => Q_stack_frame cur s0 tt s).
+    { apply Hoare_conseq_pre with (P2 := Q_stack_frame cur s0 tt).
+      { intros st Hst. subst st. exact H. }
+      apply process_edge_preserves_Q_stack_frame. intros x. apply HW. }
+    intro u_; destruct u_. apply IH0.
+  Qed.
 
   Lemma if_pop_preserves_Q_stack_frame
         (u cur: V) (s0: @SCCSt V):
     Hoare (fun s: @SCCSt V =>
              Q_stack_frame cur s0 tt s /\
-             stack_dfn_order s)
+             stack_dfn_order s /\
+             In u (stack s) /\
+             (forall anc,
+                In anc (stack s0) ->
+                dfn s0 anc < dfn s0 cur ->
+                dfn s anc < dfn s u))
           (If (fun s => low s u = dfn s u) (pop_scc u))
           (Q_stack_frame cur s0).
-  Admitted.
+  Proof.
+    unfold If.
+    intro_state. destruct H as [Hframe [Hord [Hu_stack Hbelow]]].
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      refine (Hoare_conseq_pre _
+               (fun s =>
+                  Q_stack_frame cur s0 tt s /\
+                  stack_dfn_order s /\
+                  In u (stack s) /\
+                  (forall anc,
+                     In anc (stack s0) ->
+                     dfn s0 anc < dfn s0 cur ->
+                     dfn s anc < dfn s u))
+               (pop_scc u) (Q_stack_frame cur s0) _ _); [ | ].
+      { intros st [Hlow Heq_st]. subst st.
+        split; [exact Hframe | split; [exact Hord | split; [exact Hu_stack | exact Hbelow]]]. }
+      { unfold pop_scc. intro_state. hoare_auto_s.
+        destruct H as [Hframe_pop [Hord_pop [Hu_stack_pop Hbelow_pop]]].
+        subst s. unfold Q_stack_frame. intros anc Hanc Hlt.
+        eapply pop_scc_keeps_older_stack_vertex.
+        - exact Hord_pop.
+        - apply Hframe_pop; auto.
+        - exact Hu_stack_pop.
+        - apply Hbelow_pop; auto. }
+    - intro_state. hoare_auto_s.
+      destruct H1 as [Hs _]. subst s. subst s2. exact Hframe.
+  Qed.
 
   Lemma preloop_establishes_Q_stack_frame_entry
         (u: V) (s0: @SCCSt V):
     Hoare (fun s: @SCCSt V => s = s0)
           (preloop u)
           (Q_stack_frame u s0).
-  Admitted.
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl. unfold Q_stack_frame.
+    intros anc Hanc Hlt. simpl. right. exact Hanc.
+  Qed.
 
   Theorem tarjan_scc_keep_stack_frame (u: V) (s0: @SCCSt V):
-    Hoare (fun s => s = s0 /\ stack_dfn_order s /\ dfn_injective s)
+    Hoare (fun s => s = s0 /\
+                    low_pre g root u s /\
+                    stack_dfn_order s /\
+                    dfn_injective s)
           (tarjan_scc g u)
           (Q_stack_frame u s0).
+  Proof.
+    unfold Hoare, Q_stack_frame, low_pre, wf_scc_state.
+    intros s1 r s2 Hpre Hrun anc Hanc Hlt.
+    destruct Hpre as [Heq [Hlow_pre [Hord Hinj]]].
+    destruct Hlow_pre as [Hwf Hnot_u_vis].
+    destruct Hwf as [_ [Hdfn_inv _]].
+    subst s1.
+    destruct Hdfn_inv as [_ [Hdfn_zero _]].
+    pose proof (proj2 (Hdfn_zero u) Hnot_u_vis) as Hu_zero.
+    rewrite Hu_zero in Hlt. lia.
+  Qed.
+
+  Lemma Q_active_stack_frame_self_stack
+        (u: V) (s0 s: @SCCSt V):
+    Q_active_stack_frame u s0 tt s ->
+    In u (stack s).
+  Proof.
+    intros [Hu _]. exact Hu.
+  Qed.
+
+  Lemma Q_active_stack_frame_self_dfn
+        (u: V) (s0 s: @SCCSt V):
+    Q_active_stack_frame u s0 tt s ->
+    dfn s u = dfn s0 u.
+  Proof.
+    intros [_ [Hdfn _]]. exact Hdfn.
+  Qed.
+
+  Lemma Q_active_stack_frame_old_stack
+        (u anc: V) (s0 s: @SCCSt V):
+    Q_active_stack_frame u s0 tt s ->
+    In anc (stack s0) ->
+    dfn s0 anc < dfn s0 u ->
+    In anc (stack s).
+  Proof.
+    intros [_ [_ [Hframe _]]] Hanc Hlt.
+    apply Hframe; auto.
+  Qed.
+
+  Lemma Q_active_stack_frame_old_dfn
+        (u anc: V) (s0 s: @SCCSt V):
+    Q_active_stack_frame u s0 tt s ->
+    In anc (stack s0) ->
+    dfn s0 anc < dfn s0 u ->
+    dfn s anc = dfn s0 anc.
+  Proof.
+    intros [_ [_ [_ Hdfn]]] Hanc Hlt.
+    apply Hdfn; auto.
+  Qed.
+
+  Lemma Q_active_stack_frame_pop_below
+        (u pop_root anc: V) (s0 s: @SCCSt V):
+    Q_active_stack_frame u s0 tt s ->
+    dfn s u < dfn s pop_root ->
+    In anc (stack s0) ->
+    dfn s0 anc < dfn s0 u ->
+    dfn s anc < dfn s pop_root.
+  Proof.
+    intros Hactive Hu_pop Hanc Hlt.
+    rewrite (Q_active_stack_frame_old_dfn u anc s0 s Hactive Hanc Hlt).
+    rewrite <- (Q_active_stack_frame_self_dfn u s0 s Hactive) in Hlt.
+    lia.
+  Qed.
+
+  Lemma Q_active_stack_frame_current
+        (u: V) (s: @SCCSt V):
+    In u (stack s) ->
+    Q_active_stack_frame u s tt s.
+  Proof.
+    intros Hu. repeat split; auto.
+    unfold Q_stack_frame. intros anc Hanc Hlt. exact Hanc.
+  Qed.
+
+  Lemma preloop_preserves_Q_active_stack_frame
+        (v cur: V) (s0: @SCCSt V):
+    Hoare (fun s: @SCCSt V =>
+             Q_active_stack_frame cur s0 tt s /\
+             stack_in_visited s /\
+             ~ v ∈ visited s)
+          (preloop v)
+          (Q_active_stack_frame cur s0).
+  Proof.
+    unfold Hoare. intros s1 r s2 [Hactive [Hstack_in Hnv]] Hrun.
+    unfold Q_active_stack_frame in Hactive |- *.
+    destruct Hactive as [Hu_stack [Hdfn_eq [Hframe Hdfn_anc]]].
+    split; [| split; [| split]].
+    - (* In cur (stack s2) *)
+      pose proof (preloop_keep_in_stack v cur) as Hkeep.
+      unfold Hoare in Hkeep. exact (Hkeep s1 r s2 Hu_stack Hrun).
+    - (* dfn s2 cur = dfn s0 cur *)
+      pose proof (preloop_keep_dfn v cur (dfn s0 cur)) as Hkeep.
+      unfold Hoare in Hkeep.
+      eapply Hkeep; [| exact Hrun].
+      split; [| split]; auto.
+      { intro Heq; subst cur. apply Hnv. apply (Hstack_in _ Hu_stack). }
+    - (* Q_stack_frame cur s0 tt s2 *)
+      unfold Q_stack_frame. intros anc Hanc Hlt.
+      assert (Hin1: In anc (stack s1)) by (apply Hframe; auto).
+      pose proof (preloop_keep_in_stack v anc) as Hkeep.
+      unfold Hoare in Hkeep.
+      exact (Hkeep s1 r s2 Hin1 Hrun).
+    - (* forall anc, dfn s2 anc = dfn s0 anc *)
+      intros anc Hanc Hlt.
+      assert (Hanc_s1: In anc (stack s1)) by (apply Hframe; auto).
+      assert (Hneq: v <> anc).
+      { intro Heq; subst anc. apply Hnv. apply (Hstack_in _ Hanc_s1). }
+      pose proof (preloop_keep_dfn v anc (dfn s0 anc)) as Hkeep.
+      unfold Hoare in Hkeep.
+      apply (Hkeep s1 r s2 (conj Hneq (conj (Hstack_in _ Hanc_s1) (Hdfn_anc anc Hanc Hlt))) Hrun).
+  Qed.
+
+  Lemma set_fa_preserves_Q_active_stack_frame
+        (v p cur: V) (s0: @SCCSt V):
+    Hoare (Q_active_stack_frame cur s0 tt)
+          (set_fa v p)
+          (Q_active_stack_frame cur s0).
+  Proof.
+    unfold Hoare. intros s1 r s2 Hactive Hrun.
+    unfold Q_active_stack_frame in Hactive |- *.
+    destruct Hactive as [Hu_stack [Hdfn_eq [Hframe Hdfn_anc]]].
+    split; [| split; [| split]].
+    - (* In cur (stack s2) *)
+      pose proof (set_fa_keep_in_stack v p cur) as Hkeep.
+      unfold Hoare in Hkeep. exact (Hkeep s1 r s2 Hu_stack Hrun).
+    - (* dfn s2 cur = dfn s0 cur *)
+      pose proof (set_fa_keep_dfn v cur p (dfn s0 cur)) as Hkeep.
+      unfold Hoare in Hkeep.
+      exact (Hkeep s1 r s2 Hdfn_eq Hrun).
+    - (* Q_stack_frame cur s0 tt s2 *)
+      pose proof (set_fa_preserves_Q_stack_frame v p cur s0) as Hpres.
+      unfold Hoare in Hpres.
+      exact (Hpres s1 r s2 Hframe Hrun).
+    - (* forall anc, dfn s2 anc = dfn s0 anc *)
+      intros anc Hanc Hlt.
+      pose proof (set_fa_keep_dfn v anc p (dfn s0 anc)) as Hkeep.
+      unfold Hoare in Hkeep.
+      exact (Hkeep s1 r s2 (Hdfn_anc anc Hanc Hlt) Hrun).
+  Qed.
+
+  Lemma update_low_preserves_Q_active_stack_frame
+        (u cur: V) (n: nat) (s0: @SCCSt V):
+    Hoare (Q_active_stack_frame cur s0 tt)
+          (update_low u n)
+          (Q_active_stack_frame cur s0).
+  Proof.
+    unfold Hoare. intros s1 r s2 Hactive Hrun.
+    unfold Q_active_stack_frame in Hactive |- *.
+    destruct Hactive as [Hu_stack [Hdfn_eq [Hframe Hdfn_anc]]].
+    pose proof (update_low_keep_in_stack u cur n) as Hkeep_stack.
+    pose proof (update_low_keep_dfn u cur n (dfn s0 cur)) as Hkeep_dfn_cur.
+    pose proof (update_low_preserves_Q_stack_frame u cur n s0) as Hpres_frame.
+    unfold Hoare in Hkeep_stack, Hkeep_dfn_cur, Hpres_frame.
+    split; [| split; [| split]].
+    - exact (Hkeep_stack s1 r s2 Hu_stack Hrun).
+    - exact (Hkeep_dfn_cur s1 r s2 Hdfn_eq Hrun).
+    - exact (Hpres_frame s1 r s2 Hframe Hrun).
+    - intros anc Hanc Hlt.
+      pose proof (update_low_keep_dfn u anc n (dfn s0 anc)) as Hkeep_dfn.
+      unfold Hoare in Hkeep_dfn.
+      exact (Hkeep_dfn s1 r s2 (Hdfn_anc anc Hanc Hlt) Hrun).
+  Qed.
+
+  Lemma get_low_update_low_preserves_Q_active_stack_frame
+        (u v cur: V) (s0: @SCCSt V):
+    Hoare (Q_active_stack_frame cur s0 tt)
+          (lv <- get' (fun s => low s v);; update_low u lv)
+          (Q_active_stack_frame cur s0).
+  Proof.
+    intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+    apply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+    { intros st Hst. destruct Hst. subst st. exact H. }
+    apply update_low_preserves_Q_active_stack_frame.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_Q_active_stack_frame
+        (u v cur: V) (s0: @SCCSt V):
+    Hoare (Q_active_stack_frame cur s0 tt)
+          (dv <- get' (fun s => dfn s v);; update_low u dv)
+          (Q_active_stack_frame cur s0).
+  Proof.
+    intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+    apply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+    { intros st Hst. destruct Hst. subst st. exact H. }
+    apply update_low_preserves_Q_active_stack_frame.
+  Qed.
+
+  Lemma process_edge_preserves_Q_active_stack_frame
+        (u v cur: V) (s0: @SCCSt V)
+        (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (Q_active_stack_frame cur s0 tt) (W x)
+                     (Q_active_stack_frame cur s0)) ->
+    Hoare (Q_active_stack_frame cur s0 tt)
+          (process_edge u W v)
+          (Q_active_stack_frame cur s0).
+  Proof.
+    intros HW.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+      { intros st [Hnv Heq_st]. subst st. exact H. }
+      intro_state.
+      apply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+      { intros st Heq_st. subst st. exact H1. }
+      eapply Hoare_bind with (R := fun (_: unit) s => Q_active_stack_frame cur s0 tt s).
+      * exact (set_fa_preserves_Q_active_stack_frame v u cur s0).
+      * intro u_; destruct u_.
+        eapply Hoare_bind with (R := fun (_: unit) s => Q_active_stack_frame cur s0 tt s).
+        -- exact (HW v).
+        -- intro u_'; destruct u_'.
+           exact (get_low_update_low_preserves_Q_active_stack_frame u v cur s0).
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+      { intros st [Hnv Heq_st]. subst st. exact H. }
+      intro_state. hoare_auto_s.
+      + eapply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+        2: { exact (update_low_preserves_Q_active_stack_frame u cur (dfn s2 v) s0). }
+        simpl. intros st Heq_st. subst st. exact H1.
+      + destruct H2 as [Heq _]. subst s. exact H1.
+  Qed.
+
+  Lemma forset_preserves_Q_active_stack_frame
+        (u cur: V) (s0: @SCCSt V)
+        (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (Q_active_stack_frame cur s0 tt) (W x)
+                     (Q_active_stack_frame cur s0)) ->
+    Hoare (Q_active_stack_frame cur s0 tt)
+          (forset (fun v => dg_step g u v) (process_edge u W))
+          (Q_active_stack_frame cur s0).
+  Proof.
+    intros HW.
+    unfold forset. hoare_fix_nolv_auto (V -> Prop).
+    simpl. intros W0 IH0 todo.
+    unfold forset_f. hoare_auto_s. intro_state. hoare_auto_s.
+    eapply Hoare_bind with (R := fun (_: unit) s => Q_active_stack_frame cur s0 tt s).
+    { apply Hoare_conseq_pre with (P2 := Q_active_stack_frame cur s0 tt).
+      { intros st Hst. subst st. exact H. }
+      apply process_edge_preserves_Q_active_stack_frame. intros x. apply HW. }
+    intro u_; destruct u_. apply IH0.
+  Qed.
+
+  Lemma preloop_preserves_active_stack_frames
+        (v: V) (frames: list (V * @SCCSt V)):
+    Hoare (fun s: @SCCSt V =>
+             active_stack_frames frames s /\
+             stack_in_visited s /\
+             ~ v ∈ visited s)
+          (preloop v)
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    unfold Hoare, active_stack_frames.
+    intros s1 r s2 [Hframes [Hstack_in Hnv]] Hrun cur s0 Hin.
+    pose proof (preloop_preserves_Q_active_stack_frame v cur s0) as Hpre.
+    unfold Hoare in Hpre.
+    exact (Hpre s1 r s2 (conj (Hframes cur s0 Hin) (conj Hstack_in Hnv)) Hrun).
+  Qed.
+
+  Lemma set_fa_preserves_active_stack_frames
+        (v p: V) (frames: list (V * @SCCSt V)):
+    Hoare (active_stack_frames frames)
+          (set_fa v p)
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    unfold Hoare, active_stack_frames.
+    intros s1 r s2 Hframes Hrun cur s0 Hin.
+    pose proof (set_fa_preserves_Q_active_stack_frame v p cur s0) as Hset.
+    unfold Hoare in Hset.
+    exact (Hset s1 r s2 (Hframes cur s0 Hin) Hrun).
+  Qed.
+
+  Lemma update_low_preserves_active_stack_frames
+        (u: V) (n: nat) (frames: list (V * @SCCSt V)):
+    Hoare (active_stack_frames frames)
+          (update_low u n)
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    unfold Hoare, active_stack_frames.
+    intros s1 r s2 Hframes Hrun cur s0 Hin.
+    pose proof (update_low_preserves_Q_active_stack_frame u cur n s0) as Hupd.
+    unfold Hoare in Hupd.
+    exact (Hupd s1 r s2 (Hframes cur s0 Hin) Hrun).
+  Qed.
+
+  Lemma get_low_update_low_preserves_active_stack_frames
+        (u v: V) (frames: list (V * @SCCSt V)):
+    Hoare (active_stack_frames frames)
+          (lv <- get' (fun s => low s v);; update_low u lv)
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+    apply Hoare_conseq_pre with (P2 := active_stack_frames frames).
+    { intros st Hst. destruct Hst. subst st. exact H. }
+    apply update_low_preserves_active_stack_frames.
+  Qed.
+
+  Lemma process_edge_preserves_active_stack_frames
+        (u v: V) (frames: list (V * @SCCSt V))
+        (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (active_stack_frames frames) (W x)
+                     (fun _ s => active_stack_frames frames s)) ->
+    Hoare (active_stack_frames frames)
+          (process_edge u W v)
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    intros HW.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := active_stack_frames frames).
+      { intros st [Hnv Heq_st]. subst st. exact H. }
+      intro_state.
+      apply Hoare_conseq_pre with (P2 := active_stack_frames frames).
+      { intros st Heq_st. subst st. exact H1. }
+      eapply Hoare_bind with (R := fun (_: unit) s => active_stack_frames frames s).
+      * exact (set_fa_preserves_active_stack_frames v u frames).
+      * intro u_; destruct u_.
+        eapply Hoare_bind with (R := fun (_: unit) s => active_stack_frames frames s).
+        -- exact (HW v).
+        -- intro u_'; destruct u_'.
+           exact (get_low_update_low_preserves_active_stack_frames u v frames).
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conseq_pre with (P2 := active_stack_frames frames).
+      { intros st [Hnv Heq_st]. subst st. exact H. }
+      intro_state. hoare_auto_s.
+      + eapply Hoare_conseq_pre with (P2 := active_stack_frames frames).
+        2: { eapply update_low_preserves_active_stack_frames. }
+        simpl. intros st Heq_st. subst st. exact H1.
+      + destruct H2 as [Heq _]. subst s. exact H1.
+  Qed.
+
+  Lemma forset_preserves_active_stack_frames
+        (u: V) (frames: list (V * @SCCSt V))
+        (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (active_stack_frames frames) (W x)
+                     (fun _ s => active_stack_frames frames s)) ->
+    Hoare (active_stack_frames frames)
+          (forset (fun v => dg_step g u v) (process_edge u W))
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    intros HW.
+    unfold forset. hoare_fix_nolv_auto (V -> Prop).
+    simpl. intros W0 IH0 todo.
+    unfold forset_f. hoare_auto_s. intro_state. hoare_auto_s.
+    eapply Hoare_bind with (R := fun (_: unit) s => active_stack_frames frames s).
+    { apply Hoare_conseq_pre with (P2 := active_stack_frames frames).
+      { intros st Hst. subst st. exact H. }
+      apply process_edge_preserves_active_stack_frames. intros x. apply HW. }
+    intro u_; destruct u_. apply IH0.
+  Qed.
+
+
+  Lemma if_pop_preserves_Q_active_stack_frame
+        (pop_root cur: V) (s0: @SCCSt V):
+    Hoare (fun s: @SCCSt V =>
+             Q_active_stack_frame cur s0 tt s /\
+             stack_dfn_order s /\
+             In pop_root (stack s) /\
+             dfn s cur < dfn s pop_root)
+          (If (fun s => low s pop_root = dfn s pop_root) (pop_scc pop_root))
+          (Q_active_stack_frame cur s0).
+  Proof.
+    unfold If.
+    intro_state. destruct H as [Hactive [Hord [Hpop_stack Hcur_lt_pop]]].
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      refine (Hoare_conseq_pre _
+               (fun s =>
+                  Q_active_stack_frame cur s0 tt s /\
+                  stack_dfn_order s /\
+                  In pop_root (stack s) /\
+                  dfn s cur < dfn s pop_root)
+               (pop_scc pop_root) (Q_active_stack_frame cur s0) _ _); [ | ].
+      { intros st [Hlow Heq_st]. subst st.
+        split; [exact Hactive | split; [exact Hord | split; [exact Hpop_stack | exact Hcur_lt_pop]]]. }
+      { unfold pop_scc. intro_state. hoare_auto_s.
+        destruct H as [Hactive_pop [Hord_pop [Hpop_stack_pop Hcur_lt_pop']]].
+        subst s. unfold Q_active_stack_frame in Hactive_pop |- *.
+        destruct Hactive_pop as [Hcur_stack [Hcur_dfn [Hframe Hanc_dfn]]].
+        split; [| split; [| split]].
+        - eapply pop_scc_keeps_older_stack_vertex.
+          + exact Hord_pop.
+          + exact Hcur_stack.
+          + exact Hpop_stack_pop.
+          + exact Hcur_lt_pop'.
+        - unfold pop_scc_state.
+          destruct (stack_split_at (stack s2) pop_root) as [popped rest] eqn:?.
+          simpl. exact Hcur_dfn.
+        - unfold Q_stack_frame. intros anc Hanc Hlt.
+          eapply pop_scc_keeps_older_stack_vertex.
+          + exact Hord_pop.
+          + apply Hframe; auto.
+          + exact Hpop_stack_pop.
+          + rewrite (Hanc_dfn anc Hanc Hlt).
+            rewrite <- Hcur_dfn in Hlt.
+            lia.
+        - intros anc Hanc Hlt.
+          unfold pop_scc_state.
+          destruct (stack_split_at (stack s2) pop_root) as [popped rest] eqn:?.
+          simpl. apply Hanc_dfn; auto. }
+    - intro_state. hoare_auto_s.
+      destruct H1 as [Hs _]. subst s. subst s2. exact Hactive.
+  Qed.
+
+  Lemma if_pop_preserves_active_stack_frames
+        (pop_root: V) (frames: list (V * @SCCSt V)):
+    Hoare (fun s: @SCCSt V =>
+             active_stack_frames frames s /\
+             stack_dfn_order s /\
+             In pop_root (stack s) /\
+             active_stack_frames_below frames pop_root s)
+          (If (fun s => low s pop_root = dfn s pop_root) (pop_scc pop_root))
+          (fun _ s => active_stack_frames frames s).
+  Proof.
+    unfold Hoare, active_stack_frames, active_stack_frames_below.
+    intros s1 r s2 [Hframes [Hord [Hpop_stack Hbelow]]] Hrun cur s0 Hin.
+    pose proof (if_pop_preserves_Q_active_stack_frame pop_root cur s0) as Hif.
+    unfold Hoare in Hif.
+    exact (Hif s1 r s2
+             (conj (Hframes cur s0 Hin)
+               (conj Hord (conj Hpop_stack (Hbelow cur s0 Hin))))
+             Hrun).
+  Qed.
+
+  Lemma if_pop_preserves_active_base
+        (pop_root: V) (frames: list (V * @SCCSt V)):
+    Hoare (fun s: @SCCSt V =>
+             active_base frames s /\
+             In pop_root (stack s) /\
+             active_stack_frames_below frames pop_root s)
+          (If (fun s => low s pop_root = dfn s pop_root) (pop_scc pop_root))
+          (fun _ s => active_base frames s).
+  Proof.
+    unfold active_base.
+    apply Hoare_conj with
+      (Q1 := fun _ s => active_stack_frames frames s)
+      (Q2 := fun _ s => wf_scc_state g root s /\ stack_dfn_order s /\ dfn_injective s).
+    - eapply Hoare_conseq_pre.
+      2: apply if_pop_preserves_active_stack_frames.
+      intros s [[Hframes [Hwf [Hord Hinj]]] [Hpop Hbelow]].
+      split; [exact Hframes | split; [exact Hord | split; [exact Hpop | exact Hbelow]]].
+    - unfold If. intro_state. destruct H as [[Hframes [Hwf [Hord Hinj]]] [Hpop Hbelow]].
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        apply Hoare_conj with
+          (Q1 := fun _ s => wf_scc_state g root s)
+          (Q2 := fun _ s => stack_dfn_order s /\ dfn_injective s).
+        * eapply Hoare_conseq_pre.
+          2: apply (pop_scc_preserves_wf_scc_state g root pop_root).
+          intros st [Hlow Heq]. subst st. exact Hwf.
+        * apply Hoare_conj.
+          -- eapply Hoare_conseq_pre.
+             2: apply (pop_scc_preserves_stack_dfn_order pop_root).
+             intros st [Hlow Heq]. subst st. split; auto.
+          -- unfold pop_scc. intro_state. hoare_auto_s.
+             destruct H as [_ Heq]. subst s1. subst s. unfold pop_scc_state.
+             destruct (stack_split_at (stack s0) pop_root) as [popped rest] eqn:?.
+             simpl. exact Hinj.
+      + intro_state. hoare_auto_s.
+        destruct H1 as [Heq _]. subst.
+        split; [exact Hwf | split; [exact Hord | exact Hinj]].
+  Qed.
+
+  Theorem tarjan_scc_preserves_Q_active_stack_frame
+          (child cur: V) (s0: @SCCSt V):
+    Hoare (fun s: @SCCSt V =>
+             Q_active_stack_frame cur s0 tt s /\
+             dfn s cur < timer s /\
+             low_pre g root child s /\
+             stack_dfn_order s /\
+             dfn_injective s)
+          (tarjan_scc g child)
+          (Q_active_stack_frame cur s0).
   Admitted.
 
   (* Compatibility name kept for older local scripts. *)
@@ -586,6 +1158,7 @@ Section IS_LOW.
              Q_low_valid a s0 tt s /\
              Q_fa_stable a s0 tt s /\
              Q_stack_frame a s0 tt s /\
+             Q_active_stack_frame u s0 tt s /\
              low_iteration_inv g root u done s /\
              (fa s0 a = u -> fa s a = u)).
 
