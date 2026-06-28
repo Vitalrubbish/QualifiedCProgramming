@@ -2030,13 +2030,23 @@ Lemma get_low_update_low_keep_stack_dfn_order (u v: V):
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
         (lv <- get' (fun s => low s v);; update_low u lv)
         (fun _ s => stack_dfn_order s).
-Admitted.
+Proof.
+  intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+  apply Hoare_conseq_pre with (P2 := fun s => stack_dfn_order s).
+  { intros s' Hs'. destruct Hs'. subst s'. exact H. }
+  apply (update_low_keep_stack_dfn_order u lv).
+Qed.
 
 Lemma get_dfn_update_low_keep_stack_dfn_order (u v: V):
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
         (dv <- get' (fun s => dfn s v);; update_low u dv)
         (fun _ s => stack_dfn_order s).
-Admitted.
+Proof.
+  intro_state. eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+  apply Hoare_conseq_pre with (P2 := fun s => stack_dfn_order s).
+  { intros s' Hs'. destruct Hs'. subst s'. exact H. }
+  apply (update_low_keep_stack_dfn_order u dv).
+Qed.
 
 Lemma process_edge_preserves_stack_dfn_order
       (u v: V) (W: V -> program (@SCCSt V) unit):
@@ -2046,7 +2056,39 @@ Lemma process_edge_preserves_stack_dfn_order
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
         (process_edge u W v)
         (fun _ s => stack_dfn_order s).
-Admitted.
+Proof.
+  intros HW.
+  unfold process_edge, if_else, If.
+  intro_state.
+  apply Hoare_choice.
+  (* === Tree edge: ~ v ∈ visited === *)
+  - apply Hoare_assume_bind. simpl.
+    apply Hoare_conseq_pre with (P2 := fun s => stack_dfn_order s).
+    { intros s1 [Hnv Heq]. subst s1. exact H. }
+    intro_state.
+    apply Hoare_conseq_pre with (P2 := fun s => stack_dfn_order s).
+    { intros s2 Heq. subst s2. exact H1. }
+    hoare_bind (set_fa_keep_stack_dfn_order v u). simpl. clear a.
+    eapply Hoare_bind. { apply (HW v). } simpl. intros _.
+    apply get_low_update_low_keep_stack_dfn_order.
+  (* === Non-tree edge: v ∈ visited === *)
+  - apply Hoare_assume_bind. simpl.
+    intro_state.
+    destruct H1 as [_ Heq0]; subst s1.
+    apply Hoare_choice.
+    (* In v (stack s0) → get' dfn;; update_low *)
+    + apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq1]; subst s1.
+      eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+      apply Hoare_conseq_pre with (P2 := fun s => stack_dfn_order s).
+      { intros s2 [Heq' _]. subst s2. exact H. }
+      apply (update_low_keep_stack_dfn_order u dv).
+    (* ~ In v (stack s0) → skip *)
+    + eapply Hoare_conseq_post.
+      2: { apply Hoare_assume_s. }
+      simpl. intros _ s [Heq _]. subst s. exact H.
+Qed.
 
 Lemma forset_preserves_stack_dfn_order
       (u: V) (W: V -> program (@SCCSt V) unit):
@@ -2056,7 +2098,17 @@ Lemma forset_preserves_stack_dfn_order
   Hoare (fun s: @SCCSt V => stack_dfn_order s)
         (forset (fun v => dg_step g u v) (process_edge u W))
         (fun _ s => stack_dfn_order s).
-Admitted.
+Proof.
+  intros HW.
+  unfold forset. hoare_fix_nolv_auto (V -> Prop).
+  simpl. intros W0 IH0 todo.
+  unfold forset_f. hoare_auto_s. intro_state. hoare_auto_s.
+  eapply Hoare_bind with (R := fun _ s => stack_dfn_order s).
+  { apply Hoare_conseq_pre with (P2 := fun s => stack_dfn_order s).
+    { intros s1 Hs1. subst s1. exact H. }
+    apply process_edge_preserves_stack_dfn_order. intros x. apply HW. }
+  simpl. intros _. apply IH0.
+Qed.
 
 (* ================================================================ *)
 (* 6. settled_closed — Forward-reachability closure for settled     *)
