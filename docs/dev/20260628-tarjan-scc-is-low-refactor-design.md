@@ -318,6 +318,43 @@ low_iteration_inv u done s /\
 不被子递归弹出；它们不属于 low 正确性本身，但 tree-edge 分支需要它们来恢复
 `low_iteration_inv u done`。
 
+当前实现进一步引入了 `Q_active_stack_frame`，用于表达“当前仍活跃的递归栈帧”
+不仅保留更老 ancestor 的栈成员关系，还保留 frame root 自身仍在栈中、root 的
+`dfn` 不变、以及更老 ancestor 的 `dfn` 不变。它对应 forset / recursive-call
+阶段真正需要的 stronger frame：
+
+```coq
+Q_active_stack_frame u s0 _ s :=
+  In u (stack s) /\
+  dfn s u = dfn s0 u /\
+  Q_stack_frame u s0 tt s /\
+  (forall anc,
+     In anc (stack s0) ->
+     dfn s0 anc < dfn s0 u ->
+     dfn s anc = dfn s0 anc).
+```
+
+`tarjan_scc_preserves_Q_active_stack_frame` 已完成。该 theorem 的入口条件需要
+显式包含：
+
+```coq
+dfn s cur < timer s
+```
+
+原因是 child 递归入口发生在 child 还未 visited 时；只有 child 的 `preloop`
+之后，`dfn child` 才等于旧 `timer`，从而可推出外层 active frame 的 root
+满足 `dfn cur < dfn child`，保证 child 的最终 `pop_scc child` 不会弹出外层
+frame。为支持递归证明，当前实现使用 list 版 active frame 聚合：
+
+- `active_stack_frames`
+- `active_stack_frames_below`
+- `active_stack_frames_below_timer`
+- `active_base`
+
+并先证明更强的 `tarjan_scc_preserves_active_base`，再用 singleton frame 投影出
+`tarjan_scc_preserves_Q_active_stack_frame`。后续 low-iteration 证明应优先复用
+这些 active-frame theorem，而不是重新展开 `pop_scc` 的 stack split 细节。
+
 ### 5.5 `Tarjan_scc_is_low.v`
 
 最终文件只保留：
@@ -383,7 +420,7 @@ Q : V -> Prop
 该谓词在 `set_fa` / primitive frame 下的稳定性前提，不能直接沿用泛型
 `P : SCCSt -> V -> Prop`。
 
-### 6.2 `Q_stack_frame`
+### 6.2 `Q_stack_frame` / `Q_active_stack_frame`
 
 只证明 ancestor 不会被子递归错误弹出：
 
@@ -606,7 +643,7 @@ set-fa tree-edge setup、pop-scc root preservation 和对应的 low-valid 保持
 这意味着后续 tree-edge continuation 可直接依赖
 `tarjan_scc_keep_fa_stable_unvisited`，不应再回到旧的泛型 `P` 版本 frame。
 
-### Step 5：独立证明 `Q_stack_frame`
+### Step 5：独立证明 `Q_stack_frame` / `Q_active_stack_frame`（已完成）
 
 证明子递归不会弹出更老的 ancestor。建议先证明纯 lemma：
 
@@ -622,6 +659,17 @@ pop_scc_keeps_older_stack_vertex :
 然后提升到 `tarjan_scc` 的 Lfix frame。
 该步骤依赖 `stack_dfn_order`、`dfn_injective`、`pop_scc_state` 和
 `stack_split_at` 的纯 list 性质；先证明 pure lemma，再包装成 Hoare / Lfix frame。
+
+当前实现已经完成这一阶段，并额外证明了 active-frame 版本。关键结论包括：
+
+- `tarjan_scc_keep_stack_frame`：保留较老 ancestor 的 stack membership；
+- `if_pop_preserves_Q_active_stack_frame`：当外层 frame root 的 `dfn` 小于 pop root
+  的 `dfn` 时，`pop_scc` 不会破坏该 active frame；
+- `tarjan_scc_preserves_Q_active_stack_frame`：child 递归完整保持外层 active frame；
+- `tarjan_scc_preserves_active_base`：list 化的 active frames 可穿过递归和 forset。
+
+因此 Step 6 的 tree-edge 分支不应再把 ancestor-stack 细节作为主要证明负担；
+它只需要在调用 child continuation 前建立相应 active-base / timer-below 前置。
 
 ### Step 6：重写 `forset` branch lemmas
 
@@ -689,14 +737,19 @@ preloop
 
 ## 12. 推荐优先级
 
-当前 primitive 层和 `Q_fa_stable` 已完成，下一步优先级应调整为：
+当前 primitive 层、`Q_fa_stable`、`Q_stack_frame` 和
+`Q_active_stack_frame` 均已完成。下一步优先级应调整为：
 
-1. 先完成 `Q_stack_frame`。这是子递归返回后证明 ancestor `u` 仍在 stack 中、
-   并安全使用 back-edge / pop-scc 相关条件的基础。
-2. 把当前 `Tarjan_scc_is_low.v` 中的 `process_edge_preserves_low_iteration` 和
-   `forset_preserves_low_iteration` 迁移到新的 `Tarjan_scc_low_forset.v`，按
+1. 先证明 `process_edge_preserves_low_iteration`。这是当前最小的关键闭环：
+   tree-edge 分支应组合 `set_fa_establishes_low_iteration_before_new_child`、
+   child continuation 的 `Q_low_valid / Q_fa_stable / Q_stack_frame /
+   Q_active_stack_frame`，以及 child 返回后的 `update_low` 恢复。
+2. 再证明 `forset_preserves_low_iteration`。完成单步 branch 后，forset 层应主要
+   是 `done` 扩展和 Proper / setoid plumbing，不应再展开 primitive state update。
+3. 把当前 `Tarjan_scc_is_low.v` 中的这两个 lemma 迁移到新的
+   `Tarjan_scc_low_forset.v`，按
    tree/back/self/cross 四个 branch 独立证明。
-3. 最后重写 `tarjan_scc_keep_low_valid`，只串联 preloop、forset、done-to-low-valid
+4. 最后重写 `tarjan_scc_keep_low_valid`，只串联 preloop、forset、done-to-low-valid
    和 if-pop primitive contract。
 
 完成这些步骤后，`Tarjan_scc_is_low.v` 的证明复杂度会从“维护一个全局巨型后置条件”下降为：
