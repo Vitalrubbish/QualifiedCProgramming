@@ -489,15 +489,8 @@ Lemma preloop_visited_reverse (u v: V) (s0 s_pre: @SCCSt V):
 Proof. Admitted.
 
 (** [preloop_a_no_child]: after preloop [a], the vertex [a] has no
-    outgoing tree edges in [state_to_dfs_tree] — it is a leaf.
-    Proof sketch: a tree edge [a → v] requires [fa s_pre v = a].
-    But [fa] is unchanged by preloop, and no [set_fa child a] has been
-    called yet, so the only vertex satisfying [fa s0 v = a] is [v = a].
-    Then [fa_ne] fails. *)
-Lemma preloop_a_no_child (a v root: V) (s0 s_pre: @SCCSt V):
-  (s0, tt, s_pre) ∈ preloop a ->
-  ~ dg_step (state_to_dfs_tree g s_pre root) a v.
-Proof. Admitted.
+    outgoing tree edges in [state_to_dfs_tree].  Requires [wf_scc_state s0]
+    to use [fa_visited] for the proof that [fa s0 w = a → w = a]. *)
 
 (** [preloop_keep_stack_in_visited]: preloop u preserves [stack_in_visited]
     because it visits u before pushing it. *)
