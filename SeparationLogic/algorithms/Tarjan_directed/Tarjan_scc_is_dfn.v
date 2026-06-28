@@ -1927,6 +1927,12 @@ Proof.
   apply (update_low_keep_in_stack u w lv).
 Qed.
 
+Lemma get_dfn_update_low_keep_in_stack (u v w: V):
+  Hoare (fun s: @SCCSt V => In w (stack s))
+        (dv <- get' (fun s => dfn s v);; update_low u dv)
+        (fun _ s => In w (stack s)).
+Admitted.
+
 Lemma process_edge_keep_in_stack (u v w: V) (W: V -> program (@SCCSt V) unit):
   (forall x, Hoare (fun s => In w (stack s)) (W x) (fun _ s => In w (stack s))) ->
   Hoare (fun s: @SCCSt V => In w (stack s))
@@ -2014,6 +2020,38 @@ Proof.
   - unfold set_low. intro_state. hoare_auto_s. subst s1 s. simpl. exact H.
   - destruct H1 as [Heq _]. subst s. exact H.
 Qed.
+
+Lemma get_low_update_low_keep_stack_dfn_order (u v: V):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (lv <- get' (fun s => low s v);; update_low u lv)
+        (fun _ s => stack_dfn_order s).
+Admitted.
+
+Lemma get_dfn_update_low_keep_stack_dfn_order (u v: V):
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (dv <- get' (fun s => dfn s v);; update_low u dv)
+        (fun _ s => stack_dfn_order s).
+Admitted.
+
+Lemma process_edge_preserves_stack_dfn_order
+      (u v: V) (W: V -> program (@SCCSt V) unit):
+  (forall x, Hoare (fun s: @SCCSt V => stack_dfn_order s)
+                   (W x)
+                   (fun _ s => stack_dfn_order s)) ->
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (process_edge u W v)
+        (fun _ s => stack_dfn_order s).
+Admitted.
+
+Lemma forset_preserves_stack_dfn_order
+      (u: V) (W: V -> program (@SCCSt V) unit):
+  (forall x, Hoare (fun s: @SCCSt V => stack_dfn_order s)
+                   (W x)
+                   (fun _ s => stack_dfn_order s)) ->
+  Hoare (fun s: @SCCSt V => stack_dfn_order s)
+        (forset (fun v => dg_step g u v) (process_edge u W))
+        (fun _ s => stack_dfn_order s).
+Admitted.
 
 (* ================================================================ *)
 (* 6. settled_closed — Forward-reachability closure for settled     *)

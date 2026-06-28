@@ -509,6 +509,42 @@ Section IS_LOW.
           (Q_stack_frame cur s0).
   Admitted.
 
+  Lemma process_edge_preserves_Q_stack_frame
+        (u v cur: V) (s0: @SCCSt V)
+        (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (Q_stack_frame cur s0 tt) (W x)
+                     (Q_stack_frame cur s0)) ->
+    Hoare (Q_stack_frame cur s0 tt)
+          (process_edge u W v)
+          (Q_stack_frame cur s0).
+  Admitted.
+
+  Lemma forset_preserves_Q_stack_frame
+        (u cur: V) (s0: @SCCSt V)
+        (W: V -> program (@SCCSt V) unit):
+    (forall x, Hoare (Q_stack_frame cur s0 tt) (W x)
+                     (Q_stack_frame cur s0)) ->
+    Hoare (Q_stack_frame cur s0 tt)
+          (forset (fun v => dg_step g u v) (process_edge u W))
+          (Q_stack_frame cur s0).
+  Admitted.
+
+  Lemma if_pop_preserves_Q_stack_frame
+        (u cur: V) (s0: @SCCSt V):
+    Hoare (fun s: @SCCSt V =>
+             Q_stack_frame cur s0 tt s /\
+             stack_dfn_order s)
+          (If (fun s => low s u = dfn s u) (pop_scc u))
+          (Q_stack_frame cur s0).
+  Admitted.
+
+  Lemma preloop_establishes_Q_stack_frame_entry
+        (u: V) (s0: @SCCSt V):
+    Hoare (fun s: @SCCSt V => s = s0)
+          (preloop u)
+          (Q_stack_frame u s0).
+  Admitted.
+
   Theorem tarjan_scc_keep_stack_frame (u: V) (s0: @SCCSt V):
     Hoare (fun s => s = s0 /\ stack_dfn_order s /\ dfn_injective s)
           (tarjan_scc g u)
