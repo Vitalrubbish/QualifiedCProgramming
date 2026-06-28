@@ -305,7 +305,49 @@ Section LOW_PRIMITIVES.
   (* Tree-edge setup contracts                                       *)
   (* ================================================================ *)
 
-  Lemma set_fa_establishes_new_child_tree_edge
+  Lemma set_fa_unvisited_preserves_tree_step
+        (a p x y: V) (s: @SCCSt V):
+    ~ a ∈ visited s ->
+    (dg_step (state_to_dfs_tree g
+       (RecordSet.set fa (fun fa0 z => if equiv_decb z a then p else fa0 z) s) root) x y <->
+     dg_step (state_to_dfs_tree g s root) x y).
+  Proof.
+    intros Hnv. split.
+    - (* -> direction *)
+      unfold dg_step. intros [e [Hstep_orig [Hfst Hsnd]]].
+      exists e. split; [| split; [exact Hfst | exact Hsnd]].
+      unfold state_to_dfs_tree in Hstep_orig |- *; simpl in Hstep_orig |- *.
+      unfold original_step in Hstep_orig |- *; simpl in Hstep_orig |- *.
+      destruct Hstep_orig as [v [Hv_vis [Hfa_neq [Hfst_eq Hsnd_eq]]]].
+      simpl in Hfa_neq, Hfst_eq. unfold equiv_decb in Hfa_neq, Hfst_eq.
+      destruct (equiv_dec v a) as [Heq | Hneq'].
+      { exfalso. apply Hnv. rewrite <- Heq. exact Hv_vis. }
+      { exists v. split; [exact Hv_vis | split; [exact Hfa_neq | split; [exact Hfst_eq | exact Hsnd_eq]]]. }
+    - (* <- direction *)
+      unfold dg_step. intros [e [Hstep_orig [Hfst Hsnd]]].
+      exists e. split; [| split; [exact Hfst | exact Hsnd]].
+      unfold state_to_dfs_tree in Hstep_orig |- *; simpl in Hstep_orig |- *.
+      unfold original_step in Hstep_orig |- *; simpl in Hstep_orig |- *.
+      destruct Hstep_orig as [v [Hv_vis [Hfa_neq [Hfst_eq Hsnd_eq]]]].
+      destruct (equiv_decb v a) eqn:Heq_decb.
+      { (* v ==b a = true, so v = a *) exfalso.
+        unfold equiv_decb in Heq_decb.
+        destruct (equiv_dec v a) as [Heq_va | Hneq_va]; [| discriminate Heq_decb].
+        apply Hnv. rewrite <- Heq_va. exact Hv_vis. }
+      { (* v ==b a = false, so v <> a *)
+        exists v. rewrite Heq_decb. simpl.
+        split; [exact Hv_vis | split; [exact Hfa_neq | split; [exact Hfst_eq | exact Hsnd_eq]]]. }
+  Qed.
+
+  Lemma set_fa_preserves_scc_low_valid_v_when_unvisited
+        (v a p: V) (s: @SCCSt V):
+    ~ a ∈ visited s ->
+    scc_low_valid_v g root s v ->
+    scc_low_valid_v g root
+      (RecordSet.set fa (fun fa0 x => if equiv_decb x a then p else fa0 x) s) v.
+  Admitted.
+
+  Lemma set_fa_establishes_new_child_parent
         (u a: V):
     Hoare (fun s: @SCCSt V =>
              dg_step g u a /\
@@ -314,9 +356,55 @@ Section LOW_PRIMITIVES.
           (set_fa a u)
           (fun _ s =>
              fa s a = u /\
+             fa s a <> a).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl. unfold equiv_decb.
+    destruct H as [_ [Huvis Havis]].
+    destruct (equiv_dec a a) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+    split; [reflexivity |].
+    intro Hua. apply Havis. rewrite <- Hua. exact Huvis.
+  Qed.
+
+  Lemma set_fa_visit_establishes_new_child_tree_edge
+        (u a: V):
+    Hoare (fun s: @SCCSt V =>
+             dg_step g u a /\
+             u ∈ visited s /\
+             ~ a ∈ visited s)
+          (set_fa a u;; visit a)
+          (fun _ s =>
+             fa s a = u /\
              fa s a <> a /\
              dg_step (state_to_dfs_tree g s root) u a).
-  Admitted.
+  Proof.
+    unfold set_fa, visit. unfold_op. intro_state. hoare_auto_s.
+    subst s. unfold RecordSet.set. simpl.
+    destruct H as (Hdg & Hu_vis & Ha_nvis).
+    split.
+    - (* fa a = u *) simpl. unfold equiv_decb.
+      destruct (equiv_dec a a) as [_ | Hc]; [reflexivity | exfalso; apply Hc; reflexivity].
+    - split.
+      + (* fa a <> a *) simpl. unfold equiv_decb.
+        destruct (equiv_dec a a) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+        intro Heq. apply Ha_nvis. rewrite <- Heq. exact Hu_vis.
+      + (* dg_step (state_to_dfs_tree ...) u a *)
+        unfold state_to_dfs_tree. simpl.
+        destruct Hdg as [e [Horig_step [Hfst_eq Hsnd_eq]]].
+        unfold dg_step.
+        exists e. split.
+        { unfold original_step. simpl.
+          exists a. split.
+          - sets_unfold. right. reflexivity.
+          - split.
+            * unfold equiv_decb. destruct (equiv_dec a a) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+              intro Heq. apply Ha_nvis. rewrite <- Heq. exact Hu_vis.
+            * split.
+              -- unfold equiv_decb. destruct (equiv_dec a a) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+                 rewrite Hfst_eq. reflexivity.
+              -- exact Hsnd_eq. }
+        { split; [exact Hfst_eq | exact Hsnd_eq]. }
+  Qed.
 
   Lemma set_fa_establishes_low_iteration_before_new_child
         (u a: V) (done: V -> Prop):
@@ -410,9 +498,15 @@ Section LOW_PRIMITIVES.
               [exfalso; apply Hndone; rewrite <- Heq; exact Hdone_w |
                exact Hfa_neq_w] |
             exact Hlow_eq_w]]]].
-    - (* children_low_valid — set_fa only changes fa a,
-         which is not a tree child of any done v because ~ done a *)
-      admit.
+    - (* children_low_valid: a is not visited, so changing fa a does not
+         change the DFS tree seen by already visited/done children. *)
+      unfold children_low_valid in Hchild |- *.
+      intros v Hdone_v Hdg_v Hfa_eq Hfa_neq_v.
+      simpl in Hfa_eq, Hfa_neq_v. unfold equiv_decb in Hfa_eq, Hfa_neq_v.
+      destruct (equiv_dec v a) as [Heq | Hneq'].
+      + exfalso. apply Hndone. rewrite <- Heq. exact Hdone_v.
+      + apply (set_fa_preserves_scc_low_valid_v_when_unvisited v a u s0 Hnv).
+        apply Hchild; auto.
     - (* fa_child_of_u *)
       unfold fa_child_of_u in Hfa_child |- *.
       intros v [Hfa_v Hfa_neq].
