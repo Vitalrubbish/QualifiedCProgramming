@@ -625,33 +625,6 @@ Section IS_LOW.
 
 
   (* ================================================================ *)
-  (* Group B: preloop semantic lemmas (L12–L13)                       *)
-  (* ================================================================ *)
-
-  (** Proof strategy: [preloop a] changes visited[a], dfn[a], low[a],
-      timer, stack.  [fa] is unchanged.  For [w <> a], the key is that
-      [w] cannot reach [fa s0 a] via tree edges in the calling context
-      (both are children of the same ancestor, and tree edges go parent→child
-      downward).  Hence the new vertex [a] and its back-edges are unreachable
-      from [w], so [scc_low_tree s w] is unchanged.  Combined with dfn/low
-      preservation for [w <> a] (via [preloop_keep_dfn_forall] etc.),
-      [scc_is_low_v s w] is preserved.
-
-      A helper lemma [sibling_not_reachable] is needed to establish the
-      non-reachability condition in the forset context. *)
-
-  Lemma preloop_preserves_scc_low_tree (a w: V) (s0 s_pre: SCCSt):
-    w <> a -> (s0, tt, s_pre) ∈ preloop a ->
-    scc_low_tree s0 w == scc_low_tree s_pre w.
-  Proof. Admitted.
-
-  Lemma preloop_preserves_scc_is_low_v (a w: V) (s0 s_pre: SCCSt):
-    w <> a -> (s0, tt, s_pre) ∈ preloop a ->
-    scc_is_low_v s0 w -> scc_is_low_v s_pre w.
-  Proof. Admitted.
-
-
-  (* ================================================================ *)
   (* 6. Invariant Definitions                                         *)
   (* ================================================================ *)
 
@@ -2794,6 +2767,91 @@ Section IS_LOW.
   Qed.
 
   (* ================================================================ *)
+  (* Group B: preloop semantic lemmas (L12–L13)                       *)
+  (* ================================================================ *)
+
+  Lemma preloop_preserves_scc_low_tree (a w: V) (s0 s_pre: SCCSt):
+    w <> a ->
+    wf_scc_state s0 ->
+    ~ dg_reachable (state_to_dfs_tree g s0 root) w (fa s0 a) ->
+    (s0, tt, s_pre) ∈ preloop a ->
+    scc_low_tree s0 w == scc_low_tree s_pre w.
+  Proof.
+    intros Hne Hwf Hnot_reach Hpreloop.
+    destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+    (* Extract state preservation facts from preloop Hoare triples. *)
+    pose proof (preloop_keep_fa_eq a) as Hfa_eq_all.
+    pose proof (preloop_keep_visited) as Hvis_keep.
+    pose proof (preloop_keep_stack_elements a) as Hstack_keep.
+    (* Helper: lift a dg_step in the s0 dfs tree to s_pre. *)
+    (* Unpack Hoare triples into concrete equalities. *)
+    assert (Hfa_eq: forall v, fa s_pre v = fa s0 v). {
+      intros v.
+      unfold Hoare in Hfa_eq_all. sets_unfold in Hfa_eq_all.
+      apply (Hfa_eq_all v (fa s0 v) s0 tt s_pre); [reflexivity | exact Hpreloop]. }
+    assert (Hvis_grow: forall v, v ∈ visited s0 -> v ∈ visited s_pre). {
+      intros v Hvis.
+      unfold Hoare in Hvis_keep. sets_unfold in Hvis_keep.
+      apply (Hvis_keep a v s0 tt s_pre Hvis Hpreloop). }
+    assert (Hstack_grow: forall v, In v (stack s0) -> In v (stack s_pre)). {
+      intros v Hinstk.
+      unfold Hoare in Hstack_keep. sets_unfold in Hstack_keep.
+      apply (Hstack_keep v s0 tt s_pre); [exact Hinstk | exact Hpreloop]. }
+    (* Helper: lift a dg_step in the s0 dfs tree to s_pre. *)
+    assert (Hstep_lift: forall x y,
+      dg_step (state_to_dfs_tree g s0 root) x y ->
+      dg_step (state_to_dfs_tree g s_pre root) x y). {
+      intros x y Hstep.
+      unfold dg_step, original_step, state_to_dfs_tree in *; simpl in *.
+      destruct Hstep as [e [[v [Hv_vis [Hv_fa_ne [Hfst_fa Hsnd_v]]]] [Hfst_eq Hsnd_eq]]].
+      exists e. split.
+      - exists v. split; [apply Hvis_grow; exact Hv_vis |].
+        split; [rewrite Hfa_eq; exact Hv_fa_ne | split; [rewrite Hfa_eq; exact Hfst_fa | exact Hsnd_v]].
+      - split; [exact Hfst_eq | exact Hsnd_eq]. }
+    (* Helper: lift dg_reachable from s0 to s_pre.
+       Clear irrelevant hypotheses to avoid induction pollution. *)
+    assert (Hreach_lift: forall z,
+      dg_reachable (state_to_dfs_tree g s0 root) w z ->
+      dg_reachable (state_to_dfs_tree g s_pre root) w z). {
+      intros z Hz. apply (dg_reachable_lift
+        (state_to_dfs_tree g s0 root) (state_to_dfs_tree g s_pre root) w z Hstep_lift Hz). }
+    (* Now prove scc_low_tree equality (set inclusion both ways). *)
+    unfold scc_low_tree, scc_low_reachable, scc_back_edge.
+    hnf. intro y. split.
+    - (* →: s0 ⊆ s_pre *)
+      intros [z [Hz_reach Hz_end]].
+      destruct Hz_end as [Heq | [Hdg_step [Hinstk Hnotree]]].
+      + exists z. split; [apply Hreach_lift; exact Hz_reach | left; exact Heq].
+      + exists z. split; [apply Hreach_lift; exact Hz_reach |].
+        right. split; [exact Hdg_step | split; [apply (Hstack_grow y); exact Hinstk |]].
+        (* ~dg_step(tree(s_pre), z, y): tree edges are unchanged.
+           If such a step existed in s_pre, then z=fa_s_pre[y] and y ∈ visited s_pre.
+           Since fa unchanged and visited grows, the same step exists in s0. *)
+        intro Htree.
+        unfold dg_step, original_step, state_to_dfs_tree in *; simpl in *.
+        destruct Htree as [e [[v [Hv_vis_pre [Hv_fa_ne_pre [Hfst_fa_pre Hsnd_v_pre]]]] [Hfst_eq Hsnd_eq]]].
+        apply Hnotree.
+        exists e. split.
+        { exists v. split.
+          - (* v = y from Hsnd_v_pre / Hsnd_eq; y ∈ stack[s0] given by Hinstk *)
+            rewrite Hsnd_v_pre in Hsnd_eq. rewrite Hsnd_eq. apply Hsiv. exact Hinstk.
+          - split; [rewrite (Hfa_eq v) in Hv_fa_ne_pre; exact Hv_fa_ne_pre | split; [rewrite (Hfa_eq v) in Hfst_fa_pre; exact Hfst_fa_pre | exact Hsnd_v_pre]]. }
+        { split; [exact Hfst_eq | exact Hsnd_eq]. }
+    - (* ←: s_pre ⊆ s0 — admitted.
+         New paths in s_pre can only involve [a] (the only new vertex),
+         but [w] cannot reach [fa s0 a] (Hnot_reach), so [a] is unreachable.
+         Formal proof needs reverse dg_step lift + dg_reachable induction. *)
+      admit.
+  Admitted.
+
+  Lemma preloop_preserves_scc_is_low_v (a w: V) (s0 s_pre: SCCSt):
+    w <> a ->
+    ~ dg_reachable (state_to_dfs_tree g s0 root) w (fa s0 a) ->
+    (s0, tt, s_pre) ∈ preloop a ->
+    scc_is_low_v s0 w -> scc_is_low_v s_pre w.
+  Proof. Admitted.
+
+  (* ================================================================ *)
   (* 9. Main Theorem: Single-vertex Low-link Correctness               *)
   (* ================================================================ *)
 
@@ -2855,6 +2913,21 @@ Section IS_LOW.
       (conj Hsrc_s (conj Hchild_s (conj Hfa_child_s (conj Hfa_not_done_s
         (conj Hdonevis_s (conj Hlow_post (conj Hvis Hfa_pres))))))))))).
   Qed.
+
+  (* ================================================================ *)
+  (* Group D — deferred: tree_edge_preserves_J (L23)                  *)
+  (* ================================================================ *)
+
+  Lemma tree_edge_preserves_J (a v w: V) (done: V -> Prop) (s_pre s0: SCCSt)
+        (W: V -> program SCCSt unit)
+        (IH: forall s_init x, Hoare (fun s => s = s_init) (W x) (Q_low x s_init)):
+    Hoare (fun s => s = s0 /\ J w s_pre done s /\ ~ v ∈ visited s /\ dg_step g a v)
+          (set_fa v a ;; W v ;; lv <- get' (fun s' => low s' v) ;; update_low a lv)
+          (fun _ s => J w s_pre (done ∪ [v]) s).
+  Proof.
+    (* Requires threading Q_low IH through set_fa (L1-L11), W v (Q_low FA part),
+       get' (L14-L16), and update_low (L17-L20).  Admitted pending Rounds 7-8. *)
+  Admitted.
 
   (* ================================================================ *)
   (* 9.6. Independent Fa Preservation (Separate Lfix Induction)       *)

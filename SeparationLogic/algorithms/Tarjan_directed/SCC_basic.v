@@ -107,6 +107,23 @@ Section SCC_DEFS.
     eapply dg_reachable_trans; eauto.
   Qed.
 
+  (** [dg_reachable_lift]: If every [dg_step] in [g] is also a step
+      in [g'], then reachability lifts from [g] to [g']. *)
+  Lemma dg_reachable_lift (g': OriginalGraphType V E) (x y: V):
+    (forall u v, dg_step g u v -> dg_step g' u v) ->
+    dg_reachable g x y -> dg_reachable g' x y.
+  Proof.
+    intros Hstep_lift Hreach.
+    unfold dg_reachable in *.
+    revert Hstep_lift.
+    pattern x, y. apply Coq.Relations.Relation_Operators.clos_refl_trans_ind with (R := dg_step g).
+    - intros x0 y0 Hstep Hstep_lift'. apply Relation_Operators.rt_step. apply Hstep_lift'. exact Hstep.
+    - intros x0 Hstep_lift'. apply Relation_Operators.rt_refl.
+    - intros x0 y0 z0 Hr1 IH1 Hr2 IH2 Hstep_lift'.
+      apply (Relation_Operators.rt_trans _ _ _ y0); [apply IH1; exact Hstep_lift' | apply IH2; exact Hstep_lift'].
+    - exact Hreach.
+  Qed.
+
   (* ================================================================ *)
   (* Section 2: mutually_reachable — Mutual reachability              *)
   (* ================================================================ *)

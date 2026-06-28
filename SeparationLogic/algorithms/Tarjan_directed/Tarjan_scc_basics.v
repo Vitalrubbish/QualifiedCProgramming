@@ -467,6 +467,17 @@ Proof.
   subst s. simpl. left; reflexivity.
 Qed.
 
+(** [preloop_keep_stack_elements]: preloop pushes [u] but keeps all
+    existing stack elements. *)
+Lemma preloop_keep_stack_elements (u v: V):
+  Hoare (fun s: @SCCSt V => In v (stack s))
+        (preloop u)
+        (fun _ s => In v (stack s)).
+Proof.
+  unfold preloop. unfold_op. intro_state. hoare_auto_s.
+  subst s. simpl. right. exact H.
+Qed.
+
 (** [preloop_keep_stack_in_visited]: preloop u preserves [stack_in_visited]
     because it visits u before pushing it. *)
 Lemma preloop_keep_stack_in_visited (u: V):
