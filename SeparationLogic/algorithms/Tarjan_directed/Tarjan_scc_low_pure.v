@@ -197,6 +197,32 @@ Section LOW_PURE.
     - apply Hlow. exact Hu.
   Qed.
 
+  Lemma scc_low_valid_v_bound_self (s: @SCCSt V) (u: V):
+    scc_low_valid_v g root s u ->
+    low s u <= dfn s u.
+  Proof.
+    unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset.
+    intros [n [[_ Hbound] Hlow]].
+    rewrite <- Hlow.
+    pose proof (min_nonempty_exists
+                  (fun x => dfn s x)
+                  (scc_back_edge g root s u ∪ [u])) as Hmin.
+    destruct Hmin as [m Hm].
+    { exists u. sets_unfold. right. reflexivity. }
+    specialize (Hbound m).
+    assert (Hm_outer :
+              (min_value_of_subset Nat.le
+                 (scc_back_edge g root s u ∪ [u]) (dfn s)) m).
+    { exact Hm. }
+    specialize (Hbound (or_intror Hm_outer)).
+    destruct Hm as [x [[Hx Hmin_x] Hm_eq]].
+    rewrite <- Hm_eq in Hbound.
+    eapply Nat.le_trans; [exact Hbound |].
+    apply Hmin_x.
+    right.
+    reflexivity.
+  Qed.
+
   (* ================================================================ *)
   (* Setoid support for local iteration invariants                   *)
   (* ================================================================ *)
