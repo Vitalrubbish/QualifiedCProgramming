@@ -2015,6 +2015,7 @@ Section IS_LOW.
     In u (stack s) /\
     done_visited done s /\
     done_reachable_closed g done s /\
+    done_tree_reachable_closed g u done s /\
     low_frontier g u done s /\
     low_src g u done s /\
     children_low_valid g root u done s /\
@@ -2024,6 +2025,20 @@ Section IS_LOW.
     stack_dfn_order s /\
     dfn_injective s.
 
+  Definition done_vertices_below_current
+             (u a: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
+    forall v,
+      done v ->
+      dfn s v < dfn s a.
+
+  Definition stack_segment_reachable_closed
+             (a: V) (s: @SCCSt V): Prop :=
+    forall v w,
+      In v (stack s) ->
+      dfn s a <= dfn s v ->
+      dg_reachable g v w ->
+      w ∈ visited s.
+
   Definition low_tree_child_parent_pending
              (u a: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
     wf_scc_state g root s /\
@@ -2032,11 +2047,13 @@ Section IS_LOW.
     In u (stack s) /\
     done_visited done s /\
     done_reachable_closed g done s /\
+    done_tree_reachable_closed g u done s /\
     low_frontier g u done s /\
     low_src g u done s /\
     children_low_valid g root u done s /\
     fa_child_of_u g u s /\
     fa_not_done_implies_eq_u u (done ∪ [a]) s /\
+    done_vertices_below_current u a done s /\
     stack_dfn_order s /\
     dfn_injective s /\
     dg_step g u a /\
@@ -2048,6 +2065,7 @@ Section IS_LOW.
   Definition low_tree_child_after_recursive
              (u a: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
     low_tree_child_parent_pending u a done s /\
+    done_tree_reachable_closed g u (done ∪ [a]) s /\
     scc_low_valid_v g root s a.
 
   Lemma set_fa_establishes_pending_fa_not_done
@@ -2063,7 +2081,7 @@ Section IS_LOW.
     subst s. unfold RecordSet.set. simpl.
     unfold fa_not_done_implies_eq_u.
     destruct H as [Hiter Hndone].
-    destruct Hiter as (_ & _ & _ & _ & _ & _ & _ & _ & Hfa_not).
+    destruct Hiter as (_ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & Hfa_not).
     intros w Hnot_done Hfa_w.
     simpl in Hfa_w. unfold equiv_decb in Hfa_w.
     destruct (equiv_dec w a) as [Hw_eq_a | Hw_neq_a].
@@ -2089,8 +2107,8 @@ Section IS_LOW.
   Proof.
     intros s Hiter Hord Hinj Hdg Hndone Hvis Hnot_stack.
     destruct Hiter as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
-                       Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
-                       Hfa_not).
+                       Hclosed & Htree_closed & Hfront & Hsrc & Hchild &
+                       Hfa_child & Hfa_not).
     split; [| split; [exact Hord | exact Hinj]].
     unfold low_iteration_inv.
     split; [exact Hwf | split; [exact Hsettled | split; [exact Huvis | split; [exact Hustack |]]]].
@@ -2101,42 +2119,50 @@ Section IS_LOW.
       + subst w. exact Hvis.
     - split.
       + unfold done_reachable_closed in Hclosed |- *.
-        intros v w Hv_done Hreach.
+        intros v w Hv_done Hnot_stack_v Hreach.
         sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
         * eapply Hclosed; eauto.
         * subst v. eapply Hsettled; eauto.
       + split.
-        * unfold low_frontier in Hfront |- *.
-        destruct Hfront as [Hle Hfront]. split; [exact Hle |].
-        intros v Hv_done Hv_dg.
-        sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-        -- apply Hfront; auto.
-        -- subst v. split.
-           ++ intro Hfa_a.
-              specialize (Hfa_not a Hndone Hfa_a). subst a.
-              contradiction.
-           ++ intro Ha_stack. contradiction.
+        * unfold done_tree_reachable_closed in Htree_closed |- *.
+          intros v w Hv_done Hnot_stack_v Hfa_v Hfa_neq_v Hreach.
+          sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+          -- eapply Htree_closed; eauto.
+          -- subst v.
+             specialize (Hfa_not a Hndone Hfa_v). subst a.
+             contradiction.
         * split.
-          -- unfold low_src in Hsrc |- *.
-          destruct Hsrc as [Hsrc | [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_neq_v & Hlow_v) |
-                                   (w & Hdone_w & Hdg_w & Hstack_w & Hfa_neq_w & Hlow_w)]].
-          ++ left. exact Hsrc.
-          ++ right. left. exists v. repeat split; auto. sets_unfold. left. exact Hdone_v.
-          ++ right. right. exists w. repeat split; auto. sets_unfold. left. exact Hdone_w.
-          -- split.
-             ++ unfold children_low_valid in Hchild |- *.
-             intros v Hv_done Hv_dg Hfa_v Hfa_neq_v.
-             sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-             ** apply Hchild; auto.
-             ** subst v.
-                specialize (Hfa_not a Hndone Hfa_v). subst a.
+          { unfold low_frontier in Hfront |- *.
+            destruct Hfront as [Hle Hfront]. split; [exact Hle |].
+            intros v Hv_done Hv_dg.
+            sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+            - apply Hfront; auto.
+            - subst v. split.
+              + intro Hfa_a.
+                specialize (Hfa_not a Hndone Hfa_a). subst a.
                 contradiction.
-             ++ split.
-                ** exact Hfa_child.
-                ** unfold fa_not_done_implies_eq_u in Hfa_not |- *.
-                   intros v Hnot_done Hfa_v.
-                   apply Hfa_not; [| exact Hfa_v].
-                   intro Hdone_v. apply Hnot_done. sets_unfold. left. exact Hdone_v.
+              + intro Ha_stack. contradiction. }
+          { split.
+            - unfold low_src in Hsrc |- *.
+              destruct Hsrc as [Hsrc | [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_neq_v & Hlow_v) |
+                                       (w & Hdone_w & Hdg_w & Hstack_w & Hfa_neq_w & Hlow_w)]].
+              + left. exact Hsrc.
+              + right. left. exists v. repeat split; auto. sets_unfold. left. exact Hdone_v.
+              + right. right. exists w. repeat split; auto. sets_unfold. left. exact Hdone_w.
+            - split.
+              + unfold children_low_valid in Hchild |- *.
+                intros v Hv_done Hv_dg Hfa_v Hfa_neq_v.
+                sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+                * apply Hchild; auto.
+                * subst v.
+                  specialize (Hfa_not a Hndone Hfa_v). subst a.
+                  contradiction.
+              + split.
+                * exact Hfa_child.
+	                * unfold fa_not_done_implies_eq_u in Hfa_not |- *.
+	                  intros v Hnot_done Hfa_v.
+	                  apply Hfa_not; [| exact Hfa_v].
+		                  intro Hdone_v. apply Hnot_done. sets_unfold. left. exact Hdone_v. }
   Qed.
 
   Lemma low_iteration_extend_done_skip_nonstack
@@ -2207,8 +2233,8 @@ Section IS_LOW.
       unfold RecordSet.set. simpl.
       destruct Hsnap as [Hiter [Hord [Hinj [Hdg [Hndone [Hvis Hstack_a]]]]]].
       destruct Hiter as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
-                         Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
-                         Hfa_not).
+                         Hclosed & Htree_closed & Hfront & Hsrc & Hchild &
+                         Hfa_child & Hfa_not).
       split; [| split].
       + unfold low_iteration_inv.
         split.
@@ -2228,99 +2254,107 @@ Section IS_LOW.
                 ** eapply Hclosed; eauto.
                 ** subst v. contradiction.
              ++ split.
-                ** unfold low_frontier in Hfront |- *.
-                destruct Hfront as [Hle Hfront].
-                split.
-                { simpl. unfold equiv_decb.
-                  destruct (equiv_dec u u) as [_ | Hc];
-                    [assert (dfn snap a <= dfn snap u) by lia; exact H
-                    | exfalso; apply Hc; reflexivity]. }
-                intros v Hv_done Hv_dg.
-                sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-                { specialize (Hfront v Hv_done Hv_dg) as [Hfa_part Hstack_part].
-                   split; intros Hcase.
-                   --- simpl. unfold equiv_decb.
-                       destruct (equiv_dec u u) as [_ | Hc];
-                         [destruct (equiv_dec v u) as [Hv_eq_u | Hv_neq_u];
-                            [lia |
-                             assert (dfn snap a <= low snap v) by
-                               (simpl in Hcase; pose proof (Hfa_part Hcase); lia); exact H]
-                         | exfalso; apply Hc; reflexivity].
-                   --- simpl. unfold equiv_decb.
-                       destruct (equiv_dec u u) as [_ | Hc];
-                         [assert (dfn snap a <= dfn snap v) by
-                            (pose proof (Hstack_part Hcase); lia); exact H
-                         | exfalso; apply Hc; reflexivity]. }
-                { subst v.
-                   split;
-                     [ intros Hfa_a;
-                       simpl; unfold equiv_decb;
-                       destruct (equiv_dec u u) as [_ | Hc];
-                       [ destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u];
-                         [ lia
-                         | specialize (Hfa_not a Hndone Hfa_a); contradiction ]
-                       | exfalso; apply Hc; reflexivity ]
-                     | intros _;
-                       simpl; unfold equiv_decb;
-                       destruct (equiv_dec u u) as [_ | Hc];
-                       [ lia | exfalso; apply Hc; reflexivity ] ]. }
-                ** split.
-                   --- unfold low_src in Hsrc |- *.
-                   unfold equiv_decb.
-                   destruct (equiv_dec u u) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
-	                   destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u].
-	                   { left. simpl. unfold equiv_decb.
-	                     destruct (equiv_dec u u) as [_ | Hc];
-	                       [rewrite Ha_eq_u; reflexivity | exfalso; apply Hc; reflexivity]. }
-		                   { right. right. exists a.
-		                     split; [sets_unfold; right; reflexivity |].
-		                     split; [exact Hdg |].
-		                     split; [exact Hstack_a |].
-		                     split.
-		                     - intro Hfa_a. specialize (Hfa_not a Hndone Hfa_a). contradiction.
-		                     - simpl. unfold equiv_decb.
-		                       destruct (equiv_dec u u) as [_ | Hc];
-		                         [destruct (equiv_dec a u) as [Ha_eq_u' | Ha_neq_u'];
-		                          [contradiction | reflexivity]
-		                         | exfalso; apply Hc; reflexivity]. }
-                   --- split.
-	                   +++ unfold children_low_valid in Hchild |- *.
-	                       intros v Hv_done Hv_dg Hfa_v Hfa_neq_v.
-	                       sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-	                       { apply (set_low_preserves_scc_low_valid_v_when_not_child g root v u (dfn snap a) snap).
-	                         - intro Hv_eq_u. subst v. contradiction.
-	                         - intro Htree_vu.
-	                           unfold wf_scc_state in Hwf.
-	                           destruct Hwf as [_ [_ [Hvalid _]]].
-	                           assert (Hvu_lt: dfn snap v < dfn snap u).
-	                           { apply Hvalid. exact Htree_vu. }
-	                           assert (Huv_lt: dfn snap u < dfn snap v).
-	                           { eapply fa_parent_dfn_lt; eauto. }
-	                           lia.
-	                         - apply Hchild; auto. }
-	                       { rewrite Hv_eq in Hfa_v.
-	                         destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u].
-	                         - exfalso. apply Hfa_neq_v.
-	                           simpl in Hfa_v |- *.
-	                           rewrite Hfa_v.
-	                           rewrite <- Hv_eq.
-	                           symmetry. exact Ha_eq_u.
-	                         - simpl in Hfa_v.
-	                           rewrite <- Hv_eq in Hfa_v.
-	                           specialize (Hfa_not a Hndone Hfa_v). contradiction. }
-	                   +++ split.
-	                       { exact Hfa_child. }
-	                       { unfold fa_not_done_implies_eq_u in Hfa_not |- *.
-	                         intros v Hnot_done Hfa_v.
-	                         apply Hfa_not; [| exact Hfa_v].
-	                         intro Hdone_v. apply Hnot_done. sets_unfold. left. exact Hdone_v. }
+                ** unfold done_tree_reachable_closed in Htree_closed |- *.
+                   intros v w Hv_done Hnot_stack_v Hfa_v Hfa_neq_v Hreach.
+                   sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+                   --- eapply Htree_closed; eauto.
+                   --- subst v.
+                       specialize (Hfa_not a Hndone Hfa_v). subst a.
+                       contradiction.
+	                ** split.
+                  { unfold low_frontier in Hfront |- *.
+                    destruct Hfront as [Hle Hfront].
+                    split.
+                    - simpl. unfold equiv_decb.
+                      destruct (equiv_dec u u) as [_ | Hc];
+                        [assert (dfn snap a <= dfn snap u) by lia; exact H
+                        | exfalso; apply Hc; reflexivity].
+                    - intros v Hv_done Hv_dg.
+                      sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+                      + specialize (Hfront v Hv_done Hv_dg) as [Hfa_part Hstack_part].
+                        split; intros Hcase.
+                        * simpl. unfold equiv_decb.
+                          destruct (equiv_dec u u) as [_ | Hc];
+                            [destruct (equiv_dec v u) as [Hv_eq_u | Hv_neq_u];
+                             [lia |
+                              assert (dfn snap a <= low snap v) by
+                                (simpl in Hcase; pose proof (Hfa_part Hcase); lia); exact H]
+                            | exfalso; apply Hc; reflexivity].
+                        * simpl. unfold equiv_decb.
+                          destruct (equiv_dec u u) as [_ | Hc];
+                            [assert (dfn snap a <= dfn snap v) by
+                               (pose proof (Hstack_part Hcase); lia); exact H
+                            | exfalso; apply Hc; reflexivity].
+                      + subst v.
+                        split.
+                        * intros Hfa_a.
+                          simpl. unfold equiv_decb.
+                          destruct (equiv_dec u u) as [_ | Hc].
+                          -- destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u].
+                             ++ lia.
+                             ++ specialize (Hfa_not a Hndone Hfa_a). contradiction.
+                          -- exfalso; apply Hc; reflexivity.
+                        * intros _.
+                          simpl. unfold equiv_decb.
+                          destruct (equiv_dec u u) as [_ | Hc];
+                            [lia | exfalso; apply Hc; reflexivity]. }
+                  { split.
+                    - unfold low_src in Hsrc |- *.
+                      unfold equiv_decb.
+                      destruct (equiv_dec u u) as [_ | Hc]; [| exfalso; apply Hc; reflexivity].
+                      destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u].
+                      + left. simpl. unfold equiv_decb.
+                        destruct (equiv_dec u u) as [_ | Hc];
+                          [rewrite Ha_eq_u; reflexivity | exfalso; apply Hc; reflexivity].
+                      + right. right. exists a.
+                        split; [sets_unfold; right; reflexivity |].
+                        split; [exact Hdg |].
+                        split; [exact Hstack_a |].
+                        split.
+                        * intro Hfa_a. specialize (Hfa_not a Hndone Hfa_a). contradiction.
+                        * simpl. unfold equiv_decb.
+                          destruct (equiv_dec u u) as [_ | Hc];
+                            [destruct (equiv_dec a u) as [Ha_eq_u' | Ha_neq_u'];
+                             [contradiction | reflexivity]
+                            | exfalso; apply Hc; reflexivity].
+                    - split.
+                      + unfold children_low_valid in Hchild |- *.
+                        intros v Hv_done Hv_dg Hfa_v Hfa_neq_v.
+                        sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+                        * apply (set_low_preserves_scc_low_valid_v_when_not_child g root v u (dfn snap a) snap).
+                          -- intro Hv_eq_u. subst v. contradiction.
+                          -- intro Htree_vu.
+                             unfold wf_scc_state in Hwf.
+                             destruct Hwf as [_ [_ [Hvalid _]]].
+                             assert (Hvu_lt: dfn snap v < dfn snap u).
+                             { apply Hvalid. exact Htree_vu. }
+                             assert (Huv_lt: dfn snap u < dfn snap v).
+                             { eapply fa_parent_dfn_lt; eauto. }
+                             lia.
+                          -- apply Hchild; auto.
+                        * rewrite Hv_eq in Hfa_v.
+                          destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u].
+                          -- exfalso. apply Hfa_neq_v.
+                             simpl in Hfa_v |- *.
+                             rewrite Hfa_v.
+                             rewrite <- Hv_eq.
+                             symmetry. exact Ha_eq_u.
+                          -- simpl in Hfa_v.
+                             rewrite <- Hv_eq in Hfa_v.
+                             specialize (Hfa_not a Hndone Hfa_v). contradiction.
+                      + split.
+                        * exact Hfa_child.
+                        * unfold fa_not_done_implies_eq_u in Hfa_not |- *.
+                          intros v Hnot_done Hfa_v.
+                          apply Hfa_not; [| exact Hfa_v].
+                          intro Hdone_v. apply Hnot_done. sets_unfold. left. exact Hdone_v. }
       + unfold stack_dfn_order. simpl. exact Hord.
       + exact Hinj.
     - destruct H1 as [Heq_state Hnot_lt]. subst s.
       destruct Hsnap as [Hiter [Hord [Hinj [Hdg [Hndone [Hvis Hstack_a]]]]]].
       destruct Hiter as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
-                         Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
-                         Hfa_not).
+                         Hclosed & Htree_closed & Hfront & Hsrc & Hchild &
+                         Hfa_child & Hfa_not).
       destruct H as [Heq_snap Hdv]. subst s0. subst dv.
       split; [| split; [exact Hord | exact Hinj]].
       unfold low_iteration_inv.
@@ -2337,6 +2371,14 @@ Section IS_LOW.
           { eapply Hclosed; eauto. }
           { subst v. contradiction. }
         * split.
+          { unfold done_tree_reachable_closed in Htree_closed |- *.
+            intros v w Hv_done Hnot_stack_v Hfa_v Hfa_neq_v Hreach.
+            sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+            - eapply Htree_closed; eauto.
+            - subst v.
+              specialize (Hfa_not a Hndone Hfa_v). subst a.
+              contradiction. }
+          { split.
           { unfold low_frontier in Hfront |- *.
           destruct Hfront as [Hle Hfront]. split; [exact Hle |].
           intros v Hv_done Hv_dg.
@@ -2347,7 +2389,7 @@ Section IS_LOW.
               destruct (equiv_dec a u) as [Ha_eq_u | Ha_neq_u].
               + rewrite Ha_eq_u. lia.
               + specialize (Hfa_not a Hndone Hfa_a). contradiction.
-            - intro Hstack_a'. lia. } }
+	            - intro Hstack_a'. lia. } }
           { split.
             - unfold low_src in Hsrc |- *.
              destruct Hsrc as [Hsrc | [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_neq_v & Hlow_v) |
@@ -2370,7 +2412,7 @@ Section IS_LOW.
                 * unfold fa_not_done_implies_eq_u in Hfa_not |- *.
                   intros v Hnot_done Hfa_v.
                   apply Hfa_not; [| exact Hfa_v].
-                  intro Hdone_v. apply Hnot_done. sets_unfold. left. exact Hdone_v. }
+	                  intro Hdone_v. apply Hnot_done. sets_unfold. left. exact Hdone_v. } }
   Qed.
 
   Lemma get_low_update_low_tree_child_extends_low_iteration
@@ -2387,12 +2429,12 @@ Section IS_LOW.
     unfold update_low. unfold_op. intro_state. hoare_auto_s.
     - destruct H as [Heq_snap Hlv]. subst s0. subst lv.
       subst s. unfold RecordSet.set. simpl.
-	      destruct Hsnap as [Hpending Hvalid_a].
+	      destruct Hsnap as [Hpending [Htree_done_ext Hvalid_a]].
 	      destruct Hpending as
 	        (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-           Hfront & Hsrc & Hchild &
-	         Hfa_child & Hfa_not & Hord & Hinj & Hdg & Hndone & Hvis &
-	         Hfa_a & Hfa_neq_a).
+           Htree_closed & Hfront & Hsrc & Hchild &
+	         Hfa_child & Hfa_not & _Hbelow & Hord & Hinj & Hdg & Hndone &
+           Hvis & Hfa_a & Hfa_neq_a).
       assert (Ha_neq_u: a <> u).
       { intro Ha_eq. subst a. apply Hfa_neq_a. exact Hfa_a. }
       assert (Hlow_a_dfn_a: low snap a <= dfn snap a).
@@ -2419,38 +2461,43 @@ Section IS_LOW.
 	             ++ eapply Hclosed; eauto.
 	             ++ subst v. eapply Hsettled; eauto.
 	          -- split.
-	             ++ unfold low_frontier in Hfront |- *.
-	             destruct Hfront as [Hle Hfront].
-	             split.
-	             ** simpl. unfold equiv_decb.
-	                destruct (equiv_dec u u) as [_ | Hc];
-	                  [lia | exfalso; apply Hc; reflexivity].
-	             ** intros v Hv_done Hv_dg.
-	                sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-	                --- specialize (Hfront v Hv_done Hv_dg) as [Hfa_part Hstack_part].
-	                   split.
-	                   { intros Hcase.
-	                       simpl. unfold equiv_decb.
-                       destruct (equiv_dec u u) as [_ | Hc].
-                       - destruct (equiv_dec v u) as [Hv_eq_u | Hv_neq_u].
-                         + lia.
-                         + pose proof (Hfa_part Hcase). lia.
-                       - exfalso. apply Hc. reflexivity. }
-                   { intros Hcase.
-                       simpl. unfold equiv_decb.
-                       destruct (equiv_dec u u) as [_ | Hc].
-	                       - pose proof (Hstack_part Hcase). lia.
-	                       - exfalso. apply Hc. reflexivity. }
-	                --- subst v. split; intros _.
-	                   +++ simpl. unfold equiv_decb.
-	                       destruct (equiv_dec u u) as [_ | Hc];
-	                         [destruct (equiv_dec a u) as [Ha_eq_u | _];
-	                          [exfalso; apply Ha_neq_u; exact Ha_eq_u | lia]
-	                         | exfalso; apply Hc; reflexivity].
-	                   +++ simpl. unfold equiv_decb.
-	                       destruct (equiv_dec u u) as [_ | Hc];
-	                         [lia | exfalso; apply Hc; reflexivity].
-	             ++ split.
+	             ++ unfold done_tree_reachable_closed in Htree_done_ext |- *.
+                  intros v w Hv_done Hnot_stack_v Hfa_v Hfa_neq_v Hreach.
+                  simpl in Hfa_v, Hfa_neq_v.
+                  eapply Htree_done_ext; eauto.
+				          ++ split.
+                     { unfold low_frontier in Hfront |- *.
+		               destruct Hfront as [Hle Hfront].
+		               split.
+		               - simpl. unfold equiv_decb.
+		                 destruct (equiv_dec u u) as [_ | Hc];
+		                   [lia | exfalso; apply Hc; reflexivity].
+		               - intros v Hv_done Hv_dg.
+		                 sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+		                 + specialize (Hfront v Hv_done Hv_dg) as [Hfa_part Hstack_part].
+		                   split.
+		                   * intros Hcase.
+		                     simpl. unfold equiv_decb.
+	                     destruct (equiv_dec u u) as [_ | Hc].
+	                     -- destruct (equiv_dec v u) as [Hv_eq_u | Hv_neq_u].
+	                        ++ lia.
+	                        ++ pose proof (Hfa_part Hcase). lia.
+	                     -- exfalso. apply Hc. reflexivity.
+	                   * intros Hcase.
+	                     simpl. unfold equiv_decb.
+	                     destruct (equiv_dec u u) as [_ | Hc].
+		                   -- pose proof (Hstack_part Hcase). lia.
+		                   -- exfalso. apply Hc. reflexivity.
+		                 + subst v. split; intros _.
+		                   * simpl. unfold equiv_decb.
+		                     destruct (equiv_dec u u) as [_ | Hc];
+		                       [destruct (equiv_dec a u) as [Ha_eq_u | _];
+		                        [exfalso; apply Ha_neq_u; exact Ha_eq_u | lia]
+		                       | exfalso; apply Hc; reflexivity].
+		                   * simpl. unfold equiv_decb.
+		                     destruct (equiv_dec u u) as [_ | Hc];
+		                       [lia | exfalso; apply Hc; reflexivity]. }
+			             { split.
 	                { unfold low_src.
                     right. left. exists a.
                     split; [sets_unfold; right; reflexivity |].
@@ -2495,15 +2542,15 @@ Section IS_LOW.
 	                        { apply Hvalid. exact Htree_au. }
 	                        lia.
 	                      + exact Hvalid_a. }
-	                  { split; [exact Hfa_child | exact Hfa_not]. } }
+		                  { split; [exact Hfa_child | exact Hfa_not]. } } }
     - destruct H1 as [Heq_state Hnot_lt]. subst s.
 	      destruct H as [Heq_snap Hlv]. subst s0. subst lv.
-	      destruct Hsnap as [Hpending Hvalid_a].
+	      destruct Hsnap as [Hpending [Htree_done_ext Hvalid_a]].
 	      destruct Hpending as
 	        (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-           Hfront & Hsrc & Hchild &
-	         Hfa_child & Hfa_not & Hord & Hinj & Hdg & Hndone & Hvis &
-	         Hfa_a & Hfa_neq_a).
+           Htree_closed & Hfront & Hsrc & Hchild &
+	         Hfa_child & Hfa_not & _Hbelow & Hord & Hinj & Hdg & Hndone &
+           Hvis & Hfa_a & Hfa_neq_a).
       assert (Ha_neq_u: a <> u).
       { intro Ha_eq. subst a. apply Hfa_neq_a. exact Hfa_a. }
       assert (Hlow_a_dfn_a: low snap a <= dfn snap a).
@@ -2520,31 +2567,35 @@ Section IS_LOW.
 	        * unfold done_reachable_closed in Hclosed |- *.
 	          intros v w Hv_done Hnot_stack_v Hreach.
 	          sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-	          -- eapply Hclosed; eauto.
-	          -- subst v. eapply Hsettled; eauto.
-	        * split.
-	          -- unfold low_frontier in Hfront |- *.
-	          destruct Hfront as [Hle Hfront]. split; [exact Hle |].
-	          intros v Hv_done Hv_dg.
-	          sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-	          { apply Hfront; auto. }
-	          { subst v. split; intros; lia. }
-	          -- split.
-	             ++ unfold low_src in Hsrc |- *.
-	             destruct Hsrc as [Hsrc | [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_neq_v & Hlow_v) |
-	                                      (w & Hdone_w & Hdg_w & Hstack_w & Hfa_neq_w & Hlow_w)]].
-	             ** left. exact Hsrc.
-	             ** right. left. exists v. repeat split; auto. sets_unfold. left. exact Hdone_v.
-	             ** right. right. exists w. repeat split; auto. sets_unfold. left. exact Hdone_w.
-	             ++ split.
-	                ** unfold children_low_valid in Hchild |- *.
-	                intros v Hv_done Hv_dg Hfa_v Hfa_neq_v.
-	                sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
-	                --- apply Hchild; auto.
-	                --- subst v. exact Hvalid_a.
-	                ** split.
-	                   --- exact Hfa_child.
-	                   --- exact Hfa_not.
+		          -- eapply Hclosed; eauto.
+		          -- subst v. eapply Hsettled; eauto.
+		        * split.
+              { unfold done_tree_reachable_closed in Htree_done_ext |- *.
+                intros v w Hv_done Hnot_stack_v Hfa_v Hfa_neq_v Hreach.
+                eapply Htree_done_ext; eauto. }
+              { split.
+                - unfold low_frontier in Hfront |- *.
+                  destruct Hfront as [Hle Hfront]. split; [exact Hle |].
+                  intros v Hv_done Hv_dg.
+                  sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+                  + apply Hfront; auto.
+                  + subst v. split; intros; lia.
+	                - split.
+	                  * unfold low_src in Hsrc |- *.
+                    destruct Hsrc as [Hsrc | [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_neq_v & Hlow_v) |
+                                             (w & Hdone_w & Hdg_w & Hstack_w & Hfa_neq_w & Hlow_w)]].
+	                    + left. exact Hsrc.
+	                    + right. left. exists v. repeat split; auto. sets_unfold. left. exact Hdone_v.
+	                    + right. right. exists w. repeat split; auto. sets_unfold. left. exact Hdone_w.
+	                  * split.
+	                    -- unfold children_low_valid in Hchild |- *.
+                      intros v Hv_done Hv_dg Hfa_v Hfa_neq_v.
+                      sets_unfold in Hv_done. destruct Hv_done as [Hv_done | Hv_eq].
+	                      ++ apply Hchild; auto.
+	                      ++ subst v. exact Hvalid_a.
+	                    -- split.
+	                      ++ exact Hfa_child.
+	                      ++ exact Hfa_not. }
   Qed.
 
   Lemma low_continuation_contract_from_tree_child_frame
@@ -2566,10 +2617,11 @@ Section IS_LOW.
 	             wf_scc_state_pre g root a s /\
 	             settled_closed g s /\
 	             u ∈ visited s /\
-	             In u (stack s) /\
-	             done_visited done s /\
-	             done_reachable_closed g done s /\
-	             low_frontier g u done s /\
+		             In u (stack s) /\
+		             done_visited done s /\
+		             done_reachable_closed g done s /\
+                 done_tree_reachable_closed g u done s /\
+		             low_frontier g u done s /\
 	             low_src g u done s /\
 	             children_low_valid g root u done s /\
 	             fa_child_of_u g u s /\
@@ -2598,17 +2650,18 @@ Section IS_LOW.
 	              intros st [Heq [Hiter [Hord [Hinj Hnvis]]]]. exact Hinj. }
 	      intros r st [Hset [Hfa_not_pending [Hord Hinj]]].
 	      unfold low_tree_child_after_set_fa.
-	      destruct Hset as
-	        (Hwfpre & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-           Hfront & Hsrc &
-	         Hchild & Hfa_child & Hfa_a).
+		      destruct Hset as
+		        (Hwfpre & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+             Htree_closed & Hfront & Hsrc &
+		         Hchild & Hfa_child & Hfa_a).
 	      split; [exact Hwfpre |].
 	      split; [exact Hsettled |].
 	      split; [exact Huvis |].
 	      split; [exact Hustack |].
-	      split; [exact Hdonevis |].
-	      split; [exact Hclosed |].
-	      split; [exact Hfront |].
+		      split; [exact Hdonevis |].
+		      split; [exact Hclosed |].
+          split; [exact Htree_closed |].
+		      split; [exact Hfront |].
 	      split; [exact Hsrc |].
 	      split; [exact Hchild |].
 	      split; [exact Hfa_child |].
@@ -2642,7 +2695,9 @@ Section IS_LOW.
       ~ done a ->
       Hoare (low_tree_child_after_set_fa u a done)
             (W a)
-            (fun _ s => low_tree_child_parent_pending u a done s).
+            (fun _ s =>
+               low_tree_child_parent_pending u a done s /\
+               done_tree_reachable_closed g u (done ∪ [a]) s).
 
   Definition low_parent_pending_frame_contract
              (W: V -> program (@SCCSt V) unit): Prop :=
@@ -2655,6 +2710,20 @@ Section IS_LOW.
                low_tree_child_after_set_fa parent x inner_done s)
             (W x)
             (fun _ s => low_tree_child_parent_pending u a done s).
+
+  Lemma low_tree_child_after_set_fa_child_ne_parent
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_tree_child_after_set_fa u a done s ->
+    a <> u.
+  Proof.
+    intros Hset Ha_eq_u.
+    subst a.
+    unfold low_tree_child_after_set_fa in Hset.
+    destruct Hset as (Hwfpre & _Hsettled & Huvis & _).
+    unfold wf_scc_state_pre in Hwfpre.
+    destruct Hwfpre as [_ Hnot_vis].
+    apply Hnot_vis. exact Huvis.
+  Qed.
 
   Lemma low_tree_child_after_set_fa_low_pre_with_frame
         (u a parent x: V) (done inner_done: V -> Prop) (s: @SCCSt V):
@@ -2669,7 +2738,7 @@ Section IS_LOW.
     unfold low_tree_child_after_set_fa in Hset.
     destruct Hset as
       (Hwfpre & Hsettled & _Hparent_vis & _Hparent_stack &
-       _Hdonevis & _Hclosed & _Hfront & _Hsrc & _Hchild &
+       _Hdonevis & _Hclosed & _Htree_closed & _Hfront & _Hsrc & _Hchild &
        _Hfa_child & _Hfa_not & _Hfa_x & Hord & Hinj).
     split; [exact Hwfpre | split; [exact Hsettled | split; [exact Hord | exact Hinj]]].
   Qed.
@@ -2716,7 +2785,7 @@ Section IS_LOW.
   Proof.
     unfold low_tree_child_after_set_fa, active_base, active_stack_frames.
     intros (Hwfpre & _Hsettled & _Huvis & Hustack & _Hdonevis &
-            _Hclosed & _Hfront & _Hsrc & _Hchild & _Hfa_child &
+            _Hclosed & _Htree_closed & _Hfront & _Hsrc & _Hchild & _Hfa_child &
             _Hfa_not & _Hfa_a & Hord & Hinj).
     unfold wf_scc_state_pre in Hwfpre.
     destruct Hwfpre as [Hwf _Hnot_a].
@@ -2842,8 +2911,8 @@ Section IS_LOW.
 	    unfold low_tree_child_after_set_fa in Hset.
 	    destruct Hset as
 	      (Hwfpre & _Hsettled & Huvis & _Hustack & _Hdonevis & _Hclosed &
-	       _Hfront & _Hsrc & _Hchild & _Hfa_child & _Hfa_not & Hfa_a &
-         _Hord & _Hinj).
+         _Htree_closed & _Hfront & _Hsrc & _Hchild & _Hfa_child & _Hfa_not & Hfa_a &
+	         _Hord & _Hinj).
     unfold wf_scc_state_pre in Hwfpre.
     destruct Hwfpre as [_Hwf Hnot_a_vis].
     assert (Ha_neq_u: a <> u).
@@ -2874,7 +2943,9 @@ Section IS_LOW.
     In u (stack s) ->
     done_visited done s ->
     done_reachable_closed g done s ->
+    done_tree_reachable_closed g u done s ->
     low_tree_child_parent_low_fields u a done s ->
+    done_vertices_below_current u a done s ->
     stack_dfn_order s ->
     dfn_injective s ->
     dg_step g u a ->
@@ -2884,8 +2955,8 @@ Section IS_LOW.
     fa s a <> a ->
     low_tree_child_parent_pending u a done s.
   Proof.
-    intros Hwf Hsettled Huvis Hustack Hdonevis Hclosed Hfields Hord Hinj
-	           Hdg Hndone Hvis_a Hfa_a Hfa_neq_a.
+    intros Hwf Hsettled Huvis Hustack Hdonevis Hclosed Htree_closed Hfields Hbelow
+           Hord Hinj Hdg Hndone Hvis_a Hfa_a Hfa_neq_a.
     destruct Hfields as [Hfront [Hsrc [Hchild [Hfa_child Hfa_not]]]].
     unfold low_tree_child_parent_pending.
     split; [exact Hwf |].
@@ -2894,11 +2965,13 @@ Section IS_LOW.
     split; [exact Hustack |].
     split; [exact Hdonevis |].
     split; [exact Hclosed |].
+    split; [exact Htree_closed |].
     split; [exact Hfront |].
     split; [exact Hsrc |].
     split; [exact Hchild |].
     split; [exact Hfa_child |].
     split; [exact Hfa_not |].
+    split; [exact Hbelow |].
     split; [exact Hord |].
     split; [exact Hinj |].
     split; [exact Hdg |].
@@ -3306,8 +3379,8 @@ Section IS_LOW.
                2: { apply (preloop_preserves_stack_dfn_order a). }
                intros st Heq. subst st.
                unfold low_tree_child_after_set_fa in Hset.
-               destruct Hset as (Hwfpre & _ & _ & _ & _ & _ & _ & _ &
-                                 _ & _ & _ & _ & Hord & _).
+	               destruct Hset as (Hwfpre & _ & _ & _ & _ & _ & _ & _ &
+	                                 _ & _ & _ & _ & _ & Hord & _).
 	               unfold wf_scc_state_pre in Hwfpre.
 	               destruct Hwfpre as [Hwf Hnot_a].
 	               unfold wf_scc_state in Hwf.
@@ -3317,8 +3390,8 @@ Section IS_LOW.
                2: { apply (preloop_preserves_dfn_injective a). }
                intros st Heq. subst st.
                unfold low_tree_child_after_set_fa in Hset.
-               destruct Hset as (Hwfpre & _ & _ & _ & _ & _ & _ & _ &
-                                 _ & _ & _ & _ & _ & Hinj).
+	               destruct Hset as (Hwfpre & _ & _ & _ & _ & _ & _ & _ &
+	                                 _ & _ & _ & _ & _ & _ & Hinj).
 	               unfold wf_scc_state_pre in Hwfpre.
 	               destruct Hwfpre as [Hwf Hnot_a].
 	               unfold wf_scc_state in Hwf.
@@ -3329,7 +3402,7 @@ Section IS_LOW.
     unfold low_tree_child_after_set_fa in Hset.
     destruct Hset as
       (Hwfpre & _Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-       Hfront & Hsrc & Hchild & Hfa_child & Hfa_not & Hfa_a &
+       Htree_closed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not & Hfa_a &
        _Hord & _Hinj).
     unfold wf_scc_state_pre in Hwfpre.
     destruct Hwfpre as [Hwf_old Hnot_a_vis].
@@ -3348,6 +3421,12 @@ Section IS_LOW.
       intros v w Hdone_v Hnot_stack_v Hreach.
       apply preloop_state_visited_iff. left.
       eapply Hclosed; eauto.
+      intro Hstack_old. apply Hnot_stack_v.
+      apply preloop_state_stack_iff. right. exact Hstack_old.
+    - unfold done_tree_reachable_closed in Htree_closed |- *.
+      intros v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach.
+      apply preloop_state_visited_iff. left.
+      eapply Htree_closed; eauto.
       intro Hstack_old. apply Hnot_stack_v.
       apply preloop_state_stack_iff. right. exact Hstack_old.
     - unfold low_tree_child_parent_low_fields.
@@ -3423,9 +3502,21 @@ Section IS_LOW.
                 apply Hfa_child.
                 rewrite preloop_state_fa in Hfa_v, Hfa_ne_v.
                 split; auto.
-             ++ unfold fa_not_done_implies_eq_u in Hfa_not |- *.
-	                intros v Hnot_done Hfa_v.
-	                apply Hfa_not; auto.
+	             ++ unfold fa_not_done_implies_eq_u in Hfa_not |- *.
+		                intros v Hnot_done Hfa_v.
+		                apply Hfa_not; auto.
+    - unfold done_vertices_below_current.
+      intros v Hdone_v.
+      assert (Hv_vis: v ∈ visited snap).
+      { apply Hdonevis. exact Hdone_v. }
+      assert (Hv_ne_a: v <> a).
+      { intro Hv_eq_a. subst v. exact (Hndone Hdone_v). }
+      rewrite preloop_state_dfn_neq by exact Hv_ne_a.
+      rewrite preloop_state_dfn_eq.
+      unfold wf_scc_state in Hwf_old.
+      destruct Hwf_old as [_ [Hdfn_inv _]].
+      destruct Hdfn_inv as [Htimer_bound _].
+      apply Htimer_bound. exact Hv_vis.
     - exact Hord_post.
     - exact Hinj_post.
     - exact Hdg.
@@ -3451,10 +3542,10 @@ Section IS_LOW.
   Proof.
     intros Hpending v _Hdone_v _Hdg_v Hfa_v Hfa_ne_v Htree.
     unfold low_tree_child_parent_pending in Hpending.
-    destruct Hpending as
-      (_Hwf & _Hsettled & _Huvis & _Hustack & _Hdonevis & _Hclosed &
-       _Hfront & _Hsrc & _Hchild & _Hfa_child & _Hfa_not & _Hord &
-       _Hinj & _Hdg & _Hndone & _Hvis_a & Hfa_a & _Hfa_ne_a).
+	    destruct Hpending as
+	      (_Hwf & _Hsettled & _Huvis & _Hustack & _Hdonevis & _Hclosed &
+	       _Htree_closed & _Hfront & _Hsrc & _Hchild & _Hfa_child & _Hfa_not & _Hbelow &
+	         _Hord & _Hinj & _Hdg & _Hndone & _Hvis_a & Hfa_a & _Hfa_ne_a).
     apply tree_step_char in Htree.
     destruct Htree as [Hfa_tree _].
     assert (Hv_eq_u: v = u).
@@ -3463,6 +3554,614 @@ Section IS_LOW.
     rewrite Hv_eq_u in Hfa_v.
     rewrite Hv_eq_u.
     exact Hfa_v.
+  Qed.
+
+  Lemma pop_scc_state_preserves_scc_low_valid_v_below
+        (s: @SCCSt V) (v a: V):
+    scc_low_valid_v g root s v ->
+    stack_dfn_order s ->
+    In a (stack s) ->
+    dfn s v < dfn s a ->
+    scc_low_valid_v g root (pop_scc_state s a) v.
+  Proof.
+    intros Hvalid Hord Ha_stack Hv_lt_a.
+    destruct (stack_split_at (stack s) a) as [popped rest] eqn:Hsplit.
+    assert (Hrest_old: forall y, In y rest -> In y (stack s)).
+    { intros y Hy.
+      destruct (stack_split_at_decomp (stack s) a Ha_stack popped rest Hsplit)
+        as [prefix Hstk].
+      rewrite Hstk, List.in_app_iff. right. simpl. right. exact Hy. }
+	    assert (Htree_old:
+	              forall x y,
+	                dg_step (state_to_dfs_tree g (pop_scc_state s a) root) x y ->
+	                dg_step (state_to_dfs_tree g s root) x y).
+	    { intros x y Hstep.
+      unfold pop_scc_state in Hstep. rewrite Hsplit in Hstep. simpl in Hstep.
+	      unfold state_to_dfs_tree, original_step in Hstep |- *.
+	      simpl in Hstep |- *. exact Hstep. }
+	    assert (Htree_new:
+	              forall x y,
+	                dg_step (state_to_dfs_tree g s root) x y ->
+	                dg_step (state_to_dfs_tree g (pop_scc_state s a) root) x y).
+	    { intros x y Hstep.
+      unfold pop_scc_state. rewrite Hsplit. simpl.
+	      unfold state_to_dfs_tree, original_step in Hstep |- *.
+	      simpl in Hstep |- *. exact Hstep. }
+	    assert (Hback_old:
+	              forall x y,
+	                scc_back_edge g root (pop_scc_state s a) x y ->
+	                scc_back_edge g root s x y).
+	    { intros x y Hback.
+	      unfold scc_back_edge in Hback |- *.
+	      destruct Hback as [Hdg [Hstk Hnot_tree]].
+      unfold pop_scc_state in Hstk. rewrite Hsplit in Hstk. simpl in Hstk.
+	      simpl in Hstk.
+      split; [exact Hdg |].
+      split; [apply Hrest_old; exact Hstk |].
+      intro Htree.
+      apply Hnot_tree. apply Htree_new. exact Htree. }
+    unfold pop_scc_state. rewrite Hsplit. simpl.
+    unfold pop_scc_state in Htree_new, Htree_old, Hback_old.
+    rewrite Hsplit in Htree_new, Htree_old, Hback_old.
+    simpl in Htree_new, Htree_old, Hback_old.
+	    unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset in *.
+    destruct Hvalid as [m [[Hm_src Hm_min] Hm_eq]].
+    exists m. split.
+    - split.
+      + destruct Hm_src as [Htree_min | Hback_min].
+        * left.
+          destruct Htree_min as [child [[Hchild_tree Hchild_min] Hchild_eq]].
+	          exists child. split; [| exact Hchild_eq].
+	          split.
+	          -- apply Htree_new. exact Hchild_tree.
+	          -- intros y Hy.
+	             apply Hchild_min. apply Htree_old. exact Hy.
+        * right.
+          destruct Hback_min as [y [[Hy Hmin_y] Hy_eq]].
+          assert (Hy_new:
+	                    scc_back_edge g root (pop_scc_state s a) v y
+	                    \/ y = v).
+          { sets_unfold in Hy.
+            destruct Hy as [Hback_y | Hy_eq_v].
+            - unfold scc_back_edge in Hback_y.
+              destruct Hback_y as [Hdg_y [Hstack_y Hnot_tree_y]].
+              destruct (classic (In y rest)) as [Hy_rest | Hy_not_rest].
+	              + left. unfold scc_back_edge.
+                unfold pop_scc_state. rewrite Hsplit. simpl.
+	                split; [exact Hdg_y | split; [exact Hy_rest |]].
+                intro Htree_new_y.
+                apply Hnot_tree_y. apply Htree_old. exact Htree_new_y.
+              + exfalso.
+                assert (Hdfn_y_le_v: dfn s y <= dfn s v).
+	                { apply Hmin_y. sets_unfold. right. reflexivity. }
+                assert (Hy_lt_a: dfn s y < dfn s a) by lia.
+                apply Hy_not_rest.
+                eapply stack_split_at_keeps_lower_dfn_vertex; eauto.
+            - right. symmetry. exact Hy_eq_v. }
+          exists y. split; [| exact Hy_eq].
+          split.
+          -- sets_unfold. destruct Hy_new as [Hback_y | Hy_eq_v].
+             ++ left.
+                unfold pop_scc_state in Hback_y. rewrite Hsplit in Hback_y.
+                simpl in Hback_y. exact Hback_y.
+             ++ right. symmetry. exact Hy_eq_v.
+          -- intros z Hz.
+             apply Hmin_y.
+	             sets_unfold in Hz. sets_unfold.
+             destruct Hz as [Hback_z | Hz_eq_v].
+             ++ left. apply Hback_old. exact Hback_z.
+             ++ right. exact Hz_eq_v.
+	      + intros n Hn.
+	        destruct Hn as [Htree_min | Hback_min].
+	        * destruct Htree_min as [child [[Hchild_tree Hchild_min] Hchild_eq]].
+            apply Hm_min.
+            left.
+            exists child. split; [| exact Hchild_eq].
+            split.
+            -- apply Htree_old. exact Hchild_tree.
+            -- intros y Hy.
+               apply Hchild_min. apply Htree_new. exact Hy.
+	        * destruct Hback_min as [y [[Hy Hmin_y] Hy_eq]].
+            simpl in Hy_eq.
+            assert (Hold_nonempty:
+                      exists z, (scc_back_edge g root s v ∪ [v]) z).
+            { exists v. sets_unfold. right. reflexivity. }
+	            pose proof
+	              (@min_nonempty_exists V
+	                 (fun x => dfn s x)
+	                 (scc_back_edge g root s v ∪ [v])
+	                 Hold_nonempty) as Hmin_old.
+            destruct Hmin_old as [old_n Hmin_old].
+            unfold min_value_of_subset, min_object_of_subset in Hmin_old.
+            destruct Hmin_old as [old [[Hold_mem Hold_bound] Hold_eq]].
+            assert (Hm_le_old: m <= old_n).
+            { apply Hm_min. right.
+              exists old. split.
+              - split; [exact Hold_mem | exact Hold_bound].
+              - exact Hold_eq. }
+            assert (Hy_old: (scc_back_edge g root s v ∪ [v]) y).
+            { sets_unfold in Hy. sets_unfold.
+              destruct Hy as [Hback_y | Hy_eq_v].
+              - left. apply Hback_old. exact Hback_y.
+              - right. exact Hy_eq_v. }
+            assert (Hold_le_y: old_n <= dfn s y).
+            { rewrite <- Hold_eq. apply Hold_bound. exact Hy_old. }
+	            rewrite Hy_eq in Hold_le_y.
+            lia.
+	    - exact Hm_eq.
+	  Qed.
+
+  Lemma pop_scc_state_visited
+        (s: @SCCSt V) (a v: V):
+    visited (pop_scc_state s a) v <-> visited s v.
+  Proof.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s) a) as [popped rest].
+    simpl. reflexivity.
+  Qed.
+
+  Lemma pop_scc_state_fa
+        (s: @SCCSt V) (a v: V):
+    fa (pop_scc_state s a) v = fa s v.
+  Proof.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s) a) as [popped rest].
+    simpl. reflexivity.
+  Qed.
+
+  Lemma pop_scc_state_dfn
+        (s: @SCCSt V) (a v: V):
+    dfn (pop_scc_state s a) v = dfn s v.
+  Proof.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s) a) as [popped rest].
+    simpl. reflexivity.
+  Qed.
+
+  Lemma pop_scc_state_low
+        (s: @SCCSt V) (a v: V):
+    low (pop_scc_state s a) v = low s v.
+  Proof.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s) a) as [popped rest].
+    simpl. reflexivity.
+  Qed.
+
+  Lemma pop_scc_state_preserves_done_reachable_closed_below
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    done_reachable_closed g done s ->
+    done_vertices_below_current u a done s ->
+    stack_dfn_order s ->
+    In a (stack s) ->
+    done_reachable_closed g done (pop_scc_state s a).
+  Proof.
+    intros Hclosed Hbelow Hord Ha_stack.
+    unfold done_reachable_closed in Hclosed |- *.
+    intros v w Hdone_v Hnot_stack_new Hreach.
+    apply pop_scc_state_visited.
+    destruct (classic (In v (stack s))) as [Hv_stack | Hv_not_stack].
+    - exfalso. apply Hnot_stack_new.
+      apply pop_scc_keeps_older_stack_vertex.
+      + exact Hord.
+      + exact Hv_stack.
+      + exact Ha_stack.
+      + apply Hbelow; exact Hdone_v.
+    - eapply Hclosed; eauto.
+  Qed.
+
+  Lemma pop_scc_state_preserves_done_tree_reachable_closed
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    done_tree_reachable_closed g u done s ->
+    done_vertices_below_current u a done s ->
+    stack_dfn_order s ->
+    In a (stack s) ->
+    done_tree_reachable_closed g u done (pop_scc_state s a).
+  Proof.
+    intros Htree Hbelow Hord Ha_stack.
+    unfold done_tree_reachable_closed in Htree |- *.
+    intros v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach.
+    apply pop_scc_state_visited.
+    apply Htree with (v := v).
+    - exact Hdone_v.
+    - intro Hv_stack.
+      apply Hnot_stack_v.
+      apply pop_scc_keeps_older_stack_vertex; [exact Hord | exact Hv_stack | exact Ha_stack |].
+      apply Hbelow. exact Hdone_v.
+    - rewrite pop_scc_state_fa in Hfa_v. exact Hfa_v.
+    - rewrite pop_scc_state_fa in Hfa_ne_v. exact Hfa_ne_v.
+    - exact Hreach.
+  Qed.
+
+  Lemma pop_scc_state_preserves_children_low_valid_below
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    children_low_valid g root u done s ->
+    done_vertices_below_current u a done s ->
+    stack_dfn_order s ->
+    In a (stack s) ->
+    children_low_valid g root u done (pop_scc_state s a).
+  Proof.
+    intros Hchild Hbelow Hord Ha_stack.
+    unfold children_low_valid in Hchild |- *.
+    intros v Hdone_v Hdg_v Hfa_v Hfa_ne_v.
+    rewrite pop_scc_state_fa in Hfa_v, Hfa_ne_v.
+    apply pop_scc_state_preserves_scc_low_valid_v_below.
+    - apply Hchild; auto.
+    - exact Hord.
+    - exact Ha_stack.
+    - apply Hbelow. exact Hdone_v.
+  Qed.
+
+  Lemma pop_scc_state_preserves_settled_closed_from_segment
+        (a: V) (s: @SCCSt V):
+    settled_closed g s ->
+    stack_segment_reachable_closed a s ->
+    stack_dfn_order s ->
+    In a (stack s) ->
+    settled_closed g (pop_scc_state s a).
+  Proof.
+    intros Hsettled Hsegment Hord Ha_stack.
+    unfold settled_closed in Hsettled |- *.
+    intros v w Hvis_new Hnot_stack_new Hreach.
+    apply pop_scc_state_visited in Hvis_new.
+    apply pop_scc_state_visited.
+    destruct (classic (In v (stack s))) as [Hv_stack | Hv_not_stack].
+    - destruct (stack_split_at (stack s) a) as [popped rest] eqn:Hsplit.
+      assert (Hv_not_rest: ~ In v rest).
+      { intro Hv_rest.
+        apply Hnot_stack_new.
+        unfold pop_scc_state. rewrite Hsplit. simpl.
+        exact Hv_rest. }
+      destruct (stack_split_at_decomp (stack s) a Ha_stack popped rest Hsplit)
+        as [prefix Hstk_eq].
+      assert (Hdfn_a_le_v: dfn s a <= dfn s v).
+      { rewrite Hstk_eq in Hv_stack.
+        apply List.in_app_iff in Hv_stack.
+        destruct Hv_stack as [Hv_prefix | Hv_tail].
+        - destruct (in_split v prefix Hv_prefix) as [l1 [l2 Hprefix_eq]].
+          rewrite Hprefix_eq in Hstk_eq.
+          apply (Hord v a).
+          + rewrite Hstk_eq, List.in_app_iff.
+            left. apply List.in_app_iff. right. simpl. left. reflexivity.
+          + exact Ha_stack.
+          + exists l1. exists (l2 ++ a :: rest).
+            split.
+            * rewrite Hstk_eq. rewrite <- app_assoc. reflexivity.
+            * apply List.in_or_app. right. simpl. left. reflexivity.
+        - simpl in Hv_tail.
+          destruct Hv_tail as [Hv_eq_a | Hv_rest].
+          + subst v. apply Nat.le_refl.
+          + exfalso. apply Hv_not_rest. exact Hv_rest. }
+      exact (Hsegment v w Hv_stack Hdfn_a_le_v Hreach).
+    - exact (Hsettled v w Hvis_new Hv_not_stack Hreach).
+  Qed.
+
+  Lemma pop_scc_preserves_settled_closed_from_segment
+        (a: V):
+    Hoare (fun s: @SCCSt V =>
+             settled_closed g s /\
+             stack_segment_reachable_closed a s /\
+             stack_dfn_order s /\
+             In a (stack s))
+          (pop_scc a)
+          (fun _ s => settled_closed g s).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s.
+    subst s.
+    destruct H as [Hsettled [Hsegment [Hord Ha_stack]]].
+    apply pop_scc_state_preserves_settled_closed_from_segment; auto.
+  Qed.
+
+  Lemma if_pop_preserves_settled_closed_from_segment
+        (a: V):
+    Hoare (fun s: @SCCSt V =>
+             settled_closed g s /\
+             stack_segment_reachable_closed a s /\
+             stack_dfn_order s /\
+             In a (stack s))
+          (If (fun s => low s a = dfn s a) (pop_scc a))
+          (fun _ s => settled_closed g s).
+  Proof.
+    unfold If. intro_state.
+    destruct H as [Hsettled [Hsegment [Hord Ha_stack]]].
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_conseq_pre.
+      2: { apply pop_scc_preserves_settled_closed_from_segment. }
+      intros st [_ Heq]. subst st.
+      repeat split; auto.
+    - intro_state. hoare_auto_s.
+      destruct H1 as [Heq _]. subst s. subst s1. exact Hsettled.
+  Qed.
+
+  Lemma pop_scc_state_preserves_parent_pending_after_recursive_when_root
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_tree_child_parent_pending u a done s ->
+    stack_segment_reachable_closed a s ->
+    In a (stack s) ->
+    low s a = dfn s a ->
+    low_tree_child_parent_pending u a done (pop_scc_state s a).
+  Proof.
+    intros Hpending Hsegment_closed Ha_stack _Hroot.
+    unfold low_tree_child_parent_pending in Hpending.
+    destruct Hpending as
+      (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+       Htree_closed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not &
+       Hbelow & Hord & Hinj & Hdg & Hndone & Hvis_a & Hfa_a & Hfa_ne_a).
+    unfold low_tree_child_parent_pending.
+    split.
+    { unfold wf_scc_state in Hwf |- *.
+      destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
+      split.
+      - unfold stack_in_visited in Hsiv |- *.
+        intros v Hv_stack.
+        apply pop_scc_state_visited.
+        apply Hsiv.
+        unfold pop_scc_state in Hv_stack.
+        destruct (stack_split_at (stack s) a) as [popped rest] eqn:Hsplit.
+        simpl in Hv_stack.
+        destruct (stack_split_at_decomp (stack s) a Ha_stack popped rest Hsplit)
+          as [prefix Hstk_eq].
+        rewrite Hstk_eq, List.in_app_iff. right. simpl. right. exact Hv_stack.
+      - split.
+        { unfold pop_scc_state.
+          destruct (stack_split_at (stack s) a) as [popped rest].
+          simpl. exact Hinv. }
+        split.
+        + unfold dfn_valid in Hvalid |- *.
+          intros x y Htree.
+          rewrite pop_scc_state_dfn, pop_scc_state_dfn.
+          apply Hvalid.
+          unfold pop_scc_state in Htree.
+          destruct (stack_split_at (stack s) a) as [popped rest] eqn:Hsplit.
+          simpl in Htree.
+          unfold state_to_dfs_tree, original_step in Htree |- *.
+          simpl in Htree |- *. exact Htree.
+        + unfold fa_visited in Hfa_vis |- *.
+          intros v Hfa_ne_v.
+          rewrite pop_scc_state_fa.
+          apply pop_scc_state_visited.
+          apply Hfa_vis.
+          rewrite pop_scc_state_fa in Hfa_ne_v.
+          exact Hfa_ne_v. }
+    split.
+    { apply pop_scc_state_preserves_settled_closed_from_segment; auto. }
+    split.
+    { apply pop_scc_state_visited. exact Huvis. }
+    split.
+    { eapply pop_scc_keeps_older_stack_vertex; eauto.
+      assert (Hdfn_u_lt_a: dfn s u < dfn s a).
+      { unfold wf_scc_state in Hwf.
+        destruct Hwf as [_ [_ [Hvalid _]]].
+        eapply fa_parent_dfn_lt; eauto. }
+      exact Hdfn_u_lt_a. }
+    split.
+    { unfold done_visited in Hdonevis |- *.
+      intros v Hdone_v.
+      apply pop_scc_state_visited.
+      apply Hdonevis. exact Hdone_v. }
+    split.
+    { eapply pop_scc_state_preserves_done_reachable_closed_below; eauto. }
+    split.
+    { eapply pop_scc_state_preserves_done_tree_reachable_closed; eauto. }
+    split.
+    { unfold low_frontier in Hfront |- *.
+      destruct Hfront as [Hlow_le Hfront].
+      rewrite pop_scc_state_low, pop_scc_state_dfn.
+      split; [exact Hlow_le |].
+      intros v Hdone_v Hdg_v.
+      specialize (Hfront v Hdone_v Hdg_v) as [Hfa_part Hstack_part].
+      split.
+      - intro Hfa_v.
+        rewrite pop_scc_state_fa in Hfa_v.
+        rewrite pop_scc_state_low.
+        apply Hfa_part. exact Hfa_v.
+      - intro Hstack_v.
+        rewrite pop_scc_state_dfn.
+        apply Hstack_part.
+        unfold pop_scc_state in Hstack_v.
+        destruct (stack_split_at (stack s) a) as [popped rest] eqn:Hsplit.
+        simpl in Hstack_v.
+        destruct (stack_split_at_decomp (stack s) a Ha_stack popped rest Hsplit)
+          as [prefix Hstk_eq].
+        rewrite Hstk_eq, List.in_app_iff. right. simpl. right. exact Hstack_v. }
+    split.
+    { unfold low_src in Hsrc |- *.
+      rewrite pop_scc_state_low, pop_scc_state_dfn.
+      destruct Hsrc as [Hsrc | [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_ne_v & Hlow_v) |
+                                (w & Hdone_w & Hdg_w & Hstack_w & Hfa_ne_w & Hlow_w)]].
+      - left. exact Hsrc.
+      - right. left. exists v.
+        split; [exact Hdone_v |].
+        split; [exact Hdg_v |].
+        split.
+        + rewrite pop_scc_state_fa. exact Hfa_v.
+        + split.
+          * rewrite pop_scc_state_fa. exact Hfa_ne_v.
+          * rewrite (pop_scc_state_low s a v). exact Hlow_v.
+      - destruct (classic (In w (stack (pop_scc_state s a)))) as [Hw_stack_new | Hw_not_stack_new].
+        + right. right. exists w.
+          split; [exact Hdone_w |].
+          split; [exact Hdg_w |].
+          split; [exact Hw_stack_new |].
+          split.
+          * rewrite pop_scc_state_fa. exact Hfa_ne_w.
+          * rewrite (pop_scc_state_dfn s a w). exact Hlow_w.
+        + left.
+          exfalso.
+          apply Hw_not_stack_new.
+          apply pop_scc_keeps_older_stack_vertex; auto.
+        }
+    split.
+    { apply pop_scc_state_preserves_children_low_valid_below; auto. }
+    split.
+    { unfold fa_child_of_u in Hfa_child |- *.
+      intros v [Hfa_v Hfa_ne_v].
+      apply Hfa_child.
+      rewrite pop_scc_state_fa in Hfa_v, Hfa_ne_v.
+      split; [exact Hfa_v | exact Hfa_ne_v]. }
+    split.
+    { unfold fa_not_done_implies_eq_u in Hfa_not |- *.
+      intros v Hnot_done Hfa_v.
+      apply Hfa_not; [exact Hnot_done |].
+      rewrite pop_scc_state_fa in Hfa_v.
+      exact Hfa_v. }
+    split.
+    { unfold done_vertices_below_current in Hbelow |- *.
+      intros v Hdone_v.
+      rewrite pop_scc_state_dfn, pop_scc_state_dfn.
+      apply Hbelow. exact Hdone_v. }
+    split.
+    { unfold stack_dfn_order. intros x y Hx Hy Habove.
+      unfold pop_scc_state in Hx, Hy, Habove.
+      destruct (stack_split_at (stack s) a) as [popped rest] eqn:Hsplit.
+      simpl in Hx, Hy, Habove.
+      destruct (stack_split_at_decomp (stack s) a Ha_stack popped rest Hsplit)
+        as [prefix Hstk_eq].
+      rewrite pop_scc_state_dfn, pop_scc_state_dfn.
+      apply (Hord x y).
+      - rewrite Hstk_eq, List.in_app_iff. right. simpl. right. exact Hx.
+      - rewrite Hstk_eq, List.in_app_iff. right. simpl. right. exact Hy.
+      - destruct Habove as [l1 [l2 [Hrest_eq Hy_l2]]].
+        exists (prefix ++ a :: l1). exists l2.
+        split.
+        + rewrite Hstk_eq, Hrest_eq. rewrite <- app_assoc. reflexivity.
+        + exact Hy_l2. }
+    split.
+    { unfold dfn_injective in Hinj |- *.
+      intros x y Hneq Hx_vis Hy_vis.
+      apply pop_scc_state_visited in Hx_vis.
+      apply pop_scc_state_visited in Hy_vis.
+      rewrite pop_scc_state_dfn, pop_scc_state_dfn.
+      apply Hinj; auto. }
+    split; [exact Hdg |].
+    split; [exact Hndone |].
+    split.
+    { apply pop_scc_state_visited. exact Hvis_a. }
+    split.
+    { rewrite pop_scc_state_fa. exact Hfa_a. }
+    { rewrite pop_scc_state_fa. exact Hfa_ne_a. }
+  Qed.
+
+  Lemma if_pop_preserves_parent_pending_after_recursive
+        (u a: V) (done: V -> Prop):
+    Hoare (fun s: @SCCSt V =>
+             low_tree_child_after_recursive u a done s /\
+             stack_segment_reachable_closed a s /\
+             In a (stack s))
+          (If (fun s => low s a = dfn s a) (pop_scc a))
+          (fun _ s => low_tree_child_parent_pending u a done s).
+  Proof.
+    unfold If. intro_state.
+    destruct H as [Hrec [Hsegment_closed Ha_stack]].
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold pop_scc. intro_state. hoare_auto_s.
+      destruct H as [Hlow_eq Heq_state]. subst s.
+      subst s1.
+      unfold low_tree_child_after_recursive in Hrec.
+      apply pop_scc_state_preserves_parent_pending_after_recursive_when_root; tauto.
+    - intro_state. hoare_auto_s.
+      destruct H1 as [Heq _]. subst s. subst s1.
+      unfold low_tree_child_after_recursive in Hrec.
+      exact (proj1 Hrec).
+  Qed.
+
+  Lemma if_pop_preserves_parent_pending_from_done_with_segment
+        (u a: V) (done: V -> Prop):
+    Hoare (fun s: @SCCSt V =>
+             low_tree_child_parent_pending u a done s /\
+             low_iteration_done g root a s /\
+             done_tree_reachable_closed g u (done ∪ [a]) s /\
+             stack_segment_reachable_closed a s)
+          (If (fun s => low s a = dfn s a) (pop_scc a))
+          (fun _ s => low_tree_child_parent_pending u a done s).
+  Proof.
+    eapply Hoare_conseq_pre.
+    2: { apply if_pop_preserves_parent_pending_after_recursive. }
+    intros st [Hpending [Hdone_iter [Htree_closed Hsegment_closed]]].
+    split.
+    - unfold low_tree_child_after_recursive.
+      split; [exact Hpending |].
+      split; [exact Htree_closed |].
+      apply low_frontier_and_src_imply_low_valid.
+      exact Hdone_iter.
+    - split.
+      + exact Hsegment_closed.
+      + unfold low_iteration_done in Hdone_iter.
+        destruct Hdone_iter as [Hiter [_ _]].
+        unfold low_iteration_inv in Hiter.
+        destruct Hiter as (_ & _ & _ & Ha_stack & _).
+        exact Ha_stack.
+  Qed.
+
+  Lemma if_pop_preserves_parent_pending_from_done_root_only
+        (u a: V) (done: V -> Prop):
+    Hoare (fun s: @SCCSt V =>
+             low_tree_child_parent_pending u a done s /\
+             low_iteration_done g root a s /\
+             done_tree_reachable_closed g u (done ∪ [a]) s /\
+             (low s a = dfn s a -> stack_segment_reachable_closed a s))
+          (If (fun s => low s a = dfn s a) (pop_scc a))
+          (fun _ s =>
+             low_tree_child_parent_pending u a done s /\
+             done_tree_reachable_closed g u (done ∪ [a]) s).
+  Proof.
+    unfold If. intro_state.
+    destruct H as [Hpending [Hdone_iter [Htree_closed Hsegment_if_root]]].
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      apply Hoare_conj.
+      + unfold pop_scc. intro_state. hoare_auto_s.
+        destruct H as [Hroot Heq_st]. subst s.
+        subst s1.
+        unfold low_iteration_done in Hdone_iter.
+        destruct Hdone_iter as [Hiter [_ _]].
+        unfold low_iteration_inv in Hiter.
+        destruct Hiter as
+          (_Hwf_a & _Hsettled_a & _Hvis_a_iter & Ha_stack &
+           _Hdonevis_a & _Hclosed_a & _Htree_a & _Hfront_a &
+           _Hsrc_a & _Hchild_a & _Hfa_child_a & _Hfa_not_a).
+        eapply pop_scc_state_preserves_parent_pending_after_recursive_when_root.
+        * exact Hpending.
+        * apply Hsegment_if_root. exact Hroot.
+        * exact Ha_stack.
+        * exact Hroot.
+      + unfold pop_scc. intro_state. hoare_auto_s.
+        destruct H as [Hroot Heq_st]. subst s.
+        subst s1.
+        unfold low_tree_child_parent_pending in Hpending.
+        destruct Hpending as
+          (_Hwf & _Hsettled & _Huvis & _Hustack & _Hdonevis &
+           _Hclosed & _Htree_old & _Hfront & _Hsrc & _Hchild &
+           _Hfa_child & _Hfa_not & Hbelow & Hord & _Hinj & _Hdg &
+           _Hndone & _Hvis_a & _Hfa_a & _Hfa_ne_a).
+        unfold low_iteration_done in Hdone_iter.
+        destruct Hdone_iter as [Hiter [_ _]].
+        unfold low_iteration_inv in Hiter.
+        destruct Hiter as
+          (_Hwf_a & _Hsettled_a & _Hvis_a_iter & Ha_stack &
+           _Hdonevis_a & _Hclosed_a & _Htree_a & _Hfront_a &
+           _Hsrc_a & _Hchild_a & _Hfa_child_a & _Hfa_not_a).
+        unfold done_tree_reachable_closed.
+        intros v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach.
+        sets_unfold in Hdone_v.
+        destruct Hdone_v as [Hdone_v | Hv_eq_a].
+        * assert (Htree_done:
+                    done_tree_reachable_closed g u done
+                      (pop_scc_state s0 a)).
+          { eapply pop_scc_state_preserves_done_tree_reachable_closed;
+              eauto. }
+          unfold done_tree_reachable_closed in Htree_done.
+          specialize (Htree_done v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach).
+          exact Htree_done.
+        * subst v.
+          apply pop_scc_state_visited.
+          pose proof (Hsegment_if_root Hroot) as Hsegment.
+          unfold stack_segment_reachable_closed in Hsegment.
+          exact (Hsegment a w Ha_stack (Nat.le_refl _) Hreach).
+    - intro_state. hoare_auto_s.
+      destruct H1 as [Heq_st _]. subst s. subst s1.
+      split; [exact Hpending | exact Htree_closed].
   Qed.
 
   Lemma update_low_child_preserves_parent_pending
@@ -3477,20 +4176,21 @@ Section IS_LOW.
     unfold update_low. unfold_op. intro_state; hoare_auto_s.
     - pose proof H as Hpending_all.
       subst s. unfold RecordSet.set. simpl.
-      unfold low_tree_child_parent_pending in H.
-      destruct H as
-        (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-         Hfront & Hsrc & Hchild & Hfa_child & Hfa_not & Hord & Hinj &
-         Hdg & Hndone_a & Hvis_a & Hfa_a & Hfa_ne_a).
+	      unfold low_tree_child_parent_pending in H.
+		      destruct H as
+		        (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+		         Htree_closed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not & Hbelow & Hord &
+	           Hinj & Hdg & Hndone_a & Hvis_a & Hfa_a & Hfa_ne_a).
       unfold low_tree_child_parent_pending.
       split.
       { unfold wf_scc_state in Hwf |- *. simpl. exact Hwf. }
       split; [exact Hsettled |].
       split; [exact Huvis |].
-      split; [exact Hustack |].
-      split; [exact Hdonevis |].
-      split; [exact Hclosed |].
-      split.
+	      split; [exact Hustack |].
+	      split; [exact Hdonevis |].
+	      split; [exact Hclosed |].
+	      split; [exact Htree_closed |].
+	      split.
       + unfold low_frontier in Hfront |- *.
         destruct Hfront as [Hle Hrest].
         split.
@@ -3552,10 +4252,11 @@ Section IS_LOW.
 	             ++ apply (low_tree_child_parent_pending_not_tree_child_current
 	                         u a done s0 Hpending_all v Hdone_v Hdg_v Hfa_v Hfa_ne_v).
 	             ++ apply Hchild; [exact Hdone_v | exact Hdg_v | exact Hfa_v | exact Hfa_ne_v].
-          -- split; [exact Hfa_child |].
-             split; [exact Hfa_not |].
-             split; [exact Hord |].
-             split; [exact Hinj |].
+	          -- split; [exact Hfa_child |].
+	             split; [exact Hfa_not |].
+	             split; [exact Hbelow |].
+	             split; [exact Hord |].
+	             split; [exact Hinj |].
              split; [exact Hdg |].
              split; [exact Hndone_a |].
              split; [exact Hvis_a |].
@@ -3612,10 +4313,10 @@ Section IS_LOW.
     destruct H as [Hpending Hnot_x_vis].
     pose proof Hpending as Hpending_all.
     unfold low_tree_child_parent_pending in Hpending.
-    destruct Hpending as
-      (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-       Hfront & Hsrc & Hchild & Hfa_child & Hfa_not & Hord & Hinj &
-       Hdg & Hndone & Hvis_a & Hfa_a & Hfa_ne_a).
+		      destruct Hpending as
+		        (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+		       Htree_closed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not & Hbelow & Hord &
+	         Hinj & Hdg & Hndone & Hvis_a & Hfa_a & Hfa_ne_a).
     assert (Hx_ne_a: x <> a).
     { intro Hx_eq_a. subst x. apply Hnot_x_vis. exact Hvis_a. }
     unfold low_tree_child_parent_pending.
@@ -3640,59 +4341,68 @@ Section IS_LOW.
     split; [exact Hsettled |].
     split; [exact Huvis |].
     split; [exact Hustack |].
-    split; [exact Hdonevis |].
-    split; [exact Hclosed |].
-    split.
-    - unfold low_frontier in Hfront |- *.
+	    split; [exact Hdonevis |].
+	    split; [exact Hclosed |].
+	    split.
+	    - unfold done_tree_reachable_closed in Htree_closed |- *.
+	      intros v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach.
+	      assert (Hv_ne_x: v <> x).
+	      { intro Hv_eq_x. subst v. apply Hnot_x_vis. apply Hdonevis. exact Hdone_v. }
+	      simpl in Hfa_v, Hfa_ne_v. unfold equiv_decb in Hfa_v, Hfa_ne_v.
+	      destruct (equiv_dec v x) as [Hv_eq_x | _].
+	      + contradiction.
+	      + eapply Htree_closed; eauto.
+		    - split.
+		      + unfold low_frontier in Hfront |- *.
       destruct Hfront as [Hle Hrest].
       split; [exact Hle |].
       intros v Hdone_v Hdg_v.
       assert (Hv_ne_x: v <> x).
       { intro Hv_eq_x. subst v. apply Hnot_x_vis. apply Hdonevis. exact Hdone_v. }
       specialize (Hrest v Hdone_v Hdg_v) as [Hfa_part Hstack_part].
-      split.
-      + intro Hfa_v.
-        simpl in Hfa_v. unfold equiv_decb in Hfa_v.
-        destruct (equiv_dec v x) as [Hv_eq_x | _].
-        * exfalso. apply Hv_ne_x. exact Hv_eq_x.
-        * apply Hfa_part. exact Hfa_v.
-      + intro Hstack_v. apply Hstack_part. exact Hstack_v.
-    - split.
-      + unfold low_src in Hsrc |- *.
+	      split.
+	      * intro Hfa_v.
+	        simpl in Hfa_v. unfold equiv_decb in Hfa_v.
+	        destruct (equiv_dec v x) as [Hv_eq_x | _].
+	        -- exfalso. apply Hv_ne_x. exact Hv_eq_x.
+	        -- apply Hfa_part. exact Hfa_v.
+	      * intro Hstack_v. apply Hstack_part. exact Hstack_v.
+	      + split.
+	        * unfold low_src in Hsrc |- *.
         destruct Hsrc as [Hsrc |
           [(v & Hdone_v & Hdg_v & Hfa_v & Hfa_ne_v & Hlow_v) |
            (w & Hdone_w & Hdg_w & Hstack_w & Hfa_ne_w & Hlow_w)]].
-        * left. exact Hsrc.
-        * right. left. exists v.
+	        -- left. exact Hsrc.
+	        -- right. left. exists v.
           assert (Hv_ne_x: v <> x).
           { intro Hv_eq_x. subst v. apply Hnot_x_vis. apply Hdonevis. exact Hdone_v. }
           split; [exact Hdone_v |].
           split; [exact Hdg_v |].
           split.
-          -- simpl. unfold equiv_decb.
-             destruct (equiv_dec v x) as [Hv_eq_x | _].
-             ++ exfalso. apply Hv_ne_x. exact Hv_eq_x.
-             ++ exact Hfa_v.
-          -- split.
-             ++ simpl. unfold equiv_decb.
-                destruct (equiv_dec v x) as [Hv_eq_x | _].
-                ** exfalso. apply Hv_ne_x. exact Hv_eq_x.
-                ** exact Hfa_ne_v.
-             ++ exact Hlow_v.
-        * right. right. exists w.
+	          ++ simpl. unfold equiv_decb.
+	             destruct (equiv_dec v x) as [Hv_eq_x | _].
+	             ** exfalso. apply Hv_ne_x. exact Hv_eq_x.
+	             ** exact Hfa_v.
+	          ++ split.
+	             ** simpl. unfold equiv_decb.
+	                destruct (equiv_dec v x) as [Hv_eq_x | _].
+	                --- exfalso. apply Hv_ne_x. exact Hv_eq_x.
+	                --- exact Hfa_ne_v.
+	             ** exact Hlow_v.
+	        -- right. right. exists w.
           assert (Hw_ne_x: w <> x).
           { intro Hw_eq_x. subst w. apply Hnot_x_vis. apply Hdonevis. exact Hdone_w. }
           split; [exact Hdone_w |].
           split; [exact Hdg_w |].
           split; [exact Hstack_w |].
           split.
-          -- simpl. unfold equiv_decb.
-             destruct (equiv_dec w x) as [Hw_eq_x | _].
-             ++ exfalso. apply Hw_ne_x. exact Hw_eq_x.
-             ++ exact Hfa_ne_w.
-          -- exact Hlow_w.
-      + split.
-        * unfold children_low_valid in Hchild |- *.
+	          ++ simpl. unfold equiv_decb.
+	             destruct (equiv_dec w x) as [Hw_eq_x | _].
+	             ** exfalso. apply Hw_ne_x. exact Hw_eq_x.
+	             ** exact Hfa_ne_w.
+	          ++ exact Hlow_w.
+	        * split.
+	          -- unfold children_low_valid in Hchild |- *.
           intros v Hdone_v Hdg_v Hfa_v Hfa_ne_v.
           assert (Hv_ne_x: v <> x).
           { intro Hv_eq_x. subst v. apply Hnot_x_vis. apply Hdonevis. exact Hdone_v. }
@@ -3702,34 +4412,38 @@ Section IS_LOW.
 	          apply (set_fa_preserves_scc_low_valid_v_when_unvisited
 	                   g root v x a s0 Hnot_x_vis).
 	          apply Hchild; [exact Hdone_v | exact Hdg_v | exact Hfa_v | exact Hfa_ne_v].
-        * split.
-          -- unfold fa_child_of_u in Hfa_child |- *.
+	          -- split.
+	             ++ unfold fa_child_of_u in Hfa_child |- *.
              intros v [Hfa_v Hfa_ne_v].
 	             simpl in Hfa_v, Hfa_ne_v. unfold equiv_decb in Hfa_v, Hfa_ne_v.
 	             destruct (equiv_dec v x) as [Hv_eq_x | _].
-	             ++ exfalso. apply Ha_ne_u. exact Hfa_v.
-		             ++ apply Hfa_child. split; [exact Hfa_v | exact Hfa_ne_v].
-          -- split.
-             ++ unfold fa_not_done_implies_eq_u in Hfa_not |- *.
+		             ** exfalso. apply Ha_ne_u. exact Hfa_v.
+			             ** apply Hfa_child. split; [exact Hfa_v | exact Hfa_ne_v].
+	             ++ split.
+	                ** unfold fa_not_done_implies_eq_u in Hfa_not |- *.
                 intros v Hnot_done Hfa_v.
 	                simpl in Hfa_v. unfold equiv_decb in Hfa_v.
 	                destruct (equiv_dec v x) as [Hv_eq_x | _].
-	                ** exfalso. apply Ha_ne_u. exact Hfa_v.
-		                ** apply Hfa_not; [exact Hnot_done | exact Hfa_v].
-             ++ split; [exact Hord |].
-                split; [exact Hinj |].
-                split; [exact Hdg |].
-                split; [exact Hndone |].
-                split; [exact Hvis_a |].
-                split.
-                ** simpl. unfold equiv_decb.
-                   destruct (equiv_dec a x) as [Ha_eq_x | _].
-                   --- exfalso. apply Hx_ne_a. symmetry. exact Ha_eq_x.
-                   --- exact Hfa_a.
-                ** simpl. unfold equiv_decb.
-                   destruct (equiv_dec a x) as [Ha_eq_x | _].
-                   --- exfalso. apply Hx_ne_a. symmetry. exact Ha_eq_x.
-                   --- exact Hfa_ne_a.
+		                --- exfalso. apply Ha_ne_u. exact Hfa_v.
+				                --- apply Hfa_not; [exact Hnot_done | exact Hfa_v].
+	                ** split.
+	                  --- unfold done_vertices_below_current in Hbelow |- *.
+	                     intros v Hdone_v.
+	                     apply Hbelow; exact Hdone_v.
+	                  --- split; [exact Hord |].
+	                     split; [exact Hinj |].
+	                     split; [exact Hdg |].
+	                     split; [exact Hndone |].
+	                     split; [exact Hvis_a |].
+	                     split.
+	                     { simpl. unfold equiv_decb.
+	                       destruct (equiv_dec a x) as [Ha_eq_x | _].
+	                       - exfalso. apply Hx_ne_a. symmetry. exact Ha_eq_x.
+	                       - exact Hfa_a. }
+	                     { simpl. unfold equiv_decb.
+	                       destruct (equiv_dec a x) as [Ha_eq_x | _].
+	                       - exfalso. apply Hx_ne_a. symmetry. exact Ha_eq_x.
+	                       - exact Hfa_ne_a. }
   Qed.
 
   Lemma process_edge_preserves_parent_pending
@@ -3771,9 +4485,10 @@ Section IS_LOW.
                  settled_closed g s /\
                  a ∈ visited s /\
                  In a (stack s) /\
-                 done_visited inner_done s /\
-                 done_reachable_closed g inner_done s /\
-                 low_frontier g a inner_done s /\
+	                 done_visited inner_done s /\
+	                 done_reachable_closed g inner_done s /\
+                   done_tree_reachable_closed g a inner_done s /\
+	                 low_frontier g a inner_done s /\
                  low_src g a inner_done s /\
                  children_low_valid g root a inner_done s /\
                  fa_child_of_u g a s /\
@@ -3807,16 +4522,17 @@ Section IS_LOW.
                   destruct H as [_ [_ [_ [Hinj _]]]]. exact Hinj. }
           intros _ st [Hset [Hfa_not [Hord Hinj]]].
           unfold low_tree_child_after_set_fa.
-          destruct Hset as
-            (Hwfpre & Hsettled & Hvis_a & Hstack_a & Hdonevis &
-             Hclosed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_x).
+	          destruct Hset as
+	            (Hwfpre & Hsettled & Hvis_a & Hstack_a & Hdonevis &
+	             Hclosed & Htree_closed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_x).
           split; [exact Hwfpre |].
           split; [exact Hsettled |].
           split; [exact Hvis_a |].
           split; [exact Hstack_a |].
-          split; [exact Hdonevis |].
-          split; [exact Hclosed |].
-          split; [exact Hfront |].
+	          split; [exact Hdonevis |].
+	          split; [exact Hclosed |].
+            split; [exact Htree_closed |].
+	          split; [exact Hfront |].
           split; [exact Hsrc |].
           split; [exact Hchild |].
           split; [exact Hfa_child |].
@@ -4013,6 +4729,79 @@ Section IS_LOW.
         split; [exact Hdg | exact Hnot_done].
   Qed.
 
+  Lemma preloop_forset_preserves_parent_pending
+        (W: V -> program (@SCCSt V) unit)
+        (u a: V) (done: V -> Prop):
+    a <> u ->
+    ~ done a ->
+    dg_step g u a ->
+    (forall x inner_done s0,
+       dg_step g a x ->
+       ~ inner_done x ->
+       low_continuation_contract W a x inner_done s0) ->
+    low_parent_pending_frame_contract W ->
+    Hoare (low_tree_child_after_set_fa u a done)
+          (preloop a;;
+           forset (fun v => dg_step g a v) (process_edge a W))
+          (fun _ s =>
+             low_tree_child_parent_pending u a done s /\
+             low_iteration_done g root a s).
+  Proof.
+    intros Ha_ne_u Hndone Hdg Hcont Hparent_frame.
+    eapply Hoare_bind.
+    - apply Hoare_conj with
+        (Q1 := fun _ s => low_tree_child_parent_pending u a done s)
+        (Q2 := fun _ s => low_iteration_entry g root a s).
+      + apply preloop_establishes_parent_pending_from_after_set_fa; auto.
+      + eapply Hoare_conseq_pre.
+        2: { apply preloop_establishes_low_iteration_entry. }
+        intros st Hset.
+        unfold low_tree_child_after_set_fa in Hset.
+        destruct Hset as
+          (Hwfpre & Hsettled & _Huvis & _Hustack & _Hdonevis &
+           _Hclosed & _Htree_closed & _Hfront & _Hsrc & _Hchild &
+           _Hfa_child & _Hfa_not & _Hfa_a & Hord & Hinj).
+        split; [exact Hwfpre |].
+        split; [exact Hsettled |].
+        split; [exact Hord | exact Hinj].
+    - simpl. intros _.
+      eapply Hoare_conseq_pre.
+      2: {
+        apply forset_preserves_parent_pending; auto.
+      }
+      intros st [Hpending Hentry].
+      split; [exact Hpending | exact Hentry].
+  Qed.
+
+  Lemma preloop_forset_preserves_parent_pending_from_after_set_fa
+        (W: V -> program (@SCCSt V) unit)
+        (u a: V) (done: V -> Prop):
+    ~ done a ->
+    dg_step g u a ->
+    (forall x inner_done s0,
+       dg_step g a x ->
+       ~ inner_done x ->
+       low_continuation_contract W a x inner_done s0) ->
+    low_parent_pending_frame_contract W ->
+    Hoare (low_tree_child_after_set_fa u a done)
+          (preloop a;;
+           forset (fun v => dg_step g a v) (process_edge a W))
+          (fun _ s =>
+             low_tree_child_parent_pending u a done s /\
+             low_iteration_done g root a s).
+  Proof.
+    intros Hndone Hdg Hcont Hparent_frame.
+    unfold Hoare.
+    intros s1 r s2 Hset Hrun.
+    pose proof (low_tree_child_after_set_fa_child_ne_parent u a done s1 Hset)
+      as Ha_ne_u.
+    pose proof
+      (preloop_forset_preserves_parent_pending
+         W u a done Ha_ne_u Hndone Hdg Hcont Hparent_frame) as Hprefix.
+    unfold Hoare in Hprefix.
+    exact (Hprefix s1 r s2 Hset Hrun).
+  Qed.
+
   Lemma process_edge_preserves_low_iteration_from_tree_child_frame
         (u a: V) (done: V -> Prop) (s0: @SCCSt V)
         (W: V -> program (@SCCSt V) unit):
@@ -4126,8 +4915,10 @@ Section IS_LOW.
     eapply Hoare_conseq_post.
     2: {
       apply Hoare_conj with
-        (Q1 := fun _ s => low_tree_child_parent_pending u a done s)
-        (Q2 := fun _ s => scc_low_valid_v g root s a).
+	        (Q1 := fun _ s =>
+             low_tree_child_parent_pending u a done s /\
+             done_tree_reachable_closed g u (done ∪ [a]) s)
+	        (Q2 := fun _ s => scc_low_valid_v g root s a).
       - apply Hparent; auto.
       - eapply Hoare_conseq
 	          with
@@ -4142,20 +4933,20 @@ Section IS_LOW.
                      stack_dfn_order s /\
                      dfn_injective s).
         + intros st Hset.
-	          unfold low_tree_child_after_set_fa in Hset.
-	          destruct Hset as
-	            (Hwfpre & Hsettled & _Huvis & _Hustack & _Hdonevis &
-               _Hclosed & _Hfront & _Hsrc & _Hchild & _Hfa_child &
-               _Hfa_not & _Hfa_a & Hord & Hinj).
+		          unfold low_tree_child_after_set_fa in Hset.
+		          destruct Hset as
+		            (Hwfpre & Hsettled & _Huvis & _Hustack & _Hdonevis &
+	               _Hclosed & _Htree_closed & _Hfront & _Hsrc & _Hchild & _Hfa_child &
+	               _Hfa_not & _Hfa_a & Hord & Hinj).
 	          split; [exact Hwfpre | split; [exact Hsettled | split; [exact Hord | exact Hinj]]].
         + intros _ st Hpost.
           destruct Hpost as [[_Hwf Hvalid] [_Hvis [_Hord _Hinj]]].
           exact Hvalid.
         + apply tarjan_scc_f_keep_low_valid_from_tree_child_frame.
           exact Hframe. }
-    intros _ st [Hpending Hvalid].
-    unfold low_tree_child_after_recursive.
-    split; [exact Hpending | exact Hvalid].
+	    intros _ st [[Hpending Htree_closed] Hvalid].
+	    unfold low_tree_child_after_recursive.
+	    split; [exact Hpending | split; [exact Htree_closed | exact Hvalid]].
   Qed.
 
   Lemma tarjan_scc_f_preserves_parent_pending_frame
@@ -4177,9 +4968,44 @@ Section IS_LOW.
     low_tree_child_pending_contract (tarjan_scc_f g W).
   Proof.
     intros Hframe Hparent_frame u a done Hdg Hndone.
-    (* Remaining section-2.6 obligation: preserve the parent's
-       [children_low_valid] through the recursive child body, together
-       with the other parent pending fields. *)
+    unfold tarjan_scc_f.
+    rewrite <- bind_assoc.
+    eapply Hoare_bind
+      with (Q := fun _ s =>
+                    low_tree_child_parent_pending u a done s /\
+                    low_iteration_done g root a s).
+    - apply preloop_forset_preserves_parent_pending_from_after_set_fa.
+      * exact Hndone.
+      * exact Hdg.
+      * intros x inner_done s0 Hdg_ax Hndone_x.
+        apply low_tree_child_frame_contract_continuation; auto.
+      * exact Hparent_frame.
+    - simpl. intros _.
+      eapply Hoare_conseq_pre.
+      2: { apply if_pop_preserves_parent_pending_from_done_root_only. }
+      intros st [Hpending Hdone_iter].
+      split; [exact Hpending |].
+      split; [exact Hdone_iter |].
+      split.
+      + unfold done_tree_reachable_closed.
+        intros v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach.
+        sets_unfold in Hdone_v.
+        destruct Hdone_v as [Hdone_v | Hv_eq_a].
+        * unfold low_tree_child_parent_pending in Hpending.
+          destruct Hpending as
+            (_Hwf & _Hsettled & _Huvis & _Hustack & _Hdonevis &
+             _Hclosed & Htree_old & _).
+          eapply Htree_old; eauto.
+        * subst v.
+          unfold low_iteration_done in Hdone_iter.
+          destruct Hdone_iter as [Hiter [_ _]].
+          unfold low_iteration_inv in Hiter.
+          destruct Hiter as
+            (_Hwf_a & _Hsettled_a & _Hvis_a & Ha_stack & _).
+          contradiction.
+      + intros Hroot.
+        unfold stack_segment_reachable_closed.
+        intros v w Hv_stack Hdfn_a_le_v Hreach.
   Admitted.
 
   Lemma tarjan_scc_f_low_contracts
@@ -4197,14 +5023,14 @@ Section IS_LOW.
   (* Top-level low-link theorems                                     *)
   (* ================================================================ *)
 
-	  Theorem tarjan_scc_keep_low_valid (u: V):
-	    Hoare (fun s => low_pre g root u s /\ settled_closed g s /\
-                     stack_dfn_order s /\ dfn_injective s)
-          (tarjan_scc g u)
-          (fun _ s => low_valid_post g root u s /\
-                      u ∈ visited s /\
-                      stack_dfn_order s /\
-                      dfn_injective s).
+  Theorem tarjan_scc_keep_low_valid (u: V):
+    Hoare (fun s => low_pre g root u s /\ settled_closed g s /\
+                    stack_dfn_order s /\ dfn_injective s)
+        (tarjan_scc g u)
+        (fun _ s => low_valid_post g root u s /\
+                    u ∈ visited s /\
+                    stack_dfn_order s /\
+                    dfn_injective s).
   Proof.
     unfold tarjan_scc.
     set (P := fun (x: V) (mode: low_fix_mode) (s: @SCCSt V) =>

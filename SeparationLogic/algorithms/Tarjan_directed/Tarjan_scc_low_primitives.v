@@ -58,8 +58,9 @@ Section LOW_PRIMITIVES.
         (Q1 := fun _ s => wf_scc_state g root s)
         (Q2 := fun _ s => settled_closed g s /\
                           u ∈ visited s /\ In u (stack s) /\
-                          done_visited ∅ s /\ done_reachable_closed g ∅ s /\
-                          low_frontier g u ∅ s /\
+	                          done_visited ∅ s /\ done_reachable_closed g ∅ s /\
+                            done_tree_reachable_closed g u ∅ s /\
+	                          low_frontier g u ∅ s /\
                           low_src g u ∅ s /\
                           children_low_valid g root u ∅ s /\
                           fa_child_of_u g u s /\
@@ -72,9 +73,10 @@ Section LOW_PRIMITIVES.
         apply Hoare_conj with
           (Q1 := fun _ s => settled_closed g s)
           (Q2 := fun _ s => u ∈ visited s /\ In u (stack s) /\
-                            done_visited ∅ s /\
-                            done_reachable_closed g ∅ s /\
-                            low_frontier g u ∅ s /\ low_src g u ∅ s /\
+	                            done_visited ∅ s /\
+	                            done_reachable_closed g ∅ s /\
+                              done_tree_reachable_closed g u ∅ s /\
+	                            low_frontier g u ∅ s /\ low_src g u ∅ s /\
                             children_low_valid g root u ∅ s /\
                             fa_child_of_u g u s /\
                             fa_not_done_implies_eq_u u ∅ s).
@@ -85,9 +87,10 @@ Section LOW_PRIMITIVES.
         * (* Remaining 8 conjuncts *)
           apply Hoare_conj with
             (Q1 := fun _ s => u ∈ visited s)
-            (Q2 := fun _ s => In u (stack s) /\ done_visited ∅ s /\
-                              done_reachable_closed g ∅ s /\
-                              low_frontier g u ∅ s /\ low_src g u ∅ s /\
+	            (Q2 := fun _ s => In u (stack s) /\ done_visited ∅ s /\
+	                              done_reachable_closed g ∅ s /\
+                                done_tree_reachable_closed g u ∅ s /\
+	                              low_frontier g u ∅ s /\ low_src g u ∅ s /\
                               children_low_valid g root u ∅ s /\
                               fa_child_of_u g u s /\
                               fa_not_done_implies_eq_u u ∅ s).
@@ -98,9 +101,10 @@ Section LOW_PRIMITIVES.
           -- (* Remaining 7 conjuncts *)
             apply Hoare_conj with
               (Q1 := fun _ s => In u (stack s))
-              (Q2 := fun _ s => done_visited ∅ s /\
-                                done_reachable_closed g ∅ s /\
-                                low_frontier g u ∅ s /\
+	              (Q2 := fun _ s => done_visited ∅ s /\
+	                                done_reachable_closed g ∅ s /\
+                                  done_tree_reachable_closed g u ∅ s /\
+	                                low_frontier g u ∅ s /\
                                 low_src g u ∅ s /\
                                 children_low_valid g root u ∅ s /\
                                 fa_child_of_u g u s /\
@@ -116,12 +120,14 @@ Section LOW_PRIMITIVES.
               destruct Hpre as [Hwf Hnuvis].
               unfold wf_scc_state in Hwf.
               destruct Hwf as [_ [_ [_ Hfa]]].
-              split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]].
-              ** (* done_visited ∅ *)
-                unfold done_visited. intros w Hempty. destruct Hempty.
-              ** (* done_reachable_closed ∅ *)
-                unfold done_reachable_closed. intros v w Hempty. destruct Hempty.
-              ** (* low_frontier g u ∅ *)
+	              split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]].
+	              ** (* done_visited ∅ *)
+	                unfold done_visited. intros w Hempty. destruct Hempty.
+	              ** (* done_reachable_closed ∅ *)
+	                unfold done_reachable_closed. intros v w Hempty. destruct Hempty.
+                ** (* done_tree_reachable_closed ∅ *)
+                  unfold done_tree_reachable_closed. intros v w Hempty. destruct Hempty.
+	              ** (* low_frontier g u ∅ *)
                 unfold low_frontier.
                 split; [| intros v Hempty; destruct Hempty].
                 simpl. unfold equiv_decb.
@@ -196,9 +202,10 @@ Section LOW_PRIMITIVES.
              settled_closed g s /\
              u ∈ visited s /\
              In u (stack s) /\
-             done_visited done s /\
-             done_reachable_closed g done s /\
-             low_frontier g u done s /\
+	             done_visited done s /\
+	             done_reachable_closed g done s /\
+               done_tree_reachable_closed g u done s /\
+	             low_frontier g u done s /\
              low_src g u done s /\
              fa_child_of_u g u s /\
              fa_not_done_implies_eq_u u done s).
@@ -207,9 +214,10 @@ Section LOW_PRIMITIVES.
     unfold update_low. unfold_op. intro_state. hoare_auto_s.
     { (* Branch: n < low s0 a, set_low a n executed *)
       subst s. unfold RecordSet.set. simpl.
-      destruct H as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-                     Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]]].
+	      destruct H as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+                       Htree_closed & Hfront & Hsrc & Hchild & Hfa_child &
+                       Hfa_not).
+	      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]]]].
       - (* wf_scc_state *)
         unfold wf_scc_state in Hwf |- *.
         destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
@@ -217,9 +225,10 @@ Section LOW_PRIMITIVES.
       - (* settled_closed *) exact Hsettled.
       - (* u ∈ visited *) exact Huvis.
       - (* In u (stack s) *) exact Hustack.
-      - (* done_visited *) exact Hdonevis.
-      - (* done_reachable_closed *) exact Hclosed.
-      - (* low_frontier *)
+	      - (* done_visited *) exact Hdonevis.
+	      - (* done_reachable_closed *) exact Hclosed.
+        - (* done_tree_reachable_closed *) exact Htree_closed.
+	      - (* low_frontier *)
         unfold low_frontier in Hfront |- *.
         destruct Hfront as [Hle Hrest].
         split.
@@ -269,15 +278,17 @@ Section LOW_PRIMITIVES.
       - (* fa_not_done_implies_eq_u *) exact Hfa_not. }
     { (* Branch: ~ n < low s0 a, skip *)
       destruct H1 as [Heq _]. subst s.
-      destruct H as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-                     Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+	      destruct H as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+                       Htree_closed & Hfront & Hsrc & Hchild & Hfa_child &
+                       Hfa_not).
       split; [exact Hwf |].
       split; [exact Hsettled |].
       split; [exact Huvis |].
       split; [exact Hustack |].
-      split; [exact Hdonevis |].
-      split; [exact Hclosed |].
-      split; [exact Hfront |].
+	      split; [exact Hdonevis |].
+	      split; [exact Hclosed |].
+        split; [exact Htree_closed |].
+	      split; [exact Hfront |].
       split; [exact Hsrc |].
       split; [exact Hfa_child | exact Hfa_not]. }
   Qed.
@@ -412,9 +423,10 @@ Section LOW_PRIMITIVES.
           settled_closed g s /\
           u ∈ visited s /\
           In u (stack s) /\
-          done_visited done s /\
-          done_reachable_closed g done s /\
-          low_frontier g u done s /\
+	          done_visited done s /\
+	          done_reachable_closed g done s /\
+            done_tree_reachable_closed g u done s /\
+	          low_frontier g u done s /\
           low_src g u done s /\
           fa_child_of_u g u s /\
           fa_not_done_implies_eq_u u done s)
@@ -426,17 +438,26 @@ Section LOW_PRIMITIVES.
         2: apply (update_low_preserves_children_low_valid_when_not_tree_child u a done n Hndone).
         intros s Hpre.
         destruct Hpre as [Hiter Hnot_child].
-        destruct Hiter as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
-                           Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
-                           Hfa_not).
-        split; [exact Hchild | exact Hnot_child]. }
-    intros _ s [Hframe Hchild].
-    destruct Hframe as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
-                        Hclosed & Hfront & Hsrc & Hfa_child & Hfa_not).
-    unfold low_iteration_inv.
-    split; [exact Hwf | split; [exact Hsettled | split; [exact Huvis | split; [exact Hustack |
-      split; [exact Hdonevis | split; [exact Hclosed | split; [exact Hfront | split; [exact Hsrc |
-        split; [exact Hchild | split; [exact Hfa_child | exact Hfa_not]]]]]]]]]].
+	        destruct Hiter as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
+	                           Hclosed & Htree_closed & Hfront & Hsrc & Hchild &
+                             Hfa_child & Hfa_not).
+	        split; [exact Hchild | exact Hnot_child]. }
+	    intros _ s [Hframe Hchild].
+	    destruct Hframe as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
+	                        Hclosed & Htree_closed & Hfront & Hsrc & Hfa_child &
+                          Hfa_not).
+	    unfold low_iteration_inv.
+      split; [exact Hwf |].
+      split; [exact Hsettled |].
+      split; [exact Huvis |].
+      split; [exact Hustack |].
+      split; [exact Hdonevis |].
+      split; [exact Hclosed |].
+      split; [exact Htree_closed |].
+      split; [exact Hfront |].
+      split; [exact Hsrc |].
+      split; [exact Hchild |].
+      split; [exact Hfa_child | exact Hfa_not].
   Qed.
 
   (* ================================================================ *)
@@ -636,9 +657,10 @@ Section LOW_PRIMITIVES.
              settled_closed g s /\
              u ∈ visited s /\
              In u (stack s) /\
-             done_visited done s /\
-             done_reachable_closed g done s /\
-             low_frontier g u done s /\
+	             done_visited done s /\
+	             done_reachable_closed g done s /\
+               done_tree_reachable_closed g u done s /\
+	             low_frontier g u done s /\
              low_src g u done s /\
              children_low_valid g root u done s /\
              fa_child_of_u g u s /\
@@ -647,9 +669,10 @@ Section LOW_PRIMITIVES.
     unfold set_fa. intro_state. hoare_auto_s.
     subst s. unfold RecordSet.set. simpl.
     destruct H as (Hinv & Hnv & Hndone & Hdg).
-    destruct Hinv as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
-                      Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
-    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]]]].
+	    destruct Hinv as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+	                      Htree_closed & Hfront & Hsrc & Hchild & Hfa_child &
+                        Hfa_not).
+	    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]]]]].
     - (* wf_scc_state_pre g root a *)
       unfold wf_scc_state_pre. split.
       + (* wf_scc_state *)
@@ -684,9 +707,16 @@ Section LOW_PRIMITIVES.
     - (* settled_closed *) exact Hsettled.
     - (* u ∈ visited *) exact Huvis.
     - (* In u (stack s) *) exact Hustack.
-    - (* done_visited *) exact Hdonevis.
-    - (* done_reachable_closed *) exact Hclosed.
-    - (* low_frontier *)
+	    - (* done_visited *) exact Hdonevis.
+	    - (* done_reachable_closed *) exact Hclosed.
+      - (* done_tree_reachable_closed *)
+        unfold done_tree_reachable_closed in Htree_closed |- *.
+        intros v w Hdone_v Hnot_stack_v Hfa_v Hfa_ne_v Hreach.
+        simpl in Hfa_v, Hfa_ne_v. unfold equiv_decb in Hfa_v, Hfa_ne_v.
+        destruct (equiv_dec v a) as [Heq | _].
+        + exfalso. apply Hndone. rewrite <- Heq. exact Hdone_v.
+        + eapply Htree_closed; eauto.
+	    - (* low_frontier *)
       unfold low_frontier in Hfront |- *.
       destruct Hfront as [Hle Hrest]. split; [exact Hle |].
       intros v Hdone_v Hdg_v.
@@ -764,10 +794,10 @@ Section LOW_PRIMITIVES.
     subst s. unfold pop_scc_state.
     destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
     simpl.
-    destruct H as [[Hiter [Horder Hinj]] [Hscc Hlow_dfn]].
-    destruct Hiter as (Hwf & _Hsettled & Huvis & Hustack & Hdonevis &
-                       _Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
-                       Hfa_not).
+	    destruct H as [[Hiter [Horder Hinj]] [Hscc Hlow_dfn]].
+	    destruct Hiter as (Hwf & _Hsettled & Huvis & Hustack & Hdonevis &
+	                       _Hclosed & _Htree_closed & Hfront & Hsrc & Hchild &
+                         Hfa_child & Hfa_not).
     split; [| split; [| split; [| ]]].
     { (* wf_scc_state /\ scc_low_valid_v *)
       split.

@@ -282,7 +282,8 @@ Section LOW_PURE.
     unfold low_iteration_inv.
     split; intros H;
       destruct H as (Hwf & Hsettled & Hvis & Hstack & Hdv & Hclosed &
-                     Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+                     Htree_closed & Hfront & Hsrc & Hchild & Hfa_child &
+                     Hfa_not).
     - (* done1 -> done2 *)
       destruct Hwf as [Hstack_in [Hdfn_inv [Hdfn_valid Hfa_visited]]].
       destruct Hdfn_inv as [Hdfn_lt [Hdfn0 Htimer_pos]].
@@ -294,9 +295,14 @@ Section LOW_PURE.
         apply Hdfn0.
       + (* done_visited *)
         intros w Hw. apply Hdv. apply (proj2 (Hequiv w)). exact Hw.
-      + (* done_reachable_closed *)
-        intros v w Hv Hreach.
-        apply Hclosed with (v := v); [| exact Hreach].
+	      + (* done_reachable_closed *)
+	        intros v w Hv Hnot_stack Hreach.
+	        apply Hclosed with (v := v); [| exact Hnot_stack | exact Hreach].
+	        apply (proj2 (Hequiv v)). exact Hv.
+      + (* done_tree_reachable_closed *)
+        intros v w Hv Hfa Hfa_ne Hreach.
+        apply Htree_closed with (v := v);
+          [| exact Hfa | exact Hfa_ne | exact Hreach].
         apply (proj2 (Hequiv v)). exact Hv.
       + (* low_frontier: fa direction *)
         intros Hfa_eq.
@@ -323,8 +329,12 @@ Section LOW_PURE.
       + apply Hdfn0.
       + apply Hdfn0.
       + intros w Hw. apply Hdv. apply (proj1 (Hequiv w)). exact Hw.
-      + intros v w Hv Hreach.
-        apply Hclosed with (v := v); [| exact Hreach].
+	      + intros v w Hv Hnot_stack Hreach.
+	        apply Hclosed with (v := v); [| exact Hnot_stack | exact Hreach].
+	        apply (proj1 (Hequiv v)). exact Hv.
+      + intros v w Hv Hfa Hfa_ne Hreach.
+        apply Htree_closed with (v := v);
+          [| exact Hfa | exact Hfa_ne | exact Hreach].
         apply (proj1 (Hequiv v)). exact Hv.
       + intros Hfa_eq.
         specialize (Hfront' v (proj1 (Hequiv v) H) H1) as [Hfa_part _].
@@ -348,7 +358,7 @@ Section LOW_PURE.
     unfold low_iteration_inv in Hiter.
     destruct Hiter as
       (Hwf & _Hsettled & Huvis & Hustack & Hdone_vis & _Hclosed &
-       Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+       _Htree_closed & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
     unfold low_frontier in Hfront.
     destruct Hfront as [Hlow_dfn Hfront].
     unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset.
