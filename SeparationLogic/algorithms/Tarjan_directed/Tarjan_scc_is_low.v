@@ -1511,6 +1511,54 @@ Section IS_LOW.
     - apply tarjan_scc_keep_fa_stable_unvisited.
   Qed.
 
+  Theorem tarjan_scc_keep_root_fa (u fau: V):
+    Hoare (fun s: @SCCSt V => fa s u = fau)
+          (tarjan_scc g u)
+          (fun _ s => fa s u = fau).
+  Proof.
+    unfold tarjan_scc.
+    apply (Hoare_fix_logicv_conj (tarjan_scc_f g)
+             (fun (x: V) (fav: V) (s: SCCSt) => fa s x = fav)
+             (fun (x: V) (fav: V) (_: unit) (s: SCCSt) => fa s x = fav)
+             u fau
+             (fun (x: V) (p: V * V) (s: SCCSt) =>
+                x <> fst p /\ fst p ∈ visited s /\ fa s (fst p) = snd p)
+             (fun (_: V) (p: V * V) (_: unit) (s: SCCSt) =>
+                fst p ∈ visited s /\ fa s (fst p) = snd p)).
+    - intros x p.
+      destruct p as [tracked fav]. simpl.
+      apply (Tarjan_scc_basics.tarjan_scc_keep_fa
+               (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0) g x tracked fav).
+    - intros W IHother IHself x fav.
+      unfold tarjan_scc_f.
+      eapply Hoare_bind.
+      + apply Hoare_conj with
+          (Q1 := fun _ s => fa s x = fav)
+          (Q2 := fun _ s => x ∈ visited s).
+        * apply preloop_keep_fa_no_restriction.
+        * eapply Hoare_conseq_pre.
+          2: { apply preloop_self_visited. }
+          intros st _; exact I.
+      + simpl. intros _.
+        eapply Hoare_bind with
+          (Q := fun _ s => x ∈ visited s /\ fa s x = fav).
+        * eapply Hoare_conseq_pre.
+          2: {
+            apply (Tarjan_scc_basics.forset_process_edge_keep_fa
+                     (V:=V) (E:=E) (equiv0:=equiv0) (H0:=H0)
+                     g x x W fav).
+            intros y.
+            apply (IHother y (x, fav)). }
+          intros st [Hfa Hvis].
+          split; [exact Hvis | exact Hfa].
+        * simpl. intros _.
+          unfold If. intro_state. hoare_auto_s.
+          -- eapply Hoare_conseq_pre.
+             2: { apply (pop_scc_keep_fa x x fav). }
+             intros st Heq. subst st. exact (proj2 H).
+          -- destruct H1 as [Heq _]. subst s. exact (proj2 H).
+  Qed.
+
   (* ================================================================ *)
   (* Forset phase contracts                                          *)
   (* ================================================================ *)
@@ -2120,6 +2168,225 @@ Section IS_LOW.
             (W a)
             (fun _ s => low_tree_child_after_recursive u a done s).
 
+  Definition low_tree_child_pending_contract
+             (W: V -> program (@SCCSt V) unit): Prop :=
+    forall u a done,
+      dg_step g u a ->
+      ~ done a ->
+      Hoare (low_tree_child_after_set_fa u a done)
+            (W a)
+            (fun _ s => low_tree_child_parent_pending u a done s).
+
+  Lemma low_tree_child_after_set_fa_low_pre
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_tree_child_after_set_fa u a done s ->
+    low_pre g root a s.
+  Proof.
+    unfold low_tree_child_after_set_fa, low_pre, wf_scc_state_pre.
+    intros (Hwfpre & _).
+    exact Hwfpre.
+  Qed.
+
+  Lemma low_tree_child_after_set_fa_active_base_parent
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_tree_child_after_set_fa u a done s ->
+    active_base ((u, s) :: nil) s.
+  Proof.
+    unfold low_tree_child_after_set_fa, active_base, active_stack_frames.
+    intros (Hwfpre & _Huvis & Hustack & _Hdonevis & _Hfront & _Hsrc &
+            _Hchild & _Hfa_child & _Hfa_not & _Hfa_a & Hord & Hinj).
+    unfold wf_scc_state_pre in Hwfpre.
+    destruct Hwfpre as [Hwf _Hnot_a].
+    split.
+    - intros cur s0 Hin.
+      destruct Hin as [Hin | []].
+      inversion Hin. subst cur s0.
+      apply Q_active_stack_frame_current.
+      exact Hustack.
+    - split; [exact Hwf | split; [exact Hord | exact Hinj]].
+  Qed.
+
+  Lemma low_tree_child_after_set_fa_parent_below_timer
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    low_tree_child_after_set_fa u a done s ->
+    active_stack_frames_below_timer ((u, s) :: nil) s.
+  Proof.
+    unfold low_tree_child_after_set_fa, active_stack_frames_below_timer.
+    intros (Hwfpre & Huvis & _).
+    unfold wf_scc_state_pre, wf_scc_state in Hwfpre.
+    destruct Hwfpre as [[_ [Hinv _]] _].
+    destruct Hinv as [Htimer_lt _].
+    intros cur s0 Hin.
+    destruct Hin as [Hin | []].
+    inversion Hin. subst cur s0.
+    apply Htimer_lt. exact Huvis.
+  Qed.
+
+  Lemma tarjan_scc_preserves_parent_active_base_from_after_set_fa
+        (u a: V) (done: V -> Prop) (snap: @SCCSt V):
+    Hoare (fun s => s = snap /\ low_tree_child_after_set_fa u a done s)
+          (tarjan_scc g a)
+          (fun _ s => active_base ((u, snap) :: nil) s).
+  Proof.
+    eapply Hoare_conseq_pre.
+    2: { apply (tarjan_scc_preserves_active_base a ((u, snap) :: nil)). }
+    intros st [Heq Hset].
+    subst st.
+    split.
+    - apply (low_tree_child_after_set_fa_active_base_parent u a done).
+      exact Hset.
+    - split.
+      + apply (low_tree_child_after_set_fa_low_pre u a done).
+        exact Hset.
+      + apply (low_tree_child_after_set_fa_parent_below_timer u a done).
+        exact Hset.
+  Qed.
+
+  Lemma active_base_singleton_parent_fields
+        (u: V) (snap s: @SCCSt V):
+    active_base ((u, snap) :: nil) s ->
+    wf_scc_state g root s /\
+    u ∈ visited s /\
+    In u (stack s) /\
+    stack_dfn_order s /\
+    dfn_injective s.
+  Proof.
+    intros Hbase.
+    destruct Hbase as [Hframes [Hwf [Hord Hinj]]].
+    pose proof (Hframes u snap (or_introl eq_refl)) as Hactive.
+    split; [exact Hwf |].
+    split.
+    - unfold wf_scc_state in Hwf.
+      destruct Hwf as [Hstack_in _].
+      apply Hstack_in.
+      exact (Q_active_stack_frame_self_stack u snap s Hactive).
+    - split; [exact (Q_active_stack_frame_self_stack u snap s Hactive) |].
+      split; [exact Hord | exact Hinj].
+  Qed.
+
+  Lemma tarjan_scc_preserves_parent_stack_fields_from_after_set_fa
+        (u a: V) (done: V -> Prop) (snap: @SCCSt V):
+    Hoare (fun s => s = snap /\ low_tree_child_after_set_fa u a done s)
+          (tarjan_scc g a)
+          (fun _ s =>
+             wf_scc_state g root s /\
+             u ∈ visited s /\
+             In u (stack s) /\
+             stack_dfn_order s /\
+             dfn_injective s).
+  Proof.
+    eapply Hoare_conseq
+      with
+        (P2 := fun s => s = snap /\ low_tree_child_after_set_fa u a done s)
+        (Q2 := fun _ s => active_base ((u, snap) :: nil) s).
+    - intros st Hpre. exact Hpre.
+    - intros _ st Hbase.
+      apply (active_base_singleton_parent_fields u snap).
+      exact Hbase.
+    - apply (tarjan_scc_preserves_parent_active_base_from_after_set_fa u a done snap).
+  Qed.
+
+  Lemma tarjan_scc_preserves_done_visited_from_after_set_fa
+        (u a: V) (done: V -> Prop) (snap: @SCCSt V):
+    Hoare (fun s => s = snap /\ low_tree_child_after_set_fa u a done s)
+          (tarjan_scc g a)
+          (fun _ s => done_visited done s).
+  Proof.
+    eapply Hoare_conseq
+      with
+        (P2 := fun s => done_visited done s)
+        (Q2 := fun _ s => forall v, done v -> v ∈ visited s).
+    - intros st [Heq Hset].
+      subst st.
+      unfold low_tree_child_after_set_fa in Hset.
+      destruct Hset as (_ & _ & _ & Hdonevis & _).
+      exact Hdonevis.
+    - intros _ st Hdonevis.
+      unfold done_visited.
+      exact Hdonevis.
+    - apply tarjan_scc_keep_visited_forall. exact OriginalGraph_gvalid0.
+  Qed.
+
+  Lemma tarjan_scc_preserves_child_parent_fa_from_after_set_fa
+        (u a: V) (done: V -> Prop) (snap: @SCCSt V):
+    Hoare (fun s => s = snap /\ low_tree_child_after_set_fa u a done s)
+          (tarjan_scc g a)
+          (fun _ s => fa s a = u /\ fa s a <> a).
+  Proof.
+    unfold Hoare.
+    intros s1 r s2 [Heq Hset] Hrun.
+    subst s1.
+    unfold low_tree_child_after_set_fa in Hset.
+    destruct Hset as
+      (Hwfpre & Huvis & _Hustack & _Hdonevis & _Hfront & _Hsrc &
+       _Hchild & _Hfa_child & _Hfa_not & Hfa_a & _Hord & _Hinj).
+    unfold wf_scc_state_pre in Hwfpre.
+    destruct Hwfpre as [_Hwf Hnot_a_vis].
+    assert (Ha_neq_u: a <> u).
+    { intro Ha_eq. subst a. apply Hnot_a_vis. exact Huvis. }
+    pose proof (tarjan_scc_keep_root_fa a u) as Hkeep.
+    unfold Hoare in Hkeep.
+    specialize (Hkeep snap r s2 Hfa_a Hrun).
+    split; [exact Hkeep |].
+    intro Hloop.
+    apply Ha_neq_u.
+    rewrite Hkeep in Hloop.
+    symmetry. exact Hloop.
+  Qed.
+
+  Definition low_tree_child_parent_low_fields
+             (u a: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
+    low_frontier g u done s /\
+    low_src g u done s /\
+    children_low_valid g root u done s /\
+    fa_child_of_u g u s /\
+    fa_not_done_implies_eq_u u (done ∪ [a]) s.
+
+  Lemma low_tree_child_parent_pending_from_fields
+        (u a: V) (done: V -> Prop) (s: @SCCSt V):
+    wf_scc_state g root s ->
+    u ∈ visited s ->
+    In u (stack s) ->
+    done_visited done s ->
+    low_tree_child_parent_low_fields u a done s ->
+    stack_dfn_order s ->
+    dfn_injective s ->
+    dg_step g u a ->
+    ~ done a ->
+    a ∈ visited s ->
+    fa s a = u ->
+    fa s a <> a ->
+    low_tree_child_parent_pending u a done s.
+  Proof.
+    intros Hwf Huvis Hustack Hdonevis Hfields Hord Hinj
+           Hdg Hndone Hvis_a Hfa_a Hfa_neq_a.
+    destruct Hfields as [Hfront [Hsrc [Hchild [Hfa_child Hfa_not]]]].
+    unfold low_tree_child_parent_pending.
+    split; [exact Hwf |].
+    split; [exact Huvis |].
+    split; [exact Hustack |].
+    split; [exact Hdonevis |].
+    split; [exact Hfront |].
+    split; [exact Hsrc |].
+    split; [exact Hchild |].
+    split; [exact Hfa_child |].
+    split; [exact Hfa_not |].
+    split; [exact Hord |].
+    split; [exact Hinj |].
+    split; [exact Hdg |].
+    split; [exact Hndone |].
+    split; [exact Hvis_a |].
+    split; [exact Hfa_a | exact Hfa_neq_a].
+  Qed.
+
+  Definition no_new_parent_to
+             (parent root_child: V) (s0 s: @SCCSt V): Prop :=
+    forall v,
+      fa s v = parent ->
+      v <> parent ->
+      v <> root_child ->
+      v ∈ visited s0.
+
   Lemma low_tree_child_frame_contract_continuation
         (W: V -> program (@SCCSt V) unit)
         (u a: V) (done: V -> Prop) (s0: @SCCSt V):
@@ -2310,20 +2577,20 @@ Section IS_LOW.
         (W: V -> program (@SCCSt V) unit)
         (u a: V) (done: V -> Prop):
     low_tree_child_frame_contract W ->
-    Hoare (low_tree_child_after_set_fa u a done)
-          (tarjan_scc_f g W a)
-          (fun _ s => low_tree_child_parent_pending u a done s) ->
+    low_tree_child_pending_contract (tarjan_scc_f g W) ->
+    dg_step g u a ->
+    ~ done a ->
     Hoare (low_tree_child_after_set_fa u a done)
           (tarjan_scc_f g W a)
           (fun _ s => low_tree_child_after_recursive u a done s).
   Proof.
-    intros Hframe Hparent.
+    intros Hframe Hparent Hdg Hndone.
     eapply Hoare_conseq_post.
     2: {
       apply Hoare_conj with
         (Q1 := fun _ s => low_tree_child_parent_pending u a done s)
         (Q2 := fun _ s => scc_low_valid_v g root s a).
-      - exact Hparent.
+      - apply Hparent; auto.
       - eapply Hoare_conseq
           with
             (P2 := fun s =>
