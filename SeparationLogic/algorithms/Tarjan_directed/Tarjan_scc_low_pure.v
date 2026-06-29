@@ -237,6 +237,18 @@ Section LOW_PURE.
     - apply H. destruct (Hequiv w) as [Hfw _]. apply Hfw. exact Hw.
   Qed.
 
+  Lemma done_reachable_closed_proper:
+    Proper (Sets.equiv ==> eq ==> iff) (done_reachable_closed g).
+  Proof.
+    unfold Proper, respectful, done_reachable_closed.
+    intros done1 done2 Hequiv s1 s2 Heq_s.
+    subst s2. split; intros H v w Hv Hreach.
+    - apply H with (v := v); [| exact Hreach].
+      apply (proj2 (Hequiv v)). exact Hv.
+    - apply H with (v := v); [| exact Hreach].
+      apply (proj1 (Hequiv v)). exact Hv.
+  Qed.
+
   Lemma low_src_proper (u: V) (s: @SCCSt V):
     Proper (Sets.equiv ==> iff) (fun done => low_src g u done s).
   Proof.
@@ -268,7 +280,9 @@ Section LOW_PURE.
     intros done1 done2 Hequiv s1 s2 Heq_s.
     subst s2.
     unfold low_iteration_inv.
-    split; intros H; destruct H as [Hwf [Hvis [Hstack [Hdv [Hfront [Hsrc [Hchild [Hfa_child Hfa_not]]]]]]]].
+    split; intros H;
+      destruct H as (Hwf & Hsettled & Hvis & Hstack & Hdv & Hclosed &
+                     Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
     - (* done1 -> done2 *)
       destruct Hwf as [Hstack_in [Hdfn_inv [Hdfn_valid Hfa_visited]]].
       destruct Hdfn_inv as [Hdfn_lt [Hdfn0 Htimer_pos]].
@@ -280,6 +294,10 @@ Section LOW_PURE.
         apply Hdfn0.
       + (* done_visited *)
         intros w Hw. apply Hdv. apply (proj2 (Hequiv w)). exact Hw.
+      + (* done_reachable_closed *)
+        intros v w Hv Hreach.
+        apply Hclosed with (v := v); [| exact Hreach].
+        apply (proj2 (Hequiv v)). exact Hv.
       + (* low_frontier: fa direction *)
         intros Hfa_eq.
         specialize (Hfront' v (proj2 (Hequiv v) H) H1) as [Hfa_part _].
@@ -305,6 +323,9 @@ Section LOW_PURE.
       + apply Hdfn0.
       + apply Hdfn0.
       + intros w Hw. apply Hdv. apply (proj1 (Hequiv w)). exact Hw.
+      + intros v w Hv Hreach.
+        apply Hclosed with (v := v); [| exact Hreach].
+        apply (proj1 (Hequiv v)). exact Hv.
       + intros Hfa_eq.
         specialize (Hfront' v (proj1 (Hequiv v) H) H1) as [Hfa_part _].
         apply Hfa_part. exact Hfa_eq.
@@ -326,7 +347,8 @@ Section LOW_PURE.
     intros [Hiter [_ _]].
     unfold low_iteration_inv in Hiter.
     destruct Hiter as
-      [Hwf [Huvis [Hustack [Hdone_vis [Hfront [Hsrc [Hchild [Hfa_child Hfa_not]]]]]]]].
+      (Hwf & _Hsettled & Huvis & Hustack & Hdone_vis & _Hclosed &
+       Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
     unfold low_frontier in Hfront.
     destruct Hfront as [Hlow_dfn Hfront].
     unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset.

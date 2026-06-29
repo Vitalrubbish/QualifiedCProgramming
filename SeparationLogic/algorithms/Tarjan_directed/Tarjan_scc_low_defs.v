@@ -71,6 +71,9 @@ Section LOW_DEFS.
   Definition done_visited (done: V -> Prop) (s: @SCCSt V): Prop :=
     forall w, done w -> w ∈ visited s.
 
+  Definition done_reachable_closed (done: V -> Prop) (s: @SCCSt V): Prop :=
+    forall v w, done v -> ~ In v (stack s) -> dg_reachable g v w -> w ∈ visited s.
+
   Definition fa_child_of_u (u: V) (s: @SCCSt V): Prop :=
     forall v, fa s v = u /\ fa s v <> v -> dg_step g u v.
 
@@ -101,9 +104,11 @@ Section LOW_DEFS.
   Definition low_iteration_inv
              (u: V) (done: V -> Prop) (s: @SCCSt V): Prop :=
     wf_scc_state g root s /\
+    settled_closed g s /\
     u ∈ visited s /\
     In u (stack s) /\
     done_visited done s /\
+    done_reachable_closed done s /\
     low_frontier u done s /\
     low_src u done s /\
     children_low_valid u done s /\

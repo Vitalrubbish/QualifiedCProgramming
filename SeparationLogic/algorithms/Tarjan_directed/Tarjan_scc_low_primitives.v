@@ -41,7 +41,10 @@ Section LOW_PRIMITIVES.
 
   Lemma preloop_establishes_low_iteration_entry (u: V):
     Hoare (fun s: @SCCSt V =>
-             low_pre g root u s /\ stack_dfn_order s /\ dfn_injective s)
+             low_pre g root u s /\
+             settled_closed g s /\
+             stack_dfn_order s /\
+             dfn_injective s)
           (preloop u)
           (fun _ s => low_iteration_entry g root u s).
   Proof.
@@ -53,8 +56,10 @@ Section LOW_PRIMITIVES.
       unfold low_iteration_inv.
       apply Hoare_conj with
         (Q1 := fun _ s => wf_scc_state g root s)
-        (Q2 := fun _ s => u ∈ visited s /\ In u (stack s) /\
-                          done_visited ∅ s /\ low_frontier g u ∅ s /\
+        (Q2 := fun _ s => settled_closed g s /\
+                          u ∈ visited s /\ In u (stack s) /\
+                          done_visited ∅ s /\ done_reachable_closed g ∅ s /\
+                          low_frontier g u ∅ s /\
                           low_src g u ∅ s /\
                           children_low_valid g root u ∅ s /\
                           fa_child_of_u g u s /\
@@ -65,77 +70,96 @@ Section LOW_PRIMITIVES.
         unfold wf_scc_state_pre. intros s. tauto.
       + (* Remaining 8 conjuncts *)
         apply Hoare_conj with
-          (Q1 := fun _ s => u ∈ visited s)
-          (Q2 := fun _ s => In u (stack s) /\ done_visited ∅ s /\
+          (Q1 := fun _ s => settled_closed g s)
+          (Q2 := fun _ s => u ∈ visited s /\ In u (stack s) /\
+                            done_visited ∅ s /\
+                            done_reachable_closed g ∅ s /\
                             low_frontier g u ∅ s /\ low_src g u ∅ s /\
                             children_low_valid g root u ∅ s /\
                             fa_child_of_u g u s /\
                             fa_not_done_implies_eq_u u ∅ s).
-        * (* u ∈ visited *)
+        * (* settled_closed *)
           eapply Hoare_conseq_pre.
-          2: apply (preloop_self_visited u).
+          2: apply (preloop_keep_settled_closed g u).
           intros s. tauto.
-        * (* Remaining 7 conjuncts *)
+        * (* Remaining 8 conjuncts *)
           apply Hoare_conj with
-            (Q1 := fun _ s => In u (stack s))
-            (Q2 := fun _ s => done_visited ∅ s /\ low_frontier g u ∅ s /\
-                              low_src g u ∅ s /\
+            (Q1 := fun _ s => u ∈ visited s)
+            (Q2 := fun _ s => In u (stack s) /\ done_visited ∅ s /\
+                              done_reachable_closed g ∅ s /\
+                              low_frontier g u ∅ s /\ low_src g u ∅ s /\
                               children_low_valid g root u ∅ s /\
                               fa_child_of_u g u s /\
                               fa_not_done_implies_eq_u u ∅ s).
-          -- (* In u (stack s) *)
+          -- (* u ∈ visited *)
             eapply Hoare_conseq_pre.
-            2: apply (preloop_in_stack u).
+            2: apply (preloop_self_visited u).
             intros s. tauto.
-          -- (* Remaining 6 conjuncts — prove directly via intro_state *)
-            unfold preloop. unfold_op. intro_state. hoare_auto_s.
-            subst s. simpl.
-            destruct H as [Hpre [Horder Hinj]].
-            destruct Hpre as [Hwf Hnuvis].
-            unfold wf_scc_state in Hwf.
-            destruct Hwf as [_ [_ [_ Hfa]]].
-            split; [| split; [| split; [| split; [| split; [| ]]]]].
-            ++ (* done_visited ∅ *)
-              unfold done_visited. intros w Hempty. destruct Hempty.
-            ++ (* low_frontier g u ∅ *)
-              unfold low_frontier.
-              split; [| intros v Hempty; destruct Hempty].
-              simpl. unfold equiv_decb.
-              destruct (equiv_dec u u) as [Heq | Hneq];
-                [apply le_n | exfalso; apply Hneq; reflexivity].
-            ++ (* low_src g u ∅ *)
-              unfold low_src. left. simpl.
-              unfold equiv_decb.
-              destruct (equiv_dec u u) as [Heq | Hneq];
-                [reflexivity | exfalso; apply Hneq; reflexivity].
-            ++ (* children_low_valid g root u ∅ *)
-              unfold children_low_valid.
-              intros v Hempty. destruct Hempty.
-            ++ (* fa_child_of_u g u *)
-              unfold fa_child_of_u.
-              intros v [Hfa_v Hfa_neq].
-              simpl in Hfa_v, Hfa_neq.
-              apply Hfa in Hfa_neq.
-              rewrite Hfa_v in Hfa_neq.
-              exfalso. apply Hnuvis. exact Hfa_neq.
-            ++ (* fa_not_done_implies_eq_u u ∅ *)
-              unfold fa_not_done_implies_eq_u.
-              intros v _ Hfa_v.
-              simpl in Hfa_v.
-              destruct (equiv_dec v u) as [Heq | Hneq]; [exact Heq | exfalso].
-              assert (Hfa_neq: fa s0 v <> v). {
-                intro Heq_fa. apply Hneq. rewrite <- Heq_fa. exact Hfa_v.
-              }
-              apply Hfa in Hfa_neq.
-              rewrite Hfa_v in Hfa_neq.
-              apply Hnuvis. exact Hfa_neq.
+          -- (* Remaining 7 conjuncts *)
+            apply Hoare_conj with
+              (Q1 := fun _ s => In u (stack s))
+              (Q2 := fun _ s => done_visited ∅ s /\
+                                done_reachable_closed g ∅ s /\
+                                low_frontier g u ∅ s /\
+                                low_src g u ∅ s /\
+                                children_low_valid g root u ∅ s /\
+                                fa_child_of_u g u s /\
+                                fa_not_done_implies_eq_u u ∅ s).
+            ++ (* In u (stack s) *)
+              eapply Hoare_conseq_pre.
+              2: apply (preloop_in_stack u).
+              intros s. tauto.
+            ++ (* Remaining 6 conjuncts — prove directly via intro_state *)
+              unfold preloop. unfold_op. intro_state. hoare_auto_s.
+              subst s. simpl.
+              destruct H as [Hpre [Hsettled [Horder Hinj]]].
+              destruct Hpre as [Hwf Hnuvis].
+              unfold wf_scc_state in Hwf.
+              destruct Hwf as [_ [_ [_ Hfa]]].
+              split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]].
+              ** (* done_visited ∅ *)
+                unfold done_visited. intros w Hempty. destruct Hempty.
+              ** (* done_reachable_closed ∅ *)
+                unfold done_reachable_closed. intros v w Hempty. destruct Hempty.
+              ** (* low_frontier g u ∅ *)
+                unfold low_frontier.
+                split; [| intros v Hempty; destruct Hempty].
+                simpl. unfold equiv_decb.
+                destruct (equiv_dec u u) as [Heq | Hneq];
+                  [apply le_n | exfalso; apply Hneq; reflexivity].
+              ** (* low_src g u ∅ *)
+                unfold low_src. left. simpl.
+                unfold equiv_decb.
+                destruct (equiv_dec u u) as [Heq | Hneq];
+                  [reflexivity | exfalso; apply Hneq; reflexivity].
+              ** (* children_low_valid g root u ∅ *)
+                unfold children_low_valid.
+                intros v Hempty. destruct Hempty.
+              ** (* fa_child_of_u g u *)
+                unfold fa_child_of_u.
+                intros v [Hfa_v Hfa_neq].
+                simpl in Hfa_v, Hfa_neq.
+                apply Hfa in Hfa_neq.
+                rewrite Hfa_v in Hfa_neq.
+                exfalso. apply Hnuvis. exact Hfa_neq.
+              ** (* fa_not_done_implies_eq_u u ∅ *)
+                unfold fa_not_done_implies_eq_u.
+                intros v _ Hfa_v.
+                simpl in Hfa_v.
+                destruct (equiv_dec v u) as [Heq | Hneq]; [exact Heq | exfalso].
+                assert (Hfa_neq: fa s0 v <> v). {
+                  intro Heq_fa. apply Hneq. rewrite <- Heq_fa. exact Hfa_v.
+                }
+                apply Hfa in Hfa_neq.
+                rewrite Hfa_v in Hfa_neq.
+                apply Hnuvis. exact Hfa_neq.
     - (* Part 2: stack_dfn_order /\ dfn_injective *)
       apply Hoare_conj.
       + (* stack_dfn_order *)
         eapply Hoare_conseq_pre.
         2: apply (preloop_preserves_stack_dfn_order u).
         intros s Hpre.
-        destruct Hpre as [[Hwf Hnuvis] [Horder Hinj]].
+        destruct Hpre as [[Hwf Hnuvis] [_Hsettled [Horder Hinj]]].
         unfold wf_scc_state in Hwf.
         destruct Hwf as [Hsiv [Hinv _]].
         split; [exact Horder | split; [exact Hinv | split; [exact Hsiv | exact Hnuvis]]].
@@ -143,7 +167,7 @@ Section LOW_PRIMITIVES.
         eapply Hoare_conseq_pre.
         2: apply (preloop_preserves_dfn_injective u).
         intros s Hpre.
-        destruct Hpre as [[Hwf Hnuvis] [Horder Hinj]].
+        destruct Hpre as [[Hwf Hnuvis] [_Hsettled [Horder Hinj]]].
         unfold wf_scc_state in Hwf.
         destruct Hwf as [_ [Hinv _]].
         split; [exact Hinj | split; [exact Hinv | exact Hnuvis]].
@@ -167,11 +191,13 @@ Section LOW_PRIMITIVES.
     ~ done a ->
     Hoare (fun s: @SCCSt V => low_iteration_inv g root u done s)
           (update_low a n)
-          (fun _ s =>
+             (fun _ s =>
              wf_scc_state g root s /\
+             settled_closed g s /\
              u ∈ visited s /\
              In u (stack s) /\
              done_visited done s /\
+             done_reachable_closed g done s /\
              low_frontier g u done s /\
              low_src g u done s /\
              fa_child_of_u g u s /\
@@ -181,15 +207,18 @@ Section LOW_PRIMITIVES.
     unfold update_low. unfold_op. intro_state. hoare_auto_s.
     { (* Branch: n < low s0 a, set_low a n executed *)
       subst s. unfold RecordSet.set. simpl.
-      destruct H as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]].
+      destruct H as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+                     Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]]].
       - (* wf_scc_state *)
         unfold wf_scc_state in Hwf |- *.
         destruct Hwf as [Hsiv [Hinv [Hvalid Hfa_vis]]].
         split; [exact Hsiv | split; [exact Hinv | split; [exact Hvalid | exact Hfa_vis]]].
+      - (* settled_closed *) exact Hsettled.
       - (* u ∈ visited *) exact Huvis.
       - (* In u (stack s) *) exact Hustack.
       - (* done_visited *) exact Hdonevis.
+      - (* done_reachable_closed *) exact Hclosed.
       - (* low_frontier *)
         unfold low_frontier in Hfront |- *.
         destruct Hfront as [Hle Hrest].
@@ -240,10 +269,17 @@ Section LOW_PRIMITIVES.
       - (* fa_not_done_implies_eq_u *) exact Hfa_not. }
     { (* Branch: ~ n < low s0 a, skip *)
       destruct H1 as [Heq _]. subst s.
-      destruct H as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
-      split; [exact Hwf | split; [exact Huvis | split; [exact Hustack |
-        split; [exact Hdonevis | split; [exact Hfront | split; [exact Hsrc |
-          split; [exact Hfa_child | exact Hfa_not]]]]]]]. }
+      destruct H as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+                     Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+      split; [exact Hwf |].
+      split; [exact Hsettled |].
+      split; [exact Huvis |].
+      split; [exact Hustack |].
+      split; [exact Hdonevis |].
+      split; [exact Hclosed |].
+      split; [exact Hfront |].
+      split; [exact Hsrc |].
+      split; [exact Hfa_child | exact Hfa_not]. }
   Qed.
 
   Lemma set_low_preserves_scc_low_valid_v_when_not_child
@@ -373,9 +409,11 @@ Section LOW_PRIMITIVES.
       apply Hoare_conj with
         (Q1 := fun _ s =>
           wf_scc_state g root s /\
+          settled_closed g s /\
           u ∈ visited s /\
           In u (stack s) /\
           done_visited done s /\
+          done_reachable_closed g done s /\
           low_frontier g u done s /\
           low_src g u done s /\
           fa_child_of_u g u s /\
@@ -388,14 +426,17 @@ Section LOW_PRIMITIVES.
         2: apply (update_low_preserves_children_low_valid_when_not_tree_child u a done n Hndone).
         intros s Hpre.
         destruct Hpre as [Hiter Hnot_child].
-        destruct Hiter as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+        destruct Hiter as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
+                           Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
+                           Hfa_not).
         split; [exact Hchild | exact Hnot_child]. }
     intros _ s [Hframe Hchild].
-    destruct Hframe as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hfa_child & Hfa_not).
+    destruct Hframe as (Hwf & Hsettled & Huvis & Hustack & Hdonevis &
+                        Hclosed & Hfront & Hsrc & Hfa_child & Hfa_not).
     unfold low_iteration_inv.
-    split; [exact Hwf | split; [exact Huvis | split; [exact Hustack |
-      split; [exact Hdonevis | split; [exact Hfront | split; [exact Hsrc |
-        split; [exact Hchild | split; [exact Hfa_child | exact Hfa_not]]]]]]]].
+    split; [exact Hwf | split; [exact Hsettled | split; [exact Huvis | split; [exact Hustack |
+      split; [exact Hdonevis | split; [exact Hclosed | split; [exact Hfront | split; [exact Hsrc |
+        split; [exact Hchild | split; [exact Hfa_child | exact Hfa_not]]]]]]]]]].
   Qed.
 
   (* ================================================================ *)
@@ -590,11 +631,13 @@ Section LOW_PRIMITIVES.
              ~ done a /\
              dg_step g u a)
           (set_fa a u)
-          (fun _ s =>
+             (fun _ s =>
              wf_scc_state_pre g root a s /\
+             settled_closed g s /\
              u ∈ visited s /\
              In u (stack s) /\
              done_visited done s /\
+             done_reachable_closed g done s /\
              low_frontier g u done s /\
              low_src g u done s /\
              children_low_valid g root u done s /\
@@ -604,8 +647,9 @@ Section LOW_PRIMITIVES.
     unfold set_fa. intro_state. hoare_auto_s.
     subst s. unfold RecordSet.set. simpl.
     destruct H as (Hinv & Hnv & Hndone & Hdg).
-    destruct Hinv as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
-    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]].
+    destruct Hinv as (Hwf & Hsettled & Huvis & Hustack & Hdonevis & Hclosed &
+                      Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| ]]]]]]]]]].
     - (* wf_scc_state_pre g root a *)
       unfold wf_scc_state_pre. split.
       + (* wf_scc_state *)
@@ -637,9 +681,11 @@ Section LOW_PRIMITIVES.
           { (* v = a, fa = u, need u ∈ visited *) exact Huvis. }
           { (* v <> a, fa unchanged *) apply Hfa_vis. exact Hfa_neq. }
       + (* ~ a ∈ visited *) exact Hnv.
+    - (* settled_closed *) exact Hsettled.
     - (* u ∈ visited *) exact Huvis.
     - (* In u (stack s) *) exact Hustack.
     - (* done_visited *) exact Hdonevis.
+    - (* done_reachable_closed *) exact Hclosed.
     - (* low_frontier *)
       unfold low_frontier in Hfront |- *.
       destruct Hfront as [Hle Hrest]. split; [exact Hle |].
@@ -719,7 +765,9 @@ Section LOW_PRIMITIVES.
     destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
     simpl.
     destruct H as [[Hiter [Horder Hinj]] [Hscc Hlow_dfn]].
-    destruct Hiter as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+    destruct Hiter as (Hwf & _Hsettled & Huvis & Hustack & Hdonevis &
+                       _Hclosed & Hfront & Hsrc & Hchild & Hfa_child &
+                       Hfa_not).
     split; [| split; [| split; [| ]]].
     { (* wf_scc_state /\ scc_low_valid_v *)
       split.
@@ -834,7 +882,8 @@ Section LOW_PRIMITIVES.
       unfold low_valid_post, low_iteration_done.
       destruct H as [Hiter Hscc].
       destruct Hiter as [Hinv [Horder Hinj]].
-      destruct Hinv as (Hwf & Huvis & Hustack & Hdonevis & Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
+      destruct Hinv as (Hwf & _Hsettled & Huvis & Hustack & Hdonevis &
+                        Hfront & Hsrc & Hchild & Hfa_child & Hfa_not).
       split; [split; [exact Hwf | exact Hscc] | split; [exact Huvis | split; [exact Horder | exact Hinj]]]. }
   Qed.
 
