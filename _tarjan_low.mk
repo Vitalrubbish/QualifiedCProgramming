@@ -45,7 +45,7 @@ HASNATDYNLINK     := $(COQMF_HASNATDYNLINK)
 OCAMLWARN         := $(COQMF_WARN)
 
 _tarjan_low.mk.conf: _RocqProject
-	coq_makefile -f _RocqProject SeparationLogic/algorithms/Tarjan_directed/Tarjan_scc_is_low.v -o _tarjan_low.mk
+	coq_makefile -f _RocqProject SeparationLogic/algorithms/Tarjan_directed/Tarjan_scc_low_segment.v SeparationLogic/algorithms/Tarjan_directed/Tarjan_scc_is_low.v -o _tarjan_low.mk
 
 # This file can be created by the user to hook into double colon rules or
 # add any other Makefile code he may need
