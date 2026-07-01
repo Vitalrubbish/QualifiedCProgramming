@@ -1,6 +1,7 @@
 Require Import Coq.Classes.EquivDec.
 Require Import Coq.Lists.List.
 Require Import Coq.Logic.Classical_Prop.
+Require Import Coq.Arith.Compare_dec.
 Require Import Lia.
 Require Import SetsClass.SetsClass.
 From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
@@ -797,6 +798,10 @@ Section IS_LOW_SKELETON.
     ChildLowValidForParentCandidate child s /\
     ChildIsLowForParentCandidate child s.
 
+  Definition ChildInactiveSelfLowForParentCandidate
+             (child: V) (s: St): Prop :=
+    ~ Active child s -> low s child = dfn s child.
+
   (**
     Child's contribution to parent's closedness reasoning.
 
@@ -1052,6 +1057,15 @@ Section IS_LOW_SKELETON.
     ChildLowValidForParentCandidate_statement /\
     ChildIsLowForParentCandidate_statement.
 
+  Definition ChildInactiveSelfLowForParentCandidate_statement: Prop :=
+    forall (W: RecProgram) parent child done,
+      Edge parent child ->
+      ~ done child ->
+      Hoare
+        (fun s => ChildEntryCandidate parent child done s)
+        (W child)
+        (fun _ s => ChildInactiveSelfLowForParentCandidate child s).
+
   (**
     Consumer: parent extends [done_reachable_closed] and
     [done_tree_reachable_closed] when adding a popped child to [done].
@@ -1107,6 +1121,7 @@ Section IS_LOW_SKELETON.
    *)
   Definition ProcessEdgeUnvisitedChildPostCandidate_statement: Prop :=
     ChildRootCorrectForParentCandidate_statement /\
+    ChildInactiveSelfLowForParentCandidate_statement /\
     ChildClosednessContributionCandidate_statement /\
     ChildSegmentSummaryCandidate_statement /\
     ParentResumeShapeCandidate_statement.
@@ -1144,10 +1159,20 @@ Section IS_LOW_SKELETON.
       fa s child <> child ->
       ChildIsLowForParentCandidate child s.
 
+  Definition ProcessedTreeChildrenInactiveSelfLowCandidate
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    forall child,
+      done child ->
+      dg_step g u child ->
+      fa s child = u ->
+      fa s child <> child ->
+      ChildInactiveSelfLowForParentCandidate child s.
+
   Definition ProcessedTreeChildrenCorrectCandidate
              (u: V) (done: V -> Prop) (s: St): Prop :=
     ProcessedTreeChildrenLowValidCandidate u done s /\
-    ProcessedTreeChildrenIsLowCandidate u done s.
+    ProcessedTreeChildrenIsLowCandidate u done s /\
+    ProcessedTreeChildrenInactiveSelfLowCandidate u done s.
 
   (**
     Loop invariant with Phase 6 fields.
@@ -1193,7 +1218,60 @@ Section IS_LOW_SKELETON.
       ProcessedTreeChildrenCorrectCandidate u done s ->
       ParentResumeShapeCandidate u child done s ->
       ChildRootCorrectForParentCandidate child s ->
+      ChildInactiveSelfLowForParentCandidate child s ->
       ProcessedTreeChildrenCorrectCandidate u (done_after done child) s.
+
+  Definition ChildRootCorrectTransportCandidate
+             (child: V) (snap s: St): Prop :=
+    ChildRootCorrectForParentCandidate child snap ->
+    ChildRootCorrectForParentCandidate child s.
+
+  Definition ChildLowerStackAnchorsPreservedCandidate
+             (child: V) (snap s: St): Prop :=
+    forall b,
+      Active b snap ->
+      dfn snap b < dfn snap child ->
+      Active b s.
+
+  Definition ChildRootCorrectTransportFromStackShrinkCandidate_statement:
+    Prop :=
+    forall child snap s,
+      (forall x, Visited x s <-> Visited x snap) ->
+      (forall x, dfn s x = dfn snap x) ->
+      (forall x, low s x = low snap x) ->
+      (forall x, fa s x = fa snap x) ->
+      (forall x, Active x s -> Active x snap) ->
+      ChildLowerStackAnchorsPreservedCandidate child snap s ->
+      ChildRootCorrectTransportCandidate child snap s.
+
+  Definition ChildRootCorrectTransportFromInactiveSelfLowCandidate_statement:
+    Prop :=
+    forall child snap s,
+      (forall x, Visited x s <-> Visited x snap) ->
+      (forall x, dfn s x = dfn snap x) ->
+      (forall x, low s x = low snap x) ->
+      (forall x, fa s x = fa snap x) ->
+      (forall x, Active x s -> Active x snap) ->
+      ChildInactiveSelfLowForParentCandidate child snap ->
+      ~ Active child snap ->
+      ChildRootCorrectTransportCandidate child snap s.
+
+  Definition ProcessedTreeChildrenCorrectCandidate_transport_statement:
+    Prop :=
+    forall u done snap s,
+      (forall x, dfn s x = dfn snap x) ->
+      (forall x, low s x = low snap x) ->
+      ProcessedTreeChildrenCorrectCandidate u done snap ->
+      (forall child,
+          done child ->
+          Edge u child ->
+          fa s child = u ->
+          fa s child <> child ->
+          fa snap child = u /\
+          fa snap child <> child /\
+          (Active child snap -> Active child s) /\
+          ChildRootCorrectTransportCandidate child snap s) ->
+      ProcessedTreeChildrenCorrectCandidate u done s.
 
   Definition ActiveProcessedChildSegmentSummaryCandidate_empty_statement: Prop :=
     forall u s,
@@ -1246,6 +1324,7 @@ Section IS_LOW_SKELETON.
       ActiveProcessedChildSegmentSummaryCandidate u done s ->
       ParentResumeShapeCandidate u child done s ->
       ChildRootCorrectForParentCandidate child s ->
+      ChildInactiveSelfLowForParentCandidate child s ->
       ChildClosednessContributionCandidate child s ->
       (Active child s -> ChildSegmentSummaryCandidate child s) ->
       DoneClosednessCandidate u (done_after done child) s /\
@@ -1910,6 +1989,21 @@ Section IS_LOW_SKELETON.
         (maybe_pop u)
         (fun _ s => FramePopBoundarySnapshotCandidate F snap s).
 
+  Definition MaybePopProducesChildLowerStackAnchorsPreservedCandidate_statement:
+    Prop :=
+    forall F u child snap,
+      Hoare
+        (fun s =>
+           s = snap /\
+           Active u snap /\
+           OrderFactsCandidate snap /\
+           frame_done F child /\
+           Active child snap /\
+           FramePopBoundaryCandidate F u snap)
+        (maybe_pop u)
+        (fun _ s =>
+           ChildLowerStackAnchorsPreservedCandidate child snap s).
+
   Definition MaybePopActivePostImpliesPreSnapshotCandidate_statement:
     Prop :=
     forall u snap,
@@ -1945,6 +2039,59 @@ Section IS_LOW_SKELETON.
       FramePopBoundarySnapshotCandidate F snap s ->
       DoneClosednessCandidate (frame_parent F) (frame_done F) snap ->
       DoneClosednessCandidate (frame_parent F) (frame_done F) s.
+
+  Definition FramePopBoundarySnapshotPreservesProcessedTreeChildrenCorrectWithTransportCandidate_statement:
+    Prop :=
+    forall F snap s,
+      FramePopBoundarySnapshotCandidate F snap s ->
+      ProcessedTreeChildrenCorrectCandidate
+        (frame_parent F) (frame_done F) snap ->
+      (forall child,
+          frame_done F child ->
+          Edge (frame_parent F) child ->
+          fa snap child = frame_parent F ->
+          fa snap child <> child ->
+          ChildRootCorrectTransportCandidate child snap s) ->
+      ProcessedTreeChildrenCorrectCandidate
+        (frame_parent F) (frame_done F) s.
+
+  Definition MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryAndTransportCandidate_statement:
+    Prop :=
+    forall F u,
+      Hoare
+        (fun snap =>
+           ProcessedTreeChildrenCorrectCandidate
+             (frame_parent F) (frame_done F) snap /\
+           Active (frame_parent F) snap /\
+           FramePopBoundaryCandidate F u snap /\
+           (forall s,
+               FramePopBoundarySnapshotCandidate F snap s ->
+               forall child,
+                 frame_done F child ->
+                 Edge (frame_parent F) child ->
+                 fa snap child = frame_parent F ->
+                 fa snap child <> child ->
+                 ChildRootCorrectTransportCandidate child snap s))
+        (maybe_pop u)
+        (fun _ s =>
+           ProcessedTreeChildrenCorrectCandidate
+             (frame_parent F) (frame_done F) s).
+
+  Definition MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_statement:
+    Prop :=
+    forall F u,
+      Hoare
+        (fun snap =>
+           ProcessedTreeChildrenCorrectCandidate
+             (frame_parent F) (frame_done F) snap /\
+           Active (frame_parent F) snap /\
+           Active u snap /\
+           OrderFactsCandidate snap /\
+           FramePopBoundaryCandidate F u snap)
+        (maybe_pop u)
+        (fun _ s =>
+           ProcessedTreeChildrenCorrectCandidate
+             (frame_parent F) (frame_done F) s).
 
   Definition MaybePopPreservesDoneClosednessWithFramePopBoundaryCandidate_statement:
     Prop :=
@@ -3651,9 +3798,12 @@ Section IS_LOW_SKELETON.
     unfold ProcessedTreeChildrenCorrectCandidate_empty_statement,
       ProcessedTreeChildrenCorrectCandidate,
       ProcessedTreeChildrenLowValidCandidate,
-      ProcessedTreeChildrenIsLowCandidate.
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate.
     intros u s.
-    split; intros child Hempty; sets_unfold in Hempty; destruct Hempty.
+    split.
+    - intros child Hempty. sets_unfold in Hempty. destruct Hempty.
+    - split; intros child Hempty; sets_unfold in Hempty; destruct Hempty.
   Qed.
 
   Lemma ProcessedTreeChildrenCorrectCandidate_step_child_proof:
@@ -3663,23 +3813,537 @@ Section IS_LOW_SKELETON.
       ProcessedTreeChildrenCorrectCandidate,
       ProcessedTreeChildrenLowValidCandidate,
       ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
       ParentResumeShapeCandidate,
       ChildRootCorrectForParentCandidate,
+      ChildInactiveSelfLowForParentCandidate,
       done_after.
-    intros u done child s [Hlow_valid His_low]
+    intros u done child s [Hlow_valid [His_low Hinactive]]
            [Hedge_child [Hnot_done_child [Hfa_child Hfa_child_neq]]]
-           [Hchild_valid Hchild_is_low].
+           [Hchild_valid Hchild_is_low]
+           Hchild_inactive.
     split.
     - intros x Hdone_after Hedge_x Hfa_x Hfa_neq_x.
       sets_unfold in Hdone_after.
       destruct Hdone_after as [Hdone_x | Hx_child].
       + apply Hlow_valid; assumption.
       + subst x. exact Hchild_valid.
-    - intros x Hdone_after Hedge_x Hfa_x Hfa_neq_x.
-      sets_unfold in Hdone_after.
-      destruct Hdone_after as [Hdone_x | Hx_child].
-      + apply His_low; assumption.
-      + subst x. exact Hchild_is_low.
+    - split.
+      + intros x Hdone_after Hedge_x Hfa_x Hfa_neq_x.
+        sets_unfold in Hdone_after.
+        destruct Hdone_after as [Hdone_x | Hx_child].
+        * apply His_low; assumption.
+        * subst x. exact Hchild_is_low.
+      + intros x Hdone_after Hedge_x Hfa_x Hfa_neq_x.
+        sets_unfold in Hdone_after.
+        destruct Hdone_after as [Hdone_x | Hx_child].
+        * apply Hinactive; assumption.
+        * subst x. exact Hchild_inactive.
+  Qed.
+
+  Lemma dfs_tree_step_transport_from_stable_fields:
+    forall snap s x y,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, fa s z = fa snap z) ->
+      dg_step (state_to_dfs_tree g snap root) x y ->
+      dg_step (state_to_dfs_tree g s root) x y.
+  Proof.
+    unfold Visited.
+    intros snap s x y Hvisited Hfa Hstep.
+    unfold dg_step in Hstep |- *.
+    destruct Hstep as [e [Hedge [Hfst Hsnd]]].
+    exists e.
+    split; [| split; [exact Hfst | exact Hsnd]].
+    unfold state_to_dfs_tree in Hedge |- *.
+    simpl in *.
+    destruct Hedge as [v [Hvis [Hfa_neq [Hfst_fa Hsnd_v]]]].
+    exists v.
+    split.
+    - apply (proj2 (Hvisited v)). exact Hvis.
+    - split.
+      + intro Hbad.
+        apply Hfa_neq.
+        rewrite Hfa in Hbad.
+        exact Hbad.
+      + split.
+        * rewrite Hfa. exact Hfst_fa.
+        * exact Hsnd_v.
+  Qed.
+
+  Lemma dfs_tree_reachable_transport_from_stable_fields:
+    forall snap s x y,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, fa s z = fa snap z) ->
+      dg_reachable (state_to_dfs_tree g snap root) x y ->
+      dg_reachable (state_to_dfs_tree g s root) x y.
+  Proof.
+    intros snap s x y Hvisited Hfa Hreach.
+    unfold dg_reachable in *.
+    induction Hreach as [x0 y0 Hstep | x0 | x0 y0 z0 Hxy IHxy Hyz IHyz].
+    - apply Coq.Relations.Relation_Operators.rt_step.
+      eapply dfs_tree_step_transport_from_stable_fields; eauto.
+    - apply Coq.Relations.Relation_Operators.rt_refl.
+    - eapply Coq.Relations.Relation_Operators.rt_trans; eauto.
+  Qed.
+
+  Lemma scc_back_edge_transport_post_to_snapshot:
+    forall snap s x y,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, fa s z = fa snap z) ->
+      (forall z, Active z s -> Active z snap) ->
+      scc_back_edge g root s x y ->
+      scc_back_edge g root snap x y.
+  Proof.
+    unfold scc_back_edge.
+    intros snap s x y Hvisited Hfa Hactive_subset
+           [Hedge [Hactive_y Hnot_tree]].
+    split; [exact Hedge |].
+    split; [apply Hactive_subset; exact Hactive_y |].
+    intro Htree_snap.
+    apply Hnot_tree.
+    eapply dfs_tree_step_transport_from_stable_fields; eauto.
+  Qed.
+
+  Lemma scc_back_edge_transport_snapshot_to_post_for_lower_anchor:
+    forall child snap s x y,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, fa s z = fa snap z) ->
+      ChildLowerStackAnchorsPreservedCandidate child snap s ->
+      dfn snap y < dfn snap child ->
+      scc_back_edge g root snap x y ->
+      scc_back_edge g root s x y.
+  Proof.
+    unfold scc_back_edge, ChildLowerStackAnchorsPreservedCandidate.
+    intros child snap s x y Hvisited Hfa Hlower Hdfn_lt
+           [Hedge [Hactive_y Hnot_tree]].
+    split; [exact Hedge |].
+    split; [eapply Hlower; eauto |].
+    intro Htree_post.
+    apply Hnot_tree.
+    eapply dfs_tree_step_transport_from_stable_fields
+      with (snap := s) (s := snap).
+    - intros z. symmetry. apply Hvisited.
+    - intros z. symmetry. apply Hfa.
+    - exact Htree_post.
+  Qed.
+
+  Lemma scc_low_tree_transport_post_to_snapshot:
+    forall child snap s x,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, fa s z = fa snap z) ->
+      (forall z, Active z s -> Active z snap) ->
+      scc_low_tree g root s child x ->
+      scc_low_tree g root snap child x.
+  Proof.
+    unfold scc_low_tree, scc_low_reachable.
+    intros child snap s x Hvisited Hfa Hactive_subset
+           [z [Hreach Hcase]].
+    exists z.
+    split.
+    - eapply dfs_tree_reachable_transport_from_stable_fields
+        with (snap := s) (s := snap).
+      + intros a. symmetry. apply Hvisited.
+      + intros a. symmetry. apply Hfa.
+      + exact Hreach.
+    - destruct Hcase as [Hz_eq | Hback].
+      + left. exact Hz_eq.
+      + right.
+        eapply scc_back_edge_transport_post_to_snapshot; eauto.
+  Qed.
+
+  Lemma scc_low_tree_snapshot_to_post_min_relation:
+    forall child snap s x,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, dfn s z = dfn snap z) ->
+      (forall z, fa s z = fa snap z) ->
+      ChildLowerStackAnchorsPreservedCandidate child snap s ->
+      scc_low_tree g root snap child x ->
+      exists y,
+        scc_low_tree g root s child y /\
+        dfn s y <= dfn snap x.
+  Proof.
+    unfold scc_low_tree, scc_low_reachable.
+    intros child snap s x Hvisited Hdfn Hfa Hlower
+           [z [Hreach Hcase]].
+    destruct Hcase as [Hz_eq | Hback].
+    - exists x.
+      split.
+      + exists z.
+        split.
+        * eapply dfs_tree_reachable_transport_from_stable_fields; eauto.
+        * left. exact Hz_eq.
+      + rewrite Hdfn. lia.
+    - destruct (le_gt_dec (dfn snap child) (dfn snap x))
+        as [Hge | Hlt].
+      + exists child.
+        split.
+        * exists child.
+          split.
+          -- apply Coq.Relations.Relation_Operators.rt_refl.
+          -- left. reflexivity.
+        * rewrite Hdfn. lia.
+      + exists x.
+        split.
+        * exists z.
+          split.
+          -- eapply dfs_tree_reachable_transport_from_stable_fields; eauto.
+          -- right.
+             eapply scc_back_edge_transport_snapshot_to_post_for_lower_anchor;
+               eauto.
+        * rewrite Hdfn. lia.
+  Qed.
+
+  Lemma scc_low_tree_post_to_snapshot_min_relation:
+    forall child snap s x,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, dfn s z = dfn snap z) ->
+      (forall z, fa s z = fa snap z) ->
+      (forall z, Active z s -> Active z snap) ->
+      scc_low_tree g root s child x ->
+      exists y,
+        scc_low_tree g root snap child y /\
+        dfn snap y <= dfn s x.
+  Proof.
+    intros child snap s x Hvisited Hdfn Hfa Hactive_subset Hlow_tree.
+    exists x.
+    split.
+    - eapply scc_low_tree_transport_post_to_snapshot; eauto.
+    - rewrite Hdfn. lia.
+  Qed.
+
+  Lemma scc_back_edge_union_snapshot_to_post_min_relation:
+    forall child snap s x,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, dfn s z = dfn snap z) ->
+      (forall z, fa s z = fa snap z) ->
+      ChildLowerStackAnchorsPreservedCandidate child snap s ->
+      x ∈ scc_back_edge g root snap child ∪ [child] ->
+      exists y,
+        y ∈ scc_back_edge g root s child ∪ [child] /\
+        dfn s y <= dfn snap x.
+  Proof.
+    intros child snap s x Hvisited Hdfn Hfa Hlower Hx.
+    sets_unfold in Hx.
+    destruct Hx as [Hback | Hx_child].
+    - destruct (le_gt_dec (dfn snap child) (dfn snap x))
+        as [Hge | Hlt].
+      + exists child.
+        split; [sets_unfold; right; reflexivity |].
+        rewrite Hdfn. lia.
+      + exists x.
+        split.
+        * sets_unfold. left.
+          eapply scc_back_edge_transport_snapshot_to_post_for_lower_anchor;
+            eauto.
+        * rewrite Hdfn. lia.
+    - subst x.
+      exists child.
+      split; [sets_unfold; right; reflexivity |].
+      rewrite Hdfn. lia.
+  Qed.
+
+  Lemma scc_back_edge_union_post_to_snapshot_min_relation:
+    forall child snap s x,
+      (forall z, Visited z s <-> Visited z snap) ->
+      (forall z, dfn s z = dfn snap z) ->
+      (forall z, fa s z = fa snap z) ->
+      (forall z, Active z s -> Active z snap) ->
+      x ∈ scc_back_edge g root s child ∪ [child] ->
+      exists y,
+        y ∈ scc_back_edge g root snap child ∪ [child] /\
+        dfn snap y <= dfn s x.
+  Proof.
+    intros child snap s x Hvisited Hdfn Hfa Hactive_subset Hx.
+    exists x.
+    split.
+    - sets_unfold in Hx. sets_unfold.
+      destruct Hx as [Hback | Hx_child].
+      + left.
+        eapply scc_back_edge_transport_post_to_snapshot; eauto.
+      + right. exact Hx_child.
+    - rewrite Hdfn. lia.
+  Qed.
+
+  Lemma ChildRootCorrectTransportFromStackShrinkCandidate_proof:
+    ChildRootCorrectTransportFromStackShrinkCandidate_statement.
+  Proof.
+    unfold
+      ChildRootCorrectTransportFromStackShrinkCandidate_statement,
+      ChildRootCorrectTransportCandidate,
+      ChildRootCorrectForParentCandidate,
+      ChildLowValidForParentCandidate,
+      ChildIsLowForParentCandidate.
+    intros child snap s Hvisited Hdfn Hlow Hfa Hactive_subset Hlower
+           [Hvalid His_low].
+    split.
+    - unfold scc_low_valid_v in Hvalid |- *.
+      replace (low s child) with (low snap child) by (rewrite Hlow; reflexivity).
+      eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+      + exact Hvalid.
+      + intros n Hn.
+        sets_unfold in Hn.
+        destruct Hn as [Htree_min | Hback_min].
+        * exists n.
+          split; [left | lia].
+          eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+          -- exact Htree_min.
+          -- intros x Htree_x.
+             exists x.
+             split.
+             ++ eapply dfs_tree_step_transport_from_stable_fields; eauto.
+             ++ rewrite Hlow. lia.
+          -- intros x Htree_x.
+             exists x.
+             split.
+             ++ eapply dfs_tree_step_transport_from_stable_fields
+                  with (snap := s) (s := snap).
+                ** intros z. symmetry. apply Hvisited.
+                ** intros z. symmetry. apply Hfa.
+                ** exact Htree_x.
+             ++ rewrite Hlow. lia.
+        * exists n.
+          split; [right | lia].
+          eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+          -- exact Hback_min.
+          -- intros x Hx.
+             eapply scc_back_edge_union_snapshot_to_post_min_relation;
+               eauto.
+          -- intros x Hx.
+             eapply scc_back_edge_union_post_to_snapshot_min_relation;
+               eauto.
+      + intros n Hn.
+        sets_unfold in Hn.
+        destruct Hn as [Htree_min | Hback_min].
+        * exists n.
+          split; [left | lia].
+          eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+          -- exact Htree_min.
+          -- intros x Htree_x.
+             exists x.
+             split.
+             ++ eapply dfs_tree_step_transport_from_stable_fields
+                  with (snap := s) (s := snap).
+                ** intros z. symmetry. apply Hvisited.
+                ** intros z. symmetry. apply Hfa.
+                ** exact Htree_x.
+             ++ rewrite Hlow. lia.
+          -- intros x Htree_x.
+             exists x.
+             split.
+             ++ eapply dfs_tree_step_transport_from_stable_fields; eauto.
+             ++ rewrite Hlow. lia.
+        * pose proof
+            (min_nonempty_exists
+               (dfn snap)
+               (scc_back_edge g root snap child ∪ [child])) as Hpre_min.
+          destruct Hpre_min as [m Hm].
+          { exists child. sets_unfold. right. reflexivity. }
+          exists m.
+          split; [right; exact Hm |].
+          unfold min_value_of_subset, min_object_of_subset in Hm.
+          unfold min_value_of_subset, min_object_of_subset in Hback_min.
+          destruct Hm as [pre_w [[Hpre_w Hpre_bound] Hm_eq]].
+          destruct Hback_min as [post_w [[Hpost_w _Hpost_bound] Hn_eq]].
+          subst m n.
+          destruct
+            (scc_back_edge_union_post_to_snapshot_min_relation
+               child snap s post_w
+               Hvisited Hdfn Hfa Hactive_subset Hpost_w)
+            as [pre_y [Hpre_y Hle_y]].
+          specialize (Hpre_bound pre_y Hpre_y).
+          lia.
+    - unfold scc_is_low_v, scc_is_low_v_val in His_low |- *.
+      replace (low s child) with (low snap child) by (rewrite Hlow; reflexivity).
+      eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+      + exact His_low.
+      + intros x Hlow_tree.
+        eapply scc_low_tree_snapshot_to_post_min_relation; eauto.
+      + intros x Hlow_tree.
+        eapply scc_low_tree_post_to_snapshot_min_relation; eauto.
+  Qed.
+
+  Lemma ChildRootCorrectTransportFromInactiveSelfLowCandidate_proof:
+    ChildRootCorrectTransportFromInactiveSelfLowCandidate_statement.
+  Proof.
+    unfold
+      ChildRootCorrectTransportFromInactiveSelfLowCandidate_statement,
+      ChildRootCorrectTransportCandidate,
+      ChildRootCorrectForParentCandidate,
+      ChildLowValidForParentCandidate,
+      ChildIsLowForParentCandidate,
+      ChildInactiveSelfLowForParentCandidate.
+    intros child snap s Hvisited Hdfn Hlow Hfa Hactive_subset
+           Hinactive Hnot_active [Hvalid His_low].
+    assert (Hself_snap: low snap child = dfn snap child).
+    { apply Hinactive. exact Hnot_active. }
+    assert (Hself_s: low s child = dfn s child).
+    { rewrite Hlow. rewrite Hdfn. exact Hself_snap. }
+    assert (Hback_bound_snap:
+              forall y,
+                y ∈ scc_back_edge g root snap child ∪ [child] ->
+                dfn snap child <= dfn snap y).
+    { intros y Hy.
+      unfold scc_low_valid_v, min_value_of_subset,
+        min_object_of_subset in Hvalid.
+      destruct Hvalid as [n [[_ Houter_bound] Hn_eq]].
+      pose proof
+        (min_nonempty_exists
+           (dfn snap)
+           (scc_back_edge g root snap child ∪ [child])) as Hmin.
+      destruct Hmin as [m Hm].
+      { exists child. sets_unfold. right. reflexivity. }
+      specialize (Houter_bound m (or_intror Hm)).
+      destruct Hm as [w [[Hw Hm_bound] Hm_eq]].
+      specialize (Hm_bound y Hy).
+      rewrite <- Hself_snap.
+      rewrite <- Hn_eq.
+      eapply le_trans; [exact Houter_bound |].
+      rewrite <- Hm_eq.
+      exact Hm_bound. }
+    assert (Htree_bound_snap:
+              forall x,
+                dg_step (state_to_dfs_tree g snap root) child x ->
+                low snap child <= low snap x).
+    { intros x Htree_x.
+      unfold scc_low_valid_v, min_value_of_subset,
+        min_object_of_subset in Hvalid.
+      destruct Hvalid as [n [[_ Houter_bound] Hn_eq]].
+      pose proof
+        (min_nonempty_exists
+           (low snap)
+           (dg_step (state_to_dfs_tree g snap root) child)) as Hmin.
+      destruct Hmin as [m Hm].
+      { exists x. exact Htree_x. }
+      specialize (Houter_bound m (or_introl Hm)).
+      destruct Hm as [w [[Hw Hm_bound] Hm_eq]].
+      specialize (Hm_bound x Htree_x).
+      rewrite <- Hn_eq.
+      eapply le_trans; [exact Houter_bound |].
+      rewrite <- Hm_eq.
+      exact Hm_bound. }
+    split.
+    - unfold scc_low_valid_v, min_value_of_subset, min_object_of_subset.
+      exists (low s child).
+      split.
+      + split.
+        * right.
+          exists child.
+          split.
+          -- split.
+             ++ sets_unfold. right. reflexivity.
+             ++ intros y Hy.
+                assert (Hy_snap:
+                          y ∈ scc_back_edge g root snap child ∪ [child]).
+                { sets_unfold in Hy. sets_unfold.
+                  destruct Hy as [Hback | Hy_child].
+                  - left.
+                    eapply scc_back_edge_transport_post_to_snapshot; eauto.
+                  - right. exact Hy_child. }
+                specialize (Hback_bound_snap y Hy_snap).
+                rewrite (Hdfn child). rewrite (Hdfn y).
+                exact Hback_bound_snap.
+          -- symmetry. exact Hself_s.
+        * intros n Hn.
+          destruct Hn as [Htree_min | Hback_min].
+          -- unfold min_value_of_subset, min_object_of_subset in Htree_min.
+             destruct Htree_min as [x [[Htree_x _Htree_bound] Hn_eq]].
+             assert (Htree_snap:
+                       dg_step (state_to_dfs_tree g snap root) child x).
+             { eapply dfs_tree_step_transport_from_stable_fields
+                 with (snap := s) (s := snap).
+               - intros z. symmetry. apply Hvisited.
+               - intros z. symmetry. apply Hfa.
+               - exact Htree_x. }
+             specialize (Htree_bound_snap x Htree_snap).
+             rewrite Hlow.
+             rewrite <- Hn_eq.
+             rewrite Hlow.
+             exact Htree_bound_snap.
+          -- unfold min_value_of_subset, min_object_of_subset in Hback_min.
+             destruct Hback_min as [x [[Hx _Hmin_x] Hn_eq]].
+             assert (Hx_snap:
+                       x ∈ scc_back_edge g root snap child ∪ [child]).
+             { sets_unfold in Hx. sets_unfold.
+               destruct Hx as [Hback | Hx_child].
+               - left.
+                 eapply scc_back_edge_transport_post_to_snapshot; eauto.
+               - right. exact Hx_child. }
+             specialize (Hback_bound_snap x Hx_snap).
+             rewrite Hlow.
+             rewrite Hself_snap.
+             rewrite <- Hn_eq.
+             rewrite (Hdfn x).
+             exact Hback_bound_snap.
+      + reflexivity.
+    - unfold scc_is_low_v, scc_is_low_v_val,
+        min_value_of_subset, min_object_of_subset.
+      exists child.
+      split.
+      + split.
+        * unfold scc_low_tree, scc_low_reachable.
+          exists child.
+          split.
+          -- apply Coq.Relations.Relation_Operators.rt_refl.
+          -- left. reflexivity.
+        * intros x Hx.
+          assert (Hx_snap: scc_low_tree g root snap child x).
+          { eapply scc_low_tree_transport_post_to_snapshot; eauto. }
+          pose proof
+            (scc_low_bound g root snap child (low snap child) x
+               His_low Hx_snap) as Hbound.
+          rewrite Hself_snap in Hbound.
+          rewrite (Hdfn child). rewrite (Hdfn x).
+          exact Hbound.
+      + symmetry. exact Hself_s.
+  Qed.
+
+  Lemma ProcessedTreeChildrenCorrectCandidate_transport_proof:
+    ProcessedTreeChildrenCorrectCandidate_transport_statement.
+  Proof.
+    unfold ProcessedTreeChildrenCorrectCandidate_transport_statement,
+      ProcessedTreeChildrenCorrectCandidate,
+      ProcessedTreeChildrenLowValidCandidate,
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
+      ChildRootCorrectTransportCandidate,
+      ChildRootCorrectForParentCandidate,
+      ChildInactiveSelfLowForParentCandidate.
+    intros u done snap s Hdfn Hlow
+           [Hlow_valid [His_low Hinactive]] Htransport.
+    split.
+    - intros child Hdone_child Hedge_child Hfa_child Hfa_neq_child.
+      specialize (Htransport child Hdone_child Hedge_child
+                    Hfa_child Hfa_neq_child) as
+        [Hfa_snap [Hfa_neq_snap [Hactive_surv Hroot_transport]]].
+      specialize (Hroot_transport
+                    (conj
+                       (Hlow_valid child Hdone_child Hedge_child
+                          Hfa_snap Hfa_neq_snap)
+                       (His_low child Hdone_child Hedge_child
+                          Hfa_snap Hfa_neq_snap))) as [Hvalid _].
+      exact Hvalid.
+    - split.
+      + intros child Hdone_child Hedge_child Hfa_child Hfa_neq_child.
+        specialize (Htransport child Hdone_child Hedge_child
+                      Hfa_child Hfa_neq_child) as
+          [Hfa_snap [Hfa_neq_snap [Hactive_surv Hroot_transport]]].
+        specialize (Hroot_transport
+                      (conj
+                         (Hlow_valid child Hdone_child Hedge_child
+                            Hfa_snap Hfa_neq_snap)
+                         (His_low child Hdone_child Hedge_child
+                            Hfa_snap Hfa_neq_snap))) as [_ His].
+        exact His.
+      + intros child Hdone_child Hedge_child Hfa_child Hfa_neq_child
+               Hnot_active.
+        specialize (Htransport child Hdone_child Hedge_child
+                      Hfa_child Hfa_neq_child) as
+          [Hfa_snap [Hfa_neq_snap [Hactive_surv _Hroot_transport]]].
+        rewrite Hlow. rewrite Hdfn.
+        apply Hinactive; try assumption.
+        intro Hactive_snap.
+        apply Hnot_active.
+        exact (Hactive_surv Hactive_snap).
   Qed.
 
   Lemma ActiveProcessedChildSegmentSummaryCandidate_empty_proof:
@@ -3879,7 +4543,7 @@ Section IS_LOW_SKELETON.
   Proof.
     unfold Phase6ChildPostExtendsLoopFieldsCandidate_statement.
     intros u done child s Hclosed Hchildren Hsegments
-           Hresume Hchild_root Hchild_closed Hchild_segment.
+           Hresume Hchild_root Hchild_inactive Hchild_closed Hchild_segment.
     split.
     - eapply DoneClosednessCandidate_step_child_proof; eauto.
     - split.
@@ -3909,7 +4573,7 @@ Section IS_LOW_SKELETON.
     destruct Hloop as [Hlow [Hframe [Hclosed [Hchildren _]]]].
     destruct Hlow as [Hdone_loop Hpartial].
     destruct Hdone_loop as [Hlocal _].
-    destruct Hchildren as [Hchildren_valid Hchildren_is_low].
+    destruct Hchildren as [Hchildren_valid [Hchildren_is_low _Hchildren_inactive]].
     pose proof Hlocal as Hlocal_order.
     destruct Hlocal_order as [_ [_ [_ [_ Horder]]]].
     split; [exact Hlocal |].
@@ -5594,12 +6258,71 @@ Section IS_LOW_SKELETON.
       + exfalso.
         apply Hnot_stack_s.
         exact (Hdone_active v Hdone_v Hactive_snap).
-      + eapply Htree_closed; eauto.
-        * rewrite <- Hfa. exact Hfa_s_v.
-        * intros Hfa_snap_v.
-          apply Hfa_neq_s.
-          rewrite Hfa.
-          exact Hfa_snap_v.
+	      + eapply Htree_closed; eauto.
+	        * rewrite <- Hfa. exact Hfa_s_v.
+	        * intros Hfa_snap_v.
+	          apply Hfa_neq_s.
+	          rewrite Hfa.
+	          exact Hfa_snap_v.
+	  Qed.
+
+  Lemma FramePopBoundarySnapshotPreservesProcessedTreeChildrenCorrectWithTransportCandidate_proof:
+    FramePopBoundarySnapshotPreservesProcessedTreeChildrenCorrectWithTransportCandidate_statement.
+  Proof.
+    unfold
+      FramePopBoundarySnapshotPreservesProcessedTreeChildrenCorrectWithTransportCandidate_statement,
+      FramePopBoundarySnapshotCandidate.
+    intros F snap s
+           [_Hparent_active [Hdone_active
+            [_Hvisited [Hdfn [Hlow Hfa]]]]]
+           Hchildren Hroot_transport.
+    eapply ProcessedTreeChildrenCorrectCandidate_transport_proof.
+    - exact Hdfn.
+    - exact Hlow.
+    - exact Hchildren.
+    - intros child Hdone_child Hedge_child Hfa_s_child Hfa_neq_s_child.
+      assert (Hfa_snap_child: fa snap child = frame_parent F).
+      { rewrite <- Hfa. exact Hfa_s_child. }
+      assert (Hfa_neq_snap_child: fa snap child <> child).
+      { intro Hbad.
+        apply Hfa_neq_s_child.
+        rewrite Hfa. exact Hbad. }
+      split; [exact Hfa_snap_child |].
+      split; [exact Hfa_neq_snap_child |].
+      split.
+      + intros Hactive_snap_child.
+        exact (Hdone_active child Hdone_child Hactive_snap_child).
+      + apply Hroot_transport; assumption.
+	  Qed.
+
+  Lemma MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryAndTransportCandidate_proof:
+    MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryAndTransportCandidate_statement.
+  Proof.
+    unfold
+      MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryAndTransportCandidate_statement.
+    intros F u.
+    apply Hoare_normalize.
+    intros snap [Hchildren [Hparent_active [Hboundary Hroot_transport]]].
+    eapply Hoare_conseq_post.
+    2: {
+      eapply Hoare_conseq_pre.
+      2: {
+        apply
+          (MaybePopProducesFramePopBoundarySnapshotCandidate_proof F u snap).
+      }
+      intros s Heq_s.
+      subst s.
+      split; [reflexivity |].
+      split; [exact Hparent_active | exact Hboundary].
+    }
+    intros ret post Hsnapshot.
+    eapply
+      (FramePopBoundarySnapshotPreservesProcessedTreeChildrenCorrectWithTransportCandidate_proof
+         F snap post).
+    - exact Hsnapshot.
+    - exact Hchildren.
+    - intros child Hdone_child Hedge_child Hfa_child Hfa_neq_child.
+      eapply Hroot_transport; eauto.
   Qed.
 
   Lemma MaybePopPreservesDoneClosednessWithFramePopBoundaryCandidate_proof:
@@ -5865,6 +6588,124 @@ Section IS_LOW_SKELETON.
     lia.
   Qed.
 
+  Lemma MaybePopProducesChildLowerStackAnchorsPreservedCandidate_proof:
+    MaybePopProducesChildLowerStackAnchorsPreservedCandidate_statement.
+  Proof.
+    unfold
+      MaybePopProducesChildLowerStackAnchorsPreservedCandidate_statement,
+      ChildLowerStackAnchorsPreservedCandidate,
+      OrderFactsCandidate,
+      maybe_pop,
+      pop_scc,
+      root_pop_guard,
+      Active.
+    intros F u child snap.
+    intro_state. hoare_auto_s.
+    - destruct H as
+        [Heq_s [Hu_active [[Horder _Hinj]
+         [Hdone_child [Hchild_active [_Hparent_rest Hdone_rest]]]]]].
+      subst s0.
+      subst s.
+      unfold pop_scc_state.
+      destruct (stack_split_at (stack snap) u) as [popped rest] eqn:Hsplit.
+      simpl.
+      assert (Hchild_rest: In child rest).
+      { exact (Hdone_rest child Hdone_child Hchild_active popped rest eq_refl). }
+      match goal with
+      | |- In ?anchor rest =>
+          eapply old_anchor_in_rest_when_child_in_rest
+            with (u := u) (c := child) (b := anchor)
+                 (s := snap) (popped := popped) (rest := rest);
+          eauto
+      end.
+    - destruct H1 as [Hs _Hguard].
+      subst s.
+      destruct H as
+        [Heq_s [_Hu_active [_Horder
+         [_Hdone_child [_Hchild_active _Hboundary]]]]].
+      subst s0.
+      match goal with
+      | |- forall anchor, In anchor (stack snap) -> _ =>
+          intros anchor Hb_active _Hdfn_lt; exact Hb_active
+      | |- In ?anchor (stack snap) =>
+          assumption
+      end.
+  Qed.
+
+  Lemma MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_proof:
+    MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_statement.
+  Proof.
+    unfold
+      MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_statement,
+      maybe_pop,
+      pop_scc,
+      root_pop_guard,
+      Active,
+      OrderFactsCandidate.
+    intros F u.
+    intro_state. hoare_auto_s.
+    - destruct H as
+        [Hchildren [Hparent_active [Hu_active [Horderfacts Hboundary]]]].
+      destruct Horderfacts as [Horder _Hinj].
+      subst s.
+      unfold pop_scc_state.
+      destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
+      simpl.
+      eapply ProcessedTreeChildrenCorrectCandidate_transport_proof
+        with (snap := s0).
+      + intros x. reflexivity.
+      + intros x. reflexivity.
+      + exact Hchildren.
+      + intros child Hdone_child Hedge_child Hfa_child Hfa_neq_child.
+        assert (Hfa_snap_child: fa s0 child = frame_parent F).
+        { exact Hfa_child. }
+        assert (Hfa_neq_snap_child: fa s0 child <> child).
+        { exact Hfa_neq_child. }
+        split; [exact Hfa_snap_child |].
+        split; [exact Hfa_neq_snap_child |].
+        split.
+        * intros Hactive_child.
+          destruct Hboundary as [_Hparent_rest Hdone_rest].
+          exact (Hdone_rest child Hdone_child Hactive_child popped rest Hsplit).
+        * destruct (classic (In child (stack s0)))
+            as [Hactive_child | Hnot_active_child].
+          -- eapply ChildRootCorrectTransportFromStackShrinkCandidate_proof.
+             ++ intros x. split; intro Hvisit; exact Hvisit.
+             ++ intros x. reflexivity.
+             ++ intros x. reflexivity.
+             ++ intros x. reflexivity.
+             ++ intros x Hactive_post.
+                eapply stack_split_rest_in_original_stack
+                  with (popped := popped) (rest := rest);
+                  eauto.
+             ++ unfold ChildLowerStackAnchorsPreservedCandidate, Active.
+                intros anchor Hanchor_active Hanchor_lt.
+                destruct Hboundary as [_Hparent_rest Hdone_rest].
+                assert (Hchild_rest: In child rest).
+                { exact (Hdone_rest child Hdone_child Hactive_child
+                           popped rest Hsplit). }
+                eapply old_anchor_in_rest_when_child_in_rest
+                  with (u := u) (c := child) (b := anchor)
+                       (s := s0) (popped := popped) (rest := rest);
+                  eauto.
+          -- eapply ChildRootCorrectTransportFromInactiveSelfLowCandidate_proof.
+             ++ intros x. split; intro Hvisit; exact Hvisit.
+             ++ intros x. reflexivity.
+             ++ intros x. reflexivity.
+             ++ intros x. reflexivity.
+             ++ intros x Hactive_post.
+                eapply stack_split_rest_in_original_stack
+                  with (popped := popped) (rest := rest);
+                  eauto.
+             ++ destruct Hchildren as [_ [_ Hinactive]].
+                apply Hinactive; assumption.
+             ++ exact Hnot_active_child.
+    - destruct H1 as [Hs _Hguard].
+      subst s.
+      destruct H as [Hchildren _].
+      exact Hchildren.
+  Qed.
+
   (* ---------------------------------------------------------------- *)
   (* maybe_pop preserves ActiveProcessedChildSegmentSummaryCandidate   *)
   (* ---------------------------------------------------------------- *)
@@ -5891,14 +6732,13 @@ Section IS_LOW_SKELETON.
           Active u s0 |- _ =>
           destruct Hpre as [Hsummaries [Hlocal Hu_stack]]
       end.
-	      unfold pop_scc_state in *.
-	      destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
-	      simpl in *.
-	      unfold ActiveProcessedChildSegmentSummaryCandidate in *.
-	      intros c Hdone_c Hedge_c Hfa_c Hfa_neq_c Hactive_c_post.
-	      (* After pop, Active c = In c rest *)
-	      unfold LocalActiveRootCandidate in Hlocal.
-	      destruct Hlocal as [Hshape [Hsettled [Hvis [_Hparent_stack Horder]]]].
+      unfold pop_scc_state in *.
+      destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
+      simpl in *.
+      unfold ActiveProcessedChildSegmentSummaryCandidate in *.
+      intros c Hdone_c Hedge_c Hfa_c Hfa_neq_c Hactive_c_post.
+      unfold LocalActiveRootCandidate in Hlocal.
+      destruct Hlocal as [Hshape [Hsettled [Hvis [_Hparent_stack Horder]]]].
       destruct Horder as [Horder_stack _].
       (* c was active before pop (since c ∈ rest ⊆ stack s0) *)
       assert (Hc_stack_s0: In c (stack s0)).
@@ -5918,28 +6758,28 @@ Section IS_LOW_SKELETON.
         unfold PendingRootEscapeCandidate in *.
         destruct Hpending as
           [next [Hc_c [Hedge_next [Hnot_edge_next Hreach_next_w]]]].
-	        exists next.
-	        split; [exact Hc_c |].
-	        split; [exact Hedge_next |].
-	        split; [exact Hnot_edge_next | exact Hreach_next_w].
-	      + right.
-	        unfold OldStackEscapeAnchorCandidate in *.
-	        destruct Hanchor as
-	          [b0 [Hactive_b0 [Hdfn_b0_c [Hlow_c_b0 [Hc_b0 Hb0_w]]]]].
-	        exists b0.
-	        split.
-	        { simpl.
-	          eapply old_anchor_in_rest_when_child_in_rest
-	            with (u := u) (c := c) (b := b0)
-	                 (s := s0) (popped := popped) (rest := rest);
-	            eauto. }
-	        split.
-	        { simpl. unfold equiv_decb.
-	          exact Hdfn_b0_c. }
-	        split.
-	        { simpl. unfold equiv_decb.
-	          exact Hlow_c_b0. }
-	        split; [exact Hc_b0 | exact Hb0_w].
+        exists next.
+        split; [exact Hc_c |].
+        split; [exact Hedge_next |].
+        split; [exact Hnot_edge_next | exact Hreach_next_w].
+      + right.
+        unfold OldStackEscapeAnchorCandidate in *.
+        destruct Hanchor as
+          [b0 [Hactive_b0 [Hdfn_b0_c [Hlow_c_b0 [Hc_b0 Hb0_w]]]]].
+        exists b0.
+        split.
+        { simpl.
+          eapply old_anchor_in_rest_when_child_in_rest
+            with (u := u) (c := c) (b := b0)
+                 (s := s0) (popped := popped) (rest := rest);
+            eauto. }
+        split.
+        { simpl. unfold equiv_decb.
+          exact Hdfn_b0_c. }
+        split.
+        { simpl. unfold equiv_decb.
+          exact Hlow_c_b0. }
+        split; [exact Hc_b0 | exact Hb0_w].
     - destruct H1 as [Hs _Hguard].
       subst s. destruct H as [Hsummaries _]. exact Hsummaries.
   Qed.
