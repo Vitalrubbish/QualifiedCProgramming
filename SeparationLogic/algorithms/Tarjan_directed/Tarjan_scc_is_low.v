@@ -1,4 +1,5 @@
 Require Import Coq.Classes.EquivDec.
+Require Import Coq.Classes.Morphisms.
 Require Import Coq.Lists.List.
 Require Import Coq.Logic.Classical_Prop.
 Require Import Coq.Arith.Compare_dec.
@@ -149,6 +150,11 @@ Section IS_LOW_SKELETON.
     ParentLoopSuspendedBaseCandidate parent child done s /\
     PendingChildShapeCandidate parent child s.
 
+  Definition ChildEntryProvidesEntryPreCandidate_statement: Prop :=
+    forall parent child done s,
+      ChildEntryCandidate parent child done s ->
+      EntryPreCandidate child s.
+
   (**
     The first loop invariant candidate contains only facts consumed at the
     edge-loop boundary itself: the current root is active and structurally
@@ -258,6 +264,14 @@ Section IS_LOW_SKELETON.
         (EntryPreCandidate u)
         (preloop u)
         (fun _ s => LoopEntryBaseCandidate u s).
+
+  Definition PreloopFromChildEntryProducesLoopEntryBaseCandidate_statement:
+    Prop :=
+    forall parent child done,
+      Hoare
+        (ChildEntryCandidate parent child done)
+        (preloop child)
+        (fun _ s => LoopEntryBaseCandidate child s).
 
   Definition PreloopGlobalShapeCandidate_statement: Prop :=
     forall u,
@@ -473,6 +487,10 @@ Section IS_LOW_SKELETON.
         (ChildEntryCandidate parent child done)
         (W child)
         (fun _ s => Visited child s).
+
+  Definition ChildReturnsVisitedCandidate_statement: Prop :=
+    forall W,
+      ChildReturnsVisitedCandidate W.
 
   Definition ChildPreservesDoneVisitedCandidate (W: RecProgram): Prop :=
     forall child done,
@@ -976,6 +994,21 @@ Section IS_LOW_SKELETON.
       dfn s u <= dfn s x ->
       x = u.
 
+  Definition PreloopProducesRootSegmentInitialCandidate_statement: Prop :=
+    forall u,
+      Hoare
+        (EntryPreCandidate u)
+        (preloop u)
+        (fun _ s => RootSegmentInitialCandidate u s).
+
+  Definition PreloopFromChildEntryProducesRootSegmentInitialCandidate_statement:
+    Prop :=
+    forall parent child done,
+      Hoare
+        (ChildEntryCandidate parent child done)
+        (preloop child)
+        (fun _ s => RootSegmentInitialCandidate child s).
+
   Definition ChildSegmentSummaryCandidate (child: V) (s: St): Prop :=
     SegmentEscapeAccountingCandidate child (edge_set child) s /\
     SegmentCoverageByDoneCandidate child (edge_set child) s.
@@ -1120,11 +1153,84 @@ Section IS_LOW_SKELETON.
     [ChildProvidesLowContributionCandidate] for [tarjan_scc_f].
    *)
   Definition ProcessEdgeUnvisitedChildPostCandidate_statement: Prop :=
+    ChildReturnsVisitedCandidate_statement /\
     ChildRootCorrectForParentCandidate_statement /\
     ChildInactiveSelfLowForParentCandidate_statement /\
     ChildClosednessContributionCandidate_statement /\
     ChildSegmentSummaryCandidate_statement /\
     ParentResumeShapeCandidate_statement.
+
+  Definition ChildPostCandidate
+             (parent child: V) (done: V -> Prop) (s: St): Prop :=
+    Visited child s /\
+    ChildLowValidForParentCandidate child s /\
+    ChildIsLowForParentCandidate child s /\
+    ChildInactiveSelfLowForParentCandidate child s /\
+    ChildClosednessContributionCandidate child s /\
+    (Active child s -> ChildSegmentSummaryCandidate child s) /\
+    ParentResumeShapeCandidate parent child done s.
+
+  Definition ChildContractCandidate (W: RecProgram): Prop :=
+    forall parent child done,
+      Edge parent child ->
+      ~ done child ->
+      Hoare
+        (fun s => ChildEntryCandidate parent child done s)
+        (W child)
+        (fun _ s => ChildPostCandidate parent child done s).
+
+  Definition ChildContractCandidate_from_field_statements_statement:
+    Prop :=
+    ProcessEdgeUnvisitedChildPostCandidate_statement ->
+    forall W,
+      ChildContractCandidate W.
+
+  Definition ChildContractCandidate_provides_returns_visited_statement:
+    Prop :=
+    forall W,
+      ChildContractCandidate W ->
+      ChildReturnsVisitedCandidate W.
+
+  Definition ChildContractCandidate_provides_post_fields_statement: Prop :=
+    forall W,
+      ChildContractCandidate W ->
+      ChildReturnsVisitedCandidate W /\
+      (forall parent child done,
+          Edge parent child ->
+          ~ done child ->
+          Hoare
+            (ChildEntryCandidate parent child done)
+            (W child)
+            (fun _ s => ChildRootCorrectForParentCandidate child s)) /\
+      (forall parent child done,
+          Edge parent child ->
+          ~ done child ->
+          Hoare
+            (ChildEntryCandidate parent child done)
+            (W child)
+            (fun _ s => ChildInactiveSelfLowForParentCandidate child s)) /\
+      (forall parent child done,
+          Edge parent child ->
+          ~ done child ->
+          Hoare
+            (ChildEntryCandidate parent child done)
+            (W child)
+            (fun _ s => ChildClosednessContributionCandidate child s)) /\
+      (forall parent child done,
+          Edge parent child ->
+          ~ done child ->
+          Hoare
+            (ChildEntryCandidate parent child done)
+            (W child)
+            (fun _ s =>
+               Active child s -> ChildSegmentSummaryCandidate child s)) /\
+      (forall parent child done,
+          Edge parent child ->
+          ~ done child ->
+          Hoare
+            (ChildEntryCandidate parent child done)
+            (W child)
+            (fun _ s => ParentResumeShapeCandidate parent child done s)).
 
   (* ---------------------------------------------------------------- *)
   (* Phase 6 loop-invariant extension                                  *)
@@ -1443,6 +1549,30 @@ Section IS_LOW_SKELETON.
       LocalActiveRootCandidate u s ->
       RootSegmentInitialCandidate u s ->
       SegmentEscapeAccountingCandidate u ∅ s.
+
+  Definition PreloopProducesParentFrameResumeEmptyCandidate_statement:
+    Prop :=
+    forall u,
+      Hoare
+        (EntryPreCandidate u)
+        (preloop u)
+        (fun _ s => ParentFrameResumeCandidate u ∅ s).
+
+  Definition PreloopProducesLoopInvPhase7InitialCandidate_statement:
+    Prop :=
+    forall u,
+      Hoare
+        (EntryPreCandidate u)
+        (preloop u)
+        (fun _ s => LoopInvPhase7Candidate u ∅ s).
+
+  Definition PreloopFromChildEntryProducesLoopInvPhase7InitialCandidate_statement:
+    Prop :=
+    forall parent child done,
+      Hoare
+        (ChildEntryCandidate parent child done)
+        (preloop child)
+        (fun _ s => LoopInvPhase7Candidate child ∅ s).
 
   Definition SegmentEscapeAccountingCandidate_step_child_statement: Prop :=
     forall u done child s,
@@ -1893,6 +2023,34 @@ Section IS_LOW_SKELETON.
     forall W,
       FrameContractCandidate W ->
       FramePreservationBundleCandidate W.
+
+  Definition RecursiveCallContractsCandidate (W: RecProgram): Prop :=
+    ChildContractCandidate W /\
+    ChildProvidesLowContributionCandidate W /\
+    FrameContractCandidate W.
+
+  Definition BodySatisfiesChildContractCandidate_statement: Prop :=
+    forall W,
+      RecursiveCallContractsCandidate W ->
+      ChildContractCandidate (tarjan_scc_f g W).
+
+  Definition BodyProvidesLowContributionCandidate_statement: Prop :=
+    forall W,
+      RecursiveCallContractsCandidate W ->
+      ChildProvidesLowContributionCandidate (tarjan_scc_f g W).
+
+  Definition BodyPreservesFrameContractCandidate_statement: Prop :=
+    forall W,
+      RecursiveCallContractsCandidate W ->
+      FrameContractCandidate (tarjan_scc_f g W).
+
+  Definition BodyRecursiveCallContractsCandidate_from_parts_statement: Prop :=
+    BodySatisfiesChildContractCandidate_statement ->
+    BodyProvidesLowContributionCandidate_statement ->
+    BodyPreservesFrameContractCandidate_statement ->
+    forall W,
+      RecursiveCallContractsCandidate W ->
+      RecursiveCallContractsCandidate (tarjan_scc_f g W).
 
   Definition FrameParentResumeShapeAfterPreloopCandidate_statement: Prop :=
     forall F parent child done,
@@ -2483,6 +2641,19 @@ Section IS_LOW_SKELETON.
     apply SetFaGlobalShapePreCandidate_proof.
   Qed.
 
+  Lemma ChildEntryProvidesEntryPreCandidate_proof:
+    ChildEntryProvidesEntryPreCandidate_statement.
+  Proof.
+    unfold ChildEntryProvidesEntryPreCandidate_statement,
+      ChildEntryCandidate,
+      PendingChildShapeCandidate,
+      EntryPreCandidate.
+    intros parent child done s
+           [_ [Hpre [Hsettled [_ [_ [_ Horder]]]]]].
+    split; [exact Hpre |].
+    split; [exact Hsettled | exact Horder].
+  Qed.
+
   Lemma PreloopEntryBaseCandidate_proof:
     PreloopEntryBaseCandidate_statement.
   Proof.
@@ -2524,6 +2695,18 @@ Section IS_LOW_SKELETON.
     split; [exact Hvis |].
     split; [exact Hact |].
     split; [exact Hlow | exact Horder].
+  Qed.
+
+  Lemma PreloopFromChildEntryProducesLoopEntryBaseCandidate_proof:
+    PreloopFromChildEntryProducesLoopEntryBaseCandidate_statement.
+  Proof.
+    unfold PreloopFromChildEntryProducesLoopEntryBaseCandidate_statement.
+    intros parent child done.
+    eapply Hoare_conseq_pre.
+    2: { apply PreloopEntryBaseCandidate_proof. }
+    intros s Hentry.
+    eapply ChildEntryProvidesEntryPreCandidate_proof.
+    exact Hentry.
   Qed.
 
   Lemma SetFaCreatesPendingChildCandidate_proof:
@@ -4552,6 +4735,129 @@ Section IS_LOW_SKELETON.
           eauto.
   Qed.
 
+  Lemma ChildContractCandidate_from_field_statements_proof:
+    ChildContractCandidate_from_field_statements_statement.
+  Proof.
+    unfold ChildContractCandidate_from_field_statements_statement,
+      ProcessEdgeUnvisitedChildPostCandidate_statement,
+      ChildReturnsVisitedCandidate_statement,
+      ChildRootCorrectForParentCandidate_statement,
+      ChildContractCandidate,
+      ChildPostCandidate.
+    intros Hfields W parent child done Hedge Hnot_done.
+    destruct Hfields as
+      [Hvisited [Hroot [Hinactive [Hclosed [Hsegment Hresume]]]]].
+    destruct Hroot as [Hlow_valid Hchild_is_low].
+    unfold Hoare.
+    intros s1 r s2 Hentry Hrun.
+    pose proof
+      (Hvisited W parent child done Hedge Hnot_done)
+      as Hvisited_run.
+    pose proof
+      (Hlow_valid W parent child done Hedge Hnot_done)
+      as Hlow_valid_run.
+    pose proof
+      (Hchild_is_low W parent child done Hedge Hnot_done)
+      as Hchild_is_low_run.
+    pose proof
+      (Hinactive W parent child done Hedge Hnot_done)
+      as Hinactive_run.
+    pose proof
+      (Hclosed W parent child done Hedge Hnot_done)
+      as Hclosed_run.
+    pose proof
+      (Hsegment W parent child done Hedge Hnot_done)
+      as Hsegment_run.
+    pose proof
+      (Hresume W parent child done Hedge Hnot_done)
+      as Hresume_run.
+    unfold Hoare in
+      Hlow_valid_run,
+      Hchild_is_low_run,
+      Hinactive_run,
+      Hclosed_run,
+      Hsegment_run,
+      Hresume_run.
+    split.
+    - eapply Hvisited_run; eauto.
+    - split.
+      + eapply Hlow_valid_run; eauto.
+      + split.
+        * eapply Hchild_is_low_run; eauto.
+        * split.
+          -- eapply Hinactive_run; eauto.
+          -- split.
+             ++ eapply Hclosed_run; eauto.
+             ++ split.
+                ** intros Hactive.
+                   exact (Hsegment_run s1 r s2 Hentry Hrun Hactive).
+                ** eapply Hresume_run; eauto.
+  Qed.
+
+  Lemma ChildContractCandidate_provides_returns_visited_proof:
+    ChildContractCandidate_provides_returns_visited_statement.
+  Proof.
+    unfold ChildContractCandidate_provides_returns_visited_statement,
+      ChildContractCandidate,
+      ChildReturnsVisitedCandidate,
+      ChildPostCandidate.
+    intros W Hcontract parent child done Hedge Hnot_done.
+    eapply Hoare_conseq_post.
+    2: { apply (Hcontract parent child done Hedge Hnot_done). }
+    intros r s Hpost.
+    exact (proj1 Hpost).
+  Qed.
+
+  Lemma ChildContractCandidate_provides_post_fields_proof:
+    ChildContractCandidate_provides_post_fields_statement.
+  Proof.
+    unfold ChildContractCandidate_provides_post_fields_statement.
+    intros W Hcontract.
+    split.
+    - eapply ChildContractCandidate_provides_returns_visited_proof.
+      exact Hcontract.
+    - split.
+      + intros parent child done Hedge Hnot_done.
+        eapply Hoare_conseq_post.
+        2: { apply (Hcontract parent child done Hedge Hnot_done). }
+        intros r s Hpost.
+        unfold ChildPostCandidate in Hpost.
+        destruct Hpost as [_ [Hlow_valid [Hchild_is_low _]]].
+        unfold ChildRootCorrectForParentCandidate.
+        split; assumption.
+      + split.
+        * intros parent child done Hedge Hnot_done.
+          eapply Hoare_conseq_post.
+          2: { apply (Hcontract parent child done Hedge Hnot_done). }
+          intros r s Hpost.
+          unfold ChildPostCandidate in Hpost.
+          destruct Hpost as [_ [_ [_ [Hinactive _]]]].
+          exact Hinactive.
+        * split.
+          -- intros parent child done Hedge Hnot_done.
+             eapply Hoare_conseq_post.
+             2: { apply (Hcontract parent child done Hedge Hnot_done). }
+             intros r s Hpost.
+             unfold ChildPostCandidate in Hpost.
+             destruct Hpost as [_ [_ [_ [_ [Hclosed _]]]]].
+             exact Hclosed.
+          -- split.
+             ++ intros parent child done Hedge Hnot_done.
+                eapply Hoare_conseq_post.
+                2: { apply (Hcontract parent child done Hedge Hnot_done). }
+                intros r s Hpost.
+                unfold ChildPostCandidate in Hpost.
+                destruct Hpost as [_ [_ [_ [_ [_ [Hsegment _]]]]]].
+                exact Hsegment.
+             ++ intros parent child done Hedge Hnot_done.
+                eapply Hoare_conseq_post.
+                2: { apply (Hcontract parent child done Hedge Hnot_done). }
+                intros r s Hpost.
+                unfold ChildPostCandidate in Hpost.
+                destruct Hpost as [_ [_ [_ [_ [_ [_ Hresume]]]]]].
+                exact Hresume.
+  Qed.
+
   (* ================================================================ *)
   (* Phase-7 root-bridge consumer audit proofs                        *)
   (* ================================================================ *)
@@ -4751,6 +5057,89 @@ Section IS_LOW_SKELETON.
     split; [exact Hphase6 | exact Hescape].
   Qed.
 
+  Lemma PreloopProducesRootSegmentInitialCandidate_proof:
+    PreloopProducesRootSegmentInitialCandidate_statement.
+  Proof.
+    unfold PreloopProducesRootSegmentInitialCandidate_statement,
+      EntryPreCandidate,
+      GlobalShapePreCandidate,
+      RootSegmentInitialCandidate,
+      Active.
+    intro u.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hpre _].
+    unfold wf_scc_state_pre, wf_scc_state in Hpre.
+    destruct Hpre as [[Hstack_vis [Hdfn_inv _]] Hnot_vis_u].
+    destruct Hdfn_inv as [Hdfn_lt _].
+    simpl in H2, H3.
+    destruct H2 as [Hx_u | Hx_stack].
+    - symmetry. exact Hx_u.
+    - assert (Hx_vis: x ∈ visited s0)
+        by (apply Hstack_vis; exact Hx_stack).
+      assert (Hx_lt: dfn s0 x < timer s0)
+        by (apply Hdfn_lt; exact Hx_vis).
+      assert (Hx_ne_u: x <> u)
+        by (intro Hx_u; subst x; exact (Hnot_vis_u Hx_vis)).
+      unfold equiv_decb in H3.
+      destruct (equiv_dec u u) as [_ | Hu_neq].
+      + destruct (equiv_dec x u) as [Hx_u_eq | _].
+        * exfalso. apply Hx_ne_u. exact Hx_u_eq.
+        * exfalso. lia.
+      + exfalso. apply Hu_neq. reflexivity.
+  Qed.
+
+  Lemma PreloopFromChildEntryProducesRootSegmentInitialCandidate_proof:
+    PreloopFromChildEntryProducesRootSegmentInitialCandidate_statement.
+  Proof.
+    unfold PreloopFromChildEntryProducesRootSegmentInitialCandidate_statement.
+    intros parent child done.
+    eapply Hoare_conseq_pre.
+    2: { apply PreloopProducesRootSegmentInitialCandidate_proof. }
+    intros s Hentry.
+    eapply ChildEntryProvidesEntryPreCandidate_proof.
+    exact Hentry.
+  Qed.
+
+  Lemma PreloopProducesParentFrameResumeEmptyCandidate_proof:
+    PreloopProducesParentFrameResumeEmptyCandidate_statement.
+  Proof.
+    unfold PreloopProducesParentFrameResumeEmptyCandidate_statement,
+      EntryPreCandidate,
+      GlobalShapePreCandidate,
+      ParentFrameResumeCandidate,
+      done_visited,
+      fa_child_of_u,
+      fa_not_done_implies_eq_u.
+    intro u.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hpre _].
+    unfold wf_scc_state_pre, wf_scc_state in Hpre.
+    destruct Hpre as [[_ [_ [_ Hfa_visited]]] Hnot_vis_u].
+    split.
+    - intros v Hempty. sets_unfold in Hempty. destruct Hempty.
+    - split.
+      + intros v [Hfa_v Hfa_neq].
+        simpl in Hfa_v, Hfa_neq.
+        apply Hfa_visited in Hfa_neq.
+        rewrite Hfa_v in Hfa_neq.
+        exfalso. apply Hnot_vis_u. exact Hfa_neq.
+      + intros v _ Hfa_v.
+        simpl in Hfa_v.
+        destruct (equiv_dec v u) as [Hv_u | Hv_ne_u].
+        * exact Hv_u.
+        * exfalso.
+          assert (Hfa_neq: fa s0 v <> v).
+          { intro Hfa_self.
+            apply Hv_ne_u.
+            rewrite <- Hfa_self.
+            exact Hfa_v. }
+          apply Hfa_visited in Hfa_neq.
+          rewrite Hfa_v in Hfa_neq.
+          apply Hnot_vis_u. exact Hfa_neq.
+  Qed.
+
   Lemma SegmentEscapeAccountingCandidate_empty_proof:
     SegmentEscapeAccountingCandidate_empty_statement.
   Proof.
@@ -4775,6 +5164,47 @@ Section IS_LOW_SKELETON.
         split.
         * intros Hempty. sets_unfold in Hempty. destruct Hempty.
         * exact Hreach_aw.
+  Qed.
+
+  Lemma PreloopProducesLoopInvPhase7InitialCandidate_proof:
+    PreloopProducesLoopInvPhase7InitialCandidate_statement.
+  Proof.
+    unfold PreloopProducesLoopInvPhase7InitialCandidate_statement.
+    intro u.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj with
+        (Q1 := fun _ s => LoopEntryBaseCandidate u s)
+        (Q2 := fun _ s =>
+                 ParentFrameResumeCandidate u ∅ s /\
+                 RootSegmentInitialCandidate u s).
+      - apply PreloopEntryBaseCandidate_proof.
+      - apply Hoare_conj.
+        + apply PreloopProducesParentFrameResumeEmptyCandidate_proof.
+        + apply PreloopProducesRootSegmentInitialCandidate_proof. }
+    intros _ s [Hentry [Hframe Hroot_segment]].
+    apply LoopEntryImpliesPhase7Candidate_proof.
+    - apply LoopEntryImpliesPhase6Candidate_proof.
+      + apply LoopEntryImpliesLowCandidate_proof. exact Hentry.
+      + exact Hframe.
+      + apply DoneClosednessCandidate_empty_proof.
+      + apply ProcessedTreeChildrenCorrectCandidate_empty_proof.
+      + apply ActiveProcessedChildSegmentSummaryCandidate_empty_proof.
+    - apply SegmentEscapeAccountingCandidate_empty_proof.
+      + apply LoopEntryImpliesLocalActiveRootCandidate_proof. exact Hentry.
+      + exact Hroot_segment.
+  Qed.
+
+  Lemma PreloopFromChildEntryProducesLoopInvPhase7InitialCandidate_proof:
+    PreloopFromChildEntryProducesLoopInvPhase7InitialCandidate_statement.
+  Proof.
+    unfold PreloopFromChildEntryProducesLoopInvPhase7InitialCandidate_statement.
+    intros parent child done.
+    eapply Hoare_conseq_pre.
+    2: { apply PreloopProducesLoopInvPhase7InitialCandidate_proof. }
+    intros s Hentry.
+    eapply ChildEntryProvidesEntryPreCandidate_proof.
+    exact Hentry.
   Qed.
 
   Lemma Phase7ChildPostExtendsLoopFieldsCandidate_proof:
@@ -5902,6 +6332,19 @@ Section IS_LOW_SKELETON.
                    intros r s Hframe.
                    destruct Hframe as [_ [_ [_ [_ [_ [_ Hfield]]]]]].
                    exact Hfield.
+  Qed.
+
+  Lemma BodyRecursiveCallContractsCandidate_from_parts_proof:
+    BodyRecursiveCallContractsCandidate_from_parts_statement.
+  Proof.
+    unfold BodyRecursiveCallContractsCandidate_from_parts_statement,
+      BodySatisfiesChildContractCandidate_statement,
+      BodyProvidesLowContributionCandidate_statement,
+      BodyPreservesFrameContractCandidate_statement,
+      RecursiveCallContractsCandidate.
+    intros Hchild Hlow Hframe W Hcontracts.
+    split. apply Hchild. exact Hcontracts.
+    split. apply Hlow. exact Hcontracts. apply Hframe. exact Hcontracts.
   Qed.
 
   Lemma FrameParentResumeShapeAfterPreloopCandidate_proof:
@@ -7143,12 +7586,21 @@ Section IS_LOW_SKELETON.
     ChildPost : V -> V -> (V -> Prop) -> St -> Prop;
 
     (*
+      Auxiliary recursive contract consumed by the tree-branch low update.
+      Unlike [ChildPost], this contract depends on parent low-equation
+      material present before the recursive call.
+     *)
+    LowContributionPre : V -> V -> (V -> Prop) -> St -> Prop;
+    LowContributionPost : V -> V -> (V -> Prop) -> St -> Prop;
+
+    (*
       Suspended outer parent frame.  This is the Hoare-logic counterpart of a
       continuation: an inner recursive call must preserve enough outer state
       for the parent loop to resume.
-     *)
+    *)
     Frame : Type;
     FrameInv : Frame -> St -> Prop;
+    FrameCompatible : Frame -> V -> St -> Prop;
   }.
 
   Definition LoopEntry (I: LowProofInterface) (u: V): St -> Prop :=
@@ -7173,6 +7625,16 @@ Section IS_LOW_SKELETON.
         (W child)
         (fun _ s => ChildPost I parent child done s).
 
+  Definition LowContributionContract
+             (I: LowProofInterface) (W: RecProgram): Prop :=
+    forall parent child done,
+      dg_step g parent child ->
+      ~ done child ->
+      Hoare
+        (LowContributionPre I parent child done)
+        (W child)
+        (fun _ s => LowContributionPost I parent child done s).
+
   Definition FrameContract (I: LowProofInterface) (W: RecProgram): Prop :=
     forall (F: Frame I) direct_parent child direct_done,
       dg_step g direct_parent child ->
@@ -7180,9 +7642,48 @@ Section IS_LOW_SKELETON.
       Hoare
         (fun s =>
            FrameInv I F s /\
+           FrameCompatible I F child s /\
            ChildEntry I direct_parent child direct_done s)
         (W child)
         (fun _ s => FrameInv I F s).
+
+  Definition LowCandidateInterface: LowProofInterface :=
+    {|
+      EntryPre := EntryPreCandidate;
+      RootFinal := RootFinalCandidate;
+      RootLowPrePop := RootLowPrePopCandidate;
+      LoopInv := LoopInvPhase7Candidate;
+      ChildEntry := ChildEntryCandidate;
+      ChildPost := ChildPostCandidate;
+      LowContributionPre :=
+        fun parent child done s =>
+          ChildEntryCandidate parent child done s /\
+          PartialRootLowEquationCandidate parent done s;
+      LowContributionPost :=
+        fun parent child done s =>
+          PartialRootLowEquationCandidate parent done s /\
+          fa s child = parent /\
+          fa s child <> child /\
+          low s child <= dfn s child;
+      Frame := SuspendedFrameCandidate;
+      FrameInv := FrameInvCandidate;
+      FrameCompatible := FrameCompatibleWithCallCandidate;
+    |}.
+
+  Definition ChildContractCandidate_to_interface_statement: Prop :=
+    forall W,
+      ChildContractCandidate W ->
+      ChildContract LowCandidateInterface W.
+
+  Definition LowContributionCandidate_to_interface_statement: Prop :=
+    forall W,
+      ChildProvidesLowContributionCandidate W ->
+      LowContributionContract LowCandidateInterface W.
+
+  Definition FrameContractCandidate_to_interface_statement: Prop :=
+    forall W,
+      FrameContractCandidate W ->
+      FrameContract LowCandidateInterface W.
 
   (* ================================================================ *)
   (* Cut-transition theorem statements                                *)
@@ -7198,6 +7699,7 @@ Section IS_LOW_SKELETON.
   Definition ProcessEdgeStep_statement (I: LowProofInterface): Prop :=
     forall (W: RecProgram) u a done,
       ChildContract I W ->
+      LowContributionContract I W ->
       FrameContract I W ->
       dg_step g u a ->
       ~ done a ->
@@ -7209,11 +7711,22 @@ Section IS_LOW_SKELETON.
   Definition EdgeLoopDone_statement (I: LowProofInterface): Prop :=
     forall (W: RecProgram) u,
       ChildContract I W ->
+      LowContributionContract I W ->
       FrameContract I W ->
       Hoare
         (LoopEntry I u)
         (edge_loop u W)
         (fun _ s => LoopDone I u s).
+
+  Definition LoopInvProper_statement (I: LowProofInterface): Prop :=
+    forall u,
+      Proper (Sets.equiv ==> eq ==> iff) (LoopInv I u).
+
+  Definition EdgeLoopDone_from_process_edge_step_statement
+             (I: LowProofInterface): Prop :=
+    LoopInvProper_statement I ->
+    ProcessEdgeStep_statement I ->
+    EdgeLoopDone_statement I.
 
   Definition RootBridge_statement (I: LowProofInterface): Prop :=
     forall u s,
@@ -7227,6 +7740,19 @@ Section IS_LOW_SKELETON.
         (maybe_pop u)
         (fun _ s => RootFinal I u s).
 
+  Definition RootBridgeCandidate_to_interface_statement: Prop :=
+    RootBridge_statement LowCandidateInterface.
+
+  Definition MaybePopFinalCandidate_to_interface_statement: Prop :=
+    MaybePopFinal_statement LowCandidateInterface.
+
+  Definition PreloopEntryCandidate_to_interface_statement: Prop :=
+    PreloopEntry_statement LowCandidateInterface.
+
+  Definition EdgeLoopDoneCandidate_from_process_edge_step_statement: Prop :=
+    ProcessEdgeStep_statement LowCandidateInterface ->
+    EdgeLoopDone_statement LowCandidateInterface.
+
   (* ================================================================ *)
   (* Recursive-body theorem statements                                *)
   (* ================================================================ *)
@@ -7235,13 +7761,23 @@ Section IS_LOW_SKELETON.
              (I: LowProofInterface): Prop :=
     forall W,
       ChildContract I W ->
+      LowContributionContract I W ->
       FrameContract I W ->
       ChildContract I (tarjan_scc_f g W).
+
+  Definition BodyProvidesLowContributionContract_statement
+             (I: LowProofInterface): Prop :=
+    forall W,
+      ChildContract I W ->
+      LowContributionContract I W ->
+      FrameContract I W ->
+      LowContributionContract I (tarjan_scc_f g W).
 
   Definition BodyPreservesFrameContract_statement
              (I: LowProofInterface): Prop :=
     forall W,
       ChildContract I W ->
+      LowContributionContract I W ->
       FrameContract I W ->
       FrameContract I (tarjan_scc_f g W).
 
@@ -7266,6 +7802,8 @@ Section IS_LOW_SKELETON.
       MaybePopFinal_statement I;
     obligation_body_satisfies_child_contract :
       BodySatisfiesChildContract_statement I;
+    obligation_body_provides_low_contribution_contract :
+      BodyProvidesLowContributionContract_statement I;
     obligation_body_preserves_frame_contract :
       BodyPreservesFrameContract_statement I;
   }.
@@ -7282,6 +7820,7 @@ Section IS_LOW_SKELETON.
   Inductive LowFixMode (I: LowProofInterface): Type :=
   | LowRootMode
   | LowChildMode (parent: V) (done: V -> Prop)
+  | LowContributionMode (parent: V) (done: V -> Prop)
   | LowFrameMode (outer: Frame I)
                  (direct_parent: V)
                  (direct_done: V -> Prop).
@@ -7296,8 +7835,13 @@ Section IS_LOW_SKELETON.
         ChildEntry I parent x done s /\
         dg_step g parent x /\
         ~ done x
+    | LowContributionMode _ parent done =>
+        LowContributionPre I parent x done s /\
+        dg_step g parent x /\
+        ~ done x
     | LowFrameMode _ outer direct_parent direct_done =>
         FrameInv I outer s /\
+        FrameCompatible I outer x s /\
         ChildEntry I direct_parent x direct_done s /\
         dg_step g direct_parent x /\
         ~ direct_done x
@@ -7312,8 +7856,461 @@ Section IS_LOW_SKELETON.
         RootFinal I x s
     | LowChildMode _ parent done =>
         ChildPost I parent x done s
+    | LowContributionMode _ parent done =>
+        LowContributionPost I parent x done s
     | LowFrameMode _ outer _ _ =>
         FrameInv I outer s
     end.
+
+  Definition FixIHProvidesChildContract_statement: Prop :=
+    forall I W,
+      (forall x mode,
+          Hoare (FixPre I x mode) (W x) (FixPost I x mode)) ->
+      ChildContract I W.
+
+  Definition FixIHProvidesLowContributionContract_statement: Prop :=
+    forall I W,
+      (forall x mode,
+          Hoare (FixPre I x mode) (W x) (FixPost I x mode)) ->
+      LowContributionContract I W.
+
+  Definition FixIHProvidesFrameContract_statement: Prop :=
+    forall I W,
+      (forall x mode,
+          Hoare (FixPre I x mode) (W x) (FixPost I x mode)) ->
+      FrameContract I W.
+
+  Definition FixpointModeStep_statement (I: LowProofInterface): Prop :=
+    LowProofObligations I ->
+    forall W,
+      (forall x mode,
+          Hoare (FixPre I x mode) (W x) (FixPost I x mode)) ->
+      forall x mode,
+        Hoare
+          (FixPre I x mode)
+          (tarjan_scc_f g W x)
+          (FixPost I x mode).
+
+  Lemma ChildContractCandidate_to_interface_proof:
+    ChildContractCandidate_to_interface_statement.
+  Proof.
+    unfold ChildContractCandidate_to_interface_statement,
+      ChildContractCandidate,
+      ChildContract,
+      LowCandidateInterface.
+    intros W Hchild parent child done Hedge Hnot_done.
+    exact (Hchild parent child done Hedge Hnot_done).
+  Qed.
+
+  Lemma LowContributionCandidate_to_interface_proof:
+    LowContributionCandidate_to_interface_statement.
+  Proof.
+    unfold LowContributionCandidate_to_interface_statement,
+      ChildProvidesLowContributionCandidate,
+      LowContributionContract,
+      LowCandidateInterface.
+    intros W Hlow parent child done Hedge Hnot_done.
+    exact (Hlow parent child done Hedge Hnot_done).
+  Qed.
+
+  Lemma FrameContractCandidate_to_interface_proof:
+    FrameContractCandidate_to_interface_statement.
+  Proof.
+    unfold FrameContractCandidate_to_interface_statement,
+      FrameContractCandidate,
+      FrameContract,
+      LowCandidateInterface.
+    intros W Hframe F parent child done Hedge Hnot_done.
+    exact (Hframe F parent child done Hedge Hnot_done).
+  Qed.
+
+  Lemma RootBridgeCandidate_to_interface_proof:
+    RootBridgeCandidate_to_interface_statement.
+  Proof.
+    unfold RootBridgeCandidate_to_interface_statement,
+      RootBridge_statement,
+      LoopDone,
+      LowCandidateInterface.
+    intros u s Hloop7.
+    apply
+      (RootBridgePrePopCandidate_proof
+         RootBridgeLowValidCandidate_proof
+         RootBridgeIsLowCandidate_proof).
+    apply LoopDoneProvidesRootBridgeInputCandidate_proof.
+    unfold LoopDonePhase7Candidate,
+      LoopInvPhase7Candidate in Hloop7.
+    exact (proj1 Hloop7).
+  Qed.
+
+  Lemma MaybePopFinalCandidate_to_interface_proof:
+    MaybePopFinalCandidate_to_interface_statement.
+  Proof.
+    unfold MaybePopFinalCandidate_to_interface_statement,
+      MaybePopFinal_statement,
+      PrePopRootReady,
+      LoopDone,
+      LowCandidateInterface.
+    exact MaybePopFinalCandidate_proof.
+  Qed.
+
+  Lemma PreloopEntryCandidate_to_interface_proof:
+    PreloopEntryCandidate_to_interface_statement.
+  Proof.
+    unfold PreloopEntryCandidate_to_interface_statement,
+      PreloopEntry_statement,
+      LoopEntry,
+      LowCandidateInterface.
+    apply PreloopProducesLoopInvPhase7InitialCandidate_proof.
+  Qed.
+
+  Lemma EdgeLoopDone_from_process_edge_step_proof:
+    forall I,
+      EdgeLoopDone_from_process_edge_step_statement I.
+  Proof.
+    unfold EdgeLoopDone_from_process_edge_step_statement,
+      LoopInvProper_statement,
+      ProcessEdgeStep_statement,
+      EdgeLoopDone_statement,
+      LoopEntry,
+      LoopDone,
+      edge_loop.
+    intros I Hproper Hstep W u Hchild Hlow Hframe.
+    eapply Hoare_forset
+      with (P := fun done s => LoopInv I u done s).
+    - apply Hproper.
+    - intros done a _Hsubset Hedge Hnot_done.
+      apply Hstep; assumption.
+  Qed.
+
+  Lemma LoopInvPhase7Candidate_done_proper_proof:
+    forall u,
+      Proper (Sets.equiv ==> eq ==> iff) (LoopInvPhase7Candidate u).
+  Proof.
+    unfold Proper, respectful.
+    intros u done1 done2 Hdone s1 s2 Hstate.
+    subst s2.
+    sets_unfold in Hdone.
+    unfold LoopInvPhase7Candidate,
+      LoopInvPhase6Candidate,
+      LoopInvLowCandidate,
+      LoopInvDoneCandidate,
+      DoneDisciplineCandidate,
+      DoneSubsetOfOutgoingCandidate,
+      DoneVisitedCandidate,
+      PartialRootLowEquationCandidate,
+      LowFrontierCandidate,
+      LowSourceCandidate,
+      ParentFrameResumeCandidate,
+      DoneClosednessCandidate,
+      ProcessedTreeChildrenCorrectCandidate,
+      ProcessedTreeChildrenLowValidCandidate,
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
+      ActiveProcessedChildSegmentSummaryCandidate,
+      SegmentEscapeAccountingCandidate,
+      ParentLowBelowChildCandidate,
+      PendingRootEscapeCandidate,
+      done_visited,
+      done_reachable_closed,
+      done_tree_reachable_closed,
+      low_frontier,
+      low_src,
+      fa_not_done_implies_eq_u.
+    assert
+      (Htransport:
+         forall src dst,
+           (forall x, src x -> dst x) ->
+           (forall x, dst x -> src x) ->
+           LoopInvPhase7Candidate u src s1 ->
+           LoopInvPhase7Candidate u dst s1).
+    {
+      intros src dst Hsrc_dst Hdst_src Hloop.
+      assert (Hnot_src_dst: forall x, ~ src x -> ~ dst x).
+      { intros x Hnot_src Hdst. apply Hnot_src. apply Hdst_src. exact Hdst. }
+      assert (Hnot_dst_src: forall x, ~ dst x -> ~ src x).
+      { intros x Hnot_dst Hsrc. apply Hnot_dst. apply Hsrc_dst. exact Hsrc. }
+      unfold LoopInvPhase7Candidate,
+        LoopInvPhase6Candidate,
+        LoopInvLowCandidate,
+        LoopInvDoneCandidate,
+        DoneDisciplineCandidate,
+        DoneSubsetOfOutgoingCandidate,
+        DoneVisitedCandidate,
+        PartialRootLowEquationCandidate,
+        LowFrontierCandidate,
+        LowSourceCandidate,
+        ParentFrameResumeCandidate,
+        DoneClosednessCandidate,
+        ProcessedTreeChildrenCorrectCandidate,
+        ProcessedTreeChildrenLowValidCandidate,
+        ProcessedTreeChildrenIsLowCandidate,
+        ProcessedTreeChildrenInactiveSelfLowCandidate,
+        ActiveProcessedChildSegmentSummaryCandidate,
+        SegmentEscapeAccountingCandidate,
+        PendingRootEscapeCandidate,
+        done_visited,
+        done_reachable_closed,
+        done_tree_reachable_closed,
+        fa_not_done_implies_eq_u
+        in Hloop |- *.
+      destruct Hloop as [Hphase6 Hsegment].
+      destruct Hphase6 as
+        [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
+      destruct Hlow as [Hdone_loop [Hfront Hsource]].
+      destruct Hdone_loop as [Hlocal [Hsubset Hdone_vis]].
+      destruct Hframe as [Hframe_done_vis [Hfa_child Hfa_not_done]].
+      destruct Hclosed as [Hdone_closed Htree_closed].
+      destruct Hchildren as
+        [Hchildren_valid [Hchildren_is_low Hchildren_inactive]].
+      split.
+      - split.
+        + split.
+          * split.
+            { exact Hlocal. }
+            { split.
+              - intros a Hdst_a.
+                apply Hsubset. apply Hdst_src. exact Hdst_a.
+              - intros a Hdst_a.
+                apply Hdone_vis. apply Hdst_src. exact Hdst_a. }
+          * split.
+            { split.
+              - exact (proj1 Hfront).
+              - intros a Hdst_a Hedge_a.
+                apply Hfront; [apply Hdst_src; exact Hdst_a | exact Hedge_a]. }
+            { destruct Hsource as [Hself | [Htree_source | Hstack_source]].
+              - left. exact Hself.
+              - destruct Htree_source as
+                  [a [Hsrc_a [Hedge_a [Hfa_a [Hfa_neq_a Hlow_a]]]]].
+                right. left. exists a.
+                repeat split; try assumption.
+                apply Hsrc_dst. exact Hsrc_a.
+              - destruct Hstack_source as
+                  [a [Hsrc_a [Hedge_a [Hactive_a [Hfa_neq_a Hlow_a]]]]].
+                right. right. exists a.
+                repeat split; try assumption.
+                apply Hsrc_dst. exact Hsrc_a. }
+        + split.
+          * split.
+            { intros a Hdst_a.
+              apply Hframe_done_vis. apply Hdst_src. exact Hdst_a. }
+            { split.
+              - exact Hfa_child.
+              - intros a Hnot_dst_a Hfa_a.
+                apply Hfa_not_done; [apply Hnot_dst_src; exact Hnot_dst_a |].
+                exact Hfa_a. }
+          * split.
+            { split.
+              - intros a w Hdst_a Hnot_active Hreach.
+                apply (Hdone_closed a w).
+                + apply Hdst_src. exact Hdst_a.
+                + exact Hnot_active.
+                + exact Hreach.
+              - intros a w Hdst_a Hnot_active Hfa_a Hfa_neq_a Hreach.
+                apply (Htree_closed a w).
+                + apply Hdst_src. exact Hdst_a.
+                + exact Hnot_active.
+                + exact Hfa_a.
+                + exact Hfa_neq_a.
+                + exact Hreach. }
+            { split.
+              - split.
+                + intros child Hdst_child.
+                  apply Hchildren_valid. apply Hdst_src. exact Hdst_child.
+                + split.
+                  * intros child Hdst_child.
+                    apply Hchildren_is_low. apply Hdst_src. exact Hdst_child.
+                  * intros child Hdst_child.
+                    apply Hchildren_inactive.
+                    apply Hdst_src. exact Hdst_child.
+              - intros child Hdst_child.
+                apply Hactive_segments. apply Hdst_src. exact Hdst_child. }
+      - intros x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w.
+        specialize
+          (Hsegment x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w)
+          as [Hpending | Hanchor].
+        + left.
+          destruct Hpending as
+            [a [Hx_a [Hedge_a [Hnot_src_a Hreach_aw]]]].
+          exists a.
+          split; [exact Hx_a |].
+          split; [exact Hedge_a |].
+          split; [| exact Hreach_aw].
+          apply Hnot_src_dst. exact Hnot_src_a.
+        + right. exact Hanchor.
+    }
+    split; intro H.
+    - apply (Htransport done1 done2); [apply Hdone | intros x; apply Hdone |].
+      exact H.
+    - apply (Htransport done2 done1); [intros x; apply Hdone | apply Hdone |].
+      exact H.
+  Qed.
+
+  Lemma EdgeLoopDoneCandidate_from_process_edge_step_proof:
+    EdgeLoopDoneCandidate_from_process_edge_step_statement.
+  Proof.
+    unfold EdgeLoopDoneCandidate_from_process_edge_step_statement.
+    intro Hstep.
+    apply EdgeLoopDone_from_process_edge_step_proof.
+    - unfold LoopInvProper_statement, LowCandidateInterface.
+      apply LoopInvPhase7Candidate_done_proper_proof.
+    - exact Hstep.
+  Qed.
+
+  Lemma FixIHProvidesChildContract_proof:
+    FixIHProvidesChildContract_statement.
+  Proof.
+    unfold FixIHProvidesChildContract_statement,
+      ChildContract.
+    intros I W HIH parent child done Hedge Hnot_done.
+    eapply Hoare_conseq with
+      (P2 := FixPre I child (LowChildMode I parent done))
+      (Q2 := FixPost I child (LowChildMode I parent done)).
+    - intros s Hentry.
+      unfold FixPre; simpl.
+      repeat split; assumption.
+    - intros r s Hpost.
+      unfold FixPost in Hpost; simpl in Hpost.
+      exact Hpost.
+    - apply (HIH child (LowChildMode I parent done)).
+  Qed.
+
+  Lemma FixIHProvidesLowContributionContract_proof:
+    FixIHProvidesLowContributionContract_statement.
+  Proof.
+    unfold FixIHProvidesLowContributionContract_statement,
+      LowContributionContract.
+    intros I W HIH parent child done Hedge Hnot_done.
+    eapply Hoare_conseq with
+      (P2 := FixPre I child (LowContributionMode I parent done))
+      (Q2 := FixPost I child (LowContributionMode I parent done)).
+    - intros s Hpre.
+      unfold FixPre; simpl.
+      repeat split; assumption.
+    - intros r s Hpost.
+      unfold FixPost in Hpost; simpl in Hpost.
+      exact Hpost.
+    - apply (HIH child (LowContributionMode I parent done)).
+  Qed.
+
+  Lemma FixIHProvidesFrameContract_proof:
+    FixIHProvidesFrameContract_statement.
+  Proof.
+    unfold FixIHProvidesFrameContract_statement,
+      FrameContract.
+    intros I W HIH F direct_parent child direct_done Hedge Hnot_done.
+    eapply Hoare_conseq with
+      (P2 := FixPre I child
+               (LowFrameMode I F direct_parent direct_done))
+      (Q2 := FixPost I child
+               (LowFrameMode I F direct_parent direct_done)).
+    - intros s [Hframe [Hcompatible Hentry]].
+      unfold FixPre; simpl.
+      repeat split; assumption.
+    - intros r s Hpost.
+      unfold FixPost in Hpost; simpl in Hpost.
+      exact Hpost.
+    - apply (HIH child (LowFrameMode I F direct_parent direct_done)).
+  Qed.
+
+  Lemma FixpointModeStep_from_obligations_proof:
+    forall I,
+      FixpointModeStep_statement I.
+  Proof.
+    unfold FixpointModeStep_statement.
+    intros I Hobs W HIH x mode.
+    destruct mode as
+      [| parent done | parent done | outer direct_parent direct_done];
+      simpl.
+    - destruct Hobs as
+        [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
+         Hbody_child Hbody_low Hbody_frame].
+      unfold tarjan_scc_f.
+      eapply Hoare_bind.
+      { apply Hpreloop. }
+      simpl. intros _.
+      eapply Hoare_bind.
+      { apply Hedge_loop.
+        - apply FixIHProvidesChildContract_proof.
+          exact HIH.
+        - apply FixIHProvidesLowContributionContract_proof.
+          exact HIH.
+        - apply FixIHProvidesFrameContract_proof.
+          exact HIH. }
+      simpl. intros _.
+      eapply Hoare_conseq_pre.
+      2: { apply Hmaybe_pop. }
+      intros s Hdone.
+      unfold PrePopRootReady.
+      split.
+      + exact Hdone.
+      + apply Hroot_bridge.
+        exact Hdone.
+    - destruct Hobs as
+        [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
+         Hbody_child Hbody_low Hbody_frame].
+      unfold Hoare.
+      intros s1 r s2 [Hentry [Hedge Hnot_done]] Hrun.
+      pose proof
+        (Hbody_child W
+           (FixIHProvidesChildContract_proof I W HIH)
+           (FixIHProvidesLowContributionContract_proof I W HIH)
+           (FixIHProvidesFrameContract_proof I W HIH)
+           parent x done Hedge Hnot_done) as Hchild_body.
+      unfold Hoare in Hchild_body.
+      eapply Hchild_body; [exact Hentry | exact Hrun].
+    - destruct Hobs as
+        [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
+         Hbody_child Hbody_low Hbody_frame].
+      unfold Hoare.
+      intros s1 r s2 [Hpre [Hedge Hnot_done]] Hrun.
+      pose proof
+        (Hbody_low W
+           (FixIHProvidesChildContract_proof I W HIH)
+           (FixIHProvidesLowContributionContract_proof I W HIH)
+           (FixIHProvidesFrameContract_proof I W HIH)
+           parent x done Hedge Hnot_done) as Hlow_body.
+      unfold Hoare in Hlow_body.
+      eapply Hlow_body; [exact Hpre | exact Hrun].
+    - destruct Hobs as
+        [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
+         Hbody_child Hbody_low Hbody_frame].
+      unfold Hoare.
+      intros s1 r s2
+             [Hframe [Hcompatible [Hentry [Hedge Hnot_done]]]] Hrun.
+      pose proof
+        (Hbody_frame W
+           (FixIHProvidesChildContract_proof I W HIH)
+           (FixIHProvidesLowContributionContract_proof I W HIH)
+           (FixIHProvidesFrameContract_proof I W HIH)
+           outer direct_parent x direct_done Hedge Hnot_done) as Hframe_body.
+      unfold Hoare in Hframe_body.
+      assert (Hframe_pre:
+                FrameInv I outer s1 /\
+                FrameCompatible I outer x s1 /\
+                ChildEntry I direct_parent x direct_done s1).
+      { split; [exact Hframe | split; [exact Hcompatible | exact Hentry]]. }
+      eapply Hframe_body; [exact Hframe_pre | exact Hrun].
+  Qed.
+
+  Lemma LowLayerCorrect_from_obligations_proof:
+    forall I,
+      LowLayerCorrect_from_obligations_statement I.
+  Proof.
+    unfold LowLayerCorrect_from_obligations_statement,
+      FixpointLowLayerCorrect_statement.
+    intros I Hobs u.
+    unfold tarjan_scc.
+    apply
+      (Hoare_fix_logicv
+         (tarjan_scc_f g)
+         (FixPre I)
+         (FixPost I)
+         u
+         (LowRootMode I)).
+    intros W HIH x mode.
+    apply FixpointModeStep_from_obligations_proof.
+    - exact Hobs.
+    - exact HIH.
+  Qed.
 
 End IS_LOW_SKELETON.
