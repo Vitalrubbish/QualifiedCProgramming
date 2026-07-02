@@ -845,6 +845,17 @@ Section IS_LOW_SKELETON.
       Edge u v /\
       dg_reachable g v x.
 
+  Definition ProcessedTreeReachableFromCandidate
+             (u: V) (done: V -> Prop) (s: St) (x: V): Prop :=
+    x = u \/
+    exists v,
+      done v /\
+      Edge u v /\
+      fa s v = u /\
+      fa s v <> v /\
+      dg_reachable (state_to_dfs_tree g s root) v x /\
+      dg_reachable g v x.
+
   Definition PendingRootEscapeCandidate
              (u: V) (done: V -> Prop) (s: St)
              (x w: V): Prop :=
@@ -876,6 +887,7 @@ Section IS_LOW_SKELETON.
   Definition PendingChildSegmentCandidate
              (child: V) (s: St) (x: V): Prop :=
     Visited child s /\
+    Active child s /\
     dg_reachable (state_to_dfs_tree g s root) child x.
 
   Definition SuspendedSegmentEscapeAccountingCandidate
@@ -987,6 +999,32 @@ Section IS_LOW_SKELETON.
       Active x s ->
       dfn s u <= dfn s x ->
       ProcessedReachableFromCandidate u done s x.
+
+  Definition SegmentTreeCoverageByDoneCandidate
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    forall x,
+      Active x s ->
+      dfn s u <= dfn s x ->
+      ProcessedTreeReachableFromCandidate u done s x.
+
+  Definition SuspendedSegmentTreeCoverageByDoneCandidate
+             (u child: V) (done: V -> Prop) (s: St): Prop :=
+    forall x,
+      Active x s ->
+      dfn s u <= dfn s x ->
+      ~ PendingChildSegmentCandidate child s x ->
+      ProcessedTreeReachableFromCandidate u done s x.
+
+  Definition ActiveTargetSegmentEscapeAccountedCandidate
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    forall a w,
+      Active a s ->
+      dfn s u <= dfn s a ->
+      ProcessedTreeReachableFromCandidate u done s a ->
+      dg_reachable g a w ->
+      ~ Visited w s ->
+      PendingRootEscapeCandidate u (done_after done a) s a w \/
+      OldStackEscapeAnchorCandidate u s a w.
 
   Definition RootSegmentInitialCandidate (u: V) (s: St): Prop :=
     forall x,
@@ -1158,7 +1196,16 @@ Section IS_LOW_SKELETON.
     ChildInactiveSelfLowForParentCandidate_statement /\
     ChildClosednessContributionCandidate_statement /\
     ChildSegmentSummaryCandidate_statement /\
-    ParentResumeShapeCandidate_statement.
+    ParentResumeShapeCandidate_statement /\
+    (forall (W: RecProgram) parent child done,
+        Edge parent child ->
+        ~ done child ->
+        Hoare
+          (fun s => ChildEntryCandidate parent child done s)
+          (W child)
+          (fun _ s =>
+             ParentPendingChildEscapeAccountedCandidate
+               parent done child s)).
 
   Definition ChildPostCandidate
              (parent child: V) (done: V -> Prop) (s: St): Prop :=
@@ -1168,7 +1215,8 @@ Section IS_LOW_SKELETON.
     ChildInactiveSelfLowForParentCandidate child s /\
     ChildClosednessContributionCandidate child s /\
     (Active child s -> ChildSegmentSummaryCandidate child s) /\
-    ParentResumeShapeCandidate parent child done s.
+    ParentResumeShapeCandidate parent child done s /\
+    ParentPendingChildEscapeAccountedCandidate parent done child s.
 
   Definition ChildContractCandidate (W: RecProgram): Prop :=
     forall parent child done,
@@ -1534,12 +1582,14 @@ Section IS_LOW_SKELETON.
   Definition LoopInvPhase7Candidate
              (u: V) (done: V -> Prop) (s: St): Prop :=
     LoopInvPhase6Candidate u done s /\
-    SegmentEscapeAccountingCandidate u done s.
+    SegmentEscapeAccountingCandidate u done s /\
+    SegmentTreeCoverageByDoneCandidate u done s.
 
   Definition SuspendedLoopInvPhase7Candidate
              (u child: V) (done: V -> Prop) (s: St): Prop :=
     SuspendedLoopInvPhase6Candidate u child done s /\
-    SegmentEscapeAccountingCandidate u done s.
+    SuspendedSegmentEscapeAccountingCandidate u child done s /\
+    SuspendedSegmentTreeCoverageByDoneCandidate u child done s.
 
   Definition LoopDonePhase7Candidate (u: V) (s: St): Prop :=
     LoopInvPhase7Candidate u (edge_set u) s.
@@ -1549,6 +1599,18 @@ Section IS_LOW_SKELETON.
       LocalActiveRootCandidate u s ->
       RootSegmentInitialCandidate u s ->
       SegmentEscapeAccountingCandidate u ∅ s.
+
+  Definition SegmentTreeCoverageByDoneCandidate_empty_statement: Prop :=
+    forall u s,
+      RootSegmentInitialCandidate u s ->
+      SegmentTreeCoverageByDoneCandidate u ∅ s.
+
+  Definition ActiveTargetSegmentEscapeAccountedCandidate_empty_statement:
+    Prop :=
+    forall u s,
+      LocalActiveRootCandidate u s ->
+      RootSegmentInitialCandidate u s ->
+      ActiveTargetSegmentEscapeAccountedCandidate u ∅ s.
 
   Definition PreloopProducesParentFrameResumeEmptyCandidate_statement:
     Prop :=
@@ -1584,6 +1646,36 @@ Section IS_LOW_SKELETON.
     forall u done child s,
       SegmentEscapeAccountingCandidate u done s ->
       SuspendedSegmentEscapeAccountingCandidate u child done s.
+
+  Definition SegmentTreeCoverageSuspendsCandidate_statement: Prop :=
+    forall u done child s,
+      SegmentTreeCoverageByDoneCandidate u done s ->
+      SuspendedSegmentTreeCoverageByDoneCandidate u child done s.
+
+  Definition SegmentTreeCoverageClosesAfterChildCandidate_statement: Prop :=
+    forall u done child s,
+      GlobalShapeCandidate s ->
+      Edge u child ->
+      fa s child = u ->
+      fa s child <> child ->
+      (Active child s -> ChildSegmentSummaryCandidate child s) ->
+      SuspendedSegmentTreeCoverageByDoneCandidate u child done s ->
+      SegmentTreeCoverageByDoneCandidate u (done_after done child) s.
+
+  Definition ProcessEdgeVisitedActiveExtendsSegmentEscapeAccountingWithTargetCandidate_statement:
+    Prop :=
+    forall W u a done,
+      Hoare
+        (fun s =>
+           SegmentEscapeAccountingCandidate u done s /\
+           SegmentTreeCoverageByDoneCandidate u done s /\
+           ActiveTargetSegmentEscapeAccountedCandidate u done s /\
+           Edge u a /\
+           Visited a s /\
+           Active a s)
+        (process_edge u W a)
+        (fun _ s =>
+           SegmentEscapeAccountingCandidate u (done_after done a) s).
 
   Definition SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_statement:
     Prop :=
@@ -1791,6 +1883,8 @@ Section IS_LOW_SKELETON.
     forall u s,
       LoopInvPhase6Candidate u ∅ s ->
       SegmentEscapeAccountingCandidate u ∅ s ->
+      SegmentTreeCoverageByDoneCandidate u ∅ s ->
+      ActiveTargetSegmentEscapeAccountedCandidate u ∅ s ->
       LoopInvPhase7Candidate u ∅ s.
 
   Definition Phase7ChildPostExtendsLoopFieldsCandidate_statement: Prop :=
@@ -1820,6 +1914,8 @@ Section IS_LOW_SKELETON.
     ActiveProcessedChildSegmentSummaryCandidate
       (frame_parent F) (frame_done F) s /\
     SuspendedSegmentEscapeAccountingCandidate
+      (frame_parent F) (frame_child F) (frame_done F) s /\
+    SuspendedSegmentTreeCoverageByDoneCandidate
       (frame_parent F) (frame_child F) (frame_done F) s.
 
   Definition FrameOfCallCandidate
@@ -1845,6 +1941,32 @@ Section IS_LOW_SKELETON.
       SuspendedLoopInvPhase7Candidate u child done s ->
       ParentResumeShapeCandidate u child done s ->
       FrameInvCandidate (FrameOfCallCandidate u child done) s.
+
+  Definition SetFaCreatesSuspendedParentFrameCandidate_statement: Prop :=
+    forall parent child done,
+      Edge parent child ->
+      ~ done child ->
+      Hoare
+        (fun s =>
+           LocalActiveRootCandidate parent s /\
+           ParentFrameResumeCandidate parent done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           SuspendedParentFrameResumeCandidate parent child done s /\
+           ParentResumeShapeCandidate parent child done s).
+
+  Definition SetFaPreservesProcessedTreeChildrenCorrectCandidate_statement:
+    Prop :=
+    forall parent child done,
+      ~ done child ->
+      Hoare
+        (fun s =>
+           ProcessedTreeChildrenCorrectCandidate parent done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           ProcessedTreeChildrenCorrectCandidate parent done s).
 
   Definition FrameInvProvidesParentResumeShapeCandidate_statement: Prop :=
     forall F s,
@@ -1890,6 +2012,13 @@ Section IS_LOW_SKELETON.
       SuspendedSegmentEscapeAccountingCandidate
         (frame_parent F) (frame_child F) (frame_done F) s.
 
+  Definition FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_statement:
+    Prop :=
+    forall F s,
+      FrameInvCandidate F s ->
+      SuspendedSegmentTreeCoverageByDoneCandidate
+        (frame_parent F) (frame_child F) (frame_done F) s.
+
   Definition FrameInvForgetsSuspendedLoopInvPhase6Candidate_statement: Prop :=
     forall F s,
       FrameInvCandidate F s ->
@@ -1914,6 +2043,7 @@ Section IS_LOW_SKELETON.
       ActiveProcessedChildSegmentSummaryCandidate
         parent (done_after done child) s ->
       SegmentEscapeAccountingCandidate parent (done_after done child) s ->
+      SegmentTreeCoverageByDoneCandidate parent (done_after done child) s ->
       LoopInvPhase7Candidate parent (done_after done child) s.
 
   Definition FrameContractCandidate (W: RecProgram): Prop :=
@@ -1996,6 +2126,14 @@ Section IS_LOW_SKELETON.
            (frame_parent F) (frame_child F) (frame_done F) s)
       W.
 
+  Definition FramePreservesSuspendedSegmentTreeCoverageCandidate
+             (W: RecProgram): Prop :=
+    FrameFieldPreservationCandidate
+      (fun F s =>
+         SuspendedSegmentTreeCoverageByDoneCandidate
+           (frame_parent F) (frame_child F) (frame_done F) s)
+      W.
+
   Definition FramePreservationBundleCandidate (W: RecProgram): Prop :=
     FramePreservesParentResumeShapeCandidate W /\
     FramePreservesLoopInvLowCandidate W /\
@@ -2003,7 +2141,8 @@ Section IS_LOW_SKELETON.
     FramePreservesDoneClosednessCandidate W /\
     FramePreservesProcessedTreeChildrenCorrectCandidate W /\
     FramePreservesActiveProcessedChildSegmentSummaryCandidate W /\
-    FramePreservesSuspendedSegmentEscapeAccountingCandidate W.
+    FramePreservesSuspendedSegmentEscapeAccountingCandidate W /\
+    FramePreservesSuspendedSegmentTreeCoverageCandidate W.
 
   Definition FrameContractCandidate_from_field_preservation_statement:
     Prop :=
@@ -3296,6 +3435,67 @@ Section IS_LOW_SKELETON.
     split; [exact Hlow_other | exact Hlow_old].
   Qed.
 
+  Lemma GetDfnUpdateLowKeepsTraversalSnapshotCandidate_proof:
+    forall u a snap,
+      Hoare
+        (fun s : St => s = snap)
+        (dv <- get' (fun s => dfn s a);; update_low u dv)
+        (fun _ s =>
+           (forall x, Visited x s <-> Visited x snap) /\
+           (forall x, dfn s x = dfn snap x) /\
+           (forall x, fa s x = fa snap x) /\
+           (forall x, Active x s <-> Active x snap) /\
+           (forall x, x <> u -> low s x = low snap x) /\
+           low s u <= dfn snap a).
+  Proof.
+    intros u a snap.
+    eapply Hoare_bind.
+    { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with (Q1 := fun _ s => forall x, Visited x s <-> Visited x snap)
+             (Q2 := fun _ s =>
+                      ((forall x, dfn s x = dfn snap x) /\
+                       (forall x, fa s x = fa snap x) /\
+                       (forall x, Active x s <-> Active x snap) /\
+                       (forall x, x <> u -> low s x = low snap x)) /\
+                      (dv = dfn snap a /\ low s u <= dv)).
+      - eapply Hoare_conseq_pre.
+        2: apply (UpdateLowKeepsVisitedCandidate_proof u dv snap).
+        intros s [Heq_s _]. exact Heq_s.
+      - apply Hoare_conj
+          with (Q1 := fun _ s =>
+                        (forall x, dfn s x = dfn snap x) /\
+                        (forall x, fa s x = fa snap x) /\
+                        (forall x, Active x s <-> Active x snap) /\
+                        (forall x, x <> u -> low s x = low snap x))
+               (Q2 := fun _ s => dv = dfn snap a /\ low s u <= dv).
+        + eapply Hoare_conseq_pre.
+          2: apply (UpdateLowKeepsSnapshotFieldsCandidate_proof u dv snap).
+          intros s [Heq_s _]. exact Heq_s.
+        + apply Hoare_conj
+            with (Q1 := fun _ _ => dv = dfn snap a)
+                 (Q2 := fun _ s => low s u <= dv).
+	          * unfold Hoare.
+	            intros s1 r s2 [Heq_s Hdv] _Hrun.
+            subst s1. exact Hdv.
+          * eapply Hoare_conseq_pre.
+            2: apply (UpdateLowBoundedByIncomingCandidate_proof u dv).
+            intros s _Hget. exact I.
+    }
+    intros _ s [Hvisited [Hsnapshot [Hdv Hlow_incoming]]].
+    destruct Hsnapshot as [Hdfn [Hfa [Hactive Hlow_other]]].
+    split; [exact Hvisited |].
+    split; [exact Hdfn |].
+    split; [exact Hfa |].
+    split; [exact Hactive |].
+    split; [exact Hlow_other |].
+    rewrite <- Hdv.
+    exact Hlow_incoming.
+  Qed.
+
   Lemma UpdateLowPreservesFrontierWithIncomingBound_proof:
     UpdateLowPreservesFrontierWithIncomingBound_statement.
   Proof.
@@ -4069,6 +4269,136 @@ Section IS_LOW_SKELETON.
     - eapply Coq.Relations.Relation_Operators.rt_trans; eauto.
   Qed.
 
+  Lemma set_fa_unvisited_preserves_tree_reachable:
+    forall child parent s x y,
+      Unvisited child s ->
+      (dg_reachable
+         (state_to_dfs_tree g
+            (RecordSet.set fa
+               (fun fa0 z => if equiv_decb z child then parent else fa0 z) s)
+            root) x y <->
+       dg_reachable (state_to_dfs_tree g s root) x y).
+  Proof.
+    unfold Unvisited, Visited, dg_reachable.
+    intros child parent s x y Hunvis.
+    split; intro Hreach.
+    - induction Hreach as [x0 y0 Hstep | x0 | x0 y0 z0 _ IHxy _ IHyz].
+      + apply Coq.Relations.Relation_Operators.rt_step.
+        apply (proj1
+                 (set_fa_unvisited_preserves_tree_step
+                    g root child parent x0 y0 s Hunvis)).
+        exact Hstep.
+      + apply Coq.Relations.Relation_Operators.rt_refl.
+      + eapply Coq.Relations.Relation_Operators.rt_trans;
+          [exact IHxy | exact IHyz].
+    - induction Hreach as [x0 y0 Hstep | x0 | x0 y0 z0 _ IHxy _ IHyz].
+      + apply Coq.Relations.Relation_Operators.rt_step.
+        apply (proj2
+                 (set_fa_unvisited_preserves_tree_step
+                    g root child parent x0 y0 s Hunvis)).
+        exact Hstep.
+      + apply Coq.Relations.Relation_Operators.rt_refl.
+      + eapply Coq.Relations.Relation_Operators.rt_trans;
+          [exact IHxy | exact IHyz].
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_scc_is_low_v:
+    forall target child parent s,
+      Unvisited child s ->
+      scc_is_low_v g root s target ->
+      scc_is_low_v g root
+        (RecordSet.set fa
+           (fun fa0 x => if equiv_decb x child then parent else fa0 x) s)
+        target.
+  Proof.
+    unfold Unvisited, Visited, scc_is_low_v, scc_is_low_v_val.
+    intros target child parent s Hunvis His_low.
+    simpl.
+    eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+    - exact His_low.
+    - intros x Hx.
+      exists x.
+      split; [| reflexivity].
+      unfold scc_low_tree, scc_low_reachable in Hx |- *.
+      destruct Hx as [z [Hreach Hcase]].
+      exists z.
+      split.
+      + apply (proj2
+                 (set_fa_unvisited_preserves_tree_reachable
+                    child parent s target z Hunvis)).
+        exact Hreach.
+      + destruct Hcase as [Hz_x | Hback].
+        * left. exact Hz_x.
+        * right.
+          unfold scc_back_edge in Hback |- *.
+          destruct Hback as [Hedge [Hactive Hnot_tree]].
+          split; [exact Hedge |].
+          split; [exact Hactive |].
+          intro Htree_new.
+          apply Hnot_tree.
+          apply (proj1
+                   (set_fa_unvisited_preserves_tree_step
+                      g root child parent z x s Hunvis)).
+          exact Htree_new.
+    - intros x Hx.
+      exists x.
+      split; [| reflexivity].
+      unfold scc_low_tree, scc_low_reachable in Hx |- *.
+      destruct Hx as [z [Hreach Hcase]].
+      exists z.
+      split.
+      + apply (proj1
+                 (set_fa_unvisited_preserves_tree_reachable
+                    child parent s target z Hunvis)).
+        exact Hreach.
+      + destruct Hcase as [Hz_x | Hback].
+        * left. exact Hz_x.
+        * right.
+          unfold scc_back_edge in Hback |- *.
+          destruct Hback as [Hedge [Hactive Hnot_tree]].
+          split; [exact Hedge |].
+          split; [exact Hactive |].
+          intro Htree_old.
+          apply Hnot_tree.
+          apply (proj2
+                   (set_fa_unvisited_preserves_tree_step
+                      g root child parent z x s Hunvis)).
+          exact Htree_old.
+  Qed.
+
+  Lemma set_low_other_preserves_scc_is_low_v:
+    forall target changed n s,
+      target <> changed ->
+      scc_is_low_v g root s target ->
+      scc_is_low_v g root
+        (RecordSet.set low
+           (fun low0 x => if equiv_decb x changed then n else low0 x) s)
+        target.
+  Proof.
+    unfold scc_is_low_v, scc_is_low_v_val.
+    intros target changed n s Hneq His_low.
+    simpl.
+    unfold equiv_decb.
+    destruct (equiv_dec target changed) as [Heq | _].
+    - exfalso. apply Hneq. exact Heq.
+    - exact His_low.
+  Qed.
+
+  Lemma update_low_other_preserves_scc_is_low_v:
+    forall target changed n,
+      target <> changed ->
+      Hoare
+        (fun s => scc_is_low_v g root s target)
+        (update_low changed n)
+        (fun _ s => scc_is_low_v g root s target).
+  Proof.
+    intros target changed n Hneq.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl.
+      apply set_low_other_preserves_scc_is_low_v; assumption.
+    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
+
   Lemma scc_back_edge_transport_post_to_snapshot:
     forall snap s x y,
       (forall z, Visited z s <-> Visited z snap) ->
@@ -4746,7 +5076,8 @@ Section IS_LOW_SKELETON.
       ChildPostCandidate.
     intros Hfields W parent child done Hedge Hnot_done.
     destruct Hfields as
-      [Hvisited [Hroot [Hinactive [Hclosed [Hsegment Hresume]]]]].
+      [Hvisited [Hroot [Hinactive [Hclosed [Hsegment
+       [Hresume Hparent_pending]]]]]].
     destruct Hroot as [Hlow_valid Hchild_is_low].
     unfold Hoare.
     intros s1 r s2 Hentry Hrun.
@@ -4771,13 +5102,17 @@ Section IS_LOW_SKELETON.
     pose proof
       (Hresume W parent child done Hedge Hnot_done)
       as Hresume_run.
+    pose proof
+      (Hparent_pending W parent child done Hedge Hnot_done)
+      as Hparent_pending_run.
     unfold Hoare in
       Hlow_valid_run,
       Hchild_is_low_run,
       Hinactive_run,
       Hclosed_run,
       Hsegment_run,
-      Hresume_run.
+      Hresume_run,
+      Hparent_pending_run.
     split.
     - eapply Hvisited_run; eauto.
     - split.
@@ -4791,7 +5126,9 @@ Section IS_LOW_SKELETON.
              ++ split.
                 ** intros Hactive.
                    exact (Hsegment_run s1 r s2 Hentry Hrun Hactive).
-                ** eapply Hresume_run; eauto.
+                ** split.
+                   --- eapply Hresume_run; eauto.
+                   --- eapply Hparent_pending_run; eauto.
   Qed.
 
   Lemma ChildContractCandidate_provides_returns_visited_proof:
@@ -4854,7 +5191,7 @@ Section IS_LOW_SKELETON.
                 2: { apply (Hcontract parent child done Hedge Hnot_done). }
                 intros r s Hpost.
                 unfold ChildPostCandidate in Hpost.
-                destruct Hpost as [_ [_ [_ [_ [_ [_ Hresume]]]]]].
+                destruct Hpost as [_ [_ [_ [_ [_ [_ [Hresume _Hpending]]]]]]].
                 exact Hresume.
   Qed.
 
@@ -5048,13 +5385,44 @@ Section IS_LOW_SKELETON.
   (* Phase-7 root-segment consumer audit proofs                       *)
   (* ================================================================ *)
 
+  Lemma dg_reachable_first_nonself_step_candidate
+        (T: OriginalGraphType V E) (u z: V):
+    u <> z ->
+    dg_reachable T u z ->
+    exists v, dg_step T u v /\ v <> u /\ dg_reachable T v z.
+  Proof.
+    intros Hneq Hreach.
+    remember u as start eqn:Hstart.
+    revert u Hneq Hstart.
+    induction Hreach as
+      [x y Hstep | x | x y z Hxy IHxy Hyz IHyz];
+      intros u Hneq Hstart; subst x.
+    - exists y.
+      split; [exact Hstep |].
+      split.
+      + intro Hy_u. subst y. apply Hneq. reflexivity.
+      + apply Coq.Relations.Relation_Operators.rt_refl.
+    - exfalso. apply Hneq. reflexivity.
+    - destruct (classic (u = y)) as [Hu_y | Hu_not_y].
+      + subst y.
+        apply (IHyz u Hneq eq_refl).
+      + destruct (IHxy u Hu_not_y eq_refl) as
+          [v [Hstep_v [Hv_not_u Hreach_vy]]].
+        exists v.
+        split; [exact Hstep_v |].
+        split; [exact Hv_not_u |].
+        eapply Coq.Relations.Relation_Operators.rt_trans.
+        * exact Hreach_vy.
+        * exact Hyz.
+  Qed.
+
   Lemma LoopEntryImpliesPhase7Candidate_proof:
     LoopEntryImpliesPhase7Candidate_statement.
   Proof.
     unfold LoopEntryImpliesPhase7Candidate_statement,
       LoopInvPhase7Candidate.
-    intros u s Hphase6 Hescape.
-    split; [exact Hphase6 | exact Hescape].
+    intros u s Hphase6 Hescape Hcoverage Htarget.
+    split; [exact Hphase6 | split; [exact Hescape | exact Hcoverage]].
   Qed.
 
   Lemma PreloopProducesRootSegmentInitialCandidate_proof:
@@ -5166,6 +5534,48 @@ Section IS_LOW_SKELETON.
         * exact Hreach_aw.
   Qed.
 
+  Lemma SegmentTreeCoverageByDoneCandidate_empty_proof:
+    SegmentTreeCoverageByDoneCandidate_empty_statement.
+  Proof.
+    unfold SegmentTreeCoverageByDoneCandidate_empty_statement,
+      SegmentTreeCoverageByDoneCandidate,
+      RootSegmentInitialCandidate,
+      ProcessedTreeReachableFromCandidate.
+    intros u s Hinitial x Hactive_x Hdfn_x.
+    left. apply Hinitial; assumption.
+  Qed.
+
+  Lemma ActiveTargetSegmentEscapeAccountedCandidate_empty_proof:
+    ActiveTargetSegmentEscapeAccountedCandidate_empty_statement.
+  Proof.
+    unfold ActiveTargetSegmentEscapeAccountedCandidate_empty_statement,
+      ActiveTargetSegmentEscapeAccountedCandidate,
+      LocalActiveRootCandidate,
+      RootSegmentInitialCandidate,
+      PendingRootEscapeCandidate,
+      done_after.
+    intros u s [_Hshape [_Hsettled [Hvis_u _Hactive_u]]]
+           Hinitial a w Hactive_a Hdfn_a _Hcovered Hreach_aw Hnot_vis_w.
+    assert (Ha_u: a = u) by (apply Hinitial; assumption).
+    subst a.
+    left.
+    assert (Hu_not_w: u <> w).
+    { intro Hu_w. subst w. apply Hnot_vis_w. exact Hvis_u. }
+    destruct (dg_reachable_first_nonself_step_candidate g u w
+                Hu_not_w Hreach_aw) as
+      [next [Hedge_next [Hnext_not_u Hreach_next_w]]].
+    exists next.
+    split; [apply dg_reachable_refl' |].
+    split; [exact Hedge_next |].
+    split.
+    - intros Hdone_next.
+      sets_unfold in Hdone_next.
+      destruct Hdone_next as [Hempty | Hnext_u].
+      + destruct Hempty.
+      + apply Hnext_not_u. symmetry. exact Hnext_u.
+    - exact Hreach_next_w.
+  Qed.
+
   Lemma PreloopProducesLoopInvPhase7InitialCandidate_proof:
     PreloopProducesLoopInvPhase7InitialCandidate_statement.
   Proof.
@@ -5191,6 +5601,11 @@ Section IS_LOW_SKELETON.
       + apply ProcessedTreeChildrenCorrectCandidate_empty_proof.
       + apply ActiveProcessedChildSegmentSummaryCandidate_empty_proof.
     - apply SegmentEscapeAccountingCandidate_empty_proof.
+      + apply LoopEntryImpliesLocalActiveRootCandidate_proof. exact Hentry.
+      + exact Hroot_segment.
+    - apply SegmentTreeCoverageByDoneCandidate_empty_proof.
+      exact Hroot_segment.
+    - apply ActiveTargetSegmentEscapeAccountedCandidate_empty_proof.
       + apply LoopEntryImpliesLocalActiveRootCandidate_proof. exact Hentry.
       + exact Hroot_segment.
   Qed.
@@ -5273,6 +5688,82 @@ Section IS_LOW_SKELETON.
     intros u done child s Hsegment x w Hactive_x Hdfn_x
            _Houtside Hreach_xw Hnot_vis_w.
     eapply Hsegment; eauto.
+  Qed.
+
+  Lemma SegmentTreeCoverageSuspendsCandidate_proof:
+    SegmentTreeCoverageSuspendsCandidate_statement.
+  Proof.
+    unfold SegmentTreeCoverageSuspendsCandidate_statement,
+      SuspendedSegmentTreeCoverageByDoneCandidate,
+      SegmentTreeCoverageByDoneCandidate.
+    intros u done child s Hcoverage x Hactive_x Hdfn_x _Houtside.
+    eapply Hcoverage; eauto.
+  Qed.
+
+  Lemma SegmentTreeCoverageClosesAfterChildCandidate_proof:
+    SegmentTreeCoverageClosesAfterChildCandidate_statement.
+  Proof.
+    unfold SegmentTreeCoverageClosesAfterChildCandidate_statement,
+      SegmentTreeCoverageByDoneCandidate,
+      SuspendedSegmentTreeCoverageByDoneCandidate,
+      ChildSegmentSummaryCandidate,
+      SegmentCoverageByDoneCandidate,
+      ProcessedReachableFromCandidate,
+      ProcessedTreeReachableFromCandidate,
+      PendingChildSegmentCandidate,
+      done_after,
+      edge_set.
+    intros u done child s Hshape Hedge Hfa Hfa_neq Hchild_segment
+           Hsuspended x Hactive_x Hdfn_u_x.
+    destruct (classic (Visited child s /\ Active child s /\
+                       dg_reachable (state_to_dfs_tree g s root) child x))
+      as [Hin_child_segment | Houtside_child_segment].
+    - destruct Hin_child_segment as [Hvis_child [Hactive_child Htree_child_x]].
+      assert (Hdfn_child_x: dfn s child <= dfn s x).
+      { unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+        destruct Hshape as [_ [_ [Hdfn_valid _]]].
+        assert (Hreach_dfn:
+                  forall y z,
+                    dg_reachable (state_to_dfs_tree g s root) y z ->
+                    dfn s y <= dfn s z).
+        { intros y z Hreach.
+          induction Hreach.
+          - pose proof (Hdfn_valid x0 y H). lia.
+          - apply le_n.
+          - lia. }
+        eapply Hreach_dfn. exact Htree_child_x. }
+      specialize (Hchild_segment Hactive_child) as [_ Hchild_coverage].
+      specialize (Hchild_coverage x Hactive_x Hdfn_child_x) as
+        [Hx_child | [next [_Hdone_next [Hedge_child_next Hreach_next_x]]]].
+      + right. exists child.
+        split.
+        * sets_unfold. right. reflexivity.
+        * split; [exact Hedge |].
+          split; [exact Hfa |].
+          split; [exact Hfa_neq |].
+          subst x.
+          split; apply dg_reachable_refl'.
+      + right. exists child.
+        split.
+        * sets_unfold. right. reflexivity.
+        * split; [exact Hedge |].
+          split; [exact Hfa |].
+          split; [exact Hfa_neq |].
+          split; [exact Htree_child_x |].
+          eapply dg_reachable_trans.
+          -- apply dg_reachable_step. exact Hedge_child_next.
+          -- exact Hreach_next_x.
+    - specialize (Hsuspended x Hactive_x Hdfn_u_x Houtside_child_segment)
+        as [Hx_u | [v [Hdone_v [Hedge_v
+          [Hfa_v [Hfa_neq_v [Htree_vx Hreach_vx]]]]]]].
+      + left. exact Hx_u.
+      + right. exists v.
+        split.
+        * sets_unfold. left. exact Hdone_v.
+        * split; [exact Hedge_v |].
+          split; [exact Hfa_v |].
+          split; [exact Hfa_neq_v |].
+          split; [exact Htree_vx | exact Hreach_vx].
   Qed.
 
   Lemma SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_proof:
@@ -5503,7 +5994,7 @@ Section IS_LOW_SKELETON.
       GlobalShapeCandidate,
       wf_scc_state.
     intros child s [_ [_ [Hdfn_valid _]]]
-           x [_ Htree_reach] _Hactive_x.
+           x [_ [_ Htree_reach]] _Hactive_x.
     assert (Hreach_dfn:
               forall y z,
                 dg_reachable (state_to_dfs_tree g s root) y z ->
@@ -5924,6 +6415,52 @@ Section IS_LOW_SKELETON.
       eauto.
   Qed.
 
+  Lemma GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedConditionalCandidate_proof:
+    forall u done child,
+      Hoare
+        (fun s =>
+           GlobalShapeCandidate s /\
+           Visited u s /\
+           ParentResumeShapeCandidate u child done s /\
+           (Active child s -> ChildSegmentSummaryCandidate child s) /\
+           SuspendedSegmentEscapeAccountingCandidate u child done s /\
+           ParentPendingChildEscapeAccountedCandidate u done child s)
+        (lv <- get' (fun s => low s child);; update_low u lv)
+        (fun _ s => PendingChildSegmentEscapeAccountedCandidate u done child s).
+  Proof.
+    intros u done child.
+    apply Hoare_normalize.
+    intros snap [Hshape [Hvis_u [Hresume [Hsummary_if
+      [Hsuspended Hparent_pending]]]]].
+    destruct (classic (Active child snap)) as [Hactive_child | Hnot_active_child].
+    - eapply Hoare_conseq_pre.
+      2: {
+        apply
+          (GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedCandidate_proof
+             u done child).
+      }
+      intros s Heq_s.
+      subst s.
+      split; [exact Hshape |].
+      split; [exact Hvis_u |].
+      split; [exact Hresume |].
+      split; [apply Hsummary_if; exact Hactive_child |].
+      split; [exact Hsuspended | exact Hparent_pending].
+    - eapply Hoare_conseq_post.
+      2: {
+        apply
+          (GetLowUpdateLowKeepsTraversalSnapshotCandidate_proof u child snap).
+      }
+      intros _ s [Hvisited [_Hdfn [_Hfa [Hactive _Hlow]]]].
+      unfold PendingChildSegmentEscapeAccountedCandidate,
+        PendingChildSegmentCandidate.
+      intros x w [_Hvis_child [Hactive_child_after _Htree_child_x]]
+             _Hactive_x _Hdfn_u_x _Hreach_xw _Hnot_vis_w.
+      exfalso.
+      apply Hnot_active_child.
+      apply Hactive. exact Hactive_child_after.
+  Qed.
+
   Lemma ChildOldAnchorLiftsToParentCandidate_from_all_older_proof:
     ChildOldAnchorLiftsToParentCandidate_from_all_older_statement.
   Proof.
@@ -5975,6 +6512,7 @@ Section IS_LOW_SKELETON.
     intros u done child s [Hsuspended Hsegment] Hresume.
     destruct Hsuspended as
       [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
+    destruct Hsegment as [Hsegment Hcoverage].
     simpl.
     split; [exact Hresume |].
     split; [exact Hlow |].
@@ -5982,8 +6520,2563 @@ Section IS_LOW_SKELETON.
     split; [exact Hclosed |].
     split; [exact Hchildren |].
     split; [exact Hactive_segments |].
-    apply SegmentEscapeAccountingSuspendsCandidate_proof.
-    exact Hsegment.
+    split; [exact Hsegment | exact Hcoverage].
+  Qed.
+
+  Lemma SetFaCreatesSuspendedParentFrameCandidate_proof:
+    SetFaCreatesSuspendedParentFrameCandidate_statement.
+  Proof.
+    unfold SetFaCreatesSuspendedParentFrameCandidate_statement,
+      LocalActiveRootCandidate,
+      ParentFrameResumeCandidate,
+      SuspendedParentFrameResumeCandidate,
+      ParentResumeShapeCandidate,
+      fa_child_of_u,
+      fa_not_done_implies_eq_u.
+    intros parent child done Hedge Hnot_done.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hlocal [Hframe Hunvis]].
+    destruct Hlocal as [_ [_ [Hvis_parent _]]].
+    destruct Hframe as [Hdone_vis [Hfa_child Hfa_not_done]].
+    assert (Hchild_neq_parent: child <> parent).
+    { intro Hchild_parent. apply Hunvis.
+      rewrite Hchild_parent. exact Hvis_parent. }
+    split.
+    - split.
+      + intros v Hdone_v.
+        exact (Hdone_vis v Hdone_v).
+      + split.
+        * intros v [Hfa_v Hfa_neq_v].
+          simpl in Hfa_v, Hfa_neq_v.
+          unfold equiv_decb in Hfa_v, Hfa_neq_v.
+          destruct (equiv_dec v child) as [Hv_child | Hv_not_child].
+          -- rewrite Hv_child. exact Hedge.
+          -- apply Hfa_child. split; assumption.
+        * intros v Hnot_done_v Hv_not_child Hfa_v.
+          simpl in Hfa_v.
+          unfold equiv_decb in Hfa_v.
+          destruct (equiv_dec v child) as [Hv_child | Hv_not_child'].
+          -- exfalso. apply Hv_not_child. exact Hv_child.
+          -- eapply Hfa_not_done; eauto.
+    - split; [exact Hedge |].
+      split; [exact Hnot_done |].
+      split.
+      + unfold equiv_decb.
+        destruct (equiv_dec child child) as [_ | Hneq].
+        * reflexivity.
+        * exfalso. apply Hneq. reflexivity.
+      + unfold equiv_decb.
+        destruct (equiv_dec child child) as [_ | Hneq].
+        * intro Hparent_child. apply Hchild_neq_parent.
+          symmetry. exact Hparent_child.
+        * exfalso. apply Hneq. reflexivity.
+  Qed.
+
+  Lemma SetFaPreservesProcessedTreeChildrenCorrectCandidate_proof:
+    SetFaPreservesProcessedTreeChildrenCorrectCandidate_statement.
+  Proof.
+    unfold SetFaPreservesProcessedTreeChildrenCorrectCandidate_statement,
+      ProcessedTreeChildrenCorrectCandidate,
+      ProcessedTreeChildrenLowValidCandidate,
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
+      ChildLowValidForParentCandidate,
+      ChildIsLowForParentCandidate,
+      Unvisited,
+      Visited.
+    intros parent child done Hnot_done.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [[Hlow_valid [His_low Hinactive]] Hunvis].
+    split.
+    - intros x Hdone_x Hedge_x Hfa_x Hfa_neq_x.
+      simpl in Hfa_x, Hfa_neq_x.
+      unfold equiv_decb in Hfa_x, Hfa_neq_x.
+      destruct (equiv_dec x child) as [Hx_child | Hx_not_child].
+      + exfalso. apply Hnot_done. rewrite <- Hx_child. exact Hdone_x.
+      + match goal with
+        | |- scc_low_valid_v _ _ (RecordSet.set _ _ ?st) _ =>
+            apply
+              (set_fa_preserves_scc_low_valid_v_when_unvisited
+                 g root x child parent st Hunvis)
+        end.
+        apply Hlow_valid; assumption.
+    - split.
+      + intros x Hdone_x Hedge_x Hfa_x Hfa_neq_x.
+        simpl in Hfa_x, Hfa_neq_x.
+        unfold equiv_decb in Hfa_x, Hfa_neq_x.
+        destruct (equiv_dec x child) as [Hx_child | Hx_not_child].
+        * exfalso. apply Hnot_done. rewrite <- Hx_child. exact Hdone_x.
+        * match goal with
+          | |- scc_is_low_v _ _ (RecordSet.set _ _ ?st) _ =>
+              apply
+                (set_fa_unvisited_preserves_scc_is_low_v
+                   x child parent st Hunvis)
+          end.
+          apply His_low; assumption.
+      + intros x Hdone_x Hedge_x Hfa_x Hfa_neq_x Hnot_active.
+        simpl in Hfa_x, Hfa_neq_x, Hnot_active |- *.
+        unfold equiv_decb in Hfa_x, Hfa_neq_x.
+        destruct (equiv_dec x child) as [Hx_child | Hx_not_child].
+        * exfalso. apply Hnot_done. rewrite <- Hx_child. exact Hdone_x.
+	    * apply Hinactive; try assumption.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_done_closedness_candidate:
+    forall parent child u done,
+      ~ done child ->
+      Hoare
+        (fun s =>
+           DoneClosednessCandidate u done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s => DoneClosednessCandidate u done s).
+  Proof.
+    intros parent child u done Hnot_done_child.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [[Hdone_closed Htree_closed] Hunvis].
+    unfold DoneClosednessCandidate,
+      done_reachable_closed,
+      done_tree_reachable_closed in Hdone_closed, Htree_closed |- *.
+    split.
+    - intros v w Hdone_v Hnot_active Hreach.
+      simpl in Hnot_active.
+      eapply Hdone_closed; eauto.
+    - intros v w Hdone_v Hnot_active Hfa_v Hfa_neq_v Hreach.
+      simpl in Hnot_active, Hfa_v, Hfa_neq_v.
+      unfold equiv_decb in Hfa_v, Hfa_neq_v.
+      destruct (equiv_dec v child) as [Hv_child | Hv_not_child].
+      + rewrite Hv_child in Hdone_v.
+        exfalso. apply Hnot_done_child. exact Hdone_v.
+      + eapply Htree_closed; eauto.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_active_processed_child_segment_summary:
+    forall parent child u done,
+      ~ done child ->
+      Hoare
+        (fun s =>
+           ActiveProcessedChildSegmentSummaryCandidate u done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           ActiveProcessedChildSegmentSummaryCandidate u done s).
+  Proof.
+    intros parent child u done Hnot_done_child.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hsummary Hunvis].
+    unfold ActiveProcessedChildSegmentSummaryCandidate,
+      ChildSelfSegmentEscapeSummaryCandidate,
+      PendingRootEscapeCandidate,
+      OldStackEscapeAnchorCandidate in Hsummary |- *.
+    intros c Hdone_c Hedge_c Hfa_c Hfa_neq_c Hactive_c.
+    simpl in Hfa_c, Hfa_neq_c, Hactive_c.
+    unfold equiv_decb in Hfa_c, Hfa_neq_c.
+    destruct (equiv_dec c child) as [Hc_child | Hc_not_child].
+    - rewrite Hc_child in Hdone_c.
+      exfalso. apply Hnot_done_child. exact Hdone_c.
+    - specialize (Hsummary c Hdone_c Hedge_c Hfa_c Hfa_neq_c Hactive_c).
+      intros w Hreach Hnot_vis.
+      specialize (Hsummary w Hreach Hnot_vis) as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right. exact Hanchor.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_segment_escape_accounting_candidate:
+    forall parent child u done,
+      Hoare
+        (fun s =>
+           SegmentEscapeAccountingCandidate u done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s => SegmentEscapeAccountingCandidate u done s).
+  Proof.
+    intros parent child u done.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hsegment _Hunvis].
+    unfold SegmentEscapeAccountingCandidate,
+      PendingRootEscapeCandidate,
+      OldStackEscapeAnchorCandidate in Hsegment |- *.
+    intros x w Hactive_x Hdfn_x Hreach Hnot_vis.
+    specialize (Hsegment x w Hactive_x Hdfn_x Hreach Hnot_vis)
+      as [Hpending | Hanchor].
+    - left. exact Hpending.
+    - right. exact Hanchor.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_segment_tree_coverage_candidate:
+    forall parent child u done,
+      ~ done child ->
+      Hoare
+        (fun s =>
+           SegmentTreeCoverageByDoneCandidate u done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s => SegmentTreeCoverageByDoneCandidate u done s).
+  Proof.
+    intros parent child u done Hnot_done_child.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hcoverage _Hunvis].
+    unfold SegmentTreeCoverageByDoneCandidate,
+      ProcessedTreeReachableFromCandidate in Hcoverage |- *.
+    intros x Hactive_x Hdfn_x.
+    specialize (Hcoverage x Hactive_x Hdfn_x) as
+      [Hx_u | [v [Hdone_v [Hedge_v
+        [Hfa_v [Hfa_neq_v [Htree_vx Hreach_vx]]]]]]].
+    - left. exact Hx_u.
+    - right. exists v.
+      split; [exact Hdone_v |].
+      split; [exact Hedge_v |].
+      assert (Hv_not_child: v <> child).
+      { intro Hv_child. subst v. apply Hnot_done_child. exact Hdone_v. }
+      simpl in Hactive_x, Hdfn_x.
+      unfold equiv_decb.
+      destruct (equiv_dec v child) as [Hv_child | _].
+      + exfalso. apply Hv_not_child. exact Hv_child.
+      + simpl.
+        unfold equiv_decb.
+        destruct (equiv_dec v child) as [Hv_child | _].
+        * exfalso. apply Hv_not_child. exact Hv_child.
+        * split; [exact Hfa_v |].
+          split; [exact Hfa_neq_v |].
+          split.
+          -- apply
+               (proj2
+                  (set_fa_unvisited_preserves_tree_reachable
+                     child parent s0 v x _Hunvis)).
+             exact Htree_vx.
+          -- exact Hreach_vx.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_loop_inv_low_candidate:
+    forall parent child done,
+      ~ done child ->
+      Hoare
+        (fun s =>
+           LoopInvLowCandidate parent done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s => LoopInvLowCandidate parent done s).
+  Proof.
+    intros parent child done Hnot_done_child.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with (Q1 := fun _ s => LoopInvDoneCandidate parent done s)
+             (Q2 := fun _ s => PartialRootLowEquationCandidate parent done s).
+      - eapply Hoare_conseq_post.
+        2: {
+          apply Hoare_conj
+            with (Q1 := fun _ s => LocalActiveRootCandidate parent s)
+                 (Q2 := fun _ s => DoneDisciplineCandidate parent done s).
+          + eapply Hoare_conseq_pre.
+            2: {
+              apply (SetFaParentActiveCandidate_proof parent child).
+            }
+            intros s [[Hdone_loop _Hpartial] Hunvis].
+            destruct Hdone_loop as [Hlocal _Hdone_disc].
+            split; [exact Hlocal | exact Hunvis].
+	        + apply Hoare_conj.
+	            * unfold Hoare. intros s1 _ s2 Hpre _.
+	              destruct Hpre as [[[_ [Hsubset _Hdone_vis]] _Hpartial] _Hunvis].
+	              exact Hsubset.
+	            * eapply Hoare_conseq_pre.
+	              2: { apply (set_fa_keep_visited_forall child parent done). }
+	              intros s [[[_ [_ Hdone_vis]] _Hpartial] _Hunvis].
+	              exact Hdone_vis.
+        }
+        intros _ s [Hlocal Hdone_disc].
+        split; [exact Hlocal | exact Hdone_disc].
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply (SetFaPreservesPartialLowCandidate_proof
+                   parent child done Hnot_done_child).
+        }
+        intros s [[_ Hpartial] _Hunvis].
+        exact Hpartial.
+    }
+    intros _ s [Hdone Hpartial].
+    split; [exact Hdone | exact Hpartial].
+  Qed.
+
+  Lemma set_fa_unvisited_creates_frame_inv_candidate:
+    forall parent child done,
+      Edge parent child ->
+      ~ done child ->
+      Hoare
+        (fun s =>
+           LoopInvPhase7Candidate parent done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           FrameInvCandidate (FrameOfCallCandidate parent child done) s /\
+           ChildEntryCandidate parent child done s /\
+           ParentResumeShapeCandidate parent child done s).
+  Proof.
+    intros parent child done Hedge Hnot_done_child.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with (Q1 := fun _ s => ChildEntryCandidate parent child done s)
+	     (Q2 := fun _ s =>
+	              (SuspendedParentFrameResumeCandidate parent child done s /\
+	               ParentResumeShapeCandidate parent child done s) /\
+	              LoopInvLowCandidate parent done s /\
+	              DoneClosednessCandidate parent done s /\
+	              ProcessedTreeChildrenCorrectCandidate parent done s /\
+                      ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+                      SegmentEscapeAccountingCandidate parent done s /\
+                      SegmentTreeCoverageByDoneCandidate parent done s).
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply (LoopInvDoneConsumesUnvisitedSetFaCandidate_proof
+                   parent child done Hedge Hnot_done_child).
+        }
+        intros s [[Hphase6 _Hsegment] Hunvis].
+        destruct Hphase6 as [Hlow _Htail].
+        destruct Hlow as [Hdone_loop _Hpartial].
+        split; [exact Hdone_loop | exact Hunvis].
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               SuspendedParentFrameResumeCandidate parent child done s /\
+               ParentResumeShapeCandidate parent child done s)
+            (Q2 := fun _ s =>
+               LoopInvLowCandidate parent done s /\
+               DoneClosednessCandidate parent done s /\
+               ProcessedTreeChildrenCorrectCandidate parent done s /\
+               ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+               SegmentEscapeAccountingCandidate parent done s /\
+               SegmentTreeCoverageByDoneCandidate parent done s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply (SetFaCreatesSuspendedParentFrameCandidate_proof
+                     parent child done Hedge Hnot_done_child).
+          }
+          intros s [[Hphase6 _Hsegment] Hunvis].
+          destruct Hphase6 as [Hlow [Hframe _Htail]].
+          destruct Hlow as [Hdone_loop _Hpartial].
+          destruct Hdone_loop as [Hlocal _Hdone_disc].
+          split; [exact Hlocal |].
+          split; [exact Hframe | exact Hunvis].
+        + apply Hoare_conj
+            with
+              (Q1 := fun _ s => LoopInvLowCandidate parent done s)
+              (Q2 := fun _ s =>
+                 DoneClosednessCandidate parent done s /\
+                 ProcessedTreeChildrenCorrectCandidate parent done s /\
+                 ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+                 SegmentEscapeAccountingCandidate parent done s /\
+                 SegmentTreeCoverageByDoneCandidate parent done s).
+          * eapply Hoare_conseq_pre.
+            2: {
+              apply
+                (set_fa_unvisited_preserves_loop_inv_low_candidate
+                   parent child done Hnot_done_child).
+            }
+            intros s [[Hphase6 _Hsegment] Hunvis].
+            destruct Hphase6 as [Hlow _Htail].
+            split; [exact Hlow | exact Hunvis].
+          * apply Hoare_conj
+              with
+                (Q1 := fun _ s => DoneClosednessCandidate parent done s)
+                (Q2 := fun _ s =>
+                   ProcessedTreeChildrenCorrectCandidate parent done s /\
+                   ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+                   SegmentEscapeAccountingCandidate parent done s /\
+                   SegmentTreeCoverageByDoneCandidate parent done s).
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (set_fa_unvisited_preserves_done_closedness_candidate
+                      parent child parent done Hnot_done_child).
+               }
+               intros s [[Hphase6 _Hsegment] Hunvis].
+               destruct Hphase6 as [_Hlow [_Hframe [Hclosed _Htail]]].
+               split; [exact Hclosed | exact Hunvis].
+            -- apply Hoare_conj
+                with
+                  (Q1 := fun _ s =>
+                     ProcessedTreeChildrenCorrectCandidate parent done s)
+                  (Q2 := fun _ s =>
+                     ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+                     SegmentEscapeAccountingCandidate parent done s /\
+                     SegmentTreeCoverageByDoneCandidate parent done s).
+               ++ eapply Hoare_conseq_pre.
+                  2: {
+                    apply
+                      (SetFaPreservesProcessedTreeChildrenCorrectCandidate_proof
+                         parent child done Hnot_done_child).
+                  }
+                  intros s [[Hphase6 _Hsegment] Hunvis].
+                  destruct Hphase6 as
+                    [_Hlow [_Hframe [_Hclosed [Hchildren _Hactive]]]].
+                  split; [exact Hchildren | exact Hunvis].
+               ++ apply Hoare_conj
+                    with
+                      (Q1 := fun _ s =>
+                         ActiveProcessedChildSegmentSummaryCandidate
+                           parent done s)
+                      (Q2 := fun _ s =>
+                         SegmentEscapeAccountingCandidate parent done s /\
+                         SegmentTreeCoverageByDoneCandidate parent done s).
+                  ** eapply Hoare_conseq_pre.
+                     2: {
+                       apply
+                         (set_fa_unvisited_preserves_active_processed_child_segment_summary
+                            parent child parent done Hnot_done_child).
+                     }
+                     intros s [[Hphase6 _Hsegment] Hunvis].
+                     destruct Hphase6 as
+                       [_Hlow [_Hframe [_Hclosed [_Hchildren Hactive]]]].
+                     split; [exact Hactive | exact Hunvis].
+                  ** apply Hoare_conj.
+                     --- eapply Hoare_conseq_pre.
+                         2: {
+                           apply
+                             (set_fa_unvisited_preserves_segment_escape_accounting_candidate
+                                parent child parent done).
+                         }
+                         intros s [[_Hphase6 [Hsegment _Hcoverage]] Hunvis].
+                         split; [exact Hsegment | exact Hunvis].
+                     --- eapply Hoare_conseq_pre.
+                         2: {
+                           apply
+                             (set_fa_unvisited_preserves_segment_tree_coverage_candidate
+                                parent child parent done Hnot_done_child).
+                         }
+                         intros s [[_Hphase6 [_Hsegment Hcoverage]] Hunvis].
+                         split; [exact Hcoverage | exact Hunvis].
+    }
+    intros _ s
+      [Hentry
+       [[Hsuspended_frame Hresume]
+        [Hlow [Hclosed [Hchildren [Hactive_segments [Hsegment Hcoverage]]]]]]].
+    split.
+    - unfold FrameInvCandidate, FrameOfCallCandidate. simpl.
+      split; [exact Hresume |].
+      split; [exact Hlow |].
+      split; [exact Hsuspended_frame |].
+      split; [exact Hclosed |].
+      split; [exact Hchildren |].
+      split; [exact Hactive_segments |].
+      split.
+      + apply SegmentEscapeAccountingSuspendsCandidate_proof.
+        exact Hsegment.
+      + apply SegmentTreeCoverageSuspendsCandidate_proof.
+        exact Hcoverage.
+    - split; [exact Hentry | exact Hresume].
+  Qed.
+
+  Lemma processed_direct_child_not_parent_tree_child:
+    forall u done child s,
+      GlobalShapeCandidate s ->
+      DoneVisitedCandidate done s ->
+      done child ->
+      Edge u child ->
+      fa s child = u ->
+      fa s child <> child ->
+      ~ dg_step (state_to_dfs_tree g s root) child u.
+  Proof.
+    unfold GlobalShapeCandidate, DoneVisitedCandidate, done_visited,
+      Visited, Edge.
+    intros u done child s Hglobal Hdone_vis Hdone_child Hedge Hfa Hfa_neq
+           Htree_child_u.
+    unfold wf_scc_state in Hglobal.
+    destruct Hglobal as [_ [_ [Hdfn_valid _]]].
+    pose proof (Hdfn_valid child u Htree_child_u) as Hdfn_child_u.
+    assert (Htree_u_child: dg_step (state_to_dfs_tree g s root) u child).
+    { apply tree_step_char_backward.
+      - exact Hedge.
+      - exact Hfa.
+      - exact Hfa_neq.
+      - apply Hdone_vis. exact Hdone_child. }
+    pose proof (Hdfn_valid u child Htree_u_child) as Hdfn_u_child.
+    lia.
+  Qed.
+
+  Lemma update_low_preserves_processed_tree_children_correct_parent:
+    forall u done n,
+      Hoare
+        (fun s =>
+           GlobalShapeCandidate s /\
+           DoneVisitedCandidate done s /\
+           ProcessedTreeChildrenCorrectCandidate u done s)
+        (update_low u n)
+        (fun _ s => ProcessedTreeChildrenCorrectCandidate u done s).
+  Proof.
+    intros u done n.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl.
+      destruct H as [Hglobal [Hdone_vis [Hlow_valid [His_low Hinactive]]]].
+      split.
+      + intros child Hdone_child Hedge Hfa Hfa_neq.
+        simpl in Hfa, Hfa_neq.
+        assert (Hchild_ne_u: child <> u).
+        { intro Hchild_u. subst child. apply Hfa_neq. exact Hfa. }
+        apply (set_low_preserves_scc_low_valid_v_when_not_child
+                 g root child u n s0).
+        * exact Hchild_ne_u.
+        * eapply processed_direct_child_not_parent_tree_child; eauto.
+        * apply Hlow_valid; assumption.
+      + split.
+        * intros child Hdone_child Hedge Hfa Hfa_neq.
+          simpl in Hfa, Hfa_neq.
+          assert (Hchild_ne_u: child <> u).
+          { intro Hchild_u. subst child. apply Hfa_neq. exact Hfa. }
+          apply set_low_other_preserves_scc_is_low_v.
+          -- exact Hchild_ne_u.
+          -- apply His_low; assumption.
+        * intros child Hdone_child Hedge Hfa Hfa_neq Hnot_active.
+          simpl in Hfa, Hfa_neq, Hnot_active |- *.
+          assert (Hchild_ne_u: child <> u).
+          { intro Hchild_u. subst child. apply Hfa_neq. exact Hfa. }
+          unfold equiv_decb.
+          destruct (equiv_dec child u) as [Hchild_u | _].
+          -- exfalso. apply Hchild_ne_u. exact Hchild_u.
+          -- apply Hinactive; try assumption.
+    - destruct H1 as [Heq _]. subst.
+      destruct H as [_ [_ Hchildren]].
+      exact Hchildren.
+  Qed.
+
+  Lemma update_low_preserves_parent_frame_resume_candidate:
+    forall changed n parent done,
+      Hoare
+        (ParentFrameResumeCandidate parent done)
+        (update_low changed n)
+        (fun _ s => ParentFrameResumeCandidate parent done s).
+  Proof.
+    intros changed n parent done.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl. exact H.
+    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
+
+  Lemma update_low_preserves_local_active_root_candidate:
+    forall changed n u,
+      Hoare
+        (LocalActiveRootCandidate u)
+        (update_low changed n)
+        (fun _ s => LocalActiveRootCandidate u s).
+  Proof.
+    intros changed n u.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl. exact H.
+    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
+
+  Lemma update_low_preserves_done_discipline_candidate:
+    forall changed n u done,
+      Hoare
+        (DoneDisciplineCandidate u done)
+        (update_low changed n)
+        (fun _ s => DoneDisciplineCandidate u done s).
+  Proof.
+    intros changed n u done.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl. exact H.
+    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
+
+  Lemma update_low_preserves_loop_inv_done_candidate:
+    forall changed n u done,
+      Hoare
+        (LoopInvDoneCandidate u done)
+        (update_low changed n)
+        (fun _ s => LoopInvDoneCandidate u done s).
+  Proof.
+    intros changed n u done.
+    apply Hoare_conj.
+    - eapply Hoare_conseq_pre.
+      2: { apply (update_low_preserves_local_active_root_candidate changed n u). }
+      intros s [Hlocal _]. exact Hlocal.
+    - eapply Hoare_conseq_pre.
+      2: {
+        apply (update_low_preserves_done_discipline_candidate changed n u done).
+      }
+      intros s [_ Hdone]. exact Hdone.
+  Qed.
+
+  Lemma ParentFrameResumeCandidate_step_visited_proof:
+    forall parent done child s,
+      ParentFrameResumeCandidate parent done s ->
+      Visited child s ->
+      ParentFrameResumeCandidate parent (done_after done child) s.
+  Proof.
+    unfold ParentFrameResumeCandidate,
+      done_visited,
+      fa_not_done_implies_eq_u,
+      done_after.
+    intros parent done child s [Hdone_vis [Hfa_child Hfa_not_done]]
+           Hvis_child.
+    split.
+    - intros v Hdone_after.
+      sets_unfold in Hdone_after.
+      destruct Hdone_after as [Hdone_v | Hv_child].
+      + apply Hdone_vis. exact Hdone_v.
+      + subst v. exact Hvis_child.
+    - split; [exact Hfa_child |].
+      intros v Hnot_done_after Hfa_v.
+      apply Hfa_not_done.
+      + intros Hdone_v.
+        apply Hnot_done_after.
+        sets_unfold. left. exact Hdone_v.
+      + exact Hfa_v.
+  Qed.
+
+  Lemma update_low_preserves_done_closedness_candidate:
+    forall changed n parent done,
+      Hoare
+        (DoneClosednessCandidate parent done)
+        (update_low changed n)
+        (fun _ s => DoneClosednessCandidate parent done s).
+  Proof.
+    intros changed n parent done.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl. exact H.
+    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
+
+  Lemma update_low_preserves_segment_escape_accounting_candidate:
+    forall u done n,
+      Hoare
+        (SegmentEscapeAccountingCandidate u done)
+        (update_low u n)
+        (fun _ s => SegmentEscapeAccountingCandidate u done s).
+  Proof.
+    intros u done n.
+    unfold update_low.
+    apply Hoare_normalize. intros snap Haccount.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lu.
+    unfold If. intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold set_low. intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H1 as [Hlt Heq_s1]. subst s1. subst s.
+      unfold SegmentEscapeAccountingCandidate,
+        PendingRootEscapeCandidate,
+        OldStackEscapeAnchorCandidate in Haccount |- *.
+      intros x w Hactive_x Hdfn_x Hreach Hnot_vis.
+      simpl in Hactive_x, Hdfn_x, Hnot_vis.
+      specialize (Haccount x w Hactive_x Hdfn_x Hreach Hnot_vis)
+        as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right.
+        destruct Hanchor as
+          [anchor [Hactive_anchor [Hdfn_anchor [Hlow_anchor [Hx_anchor Hanchor_w]]]]].
+        exists anchor.
+        simpl.
+        split; [exact Hactive_anchor |].
+        split; [exact Hdfn_anchor |].
+        split.
+        * unfold equiv_decb.
+          destruct (equiv_dec u u) as [_ | Hneq].
+          -- lia.
+          -- exfalso. apply Hneq. reflexivity.
+        * split; [exact Hx_anchor | exact Hanchor_w].
+    - intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H2 as [Heq_s1 _]. subst s1. subst s.
+      exact Haccount.
+  Qed.
+
+  Lemma update_low_preserves_segment_tree_coverage_candidate:
+    forall u done n,
+      Hoare
+        (SegmentTreeCoverageByDoneCandidate u done)
+        (update_low u n)
+        (fun _ s => SegmentTreeCoverageByDoneCandidate u done s).
+  Proof.
+    intros u done n.
+    unfold update_low.
+    apply Hoare_normalize. intros snap Hcoverage.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lu.
+    unfold If. intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold set_low. intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H1 as [_Hlt Heq_s1]. subst s1. subst s.
+      unfold SegmentTreeCoverageByDoneCandidate,
+        ProcessedTreeReachableFromCandidate in Hcoverage |- *.
+      intros x Hactive_x Hdfn_x.
+      simpl in Hactive_x, Hdfn_x.
+      specialize (Hcoverage x Hactive_x Hdfn_x) as
+        [Hx_u | [v [Hdone_v [Hedge_v [Hfa_v [Hfa_neq_v Hreach_vx]]]]]].
+      + left. exact Hx_u.
+      + right. exists v.
+        split; [exact Hdone_v |].
+        split; [exact Hedge_v |].
+        simpl.
+        split; [exact Hfa_v |].
+        split; [exact Hfa_neq_v | exact Hreach_vx].
+    - intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H2 as [Heq_s1 _]. subst s1. subst s.
+      exact Hcoverage.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_segment_tree_coverage_candidate:
+    forall u a done,
+      Hoare
+        (SegmentTreeCoverageByDoneCandidate u done)
+        (dv <- get' (fun s => dfn s a);; update_low u dv)
+        (fun _ s => SegmentTreeCoverageByDoneCandidate u done s).
+  Proof.
+    intros u a done.
+    apply Hoare_normalize. intros snap Hcoverage.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_segment_tree_coverage_candidate
+               u done dv).
+    }
+    intros s [Heq _]. subst s. exact Hcoverage.
+  Qed.
+
+  Lemma get_low_update_low_preserves_segment_tree_coverage_candidate:
+    forall u a done,
+      Hoare
+        (SegmentTreeCoverageByDoneCandidate u done)
+        (lv <- get' (fun s => low s a);; update_low u lv)
+        (fun _ s => SegmentTreeCoverageByDoneCandidate u done s).
+  Proof.
+    intros u a done.
+    apply Hoare_normalize. intros snap Hcoverage.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_segment_tree_coverage_candidate
+               u done lv).
+    }
+    intros s [Heq _]. subst s. exact Hcoverage.
+  Qed.
+
+  Lemma SegmentTreeCoverageByDoneCandidate_mono_proof:
+    forall u done1 done2 s,
+      (forall x, done1 x -> done2 x) ->
+      SegmentTreeCoverageByDoneCandidate u done1 s ->
+      SegmentTreeCoverageByDoneCandidate u done2 s.
+  Proof.
+    unfold SegmentTreeCoverageByDoneCandidate,
+      ProcessedTreeReachableFromCandidate.
+    intros u done1 done2 s Hmono Hcoverage x Hactive_x Hdfn_x.
+    specialize (Hcoverage x Hactive_x Hdfn_x) as
+      [Hx_u | [child [Hdone_child [Hedge_child
+        [Hfa_child [Hfa_neq_child [Htree_child_x Hreach_child_x]]]]]]].
+    - left. exact Hx_u.
+    - right. exists child.
+      split; [apply Hmono; exact Hdone_child |].
+      split; [exact Hedge_child |].
+      split; [exact Hfa_child |].
+      split; [exact Hfa_neq_child |].
+      split; [exact Htree_child_x | exact Hreach_child_x].
+  Qed.
+
+  Lemma SegmentTreeCoverageByDoneCandidate_step_proof:
+    forall u done a s,
+      SegmentTreeCoverageByDoneCandidate u done s ->
+      SegmentTreeCoverageByDoneCandidate u (done_after done a) s.
+  Proof.
+    intros u done a s Hcoverage.
+    eapply SegmentTreeCoverageByDoneCandidate_mono_proof.
+    - intros x Hdone_x. unfold done_after. sets_unfold. left. exact Hdone_x.
+    - exact Hcoverage.
+  Qed.
+
+  Lemma ProcessEdgeVisitedNonStackExtendsSegmentTreeCoverageCandidate_proof:
+    forall W u a done,
+      Hoare
+        (fun s =>
+           SegmentTreeCoverageByDoneCandidate u done s /\
+           Visited a s /\
+           ~ Active a s)
+        (process_edge u W a)
+        (fun _ s =>
+           SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+  Proof.
+    intros W u a done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [Hvis _]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        intro_state.
+        destruct H1 as [Hactive_guard Heq1]. subst s1.
+        destruct H as [_ [_ Hnot_active]].
+        exfalso. apply Hnot_active. exact Hactive_guard.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s _Hnot_active_guard].
+        subst s.
+        destruct H as [Hcoverage _].
+        apply SegmentTreeCoverageByDoneCandidate_step_proof.
+        exact Hcoverage.
+  Qed.
+
+  Lemma ProcessEdgeVisitedActiveExtendsSegmentTreeCoverageCandidate_proof:
+    forall W u a done,
+      Hoare
+        (fun s =>
+           SegmentTreeCoverageByDoneCandidate u done s /\
+           Visited a s /\
+           Active a s)
+        (process_edge u W a)
+        (fun _ s =>
+           SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+  Proof.
+    intros W u a done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [Hvis _]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_post.
+        2: {
+          eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_preserves_segment_tree_coverage_candidate
+                 u a done).
+          }
+          intros s [Hactive_guard Heq_s]. subst s.
+          destruct H as [Hcoverage _].
+          exact Hcoverage.
+        }
+        intros ret st_after Hcoverage_after.
+        apply SegmentTreeCoverageByDoneCandidate_step_proof.
+        exact Hcoverage_after.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s Hnot_active].
+        subst s.
+        destruct H as [_ [_ Hactive]].
+        exfalso. apply Hnot_active. exact Hactive.
+  Qed.
+
+  Lemma update_low_preserves_suspended_segment_escape_accounting_candidate:
+    forall u child done n,
+      Hoare
+        (SuspendedSegmentEscapeAccountingCandidate u child done)
+        (update_low u n)
+        (fun _ s =>
+           SuspendedSegmentEscapeAccountingCandidate u child done s).
+  Proof.
+    intros u child done n.
+    unfold update_low.
+    apply Hoare_normalize. intros snap Haccount.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lu.
+    unfold If. intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold set_low. intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H1 as [Hlt Heq_s1]. subst s1. subst s.
+      unfold SuspendedSegmentEscapeAccountingCandidate,
+        PendingRootEscapeCandidate,
+        OldStackEscapeAnchorCandidate in Haccount |- *.
+      intros x w Hactive_x Hdfn_x Houtside Hreach Hnot_vis.
+      simpl in Hactive_x, Hdfn_x, Houtside, Hnot_vis.
+      specialize (Haccount x w Hactive_x Hdfn_x Houtside Hreach Hnot_vis)
+        as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right.
+        destruct Hanchor as
+          [anchor [Hactive_anchor [Hdfn_anchor [Hlow_anchor [Hx_anchor Hanchor_w]]]]].
+        exists anchor.
+        simpl.
+        split; [exact Hactive_anchor |].
+        split; [exact Hdfn_anchor |].
+        split.
+        * unfold equiv_decb.
+          destruct (equiv_dec u u) as [_ | Hneq].
+          -- lia.
+          -- exfalso. apply Hneq. reflexivity.
+        * split; [exact Hx_anchor | exact Hanchor_w].
+    - intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H2 as [Heq_s1 _]. subst s1. subst s.
+      exact Haccount.
+  Qed.
+
+  Lemma update_low_preserves_parent_pending_child_escape_accounted_candidate:
+    forall u done child n,
+      Hoare
+        (ParentPendingChildEscapeAccountedCandidate u done child)
+        (update_low u n)
+        (fun _ s =>
+           ParentPendingChildEscapeAccountedCandidate u done child s).
+  Proof.
+    intros u done child n.
+    unfold update_low.
+    apply Hoare_normalize. intros snap Haccount.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lu.
+    unfold If. intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold set_low. intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H1 as [Hlt Heq_s1]. subst s1. subst s.
+      unfold ParentPendingChildEscapeAccountedCandidate,
+        PendingRootEscapeCandidate,
+        OldStackEscapeAnchorCandidate in Haccount |- *.
+      intros x w Hactive_x Hdfn_x Hxu Hchild_w Hnot_vis.
+      simpl in Hactive_x, Hdfn_x, Hnot_vis.
+      specialize (Haccount x w Hactive_x Hdfn_x Hxu Hchild_w Hnot_vis)
+        as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right.
+        destruct Hanchor as
+          [anchor [Hactive_anchor [Hdfn_anchor [Hlow_anchor [Hx_anchor Hanchor_w]]]]].
+        exists anchor.
+        simpl.
+        split; [exact Hactive_anchor |].
+        split; [exact Hdfn_anchor |].
+        split.
+        * unfold equiv_decb.
+          destruct (equiv_dec u u) as [_ | Hneq].
+          -- lia.
+          -- exfalso. apply Hneq. reflexivity.
+        * split; [exact Hx_anchor | exact Hanchor_w].
+    - intro_state. hoare_auto_s.
+      destruct H as [Heq_snap Heq_lu]. subst s0. subst lu.
+      destruct H2 as [Heq_s1 _]. subst s1. subst s.
+      exact Haccount.
+  Qed.
+
+  Lemma get_low_update_low_preserves_suspended_segment_escape_accounting_candidate:
+    forall u done child,
+      Hoare
+        (SuspendedSegmentEscapeAccountingCandidate u child done)
+        (lv <- get' (fun s => low s child);; update_low u lv)
+        (fun _ s =>
+           SuspendedSegmentEscapeAccountingCandidate u child done s).
+  Proof.
+    intros u done child.
+    apply Hoare_normalize.
+    intros snap Haccount.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (update_low_preserves_suspended_segment_escape_accounting_candidate
+           u child done lv).
+    }
+    intros s [Heq_s _]. subst s. exact Haccount.
+  Qed.
+
+  Lemma get_low_update_low_preserves_parent_pending_child_escape_accounted_candidate:
+    forall u done child,
+      Hoare
+        (ParentPendingChildEscapeAccountedCandidate u done child)
+        (lv <- get' (fun s => low s child);; update_low u lv)
+        (fun _ s =>
+           ParentPendingChildEscapeAccountedCandidate u done child s).
+  Proof.
+    intros u done child.
+    apply Hoare_normalize.
+    intros snap Haccount.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (update_low_preserves_parent_pending_child_escape_accounted_candidate
+           u done child lv).
+    }
+    intros s [Heq_s _]. subst s. exact Haccount.
+  Qed.
+
+  Lemma SegmentEscapeAccountingCandidate_step_nonactive_visited_proof:
+    forall u done a s,
+      SegmentEscapeAccountingCandidate u done s ->
+      SettledClosedCandidate s ->
+      Visited a s ->
+      ~ Active a s ->
+      SegmentEscapeAccountingCandidate u (done_after done a) s.
+  Proof.
+    unfold SegmentEscapeAccountingCandidate,
+      SettledClosedCandidate,
+      PendingRootEscapeCandidate,
+      done_after.
+    intros u done a s Hsegment Hsettled Hvis_a Hnot_active_a
+           x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w.
+    specialize (Hsegment x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w)
+      as [Hpending | Hanchor].
+    - destruct Hpending as
+        [b [Hxu [Hedge_b [Hnot_done_b Hreach_bw]]]].
+	      destruct (equiv_dec b a) as [Hb_a | Hb_not_a].
+	      + rewrite Hb_a in Hreach_bw.
+	        exfalso.
+	        apply Hnot_vis_w.
+	        eapply Hsettled; eauto.
+      + left. exists b.
+        split; [exact Hxu |].
+        split; [exact Hedge_b |].
+        split.
+        * intros Hdone_after.
+          apply Hnot_done_b.
+          sets_unfold in Hdone_after.
+          destruct Hdone_after as [Hdone_b | Hb_a].
+          -- exact Hdone_b.
+          -- exfalso. apply Hb_not_a. symmetry. exact Hb_a.
+        * exact Hreach_bw.
+    - right. exact Hanchor.
+  Qed.
+
+  Lemma SegmentEscapeAccountingCandidate_step_active_target_proof:
+    forall u done a s,
+      SegmentEscapeAccountingCandidate u done s ->
+      SegmentTreeCoverageByDoneCandidate u done s ->
+      ActiveTargetSegmentEscapeAccountedCandidate u done s ->
+      Edge u a ->
+      Active a s ->
+      dfn s u <= dfn s a ->
+      SegmentEscapeAccountingCandidate u (done_after done a) s.
+  Proof.
+    unfold SegmentEscapeAccountingCandidate,
+      SegmentTreeCoverageByDoneCandidate,
+      ActiveTargetSegmentEscapeAccountedCandidate,
+      PendingRootEscapeCandidate,
+      OldStackEscapeAnchorCandidate,
+      done_after.
+    intros u done a s Hsegment Hcoverage Htarget Hedge_a Hactive_a Hdfn_a
+           x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w.
+    specialize (Hsegment x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w)
+      as [Hpending | Hanchor].
+    - destruct Hpending as
+        [b [Hxu [Hedge_b [Hnot_done_b Hreach_bw]]]].
+      destruct (equiv_dec b a) as [Hb_a | Hb_not_a].
+      + rewrite Hb_a in Hreach_bw.
+        specialize (Hcoverage a Hactive_a Hdfn_a) as Hcovered_a.
+        specialize (Htarget a w Hactive_a Hdfn_a Hcovered_a
+                      Hreach_bw Hnot_vis_w) as [Hpending_a | Hanchor_a].
+        * left.
+          destruct Hpending_a as
+            [c [_Ha_u [Hedge_c [Hnot_done_after_c Hreach_cw]]]].
+          exists c.
+          split; [exact Hxu |].
+          split; [exact Hedge_c |].
+          split; [exact Hnot_done_after_c | exact Hreach_cw].
+        * right.
+          destruct Hanchor_a as
+            [c [Hactive_c [Hdfn_c [Hlow_c [Ha_c Hc_w]]]]].
+          exists c.
+          split; [exact Hactive_c |].
+          split; [exact Hdfn_c |].
+          split; [exact Hlow_c |].
+          split.
+          -- eapply dg_reachable_trans.
+             ++ eapply dg_reachable_trans.
+                ** exact Hxu.
+                ** apply dg_reachable_step. exact Hedge_a.
+             ++ exact Ha_c.
+          -- exact Hc_w.
+      + left. exists b.
+        split; [exact Hxu |].
+        split; [exact Hedge_b |].
+        split.
+        * intros Hdone_after.
+          apply Hnot_done_b.
+          sets_unfold in Hdone_after.
+          destruct Hdone_after as [Hdone_b | Hb_a].
+          -- exact Hdone_b.
+          -- exfalso. apply Hb_not_a. symmetry. exact Hb_a.
+        * exact Hreach_bw.
+    - right. exact Hanchor.
+  Qed.
+
+  Lemma GetDfnUpdateLowExtendsSegmentEscapeAccountingActiveTargetCandidate_proof:
+    forall u done a,
+      Hoare
+        (fun s =>
+           SegmentEscapeAccountingCandidate u done s /\
+           SegmentTreeCoverageByDoneCandidate u done s /\
+           ActiveTargetSegmentEscapeAccountedCandidate u done s /\
+           Edge u a /\
+           Active a s /\
+           dfn s u <= dfn s a)
+        (dv <- get' (fun s => dfn s a);; update_low u dv)
+        (fun _ s =>
+           SegmentEscapeAccountingCandidate u (done_after done a) s).
+  Proof.
+    intros u done a.
+    apply Hoare_normalize.
+    intros snap [Hsegment [Hcoverage [Htarget [Hedge [Hactive Hdfn]]]]].
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_segment_escape_accounting_candidate
+               u (done_after done a) dv).
+    }
+    intros s [Heq _]. subst s.
+    eapply SegmentEscapeAccountingCandidate_step_active_target_proof;
+      eauto.
+  Qed.
+
+  Lemma ProcessEdgeVisitedNonStackExtendsSegmentEscapeAccountingCandidate_proof:
+    forall W u a done,
+      Hoare
+        (fun s =>
+           SegmentEscapeAccountingCandidate u done s /\
+           SettledClosedCandidate s /\
+           Visited a s /\
+           ~ Active a s)
+        (process_edge u W a)
+        (fun _ s =>
+           SegmentEscapeAccountingCandidate u (done_after done a) s).
+  Proof.
+    intros W u a done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [_ [Hvis _]]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        intro_state.
+        destruct H1 as [Hactive_guard Heq1]. subst s1.
+        destruct H as [_ [_ [_ Hnot_active]]].
+        exfalso. apply Hnot_active. exact Hactive_guard.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s _Hnot_stack_guard].
+        subst s.
+        destruct H as [Hsegment [Hsettled [Hvis Hnot_active]]].
+        eapply SegmentEscapeAccountingCandidate_step_nonactive_visited_proof;
+          eauto.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_segment_escape_accounting_candidate:
+    forall u a done,
+      Hoare
+        (SegmentEscapeAccountingCandidate u done)
+        (dv <- get' (fun s => dfn s a);; update_low u dv)
+        (fun _ s => SegmentEscapeAccountingCandidate u done s).
+  Proof.
+    intros u a done.
+    apply Hoare_normalize. intros snap Hsegment.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_segment_escape_accounting_candidate
+               u done dv).
+    }
+    intros s [Heq _]. subst s. exact Hsegment.
+  Qed.
+
+  Lemma GetDfnUpdateLowExtendsSegmentEscapeAccountingActiveOlderCandidate_proof:
+    forall u done a,
+      Hoare
+        (fun s =>
+           SegmentEscapeAccountingCandidate u done s /\
+           Edge u a /\
+           Active a s /\
+           dfn s a < dfn s u)
+        (dv <- get' (fun s => dfn s a);; update_low u dv)
+        (fun _ s =>
+           SegmentEscapeAccountingCandidate u (done_after done a) s).
+  Proof.
+    intros u done a.
+    apply Hoare_normalize.
+    intros snap [Hsegment [Hedge [Hactive_a Hdfn_lt]]].
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s => SegmentEscapeAccountingCandidate u done s)
+          (Q2 := fun _ s =>
+             (forall x, Visited x s <-> Visited x snap) /\
+             (forall x, dfn s x = dfn snap x) /\
+             (forall x, fa s x = fa snap x) /\
+             (forall x, Active x s <-> Active x snap) /\
+             (forall x, x <> u -> low s x = low snap x) /\
+             low s u <= dfn snap a).
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (get_dfn_update_low_preserves_segment_escape_accounting_candidate
+               u a done).
+        }
+        intros s Heq_s. subst s. exact Hsegment.
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply (GetDfnUpdateLowKeepsTraversalSnapshotCandidate_proof
+                   u a snap).
+        }
+        intros s Heq_s. exact Heq_s.
+    }
+    intros _ s [Hsegment_after [Hvisited [Hdfn [Hfa [Hactive
+      [Hlow_other Hlow_u_a]]]]]].
+    unfold SegmentEscapeAccountingCandidate,
+      PendingRootEscapeCandidate,
+      OldStackEscapeAnchorCandidate in Hsegment_after |- *.
+    intros x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w.
+    specialize (Hsegment_after x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w)
+      as [Hpending | Hanchor].
+    - destruct Hpending as
+        [b [Hxu [Hedge_b [Hnot_done_b Hreach_bw]]]].
+      destruct (equiv_dec b a) as [Hb_a | Hb_not_a].
+      + right.
+        exists a.
+        split.
+        * apply Hactive. exact Hactive_a.
+        * split.
+          -- pose proof (Hdfn a). pose proof (Hdfn u). lia.
+          -- split.
+             ++ pose proof (Hdfn a). lia.
+             ++ split.
+                ** eapply dg_reachable_trans.
+                   --- exact Hxu.
+                   --- apply dg_reachable_step.
+                       rewrite Hb_a in Hedge_b. exact Hedge_b.
+                ** rewrite Hb_a in Hreach_bw. exact Hreach_bw.
+      + left.
+        exists b.
+        split; [exact Hxu |].
+        split; [exact Hedge_b |].
+        split.
+        * intros Hdone_after.
+          apply Hnot_done_b.
+          sets_unfold in Hdone_after.
+          destruct Hdone_after as [Hdone_b | Hb_a].
+          -- exact Hdone_b.
+          -- exfalso. apply Hb_not_a. symmetry. exact Hb_a.
+        * exact Hreach_bw.
+    - right. exact Hanchor.
+  Qed.
+
+  Lemma ProcessEdgeVisitedActiveOlderExtendsSegmentEscapeAccountingCandidate_proof:
+    forall W u a done,
+      Hoare
+        (fun s =>
+           SegmentEscapeAccountingCandidate u done s /\
+           Edge u a /\
+           Visited a s /\
+           Active a s /\
+           dfn s a < dfn s u)
+        (process_edge u W a)
+        (fun _ s =>
+           SegmentEscapeAccountingCandidate u (done_after done a) s).
+  Proof.
+    intros W u a done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [_ [Hvis _]]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (GetDfnUpdateLowExtendsSegmentEscapeAccountingActiveOlderCandidate_proof
+               u done a).
+        }
+        intros s [Hactive_guard Heq_s]. subst s.
+        destruct H as [Hsegment [Hedge [_Hvis [_Hactive Hdfn_lt]]]].
+        split; [exact Hsegment |].
+        split; [exact Hedge |].
+        split; [exact Hactive_guard | exact Hdfn_lt].
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s Hnot_active].
+        subst s.
+        destruct H as [_ [_ [_ [Hactive _]]]].
+        exfalso. apply Hnot_active. exact Hactive.
+  Qed.
+
+  Lemma ProcessEdgeVisitedActiveExtendsSegmentEscapeAccountingWithTargetCandidate_proof:
+    ProcessEdgeVisitedActiveExtendsSegmentEscapeAccountingWithTargetCandidate_statement.
+  Proof.
+    unfold
+      ProcessEdgeVisitedActiveExtendsSegmentEscapeAccountingWithTargetCandidate_statement.
+    intros W u a done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [_ [_ [_ [Hvis _]]]]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        destruct (lt_dec (dfn s0 a) (dfn s0 u)) as
+          [Holder | Hnot_older].
+        * eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (GetDfnUpdateLowExtendsSegmentEscapeAccountingActiveOlderCandidate_proof
+                 u done a).
+          }
+          intros s [Hactive_guard Heq_s]. subst s.
+          destruct H as [Hsegment [_Hcoverage [_Htarget
+            [Hedge [_Hvis _Hactive]]]]].
+          split; [exact Hsegment |].
+          split; [exact Hedge |].
+          split; [exact Hactive_guard | exact Holder].
+        * eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (GetDfnUpdateLowExtendsSegmentEscapeAccountingActiveTargetCandidate_proof
+                 u done a).
+          }
+          intros s [Hactive_guard Heq_s]. subst s.
+          destruct H as [Hsegment [Hcoverage [Htarget
+            [Hedge [_Hvis _Hactive]]]]].
+          split; [exact Hsegment |].
+          split; [exact Hcoverage |].
+          split; [exact Htarget |].
+          split; [exact Hedge |].
+          split; [exact Hactive_guard |].
+          lia.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s Hnot_active].
+        subst s.
+        destruct H as [_ [_ [_ [_ [_ Hactive]]]]].
+        exfalso. apply Hnot_active. exact Hactive.
+  Qed.
+
+  Lemma update_low_parent_preserves_active_processed_child_segment_summary:
+    forall parent done n,
+      Hoare
+        (ActiveProcessedChildSegmentSummaryCandidate parent done)
+        (update_low parent n)
+        (fun _ s =>
+           ActiveProcessedChildSegmentSummaryCandidate parent done s).
+  Proof.
+    intros parent done n.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl.
+      unfold ActiveProcessedChildSegmentSummaryCandidate,
+        ChildSelfSegmentEscapeSummaryCandidate,
+        PendingRootEscapeCandidate,
+        OldStackEscapeAnchorCandidate in H |- *.
+      intros child Hdone_child Hedge Hfa Hfa_neq Hactive_child.
+      simpl in Hfa, Hfa_neq, Hactive_child.
+      assert (Hchild_ne_parent: child <> parent).
+      { intro Hchild_parent. subst child. apply Hfa_neq. exact Hfa. }
+      specialize (H child Hdone_child Hedge Hfa Hfa_neq Hactive_child).
+      intros w Hreach Hnot_vis.
+      specialize (H w Hreach Hnot_vis) as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right.
+        destruct Hanchor as
+          [anchor [Hactive_anchor [Hdfn_anchor [Hlow_anchor [Hchild_anchor Hanchor_w]]]]].
+        exists anchor.
+        simpl.
+        split; [exact Hactive_anchor |].
+        split; [exact Hdfn_anchor |].
+        split.
+        * unfold equiv_decb.
+          destruct (equiv_dec child parent) as [Hchild_parent | _].
+          -- exfalso. apply Hchild_ne_parent. exact Hchild_parent.
+          -- exact Hlow_anchor.
+        * split; [exact Hchild_anchor | exact Hanchor_w].
+	    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
+
+  Lemma get_low_update_low_preserves_loop_inv_done_candidate:
+    forall parent child done,
+      Hoare
+        (LoopInvDoneCandidate parent done)
+        (lv <- get' (fun s => low s child);; update_low parent lv)
+        (fun _ s => LoopInvDoneCandidate parent done s).
+  Proof.
+    intros parent child done.
+    apply Hoare_normalize. intros snap Hdone.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_loop_inv_done_candidate
+               parent lv parent done).
+    }
+    intros s [Heq _]. subst s. exact Hdone.
+  Qed.
+
+  Lemma get_low_update_low_preserves_parent_frame_resume_candidate:
+    forall parent child done,
+      Hoare
+        (ParentFrameResumeCandidate parent done)
+        (lv <- get' (fun s => low s child);; update_low parent lv)
+        (fun _ s => ParentFrameResumeCandidate parent done s).
+  Proof.
+    intros parent child done.
+    apply Hoare_normalize. intros snap Hframe.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_parent_frame_resume_candidate
+               parent lv parent done).
+    }
+    intros s [Heq _]. subst s. exact Hframe.
+  Qed.
+
+  Lemma get_low_update_low_preserves_done_closedness_candidate:
+    forall parent child done,
+      Hoare
+        (DoneClosednessCandidate parent done)
+        (lv <- get' (fun s => low s child);; update_low parent lv)
+        (fun _ s => DoneClosednessCandidate parent done s).
+  Proof.
+    intros parent child done.
+    apply Hoare_normalize. intros snap Hclosed.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_done_closedness_candidate
+               parent lv parent done).
+    }
+    intros s [Heq _]. subst s. exact Hclosed.
+  Qed.
+
+  Lemma get_low_update_low_preserves_processed_tree_children_correct_parent:
+    forall parent child done,
+      Hoare
+        (fun s =>
+           GlobalShapeCandidate s /\
+           DoneVisitedCandidate done s /\
+           ProcessedTreeChildrenCorrectCandidate parent done s)
+        (lv <- get' (fun s => low s child);; update_low parent lv)
+        (fun _ s =>
+           ProcessedTreeChildrenCorrectCandidate parent done s).
+  Proof.
+    intros parent child done.
+    apply Hoare_normalize. intros snap Hpre.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (update_low_preserves_processed_tree_children_correct_parent
+           parent done lv).
+    }
+    intros s [Heq _]. subst s. exact Hpre.
+  Qed.
+
+  Lemma get_low_update_low_preserves_active_processed_child_segment_summary:
+    forall parent child done,
+      Hoare
+        (ActiveProcessedChildSegmentSummaryCandidate parent done)
+        (lv <- get' (fun s => low s child);; update_low parent lv)
+        (fun _ s =>
+           ActiveProcessedChildSegmentSummaryCandidate parent done s).
+  Proof.
+    intros parent child done.
+    apply Hoare_normalize. intros snap Hsummary.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (update_low_parent_preserves_active_processed_child_segment_summary
+           parent done lv).
+    }
+    intros s [Heq _]. subst s. exact Hsummary.
+  Qed.
+
+  Lemma DoneClosednessCandidate_step_active_proof:
+    forall u done a s,
+      DoneClosednessCandidate u done s ->
+      Active a s ->
+      DoneClosednessCandidate u (done_after done a) s.
+  Proof.
+    unfold DoneClosednessCandidate,
+      done_reachable_closed,
+      done_tree_reachable_closed,
+      done_after.
+    intros u done a s [Hdone_closed Htree_closed] Hactive_a.
+    split.
+    - intros v w Hdone_after Hnot_active_v Hreach.
+      sets_unfold in Hdone_after.
+      destruct Hdone_after as [Hdone_v | Hv_a].
+      + eapply Hdone_closed; eauto.
+      + subst v. exfalso. apply Hnot_active_v. exact Hactive_a.
+    - intros v w Hdone_after Hnot_active_v Hfa_v Hfa_neq_v Hreach.
+      sets_unfold in Hdone_after.
+      destruct Hdone_after as [Hdone_v | Hv_a].
+      + eapply Htree_closed; eauto.
+      + subst v. exfalso. apply Hnot_active_v. exact Hactive_a.
+  Qed.
+
+  Lemma DoneClosednessCandidate_step_settled_proof:
+    forall u done a s,
+      DoneClosednessCandidate u done s ->
+      SettledClosedCandidate s ->
+      Visited a s ->
+      ~ Active a s ->
+      DoneClosednessCandidate u (done_after done a) s.
+  Proof.
+    unfold DoneClosednessCandidate,
+      SettledClosedCandidate,
+      done_reachable_closed,
+      done_tree_reachable_closed,
+      done_after.
+    intros u done a s [Hdone_closed Htree_closed] Hsettled _Hvis_a Hnot_active_a.
+    split.
+    - intros v w Hdone_after Hnot_active_v Hreach.
+      sets_unfold in Hdone_after.
+      destruct Hdone_after as [Hdone_v | Hv_a].
+      + eapply Hdone_closed; eauto.
+      + subst v. eapply Hsettled; eauto.
+    - intros v w Hdone_after Hnot_active_v Hfa_v Hfa_neq_v Hreach.
+      sets_unfold in Hdone_after.
+      destruct Hdone_after as [Hdone_v | Hv_a].
+      + eapply Htree_closed; eauto.
+      + subst v. eapply Hsettled; eauto.
+  Qed.
+
+  Lemma ProcessedTreeChildrenCorrectCandidate_step_not_tree_proof:
+    forall u done a s,
+      ProcessedTreeChildrenCorrectCandidate u done s ->
+      (fa s a = u -> fa s a <> a -> False) ->
+      ProcessedTreeChildrenCorrectCandidate u (done_after done a) s.
+  Proof.
+    unfold ProcessedTreeChildrenCorrectCandidate,
+      ProcessedTreeChildrenLowValidCandidate,
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
+      done_after.
+    intros u done a s [Hvalid [His_low Hinactive]] Hnot_tree.
+    split.
+    - intros child Hdone_after Hedge_child Hfa_child Hfa_neq_child.
+      sets_unfold in Hdone_after.
+      destruct Hdone_after as [Hdone_child | Hchild_a].
+      + eapply Hvalid; eauto.
+      + subst child. exfalso. eapply Hnot_tree; eauto.
+    - split.
+      + intros child Hdone_after Hedge_child Hfa_child Hfa_neq_child.
+        sets_unfold in Hdone_after.
+        destruct Hdone_after as [Hdone_child | Hchild_a].
+        * eapply His_low; eauto.
+        * subst child. exfalso. eapply Hnot_tree; eauto.
+      + intros child Hdone_after Hedge_child Hfa_child Hfa_neq_child Hnot_active.
+        sets_unfold in Hdone_after.
+        destruct Hdone_after as [Hdone_child | Hchild_a].
+        * eapply Hinactive; eauto.
+        * subst child. exfalso. eapply Hnot_tree; eauto.
+  Qed.
+
+  Lemma ActiveProcessedChildSegmentSummaryCandidate_step_not_active_proof:
+    forall u done a s,
+      ActiveProcessedChildSegmentSummaryCandidate u done s ->
+      ~ Active a s ->
+      ActiveProcessedChildSegmentSummaryCandidate u (done_after done a) s.
+  Proof.
+    unfold ActiveProcessedChildSegmentSummaryCandidate,
+      done_after.
+    intros u done a s Hsummary Hnot_active_a
+           child Hdone_after Hedge_child Hfa_child Hfa_neq_child Hactive_child.
+    sets_unfold in Hdone_after.
+    destruct Hdone_after as [Hdone_child | Hchild_a].
+    - eapply Hsummary; eauto.
+    - subst child. exfalso. apply Hnot_active_a. exact Hactive_child.
+  Qed.
+
+  Lemma ActiveProcessedChildSegmentSummaryCandidate_step_not_tree_proof:
+    forall u done a s,
+      ActiveProcessedChildSegmentSummaryCandidate u done s ->
+      (fa s a = u -> False) ->
+      ActiveProcessedChildSegmentSummaryCandidate u (done_after done a) s.
+  Proof.
+    unfold ActiveProcessedChildSegmentSummaryCandidate,
+      done_after.
+    intros u done a s Hsummary Hnot_tree
+           child Hdone_after Hedge_child Hfa_child Hfa_neq_child Hactive_child.
+    sets_unfold in Hdone_after.
+    destruct Hdone_after as [Hdone_child | Hchild_a].
+    - eapply Hsummary; eauto.
+    - subst child. exfalso. apply Hnot_tree. exact Hfa_child.
+  Qed.
+
+  Lemma ActiveProcessedChildSegmentSummaryCandidate_step_not_tree_child_proof:
+    forall u done a s,
+      ActiveProcessedChildSegmentSummaryCandidate u done s ->
+      (fa s a = u -> fa s a <> a -> False) ->
+      ActiveProcessedChildSegmentSummaryCandidate u (done_after done a) s.
+  Proof.
+    unfold ActiveProcessedChildSegmentSummaryCandidate,
+      done_after.
+    intros u done a s Hsummary Hnot_tree_child
+           child Hdone_after Hedge_child Hfa_child Hfa_neq_child Hactive_child.
+    sets_unfold in Hdone_after.
+    destruct Hdone_after as [Hdone_child | Hchild_a].
+    - eapply Hsummary; eauto.
+    - subst child. exfalso. eapply Hnot_tree_child; eauto.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_loop_inv_done_candidate:
+    forall parent a done,
+      Hoare
+        (LoopInvDoneCandidate parent done)
+        (dv <- get' (fun s => dfn s a);; update_low parent dv)
+        (fun _ s => LoopInvDoneCandidate parent done s).
+  Proof.
+    intros parent a done.
+    apply Hoare_normalize. intros snap Hdone.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_loop_inv_done_candidate
+               parent dv parent done).
+    }
+    intros s [Heq _]. subst s. exact Hdone.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_parent_frame_resume_candidate:
+    forall parent a done,
+      Hoare
+        (ParentFrameResumeCandidate parent done)
+        (dv <- get' (fun s => dfn s a);; update_low parent dv)
+        (fun _ s => ParentFrameResumeCandidate parent done s).
+  Proof.
+    intros parent a done.
+    apply Hoare_normalize. intros snap Hframe.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_parent_frame_resume_candidate
+               parent dv parent done).
+    }
+    intros s [Heq _]. subst s. exact Hframe.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_done_closedness_candidate:
+    forall parent a done,
+      Hoare
+        (DoneClosednessCandidate parent done)
+        (dv <- get' (fun s => dfn s a);; update_low parent dv)
+        (fun _ s => DoneClosednessCandidate parent done s).
+  Proof.
+    intros parent a done.
+    apply Hoare_normalize. intros snap Hclosed.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply (update_low_preserves_done_closedness_candidate
+               parent dv parent done).
+    }
+    intros s [Heq _]. subst s. exact Hclosed.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_processed_tree_children_correct_parent:
+    forall parent a done,
+      Hoare
+        (fun s =>
+           GlobalShapeCandidate s /\
+           DoneVisitedCandidate done s /\
+           ProcessedTreeChildrenCorrectCandidate parent done s)
+        (dv <- get' (fun s => dfn s a);; update_low parent dv)
+        (fun _ s =>
+           ProcessedTreeChildrenCorrectCandidate parent done s).
+  Proof.
+    intros parent a done.
+    apply Hoare_normalize. intros snap Hpre.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (update_low_preserves_processed_tree_children_correct_parent
+           parent done dv).
+    }
+    intros s [Heq _]. subst s. exact Hpre.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_active_processed_child_segment_summary:
+    forall parent a done,
+      Hoare
+        (ActiveProcessedChildSegmentSummaryCandidate parent done)
+        (dv <- get' (fun s => dfn s a);; update_low parent dv)
+        (fun _ s =>
+           ActiveProcessedChildSegmentSummaryCandidate parent done s).
+  Proof.
+    intros parent a done.
+    apply Hoare_normalize. intros snap Hsummary.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (update_low_parent_preserves_active_processed_child_segment_summary
+           parent done dv).
+    }
+    intros s [Heq _]. subst s. exact Hsummary.
+  Qed.
+
+  Lemma get_dfn_update_low_extends_loop_inv_phase6_active_candidate:
+    forall u a done,
+      Edge u a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase6Candidate u done s /\
+           Visited a s /\
+           Active a s /\
+           fa s a <> u)
+        (dv <- get' (fun s => dfn s a);; update_low u dv)
+        (fun _ s => LoopInvPhase6Candidate u (done_after done a) s).
+  Proof.
+    intros u a done Hedge.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s => LoopInvLowCandidate u (done_after done a) s)
+          (Q2 := fun _ s =>
+             ParentFrameResumeCandidate u (done_after done a) s /\
+             DoneClosednessCandidate u (done_after done a) s /\
+             ProcessedTreeChildrenCorrectCandidate u (done_after done a) s /\
+             ActiveProcessedChildSegmentSummaryCandidate
+               u (done_after done a) s).
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s => LoopInvDoneCandidate u (done_after done a) s)
+            (Q2 := fun _ s =>
+               PartialRootLowEquationCandidate u (done_after done a) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_preserves_loop_inv_done_candidate
+                 u a (done_after done a)).
+          }
+          intros s [Hphase6 [Hvis_a [_Hactive_a _Hfa_not]]].
+          destruct Hphase6 as [Hlow _].
+          destruct Hlow as [Hdone_loop _Hpartial].
+          destruct Hdone_loop as [Hlocal Hdisc].
+          split; [exact Hlocal |].
+          eapply DoneDisciplineCandidate_step_proof; eauto.
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (GetDfnUpdateLowExtendsPartialLowStackCandidate_proof
+                 u done a Hedge).
+          }
+          intros s [Hphase6 [_Hvis_a [Hactive_a Hfa_not_u]]].
+          destruct Hphase6 as [Hlow _].
+          destruct Hlow as [_Hdone_loop Hpartial].
+          split; [exact Hpartial |].
+          split; [exact Hactive_a | exact Hfa_not_u].
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               ParentFrameResumeCandidate u (done_after done a) s)
+            (Q2 := fun _ s =>
+               DoneClosednessCandidate u (done_after done a) s /\
+               ProcessedTreeChildrenCorrectCandidate u (done_after done a) s /\
+               ActiveProcessedChildSegmentSummaryCandidate
+                 u (done_after done a) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_preserves_parent_frame_resume_candidate
+                 u a (done_after done a)).
+          }
+          intros s [Hphase6 [Hvis_a _]].
+          destruct Hphase6 as [_Hlow [Hframe _]].
+          eapply ParentFrameResumeCandidate_step_visited_proof; eauto.
+        + apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 DoneClosednessCandidate u (done_after done a) s)
+              (Q2 := fun _ s =>
+                 ProcessedTreeChildrenCorrectCandidate
+                   u (done_after done a) s /\
+                 ActiveProcessedChildSegmentSummaryCandidate
+                   u (done_after done a) s).
+          * eapply Hoare_conseq_pre.
+            2: {
+              apply
+                (get_dfn_update_low_preserves_done_closedness_candidate
+                   u a (done_after done a)).
+            }
+            intros s [Hphase6 [_Hvis_a [Hactive_a _Hfa_not]]].
+            destruct Hphase6 as [_Hlow [_Hframe [Hclosed _]]].
+            eapply DoneClosednessCandidate_step_active_proof; eauto.
+          * apply Hoare_conj
+              with
+                (Q1 := fun _ s =>
+                   ProcessedTreeChildrenCorrectCandidate
+                     u (done_after done a) s)
+                (Q2 := fun _ s =>
+                   ActiveProcessedChildSegmentSummaryCandidate
+                     u (done_after done a) s).
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (get_dfn_update_low_preserves_processed_tree_children_correct_parent
+                      u a (done_after done a)).
+               }
+               intros s [Hphase6 [Hvis_a [Hactive_a Hfa_not_u]]].
+               destruct Hphase6 as [Hlow [_Hframe [_Hclosed [Hchildren _]]]].
+               destruct Hlow as [Hdone_loop _Hpartial].
+               destruct Hdone_loop as [Hlocal Hdisc].
+               destruct Hlocal as [Hglobal _].
+               assert (Hdisc_after:
+                         DoneDisciplineCandidate u (done_after done a) s).
+               { eapply DoneDisciplineCandidate_step_proof; eauto. }
+               destruct Hdisc_after as [_Hsubset_after Hdone_vis_after].
+               split; [exact Hglobal |].
+               split; [exact Hdone_vis_after |].
+               eapply ProcessedTreeChildrenCorrectCandidate_step_not_tree_proof.
+               ++ exact Hchildren.
+               ++ intros Hfa_a _Hfa_neq_a.
+                  apply Hfa_not_u. exact Hfa_a.
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (get_dfn_update_low_preserves_active_processed_child_segment_summary
+                      u a (done_after done a)).
+               }
+               intros s [Hphase6 [_Hvis_a [_Hactive_a Hfa_not_u]]].
+               destruct Hphase6 as [_Hlow [_Hframe [_Hclosed [_Hchildren Hactive_segments]]]].
+               eapply ActiveProcessedChildSegmentSummaryCandidate_step_not_tree_proof.
+               ++ exact Hactive_segments.
+               ++ intros Hfa_a. apply Hfa_not_u. exact Hfa_a.
+    }
+    intros _ s [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
+    unfold LoopInvPhase6Candidate.
+    split; [exact Hlow |].
+    split; [exact Hframe |].
+    split; [exact Hclosed |].
+    split; [exact Hchildren | exact Hactive_segments].
+  Qed.
+
+  Lemma GetDfnUpdateLowExtendsPartialLowSelfCandidate_proof:
+    forall u done,
+      Edge u u ->
+      Hoare
+        (PartialRootLowEquationCandidate u done)
+        (dv <- get' (fun s => dfn s u);; update_low u dv)
+        (fun _ s =>
+           PartialRootLowEquationCandidate u (done_after done u) s).
+  Proof.
+    intros u done Hedge.
+    unfold PartialRootLowEquationCandidate.
+    apply Hoare_conj.
+    - apply Hoare_normalize. intros snap [Hfront _Hsrc].
+      eapply Hoare_bind. { apply Hoare_get'. }
+      simpl. intros dv.
+      eapply Hoare_conseq_post.
+      2: {
+        eapply Hoare_conseq_pre.
+        2: { apply (UpdateLowPreservesFrontierCandidate_proof u done dv). }
+        intros s [Heq_s _]. subst s. exact Hfront.
+      }
+      intros ret st_after Hfront_after.
+      eapply LowFrontierCandidate_step_proof.
+      + exact Hfront_after.
+      + exact Hedge.
+      + intros _Hfa. lia.
+      + intros _Hactive. exact (proj1 Hfront_after).
+    - apply Hoare_normalize. intros snap [_Hfront Hsrc].
+      eapply Hoare_bind. { apply Hoare_get'. }
+      simpl. intros dv.
+      eapply Hoare_conseq_post.
+      2: {
+        apply Hoare_conj
+          with (Q1 := fun _ s =>
+                        LowSourceCandidate u done s \/ low s u = dv)
+               (Q2 := fun _ s =>
+                        dv = dfn snap u /\
+                        forall x, dfn s x = dfn snap x).
+        + eapply Hoare_conseq_pre.
+          2: { apply (UpdateLowSourceOrIncomingCandidate_proof u done dv). }
+          intros s [Heq_s _]. subst s. exact Hsrc.
+        + apply Hoare_conj.
+          * unfold Hoare.
+            intros st1 ret_get st2 Hpre Hrun.
+            destruct Hpre as [_ Hdv].
+            exact Hdv.
+          * eapply Hoare_conseq_post.
+            2: {
+              eapply Hoare_conseq_pre.
+              2: { apply (UpdateLowKeepsSnapshotFieldsCandidate_proof u dv snap). }
+              intros s [Heq_s _]. subst s. reflexivity.
+            }
+            intros ret_update st_update [Hdfn_keep _].
+            exact Hdfn_keep.
+      }
+      intros ret st_after [[Hsrc_after | Hlow_incoming] [Hdv Hdfn_keep]].
+      + apply LowSourceCandidate_step_keep_proof.
+        exact Hsrc_after.
+      + left.
+        rewrite Hlow_incoming.
+        rewrite Hdv.
+        rewrite <- Hdfn_keep.
+        reflexivity.
+  Qed.
+
+  Lemma get_dfn_update_low_extends_loop_inv_phase6_active_self_candidate:
+    forall u done,
+      Edge u u ->
+      Hoare
+        (LoopInvPhase6Candidate u done)
+        (dv <- get' (fun s => dfn s u);; update_low u dv)
+        (fun _ s => LoopInvPhase6Candidate u (done_after done u) s).
+  Proof.
+    intros u done Hedge.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s => LoopInvLowCandidate u (done_after done u) s)
+          (Q2 := fun _ s =>
+             ParentFrameResumeCandidate u (done_after done u) s /\
+             DoneClosednessCandidate u (done_after done u) s /\
+             ProcessedTreeChildrenCorrectCandidate u (done_after done u) s /\
+             ActiveProcessedChildSegmentSummaryCandidate
+               u (done_after done u) s).
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s => LoopInvDoneCandidate u (done_after done u) s)
+            (Q2 := fun _ s =>
+               PartialRootLowEquationCandidate u (done_after done u) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_preserves_loop_inv_done_candidate
+                 u u (done_after done u)).
+          }
+          intros s Hphase6.
+          destruct Hphase6 as [Hlow _].
+          destruct Hlow as [Hdone_loop _Hpartial].
+          destruct Hdone_loop as [Hlocal Hdisc].
+          pose proof Hlocal as Hlocal_keep.
+          destruct Hlocal as [_Hshape [_Hsettled [Hvis_u _]]].
+          split; [exact Hlocal_keep |].
+          eapply DoneDisciplineCandidate_step_proof; eauto.
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (GetDfnUpdateLowExtendsPartialLowSelfCandidate_proof
+                 u done Hedge).
+          }
+          intros s Hphase6.
+          destruct Hphase6 as [Hlow _].
+          exact (proj2 Hlow).
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               ParentFrameResumeCandidate u (done_after done u) s)
+            (Q2 := fun _ s =>
+               DoneClosednessCandidate u (done_after done u) s /\
+               ProcessedTreeChildrenCorrectCandidate
+                 u (done_after done u) s /\
+               ActiveProcessedChildSegmentSummaryCandidate
+                 u (done_after done u) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_preserves_parent_frame_resume_candidate
+                 u u (done_after done u)).
+          }
+          intros s Hphase6.
+          destruct Hphase6 as [Hlow [Hframe _]].
+          destruct Hlow as [Hdone_loop _].
+          destruct Hdone_loop as [Hlocal _].
+          destruct Hlocal as [_Hshape [_Hsettled [Hvis_u _]]].
+          eapply ParentFrameResumeCandidate_step_visited_proof; eauto.
+        + apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 DoneClosednessCandidate u (done_after done u) s)
+              (Q2 := fun _ s =>
+                 ProcessedTreeChildrenCorrectCandidate
+                   u (done_after done u) s /\
+                 ActiveProcessedChildSegmentSummaryCandidate
+                   u (done_after done u) s).
+          * eapply Hoare_conseq_pre.
+            2: {
+              apply
+                (get_dfn_update_low_preserves_done_closedness_candidate
+                   u u (done_after done u)).
+            }
+            intros s Hphase6.
+            destruct Hphase6 as [Hlow [_Hframe [Hclosed _]]].
+            destruct Hlow as [Hdone_loop _].
+            destruct Hdone_loop as [Hlocal _].
+            destruct Hlocal as [_Hshape [_Hsettled [_Hvis_u [Hactive_u _]]]].
+            eapply DoneClosednessCandidate_step_active_proof; eauto.
+          * apply Hoare_conj
+              with
+                (Q1 := fun _ s =>
+                   ProcessedTreeChildrenCorrectCandidate
+                     u (done_after done u) s)
+                (Q2 := fun _ s =>
+                   ActiveProcessedChildSegmentSummaryCandidate
+                     u (done_after done u) s).
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (get_dfn_update_low_preserves_processed_tree_children_correct_parent
+                      u u (done_after done u)).
+               }
+               intros s Hphase6.
+               destruct Hphase6 as [Hlow [_Hframe [_Hclosed [Hchildren _]]]].
+               destruct Hlow as [Hdone_loop _Hpartial].
+               destruct Hdone_loop as [Hlocal Hdisc].
+               destruct Hlocal as [Hglobal [_Hsettled [Hvis_u _]]].
+               assert (Hdisc_after:
+                         DoneDisciplineCandidate u (done_after done u) s).
+               { eapply DoneDisciplineCandidate_step_proof; eauto. }
+               destruct Hdisc_after as [_Hsubset_after Hdone_vis_after].
+               split; [exact Hglobal |].
+               split; [exact Hdone_vis_after |].
+               eapply ProcessedTreeChildrenCorrectCandidate_step_not_tree_proof.
+               ++ exact Hchildren.
+               ++ intros Hfa_u Hfa_neq_u.
+                  apply Hfa_neq_u. exact Hfa_u.
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (get_dfn_update_low_preserves_active_processed_child_segment_summary
+                      u u (done_after done u)).
+               }
+               intros s Hphase6.
+               destruct Hphase6 as
+                 [_Hlow [_Hframe [_Hclosed [_Hchildren Hactive_segments]]]].
+               eapply
+                 ActiveProcessedChildSegmentSummaryCandidate_step_not_tree_child_proof.
+               ++ exact Hactive_segments.
+               ++ intros Hfa_u Hfa_neq_u.
+                  apply Hfa_neq_u. exact Hfa_u.
+    }
+    intros _ s [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
+    unfold LoopInvPhase6Candidate.
+    split; [exact Hlow |].
+    split; [exact Hframe |].
+    split; [exact Hclosed |].
+    split; [exact Hchildren | exact Hactive_segments].
+  Qed.
+
+  Lemma ProcessEdgeVisitedActiveExtendsLoopInvPhase6Candidate_proof:
+    forall W u a done,
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase6Candidate u done s /\
+           Visited a s /\
+           Active a s)
+        (process_edge u W a)
+        (fun _ s => LoopInvPhase6Candidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hedge Hnot_done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [Hvis _]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        destruct (equiv_dec a u) as [Ha_u | Ha_not_u].
+        * rewrite Ha_u in Hedge.
+          rewrite Ha_u.
+          eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_extends_loop_inv_phase6_active_self_candidate
+                 u done Hedge).
+          }
+          intros s [_Hactive_guard Heq_s]. subst s.
+          exact (proj1 H).
+        * eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_dfn_update_low_extends_loop_inv_phase6_active_candidate
+                 u a done Hedge).
+          }
+          intros s [Hactive_guard Heq_s]. subst s.
+          destruct H as [Hphase6 [Hvis_a _Hactive_a]].
+          assert (Hfa_not_u: fa s0 a <> u).
+          { intro Hfa_a.
+            destruct Hphase6 as [_Hlow [Hframe _Htail]].
+            destruct Hframe as [_Hdone_vis [_Hfa_child Hfa_not_done]].
+            apply Ha_not_u.
+            eapply Hfa_not_done; eauto. }
+          split; [exact Hphase6 |].
+          split; [exact Hvis_a |].
+          split; [exact Hactive_guard | exact Hfa_not_u].
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s Hnot_active].
+        subst s.
+        destruct H as [_ [_ Hactive_a]].
+        exfalso. apply Hnot_active. exact Hactive_a.
+  Qed.
+
+  Lemma ProcessEdgeVisitedNonStackExtendsLoopInvPhase6Candidate_proof:
+    forall W u a done,
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase6Candidate u done s /\
+           Visited a s /\
+           ~ Active a s)
+        (process_edge u W a)
+        (fun _ s => LoopInvPhase6Candidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hedge Hnot_done.
+    unfold process_edge, if_else, If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hunvis Heq]. subst s1.
+      destruct H as [_ [Hvis _]].
+      exfalso. apply Hunvis. exact Hvis.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Heq0]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        intro_state.
+        destruct H1 as [Hactive_guard Heq1]. subst s1.
+        destruct H as [_ [_ Hnot_active]].
+        exfalso. apply Hnot_active. exact Hactive_guard.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        intros _ s [Heq_s _Hnot_active_guard].
+        subst s.
+        destruct H as [Hphase6 [Hvis_a Hnot_active_a]].
+        destruct Hphase6 as
+          [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
+        destruct Hlow as [Hdone_loop Hpartial].
+        destruct Hdone_loop as [Hlocal Hdisc].
+        pose proof Hlocal as Hlocal_keep.
+        destruct Hlocal as [Hglobal [Hsettled [_Hvis_u [_Hactive_u _Horder]]]].
+        assert (Hfa_tree_false:
+                  fa s0 a = u -> fa s0 a <> a -> False).
+        { intros Hfa_a Hfa_neq_a.
+          destruct Hframe as [_Hdone_vis [_Hfa_child Hfa_not_done]].
+          assert (Ha_u: a = u) by (eapply Hfa_not_done; eauto).
+          subst a. apply Hfa_neq_a. exact Hfa_a. }
+        unfold LoopInvPhase6Candidate.
+        split.
+        * split.
+          -- split; [exact Hlocal_keep |].
+             eapply DoneDisciplineCandidate_step_proof; eauto.
+          -- eapply PartialRootLowEquationCandidate_step_keep_proof.
+	             ++ exact Hpartial.
+	             ++ exact Hedge.
+	             ++ intros Hfa_a.
+	                destruct Hframe as [_Hdone_vis [_Hfa_child Hfa_not_done]].
+	                assert (Ha_u: a = u) by (eapply Hfa_not_done; eauto).
+	                subst a. lia.
+	             ++ intros Hactive_a.
+	                exfalso. apply Hnot_active_a. exact Hactive_a.
+        * split.
+          -- eapply ParentFrameResumeCandidate_step_visited_proof; eauto.
+          -- split.
+             ++ eapply DoneClosednessCandidate_step_settled_proof; eauto.
+             ++ split.
+                ** eapply ProcessedTreeChildrenCorrectCandidate_step_not_tree_proof;
+                     eauto.
+                ** eapply ActiveProcessedChildSegmentSummaryCandidate_step_not_active_proof;
+                     eauto.
+  Qed.
+
+  Lemma ProcessEdgeVisitedActiveExtendsLoopInvPhase7WithTargetCandidate_proof:
+    forall W u a done,
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase7Candidate u done s /\
+           ActiveTargetSegmentEscapeAccountedCandidate u done s /\
+           Visited a s /\
+           Active a s)
+        (process_edge u W a)
+        (fun _ s => LoopInvPhase7Candidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hedge Hnot_done.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s => LoopInvPhase6Candidate u (done_after done a) s)
+          (Q2 := fun _ s =>
+             SegmentEscapeAccountingCandidate u (done_after done a) s /\
+             SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (ProcessEdgeVisitedActiveExtendsLoopInvPhase6Candidate_proof
+               W u a done Hedge Hnot_done).
+        }
+        intros s [Hloop7 [_Htarget [Hvis Hactive]]].
+        destruct Hloop7 as [Hphase6 _].
+        split; [exact Hphase6 |].
+        split; [exact Hvis | exact Hactive].
+      - apply Hoare_conj.
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (ProcessEdgeVisitedActiveExtendsSegmentEscapeAccountingWithTargetCandidate_proof
+                 W u a done).
+          }
+          intros s [Hloop7 [Htarget [Hvis Hactive]]].
+          destruct Hloop7 as [_Hphase6 [Hsegment Hcoverage]].
+          split; [exact Hsegment |].
+          split; [exact Hcoverage |].
+          split; [exact Htarget |].
+          split; [exact Hedge |].
+          split; [exact Hvis | exact Hactive].
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (ProcessEdgeVisitedActiveExtendsSegmentTreeCoverageCandidate_proof
+                 W u a done).
+          }
+          intros s [Hloop7 [_Htarget [Hvis Hactive]]].
+          destruct Hloop7 as [_Hphase6 [_Hsegment Hcoverage]].
+          split; [exact Hcoverage |].
+          split; [exact Hvis | exact Hactive].
+    }
+    intros _ s [Hphase6 [Hsegment Hcoverage]].
+    unfold LoopInvPhase7Candidate.
+    split; [exact Hphase6 | split; [exact Hsegment | exact Hcoverage]].
+  Qed.
+
+  Lemma ProcessEdgeVisitedNonStackExtendsLoopInvPhase7Candidate_proof:
+    forall W u a done,
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase7Candidate u done s /\
+           Visited a s /\
+           ~ Active a s)
+        (process_edge u W a)
+        (fun _ s => LoopInvPhase7Candidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hedge Hnot_done.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s => LoopInvPhase6Candidate u (done_after done a) s)
+          (Q2 := fun _ s =>
+             SegmentEscapeAccountingCandidate u (done_after done a) s /\
+             SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (ProcessEdgeVisitedNonStackExtendsLoopInvPhase6Candidate_proof
+               W u a done Hedge Hnot_done).
+        }
+        intros s [Hloop7 [Hvis Hnot_active]].
+        destruct Hloop7 as [Hphase6 _].
+        split; [exact Hphase6 |].
+        split; [exact Hvis | exact Hnot_active].
+      - apply Hoare_conj.
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (ProcessEdgeVisitedNonStackExtendsSegmentEscapeAccountingCandidate_proof
+                 W u a done).
+          }
+          intros s [Hloop7 [Hvis Hnot_active]].
+          destruct Hloop7 as [Hphase6 [Hsegment _Hcoverage]].
+          destruct Hphase6 as [Hlow _].
+          destruct Hlow as [Hdone_loop _Hpartial].
+          destruct Hdone_loop as [Hlocal _Hdisc].
+          destruct Hlocal as [_Hshape [Hsettled _]].
+          split; [exact Hsegment |].
+          split; [exact Hsettled |].
+          split; [exact Hvis | exact Hnot_active].
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (ProcessEdgeVisitedNonStackExtendsSegmentTreeCoverageCandidate_proof
+                 W u a done).
+          }
+          intros s [Hloop7 [Hvis Hnot_active]].
+          destruct Hloop7 as [_Hphase6 [_Hsegment Hcoverage]].
+          split; [exact Hcoverage |].
+          split; [exact Hvis | exact Hnot_active].
+    }
+    intros _ s [Hphase6 [Hsegment Hcoverage]].
+    unfold LoopInvPhase7Candidate.
+    split; [exact Hphase6 | split; [exact Hsegment | exact Hcoverage]].
+  Qed.
+
+  Lemma get_low_update_low_extends_loop_inv_phase6_after_child_candidate:
+    forall parent child done,
+      Edge parent child ->
+      Hoare
+        (fun s =>
+           LoopInvLowCandidate parent done s /\
+           SuspendedParentFrameResumeCandidate parent child done s /\
+           Visited child s /\
+           DoneClosednessCandidate parent done s /\
+           ProcessedTreeChildrenCorrectCandidate parent done s /\
+           ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+           ParentResumeShapeCandidate parent child done s /\
+           ChildRootCorrectForParentCandidate child s /\
+           ChildInactiveSelfLowForParentCandidate child s /\
+           ChildClosednessContributionCandidate child s /\
+           (Active child s -> ChildSegmentSummaryCandidate child s) /\
+           fa s child = parent /\
+           fa s child <> child /\
+           low s child <= dfn s child)
+        (lv <- get' (fun s => low s child);; update_low parent lv)
+        (fun _ s =>
+           LoopInvPhase6Candidate parent (done_after done child) s).
+  Proof.
+    intros parent child done Hedge.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s =>
+             LoopInvLowCandidate parent (done_after done child) s)
+          (Q2 := fun _ s =>
+             ParentFrameResumeCandidate parent (done_after done child) s /\
+             DoneClosednessCandidate parent (done_after done child) s /\
+             ProcessedTreeChildrenCorrectCandidate
+               parent (done_after done child) s /\
+             ActiveProcessedChildSegmentSummaryCandidate
+               parent (done_after done child) s).
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               LoopInvDoneCandidate parent (done_after done child) s)
+            (Q2 := fun _ s =>
+               PartialRootLowEquationCandidate
+                 parent (done_after done child) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_low_update_low_preserves_loop_inv_done_candidate
+                 parent child (done_after done child)).
+          }
+          intros s Hpre.
+          destruct Hpre as
+            [Hlow [_Hsuspended [Hvis_child _Htail]]].
+          destruct Hlow as [Hdone_loop _Hpartial].
+          destruct Hdone_loop as [Hlocal Hdone_disc].
+          split; [exact Hlocal |].
+          eapply DoneDisciplineCandidate_step_proof; eauto.
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (GetLowUpdateLowExtendsPartialLowTreeCandidate_proof
+                 parent done child Hedge).
+	          }
+	          intros s Hpre.
+	          destruct Hpre as [Hlow Hpre].
+	          destruct Hpre as [_Hsuspended Hpre].
+	          destruct Hpre as [_Hvis_child Hpre].
+	          destruct Hpre as [_Hclosed Hpre].
+	          destruct Hpre as [_Hchildren Hpre].
+	          destruct Hpre as [_Hactive_segments Hpre].
+	          destruct Hpre as [_Hresume Hpre].
+	          destruct Hpre as [_Hroot Hpre].
+	          destruct Hpre as [_Hinactive Hpre].
+	          destruct Hpre as [_Hchild_closed Hpre].
+	          destruct Hpre as [_Hchild_segment Hpre].
+	          destruct Hpre as [Hfa [Hfa_neq Hlow_child]].
+          destruct Hlow as [_Hdone_loop Hpartial].
+          split; [exact Hpartial |].
+          split; [exact Hfa |].
+          split; [exact Hfa_neq | exact Hlow_child].
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               ParentFrameResumeCandidate
+                 parent (done_after done child) s)
+            (Q2 := fun _ s =>
+               DoneClosednessCandidate parent (done_after done child) s /\
+               ProcessedTreeChildrenCorrectCandidate
+                 parent (done_after done child) s /\
+               ActiveProcessedChildSegmentSummaryCandidate
+                 parent (done_after done child) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (get_low_update_low_preserves_parent_frame_resume_candidate
+                 parent child (done_after done child)).
+	          }
+	          intros s Hpre.
+	          destruct Hpre as
+	            [_Hlow [Hsuspended [Hvis_child _Htail]]].
+	          unfold SuspendedParentFrameResumeCandidate,
+	            ParentFrameResumeCandidate,
+	            done_visited,
+	            fa_not_done_implies_eq_u,
+	            done_after in Hsuspended |- *.
+	          destruct Hsuspended as [Hdone_vis [Hfa_child Hfa_not_child]].
+	          split.
+	          * intros v Hdone_after.
+	            sets_unfold in Hdone_after.
+	            destruct Hdone_after as [Hdone_v | Hv_child].
+	            -- apply Hdone_vis. exact Hdone_v.
+	            -- subst v. exact Hvis_child.
+	          * split; [exact Hfa_child |].
+	            intros v Hnot_done_after Hfa_v.
+	            apply Hfa_not_child.
+	            -- intros Hdone_v.
+	               apply Hnot_done_after.
+	               sets_unfold. left. exact Hdone_v.
+	            -- intros Hv_child.
+	               apply Hnot_done_after.
+	               sets_unfold. right. symmetry. exact Hv_child.
+	            -- exact Hfa_v.
+        + apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 DoneClosednessCandidate parent (done_after done child) s)
+              (Q2 := fun _ s =>
+                 ProcessedTreeChildrenCorrectCandidate
+                   parent (done_after done child) s /\
+                 ActiveProcessedChildSegmentSummaryCandidate
+                   parent (done_after done child) s).
+          * eapply Hoare_conseq_pre.
+            2: {
+              apply
+                (get_low_update_low_preserves_done_closedness_candidate
+                   parent child (done_after done child)).
+	            }
+	            intros s Hpre.
+	            destruct Hpre as [_Hlow Hpre].
+	            destruct Hpre as [_Hsuspended Hpre].
+	            destruct Hpre as [_Hvis_child Hpre].
+	            destruct Hpre as [Hclosed Hpre].
+	            destruct Hpre as [_Hchildren Hpre].
+	            destruct Hpre as [_Hactive_segments Hpre].
+	            destruct Hpre as [Hresume Hpre].
+	            destruct Hpre as [_Hroot Hpre].
+	            destruct Hpre as [_Hinactive Hpre].
+	            destruct Hpre as [Hchild_closed _Htail].
+            eapply DoneClosednessCandidate_step_child_proof; eauto.
+          * apply Hoare_conj
+              with
+                (Q1 := fun _ s =>
+                   ProcessedTreeChildrenCorrectCandidate
+                     parent (done_after done child) s)
+                (Q2 := fun _ s =>
+                   ActiveProcessedChildSegmentSummaryCandidate
+                     parent (done_after done child) s).
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (get_low_update_low_preserves_processed_tree_children_correct_parent
+                      parent child (done_after done child)).
+	               }
+	               intros s Hpre.
+	               destruct Hpre as [Hlow Hpre].
+	               destruct Hpre as [Hsuspended Hpre].
+	               destruct Hpre as [Hvis_child Hpre].
+	               destruct Hpre as [_Hclosed Hpre].
+	               destruct Hpre as [Hchildren Hpre].
+	               destruct Hpre as [_Hactive_segments Hpre].
+	               destruct Hpre as [Hresume Hpre].
+	               destruct Hpre as [Hchild_root Hpre].
+	               destruct Hpre as [Hchild_inactive _Htail].
+               destruct Hlow as [Hdone_loop _Hpartial].
+               destruct Hdone_loop as [Hlocal _Hdone_disc].
+               destruct Hlocal as [Hglobal _Hlocal_tail].
+               split; [exact Hglobal |].
+               split.
+               ++ unfold DoneVisitedCandidate, done_after.
+                  intros v Hdone_after.
+                  sets_unfold in Hdone_after.
+                  destruct Hdone_after as [Hdone_v | Hv_child].
+                  ** destruct Hsuspended as [Hdone_vis _].
+                     apply Hdone_vis. exact Hdone_v.
+                  ** subst v. exact Hvis_child.
+               ++ eapply ProcessedTreeChildrenCorrectCandidate_step_child_proof;
+                    eauto.
+            -- eapply Hoare_conseq_pre.
+               2: {
+                 apply
+                   (get_low_update_low_preserves_active_processed_child_segment_summary
+                      parent child (done_after done child)).
+	               }
+	               intros s Hpre.
+	               destruct Hpre as [_Hlow Hpre].
+	               destruct Hpre as [_Hsuspended Hpre].
+	               destruct Hpre as [_Hvis_child Hpre].
+	               destruct Hpre as [_Hclosed Hpre].
+	               destruct Hpre as [_Hchildren Hpre].
+	               destruct Hpre as [Hactive_segments Hpre].
+	               destruct Hpre as [Hresume Hpre].
+	               destruct Hpre as [_Hroot Hpre].
+	               destruct Hpre as [_Hinactive Hpre].
+	               destruct Hpre as [_Hchild_closed Hpre].
+	               destruct Hpre as [Hchild_segment _Htail].
+               eapply ActiveProcessedChildSegmentSummaryCandidate_step_child_proof;
+                 eauto.
+    }
+    intros _ s [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
+    unfold LoopInvPhase6Candidate.
+    split; [exact Hlow |].
+    split; [exact Hframe |].
+    split; [exact Hclosed |].
+    split; [exact Hchildren | exact Hactive_segments].
   Qed.
 
   Lemma FrameInvProvidesParentResumeShapeCandidate_proof:
@@ -6045,8 +9138,17 @@ Section IS_LOW_SKELETON.
   Proof.
     unfold FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_statement,
       FrameInvCandidate.
-    intros F s [_ [_ [_ [_ [_ [_ Hsegment]]]]]].
+    intros F s [_ [_ [_ [_ [_ [_ [Hsegment _Hcoverage]]]]]]].
     exact Hsegment.
+  Qed.
+
+  Lemma FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof:
+    FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_statement.
+  Proof.
+    unfold FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_statement,
+      FrameInvCandidate.
+    intros F s [_ [_ [_ [_ [_ [_ [_Hsegment Hcoverage]]]]]]].
+    exact Hcoverage.
   Qed.
 
   Lemma FrameInvForgetsSuspendedLoopInvPhase6Candidate_proof:
@@ -6100,7 +9202,7 @@ Section IS_LOW_SKELETON.
       LoopInvPhase7Candidate,
       LoopInvPhase6Candidate.
     intros parent child done s Hlow Hsuspended_frame Hvis_child
-           Hclosed Hchildren Hactive_segments Hsegment.
+           Hclosed Hchildren Hactive_segments Hsegment Hcoverage.
     split.
     - split; [exact Hlow |].
       split.
@@ -6108,7 +9210,7 @@ Section IS_LOW_SKELETON.
           eauto.
       + split; [exact Hclosed |].
         split; [exact Hchildren | exact Hactive_segments].
-    - exact Hsegment.
+    - split; [exact Hsegment | exact Hcoverage].
   Qed.
 
   Lemma FrameContractCandidate_from_field_preservation_proof:
@@ -6123,12 +9225,13 @@ Section IS_LOW_SKELETON.
       FramePreservesProcessedTreeChildrenCorrectCandidate,
       FramePreservesActiveProcessedChildSegmentSummaryCandidate,
       FramePreservesSuspendedSegmentEscapeAccountingCandidate,
+      FramePreservesSuspendedSegmentTreeCoverageCandidate,
       FrameFieldPreservationCandidate,
       FrameContractCandidate,
       FrameInvCandidate.
     intros W
       [Hresume [Hlow [Hsuspended_frame [Hclosed
-       [Hchildren [Hactive_segments Hsegment]]]]]]
+       [Hchildren [Hactive_segments [Hsegment Hcoverage]]]]]]]
       F parent child done Hedge Hnot_done.
     eapply Hoare_conseq_post.
     2: {
@@ -6146,6 +9249,8 @@ Section IS_LOW_SKELETON.
           ActiveProcessedChildSegmentSummaryCandidate
             (frame_parent F) (frame_done F) s /\
           SuspendedSegmentEscapeAccountingCandidate
+            (frame_parent F) (frame_child F) (frame_done F) s /\
+          SuspendedSegmentTreeCoverageByDoneCandidate
             (frame_parent F) (frame_child F) (frame_done F) s).
       - eapply Hoare_conseq_pre.
         2: { exact (Hresume F parent child done Hedge Hnot_done). }
@@ -6164,6 +9269,8 @@ Section IS_LOW_SKELETON.
             ActiveProcessedChildSegmentSummaryCandidate
               (frame_parent F) (frame_done F) s /\
             SuspendedSegmentEscapeAccountingCandidate
+              (frame_parent F) (frame_child F) (frame_done F) s /\
+            SuspendedSegmentTreeCoverageByDoneCandidate
               (frame_parent F) (frame_child F) (frame_done F) s).
         + eapply Hoare_conseq_pre.
           2: { exact (Hlow F parent child done Hedge Hnot_done). }
@@ -6181,6 +9288,8 @@ Section IS_LOW_SKELETON.
               ActiveProcessedChildSegmentSummaryCandidate
                 (frame_parent F) (frame_done F) s /\
               SuspendedSegmentEscapeAccountingCandidate
+                (frame_parent F) (frame_child F) (frame_done F) s /\
+              SuspendedSegmentTreeCoverageByDoneCandidate
                 (frame_parent F) (frame_child F) (frame_done F) s).
           * eapply Hoare_conseq_pre.
             2: {
@@ -6198,6 +9307,8 @@ Section IS_LOW_SKELETON.
                 ActiveProcessedChildSegmentSummaryCandidate
                   (frame_parent F) (frame_done F) s /\
                 SuspendedSegmentEscapeAccountingCandidate
+                  (frame_parent F) (frame_child F) (frame_done F) s /\
+                SuspendedSegmentTreeCoverageByDoneCandidate
                   (frame_parent F) (frame_child F) (frame_done F) s).
             -- eapply Hoare_conseq_pre.
                2: { exact (Hclosed F parent child done Hedge Hnot_done). }
@@ -6212,6 +9323,8 @@ Section IS_LOW_SKELETON.
                   ActiveProcessedChildSegmentSummaryCandidate
                     (frame_parent F) (frame_done F) s /\
                   SuspendedSegmentEscapeAccountingCandidate
+                    (frame_parent F) (frame_child F) (frame_done F) s /\
+                  SuspendedSegmentTreeCoverageByDoneCandidate
                     (frame_parent F) (frame_child F) (frame_done F) s).
                ++ eapply Hoare_conseq_pre.
                   2: { exact (Hchildren F parent child done Hedge Hnot_done). }
@@ -6224,6 +9337,8 @@ Section IS_LOW_SKELETON.
                         (frame_parent F) (frame_done F) s)
                     (Q2 := fun _ s =>
                       SuspendedSegmentEscapeAccountingCandidate
+                        (frame_parent F) (frame_child F) (frame_done F) s /\
+                      SuspendedSegmentTreeCoverageByDoneCandidate
                         (frame_parent F) (frame_child F) (frame_done F) s).
                   ** eapply Hoare_conseq_pre.
                      2: {
@@ -6233,21 +9348,28 @@ Section IS_LOW_SKELETON.
                      intros s [Hframe [Hcompat Hchild_entry]].
                      split; [exact Hframe |].
                      split; [exact Hcompat | exact Hchild_entry].
-                  ** eapply Hoare_conseq_pre.
-                     2: { exact (Hsegment F parent child done Hedge Hnot_done). }
-                     intros s [Hframe [Hcompat Hchild_entry]].
-                     split; [exact Hframe |].
-                     split; [exact Hcompat | exact Hchild_entry].
+                  ** apply Hoare_conj.
+                     --- eapply Hoare_conseq_pre.
+                         2: { exact (Hsegment F parent child done Hedge Hnot_done). }
+                         intros s [Hframe [Hcompat Hchild_entry]].
+                         split; [exact Hframe |].
+                         split; [exact Hcompat | exact Hchild_entry].
+                     --- eapply Hoare_conseq_pre.
+                         2: { exact (Hcoverage F parent child done Hedge Hnot_done). }
+                         intros s [Hframe [Hcompat Hchild_entry]].
+                         split; [exact Hframe |].
+                         split; [exact Hcompat | exact Hchild_entry].
     }
     intros _ s [Hresume_field
       [Hlow_field [Hsuspended_field [Hclosed_field
-       [Hchildren_field [Hactive_field Hsegment_field]]]]]].
+       [Hchildren_field [Hactive_field [Hsegment_field Hcoverage_field]]]]]]].
     split; [exact Hresume_field |].
     split; [exact Hlow_field |].
     split; [exact Hsuspended_field |].
     split; [exact Hclosed_field |].
     split; [exact Hchildren_field |].
-    split; [exact Hactive_field | exact Hsegment_field].
+    split; [exact Hactive_field |].
+    split; [exact Hsegment_field | exact Hcoverage_field].
   Qed.
 
   Lemma FrameContractCandidate_provides_field_preservation_proof:
@@ -6276,6 +9398,7 @@ Section IS_LOW_SKELETON.
       FramePreservesProcessedTreeChildrenCorrectCandidate,
       FramePreservesActiveProcessedChildSegmentSummaryCandidate,
       FramePreservesSuspendedSegmentEscapeAccountingCandidate,
+      FramePreservesSuspendedSegmentTreeCoverageCandidate,
       FrameFieldPreservationCandidate.
     split.
     - (* ParentResumeShape *)
@@ -6325,13 +9448,318 @@ Section IS_LOW_SKELETON.
                    intros r s Hframe.
                    destruct Hframe as [_ [_ [_ [_ [_ [Hfield _]]]]]].
                    exact Hfield.
-                ** (* SegmentEscapeAccounting *)
-                   intros Fr p c d Hedge Hnot_done.
-                   eapply Hoare_conseq_post.
-                   2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
-                   intros r s Hframe.
-                   destruct Hframe as [_ [_ [_ [_ [_ [_ Hfield]]]]]].
-                   exact Hfield.
+                ** split.
+                   --- (* SegmentEscapeAccounting *)
+                       intros Fr p c d Hedge Hnot_done.
+                       eapply Hoare_conseq_post.
+                       2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
+                       intros r s Hframe.
+                       destruct Hframe as [_ [_ [_ [_ [_ [_ [Hfield _]]]]]]].
+                       exact Hfield.
+                   --- (* SegmentTreeCoverage *)
+                       intros Fr p c d Hedge Hnot_done.
+                       eapply Hoare_conseq_post.
+                       2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
+                       intros r s Hframe.
+                       destruct Hframe as [_ [_ [_ [_ [_ [_ [_ Hfield]]]]]]].
+                       exact Hfield.
+  Qed.
+
+  Lemma ProcessEdgeTreeBranchExtendsLoopInvPhase6Candidate_proof:
+    forall W u a done,
+      RecursiveCallContractsCandidate W ->
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase7Candidate u done s /\
+           Unvisited a s)
+        (set_fa a u;; W a;;
+         lv <- get' (fun s => low s a);; update_low u lv)
+        (fun _ s =>
+           LoopInvPhase6Candidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hcontracts Hedge Hnot_done.
+    destruct Hcontracts as [Hchild [Hlow_contribution Hframe]].
+    eapply Hoare_bind.
+    - apply (set_fa_unvisited_creates_frame_inv_candidate
+               u a done Hedge Hnot_done).
+    - simpl. intros _.
+	      eapply Hoare_bind with
+	        (Q := fun (_: unit) s =>
+	           FrameInvCandidate (FrameOfCallCandidate u a done) s /\
+	           ChildPostCandidate u a done s /\
+	           (PartialRootLowEquationCandidate u done s /\
+            fa s a = u /\
+            fa s a <> a /\
+            low s a <= dfn s a)).
+      + eapply Hoare_conseq_post.
+        2: {
+          apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 FrameInvCandidate (FrameOfCallCandidate u a done) s)
+              (Q2 := fun _ s =>
+                 ChildPostCandidate u a done s /\
+                 (PartialRootLowEquationCandidate u done s /\
+                  fa s a = u /\
+                  fa s a <> a /\
+                  low s a <= dfn s a)).
+          - eapply Hoare_conseq_pre.
+            2: {
+              apply
+                (Hframe (FrameOfCallCandidate u a done)
+                   u a done Hedge Hnot_done).
+            }
+            intros s [Hframe_inv [Hentry _Hresume]].
+            split; [exact Hframe_inv |].
+            split.
+            + apply FrameCompatibleWithOwnCallCandidate_proof.
+            + exact Hentry.
+          - apply Hoare_conj
+              with
+                (Q1 := fun _ s => ChildPostCandidate u a done s)
+                (Q2 := fun _ s =>
+                   PartialRootLowEquationCandidate u done s /\
+                   fa s a = u /\
+                   fa s a <> a /\
+                   low s a <= dfn s a).
+            + eapply Hoare_conseq_pre.
+              2: { apply (Hchild u a done Hedge Hnot_done). }
+              intros s [_Hframe_inv [Hentry _Hresume]].
+              exact Hentry.
+            + eapply Hoare_conseq_pre.
+              2: { apply (Hlow_contribution u a done Hedge Hnot_done). }
+              intros s [Hframe_inv [Hentry _Hresume]].
+              split; [exact Hentry |].
+              pose proof
+                (FrameInvProvidesLoopInvLowCandidate_proof
+                   (FrameOfCallCandidate u a done) s Hframe_inv)
+                as Hloop_low.
+              simpl in Hloop_low.
+              exact (proj2 Hloop_low).
+        }
+	        intros r s [Hframe_inv [Hchild_post Hlow_post]].
+        split; [exact Hframe_inv | split; [exact Hchild_post | exact Hlow_post]].
+      + simpl. intros _.
+        eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (get_low_update_low_extends_loop_inv_phase6_after_child_candidate
+               u a done Hedge).
+        }
+        intros s [Hframe_inv [Hchild_post Hlow_post]].
+        destruct Hframe_inv as
+          [Hresume_frame [Hloop_low [Hsuspended_frame [Hclosed
+           [Hchildren [Hactive_segments _Hsuspended_segment]]]]]].
+        destruct Hchild_post as
+          [Hvis_child [Hchild_low_valid [Hchild_is_low
+           [Hchild_inactive [Hchild_closed
+           [Hchild_segment Hresume_pending]]]]]].
+        destruct Hresume_pending as [Hresume_child Hparent_pending_unused].
+        destruct Hlow_post as [Hpartial [Hfa [Hfa_neq Hlow_child]]].
+        split; [exact Hloop_low |].
+        split; [exact Hsuspended_frame |].
+        split; [exact Hvis_child |].
+        split; [exact Hclosed |].
+        split; [exact Hchildren |].
+        split; [exact Hactive_segments |].
+        split; [exact Hresume_child |].
+        split.
+        * split; [exact Hchild_low_valid | exact Hchild_is_low].
+        * split; [exact Hchild_inactive |].
+          split; [exact Hchild_closed |].
+          split; [exact Hchild_segment |].
+          split; [exact Hfa |].
+          split; [exact Hfa_neq | exact Hlow_child].
+  Qed.
+
+  Lemma ProcessEdgeTreeBranchExtendsPhase7SegmentFieldsCandidate_proof:
+    forall W u a done,
+      RecursiveCallContractsCandidate W ->
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase7Candidate u done s /\
+           Unvisited a s)
+        (set_fa a u;; W a;;
+         lv <- get' (fun s => low s a);; update_low u lv)
+        (fun _ s =>
+           SegmentEscapeAccountingCandidate u (done_after done a) s /\
+           SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hcontracts Hedge Hnot_done.
+    destruct Hcontracts as [Hchild [_Hlow_contribution Hframe]].
+    eapply Hoare_bind.
+    - apply (set_fa_unvisited_creates_frame_inv_candidate
+               u a done Hedge Hnot_done).
+    - simpl. intros _.
+      eapply Hoare_bind
+        with
+          (Q := fun (_: unit) s =>
+             FrameInvCandidate (FrameOfCallCandidate u a done) s /\
+             ChildPostCandidate u a done s).
+      + apply Hoare_conj.
+        * eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (Hframe (FrameOfCallCandidate u a done)
+                 u a done Hedge Hnot_done).
+          }
+          intros s [Hframe_inv [Hentry _Hresume]].
+          split; [exact Hframe_inv |].
+          split.
+          -- apply FrameCompatibleWithOwnCallCandidate_proof.
+          -- exact Hentry.
+        * eapply Hoare_conseq_pre.
+          2: { apply (Hchild u a done Hedge Hnot_done). }
+          intros s [_Hframe_inv [Hentry _Hresume]].
+          exact Hentry.
+      + simpl. intros _.
+        eapply Hoare_conseq_post.
+        2: {
+          apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 SegmentEscapeAccountingCandidate u (done_after done a) s)
+              (Q2 := fun _ s =>
+                 SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+          - eapply Hoare_conseq_post.
+            2: {
+              apply Hoare_conj
+                with
+                  (Q1 := fun _ s =>
+                     SuspendedSegmentEscapeAccountingCandidate u a done s)
+                  (Q2 := fun _ s =>
+                     ParentPendingChildEscapeAccountedCandidate u done a s /\
+                     PendingChildSegmentEscapeAccountedCandidate u done a s).
+              + eapply Hoare_conseq_pre.
+                2: {
+                  apply
+                    (get_low_update_low_preserves_suspended_segment_escape_accounting_candidate
+                       u done a).
+                }
+                intros s [Hframe_inv _Hchild_post].
+                destruct Hframe_inv as
+                  [_Hresume_frame [_Hloop_low [_Hsuspended_frame [_Hclosed
+                   [_Hchildren [_Hactive_segments
+                   [Hsuspended_escape _Hsuspended_coverage]]]]]]].
+                exact Hsuspended_escape.
+              + apply Hoare_conj.
+                * eapply Hoare_conseq_pre.
+                  2: {
+                    apply
+                      (get_low_update_low_preserves_parent_pending_child_escape_accounted_candidate
+                         u done a).
+                  }
+                  intros s [_Hframe_inv Hchild_post].
+                  destruct Hchild_post as
+                    [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
+                     [_Hchild_inactive [_Hchild_closed
+                     [_Hchild_segment Hresume_pending]]]]]].
+                  destruct Hresume_pending as [_Hresume_child Hparent_pending].
+                  exact Hparent_pending.
+                * eapply Hoare_conseq_pre.
+                  2: {
+                    apply
+                      (GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedConditionalCandidate_proof
+                         u done a).
+                  }
+                  intros s [Hframe_inv Hchild_post].
+                  destruct Hframe_inv as
+                    [_Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
+                     [_Hchildren [_Hactive_segments
+                     [Hsuspended_escape _Hsuspended_coverage]]]]]]].
+                  destruct Hloop_low as [Hdone_loop _Hpartial].
+                  destruct Hdone_loop as [Hlocal _Hdiscipline].
+                  destruct Hlocal as [Hshape [_Hsettled [Hvis_u _Horder]]].
+                  destruct Hchild_post as
+                    [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
+                     [_Hchild_inactive [_Hchild_closed
+                     [Hchild_segment_if Hresume_pending]]]]]].
+                  destruct Hresume_pending as [Hresume_child Hparent_pending].
+                  split; [exact Hshape |].
+                  split; [exact Hvis_u |].
+                  split; [exact Hresume_child |].
+                  split; [exact Hchild_segment_if |].
+                  split; [exact Hsuspended_escape | exact Hparent_pending].
+            }
+            intros _ s [Hsuspended_escape
+                         [Hparent_pending Hpending_child_segment]].
+            eapply SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_proof;
+              eauto.
+          - eapply Hoare_conseq_pre.
+            2: {
+              apply
+                (get_low_update_low_preserves_segment_tree_coverage_candidate
+                   u a (done_after done a)).
+            }
+            intros s [Hframe_inv Hchild_post].
+            destruct Hframe_inv as
+              [_Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
+               [_Hchildren [_Hactive_segments
+               [_Hsuspended_escape Hsuspended_coverage]]]]]]].
+            destruct Hloop_low as [Hdone_loop _Hpartial].
+            destruct Hdone_loop as [Hlocal _Hdiscipline].
+            destruct Hlocal as [Hshape _Hlocal_tail].
+            destruct Hchild_post as
+              [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
+               [_Hchild_inactive [_Hchild_closed
+               [Hchild_segment_if Hresume_pending]]]]]].
+            destruct Hresume_pending as [Hresume_child _Hparent_pending].
+            destruct Hresume_child as [_Hedge_child Hresume_child].
+            destruct Hresume_child as [_Hnot_done_child Hresume_child].
+            destruct Hresume_child as [Hfa Hfa_neq].
+            eapply SegmentTreeCoverageClosesAfterChildCandidate_proof;
+              eauto.
+        }
+        intros _ s [Hsegment Hcoverage].
+        split; [exact Hsegment | exact Hcoverage].
+  Qed.
+
+  Lemma ProcessEdgeTreeBranchExtendsLoopInvPhase7Candidate_proof:
+    forall W u a done,
+      RecursiveCallContractsCandidate W ->
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (fun s =>
+           LoopInvPhase7Candidate u done s /\
+           Unvisited a s)
+        (set_fa a u;; W a;;
+         lv <- get' (fun s => low s a);; update_low u lv)
+        (fun _ s =>
+           LoopInvPhase7Candidate u (done_after done a) s).
+  Proof.
+    intros W u a done Hcontracts Hedge Hnot_done.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj
+        with
+          (Q1 := fun _ s => LoopInvPhase6Candidate u (done_after done a) s)
+          (Q2 := fun _ s =>
+             SegmentEscapeAccountingCandidate u (done_after done a) s /\
+             SegmentTreeCoverageByDoneCandidate u (done_after done a) s).
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (ProcessEdgeTreeBranchExtendsLoopInvPhase6Candidate_proof
+               W u a done Hcontracts Hedge Hnot_done).
+        }
+        intros s Hpre. exact Hpre.
+      - eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (ProcessEdgeTreeBranchExtendsPhase7SegmentFieldsCandidate_proof
+               W u a done Hcontracts Hedge Hnot_done).
+        }
+        intros s Hpre. exact Hpre.
+    }
+    intros _ s [Hphase6 [Hsegment Hcoverage]].
+    unfold LoopInvPhase7Candidate.
+    split; [exact Hphase6 |].
+    split; [exact Hsegment | exact Hcoverage].
   Qed.
 
   Lemma BodyRecursiveCallContractsCandidate_from_parts_proof:
@@ -6499,7 +9927,7 @@ Section IS_LOW_SKELETON.
       LoopInvPhase7Candidate,
       root_pop_guard.
     intros u s [Hloop Hguard] x w Hvis_x Hactive_x Hdfn_x Hreach.
-    destruct Hloop as [_ Hescape].
+    destruct Hloop as [_ [Hescape _Hcoverage]].
     destruct (classic (Visited w s)) as [Hvis_w | Hnot_vis_w].
     - exact Hvis_w.
     - specialize (Hescape x w Hactive_x Hdfn_x Hreach Hnot_vis_w) as
@@ -7749,6 +11177,20 @@ Section IS_LOW_SKELETON.
   Definition PreloopEntryCandidate_to_interface_statement: Prop :=
     PreloopEntry_statement LowCandidateInterface.
 
+  Definition ProcessEdgeStepCandidate_statement: Prop :=
+    forall W u a done,
+      RecursiveCallContractsCandidate W ->
+      Edge u a ->
+      ~ done a ->
+      Hoare
+        (LoopInvPhase7Candidate u done)
+        (process_edge u W a)
+        (fun _ s => LoopInvPhase7Candidate u (done_after done a) s).
+
+  Definition ProcessEdgeStepCandidate_to_interface_statement: Prop :=
+    ProcessEdgeStepCandidate_statement ->
+    ProcessEdgeStep_statement LowCandidateInterface.
+
   Definition EdgeLoopDoneCandidate_from_process_edge_step_statement: Prop :=
     ProcessEdgeStep_statement LowCandidateInterface ->
     EdgeLoopDone_statement LowCandidateInterface.
@@ -7963,6 +11405,26 @@ Section IS_LOW_SKELETON.
     apply PreloopProducesLoopInvPhase7InitialCandidate_proof.
   Qed.
 
+  Lemma ProcessEdgeStepCandidate_to_interface_proof:
+    ProcessEdgeStepCandidate_to_interface_statement.
+  Proof.
+    unfold ProcessEdgeStepCandidate_to_interface_statement,
+      ProcessEdgeStepCandidate_statement,
+      ProcessEdgeStep_statement,
+      RecursiveCallContractsCandidate,
+      ChildContractCandidate,
+      ChildProvidesLowContributionCandidate,
+      FrameContractCandidate,
+      ChildContract,
+      LowContributionContract,
+      FrameContract,
+      LowCandidateInterface,
+      Edge.
+    intros Hstep W u a done Hchild Hlow Hframe Hedge Hnot_done.
+    apply Hstep; try assumption.
+    split; [exact Hchild | split; [exact Hlow | exact Hframe]].
+  Qed.
+
   Lemma EdgeLoopDone_from_process_edge_step_proof:
     forall I,
       EdgeLoopDone_from_process_edge_step_statement I.
@@ -8008,6 +11470,8 @@ Section IS_LOW_SKELETON.
       ProcessedTreeChildrenInactiveSelfLowCandidate,
       ActiveProcessedChildSegmentSummaryCandidate,
       SegmentEscapeAccountingCandidate,
+      SegmentTreeCoverageByDoneCandidate,
+      ProcessedTreeReachableFromCandidate,
       ParentLowBelowChildCandidate,
       PendingRootEscapeCandidate,
       done_visited,
@@ -8047,13 +11511,15 @@ Section IS_LOW_SKELETON.
         ProcessedTreeChildrenInactiveSelfLowCandidate,
         ActiveProcessedChildSegmentSummaryCandidate,
         SegmentEscapeAccountingCandidate,
+        SegmentTreeCoverageByDoneCandidate,
+        ProcessedTreeReachableFromCandidate,
         PendingRootEscapeCandidate,
         done_visited,
         done_reachable_closed,
         done_tree_reachable_closed,
         fa_not_done_implies_eq_u
         in Hloop |- *.
-      destruct Hloop as [Hphase6 Hsegment].
+      destruct Hloop as [Hphase6 [Hsegment Hcoverage]].
       destruct Hphase6 as
         [Hlow [Hframe [Hclosed [Hchildren Hactive_segments]]]].
       destruct Hlow as [Hdone_loop [Hfront Hsource]].
@@ -8124,19 +11590,32 @@ Section IS_LOW_SKELETON.
                     apply Hdst_src. exact Hdst_child.
               - intros child Hdst_child.
                 apply Hactive_segments. apply Hdst_src. exact Hdst_child. }
-      - intros x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w.
-        specialize
-          (Hsegment x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w)
-          as [Hpending | Hanchor].
-        + left.
-          destruct Hpending as
-            [a [Hx_a [Hedge_a [Hnot_src_a Hreach_aw]]]].
-          exists a.
-          split; [exact Hx_a |].
-          split; [exact Hedge_a |].
-          split; [| exact Hreach_aw].
-          apply Hnot_src_dst. exact Hnot_src_a.
-        + right. exact Hanchor.
+      - split.
+        + intros x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w.
+          specialize
+            (Hsegment x w Hactive_x Hdfn_x Hreach_xw Hnot_vis_w)
+            as [Hpending | Hanchor].
+          * left.
+            destruct Hpending as
+              [a [Hx_a [Hedge_a [Hnot_src_a Hreach_aw]]]].
+            exists a.
+            split; [exact Hx_a |].
+            split; [exact Hedge_a |].
+            split; [| exact Hreach_aw].
+            apply Hnot_src_dst. exact Hnot_src_a.
+          * right. exact Hanchor.
+        + intros x Hactive_x Hdfn_x.
+          specialize (Hcoverage x Hactive_x Hdfn_x) as
+            [Hx_u | [a [Hsrc_a [Hedge_a
+              [Hfa_a [Hfa_neq_a [Htree_ax Hreach_ax]]]]]]].
+          * left. exact Hx_u.
+          * right. exists a.
+            split.
+            { apply Hsrc_dst. exact Hsrc_a. }
+            split; [exact Hedge_a |].
+            split; [exact Hfa_a |].
+            split; [exact Hfa_neq_a |].
+            split; [exact Htree_ax | exact Hreach_ax].
     }
     split; intro H.
     - apply (Htransport done1 done2); [apply Hdone | intros x; apply Hdone |].

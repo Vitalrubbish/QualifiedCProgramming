@@ -54,8 +54,8 @@ Definition low_full_post (u: V) (s: @SCCSt V): Prop :=
   wf_scc_state g root s /\
   settled_closed g s /\
   u ∈ visited s /\
-  scc_low_valid_v g root s u /\
-  scc_is_low_v g root s u.
+  RootFinalLowValid u s /\
+  RootFinalIsLow u s.
 ```
 
 不把 whole-subtree low-valid / is-low 放进 final post。
@@ -131,8 +131,8 @@ To prove `Cfinal`, `if_pop` needs:
 
 ```coq
 low_segment_loop_done u s /\
-scc_low_valid_v g root s u /\
-scc_is_low_v g root s u.
+RootFinalLowValid u s /\
+RootFinalIsLow u s.
 ```
 
 Skip branch:
@@ -198,8 +198,8 @@ It must include:
 
 - parent pending facts after the recursive return;
 - done-tree closedness for `done ∪ [a]`;
-- child root low-valid;
-- child root is-low;
+- child root low-valid, tracked separately from is-low;
+- child root is-low, tracked separately from low-valid;
 - conditional child segment summary if `a` remains active.
 
 ### 4.5 Frame obligation
@@ -301,11 +301,11 @@ parent loop context, this is the candidate `ChildEntry u a done`.
 Needed from recursive child post:
 
 ```coq
-low_tree_child_parent_pending u a done s'
-done_tree_reachable_closed g u (done ∪ [a]) s'
-low_full_valid_post a s'
-scc_is_low_v g root s' a
-(In a (stack s') -> low_segment_loop_done a s')
+ParentResumeShape u a done s'
+ChildClosednessContribution a s'
+ChildLowValidForParent a s'
+ChildIsLowForParent a s'
+(In a (stack s') -> ChildSegmentSummary a s')
 ```
 
 Consumes:
@@ -320,6 +320,22 @@ Produces/extensions:
 - `active_done_child_segment_summaries u (done ∪ [a])` if `a` remains active;
 - segment accounting and coverage for parent;
 - ordinary `low_iteration_inv'`.
+
+Phase-6 skeleton status:
+
+- The child post is split into consumer-specific interfaces:
+  `ChildLowValidForParentCandidate`,
+  `ChildIsLowForParentCandidate`,
+  `ChildClosednessContributionCandidate`,
+  `ChildSegmentSummaryCandidate`, and
+  `ParentResumeShapeCandidate`.
+- The pure consumer audit is proved for empty fields and child-step field
+  extension:
+  `DoneClosednessCandidate_step_child_proof`,
+  `ProcessedTreeChildrenCorrectCandidate_step_child_proof`,
+  `ActiveProcessedChildSegmentSummaryCandidate_step_child_proof`, and
+  `Phase6ChildPostExtendsLoopFieldsCandidate_proof`.
+- The actual root bridge consuming the low-valid / is-low halves remains Phase 7.
 
 ### Branch B: `a` visited and not in stack
 
@@ -409,27 +425,324 @@ Record low_frame: Type := {
 }.
 
 Definition low_frame_inv (F: low_frame) (s: @SCCSt V): Prop :=
-  low_tree_child_parent_pending
+  ParentResumeShape
     (frame_parent F) (frame_child F) (frame_done F) s /\
-  segment_escape_accounted
+  LoopInvLow
     (frame_parent F) (frame_done F) s /\
-  stack_segment_covered_by_done
+  SuspendedParentFrameResume
+    (frame_parent F) (frame_child F) (frame_done F) s /\
+  DoneClosedness
     (frame_parent F) (frame_done F) s /\
-  active_done_child_segment_summaries
+  ProcessedTreeChildrenCorrect
     (frame_parent F) (frame_done F) s /\
-  children_is_low
-    (frame_parent F) (frame_done F) s.
+  ActiveProcessedChildSegmentSummary
+    (frame_parent F) (frame_done F) s /\
+  SuspendedSegmentEscapeAccounting
+    (frame_parent F) (frame_child F) (frame_done F) s.
 ```
 
 Frame field ledger:
 
 | Frame field | Why it must be preserved |
 |---|---|
-| `low_tree_child_parent_pending` | parent must resume after child with pending facts intact |
-| `segment_escape_accounted` | parent pop and active-descendant branches depend on it |
-| `stack_segment_covered_by_done` | parent segment lifting depends on it |
-| `active_done_child_segment_summaries` | already processed active child summaries must not disappear |
-| `children_is_low` | parent root bridge consumes it after parent loop finishes |
+| `ParentResumeShape` | parent must resume after the pending child with `fa child = parent`, `child` not done, and the direct edge fact intact |
+| `LoopInvLow` | parent still needs done discipline and the partial low equation to perform the post-child low update |
+| `SuspendedParentFrameResume` | the suspended call must preserve parent `fa` discipline while allowing the current pending child as the only `~done` exception |
+| `DoneClosedness` | parent done extension and root bridge consume closedness |
+| `ProcessedTreeChildrenCorrect` | root low-valid and root is-low bridges consume processed child correctness |
+| `ActiveProcessedChildSegmentSummary` | active-descendant branch consumes summaries of already processed active children |
+| `SuspendedSegmentEscapeAccounting` | parent resume needs the old segment escape accounting outside the pending child segment; child segment accounting is closed after return |
+
+Phase-8a status:
+
+- The frame is now produced from `SuspendedLoopInvPhase7Candidate` plus
+  `ParentResumeShapeCandidate`; a normal loop invariant alone is not a
+  suspended call frame because it does not identify the pending child, and
+  after `set_fa child parent` it is too strong.
+- `FrameInvProvides...` projection proofs record the current consumer set.
+  Producer audit for preservation through the inner body must now be performed
+  field by field.  If a preservation proof only works for a weaker field, the
+  corresponding frame field should be narrowed rather than forcing the current
+  statement.
+
+Phase-8b status:
+
+- Full `ParentFrameResumeCandidate parent done` was rejected as a frame field:
+  `ParentResumeShapeCandidate parent child done` contains `~ done child` and
+  `fa child = parent`, exactly the exception that violates
+  `fa_not_done_implies_eq_u parent done`.
+- `SuspendedParentFrameResumeCandidate parent child done` is the narrowed
+  field.  `SuspendedParentFrameResumeClosesAfterChildCandidate_proof` restores
+  the normal `ParentFrameResumeCandidate parent (done_after done child)` once
+  the child is known visited.
+- `SuspendedLoopInvPhase7ClosesAfterChildCandidate_proof` records the
+  re-entry shape for the parent loop after the child has been added to `done`.
+- `FramePreservationBundleCandidate` is the producer ledger for the seven
+  frame fields.  `FrameContractCandidate_from_field_preservation_proof`
+  assembles those field producers into `FrameContractCandidate`; it does not
+  prove any field preservation by itself.
+
+Phase-8c status:
+
+- `FrameContractCandidate` and `FrameFieldPreservationCandidate` now require
+  `FrameCompatibleWithCallCandidate F child s`.  This removes the over-strong
+  obligation to preserve arbitrary unrelated frames.
+- Compatibility has exactly two producers:
+  `FrameCompatibleWithOwnCallCandidate_proof` for the frame's own pending
+  child, and `FrameCompatibleWithVisitedFrameCandidate_proof` for deeper calls
+  after that child has been visited.
+- Field producers now consume the whole `FrameInvCandidate`, not just their
+  individual field.  This avoids artificial proof obligations where a field
+  would need facts intentionally stored in another frame field.
+- The ledger has both assembly directions:
+  `FrameContractCandidate_from_field_preservation_proof` bundles field
+  producers into the whole contract, while
+  `FrameContractCandidate_to_field_preservation_bundle_proof` projects a
+  whole-frame recursive IH back into field producers.
+
+Phase-8d status:
+
+- `FrameParentResumeShapeAfterPreloopCandidate_proof` is the first concrete
+  frame-field producer.  Dependency shape:
+
+```text
+FrameInv F s
+FrameCompatibleWithCall F child s
+ChildEntry parent child done s
+preloop child
+  -> ParentResumeShape (frame_parent F) (frame_child F) (frame_done F) s'
+  -> Visited (frame_child F) s'
+```
+
+- The only non-frame dependency in this producer is the operational effect of
+  `preloop`: the called child becomes visited.  Compatibility supplies the
+  bridge from the direct call child to the frame child when the frame is the
+  own pending call, and otherwise the frame child was already visited.
+- `FrameParentResumeShapePreservedByMaybePopCandidate_proof` audits the pop
+  side:
+
+```text
+ParentResumeShape (frame_parent F) (frame_child F) (frame_done F) s
+maybe_pop u
+  -> ParentResumeShape (frame_parent F) (frame_child F) (frame_done F) s'
+```
+
+- Its primitive dependency is `pop_scc_keep_fa`; edge and `done` facts are pure
+  frame parameters.  The post-state inequality
+  `fa s' (frame_child F) <> frame_child F` is derived from the preserved
+  `fa = frame_parent F` relation, not assumed as state-invariant syntax.
+- The full `FramePreservesParentResumeShapeCandidate (tarjan_scc_f g W)`
+  theorem is intentionally deferred.  During the inner `edge_loop`, an
+  unvisited edge calls `W a`; the recursive frame contract for that call
+  requires the whole `FrameInvCandidate F` before the call.  A proof that
+  tracks only `ParentResumeShapeCandidate` would lose the precondition needed
+  for the next recursive call.  The correct dependency order is:
+
+```text
+audit all seven frame fields through preloop / process_edge / maybe_pop
+  -> prove edge_loop preserves the whole frame bundle
+  -> project FramePreservesParentResumeShapeCandidate from the bundle
+```
+
+Phase-8e status:
+
+- `SuspendedParentFrameResumeCandidate` is the second field with concrete
+  cut-level producers:
+
+```text
+FrameInv F s
+FrameCompatibleWithCall F child s
+ChildEntry parent child done s
+preloop child
+  -> SuspendedParentFrameResume (frame_parent F) (frame_child F) (frame_done F) s'
+
+SuspendedParentFrameResume (frame_parent F) (frame_child F) (frame_done F) s
+maybe_pop u
+  -> SuspendedParentFrameResume (frame_parent F) (frame_child F) (frame_done F) s'
+```
+
+- The primitive reason is simple: `preloop` only grows `visited` and does not
+  change `fa`; `pop_scc` changes stack/sccs but not `visited` or `fa`.
+- The remaining five fields expose missing dependencies:
+
+| Field | Missing producer before bundle proof |
+|---|---|
+| `LoopInvLowCandidate` | frame-pop separation preserving the parent and any active low-source witness below the pending child boundary |
+| `DoneClosednessCandidate` | proof that inner pop does not newly expose a frame-`done` vertex as non-active, unless that vertex's reachable region is already closed |
+| `ProcessedTreeChildrenCorrectCandidate` | cut-level pop preservation is now closed after adding the inactive-self-low child field; active processed children use lower-anchor preservation, while inactive processed children use `ChildInactiveSelfLowForParentCandidate` |
+| `ActiveProcessedChildSegmentSummaryCandidate` | replacement of the dfn-only child-segment approximation with a segment predicate stable under later sibling `preloop` |
+| `SegmentEscapeAccountingCandidate` | resolved for the frame field by replacing it with `SuspendedSegmentEscapeAccountingCandidate`; still needs a post-child close lemma |
+
+- Therefore the next proof dependency is not another field proof.  It is a
+  predicate refinement step: define the suspended segment/frame-pop boundary
+  facts that these consumers actually need, then restart the remaining field
+  producer audit against those narrowed fields.
+
+Phase-8f status:
+
+- The suspended segment refinement is now explicit in the skeleton:
+
+```text
+PendingChildSegment child s x :=
+  Visited child s /\
+  dg_reachable (state_to_dfs_tree g s root) child x
+
+SuspendedSegmentEscapeAccounting u child done s :=
+  SegmentEscapeAccounting u done s restricted to active x outside
+  PendingChildSegment child s
+```
+
+- `SegmentEscapeAccountingSuspendsCandidate_proof` is the producer from full
+  parent accounting to the suspended frame field.
+- `SuspendedLoopInvPhase7ProvidesFrameInvCandidate_proof` now consumes full
+  pre-call Phase 7 accounting and stores only the suspended accounting in
+  `FrameInvCandidate`.
+- `FrameInvForgetsSuspendedLoopInvPhase7Candidate_proof` was removed as an
+  invalid projection.  The valid projection is
+  `FrameInvForgetsSuspendedLoopInvPhase6Candidate_proof`.
+- New dependency created by this refinement:
+
+```text
+SuspendedSegmentEscapeAccounting parent child done s
+ParentPendingChildEscapeAccounted parent done child s
+PendingChildSegmentEscapeAccounted parent done child s
+  -> SegmentEscapeAccounting parent (done_after done child) s
+```
+
+- `SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_proof` closes this
+  dependency.  It deliberately does not assume that `ChildSegmentSummary` alone
+  is enough; instead it exposes the exact remaining producer obligation as
+  `PendingChildSegmentEscapeAccountedCandidate`.
+- The next producer dependency is:
+
+```text
+ChildSegmentSummary child s
+PendingChildSegmentOrder child s
+PendingChildSegmentOldAnchorLiftsToParent parent done child s
+  -> PendingChildSegmentEscapeAccounted parent done child s
+```
+
+- `PendingChildSegmentEscapeAccountedCandidate_from_child_summary_proof`
+  closes this composition.  It leaves two explicit producers:
+
+```text
+PendingChildSegmentOrder child s
+PendingChildSegmentOldAnchorLiftsToParent parent done child s
+```
+
+- `PendingChildSegmentOrderCandidate_from_global_shape_proof` closes the first
+  producer from `GlobalShapeCandidate`, using DFS-tree reachability and
+  `dfn_valid`.
+- The second producer was corrected to return the parent accounting
+  disjunction:
+
+```text
+old anchor from child segment
+  -> PendingRootEscape parent (done_after done child)
+     or OldStackEscapeAnchor parent
+```
+
+- The all-older branch is a sufficient producer for the old-anchor side:
+
+```text
+low parent <= low child
+PendingChildSegmentOldAnchorsBelowParent parent child s
+  -> PendingChildSegmentOldAnchorLiftsToParent parent done child s
+```
+
+- `PendingChildSegmentOldAnchorLiftsToParentCandidate_from_all_older_segment_proof`
+  closes that decomposition, and
+  `PendingChildSegmentEscapeAccountedCandidate_from_child_summary_and_segment_producers_proof`
+  composes that sufficient producer path.
+- `GetLowUpdateLowProducesParentLowBelowChildCandidate_proof` closes
+  `low parent <= low child` at the `get low child ;; update_low parent` cut.
+- The preferred consumer-driven split is now explicit:
+
+```text
+ParentLowBelowChild parent child s
+PendingChildSegmentNonOlderAnchorAccountedByParent parent done child s
+  -> PendingChildSegmentOldAnchorLiftsToParent parent done child s
+```
+
+- `PendingChildSegmentOldAnchorLiftsToParentCandidate_from_anchor_split_proof`
+  closes this split.  The proof sends `dfn b < dfn parent` to the old-anchor
+  branch and sends `dfn parent <= dfn b` to the parent-accounted disjunction.
+- `PendingChildSegmentNonOlderAnchorAccountedBySuspendedParent_proof` proves
+  that disjunction from:
+
+```text
+PendingChildSegmentOrder child s
+SuspendedSegmentEscapeAccounting parent child done s
+ParentPendingChildEscapeAccounted parent done child s
+```
+
+  It queries suspended parent accounting at the non-older anchor `b`.  A
+  pending-root witness through the pending child edge is repaired by
+  `ParentPendingChildEscapeAccounted`; all other pending-root and old-anchor
+  witnesses are prefixed by `x ->* b`.
+- `PendingChildSegmentEscapeAccountedCandidate_from_child_summary_and_anchor_split_proof`
+  composes the preferred path from global shape, child summary,
+  `ParentLowBelowChildCandidate`, and the non-older-anchor accounted predicate.
+- `PendingChildSegmentEscapeAccountedCandidate_from_child_summary_and_suspended_parent_proof`
+  composes the closed preferred path from global shape, child summary,
+  `ParentLowBelowChildCandidate`, suspended parent accounting, and
+  parent-pending-child accounting.
+- The closed preferred path is now connected to the actual post-child cut by
+  `GetLowUpdateLowPreservesChildSegmentSummaryFromParentResumeCandidate_proof`,
+  `GetLowUpdateLowProducesNonOlderAnchorAccountedByParentFromParentResumeCandidate_proof`,
+  and
+  `GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedCandidate_proof`.
+- The frame-pop boundary predicate has been introduced as
+  `FramePopBoundaryCandidate F u s`: the frame parent and active frame-`done`
+  vertices must lie in the `rest` side of `stack_split_at (stack s) u`.
+  `MaybePopProducesFramePopBoundarySnapshotCandidate_proof` produces the
+  first post-`maybe_pop` snapshot: frame-protected active vertices survive and
+  `visited`/`dfn`/`low`/`fa` are unchanged.
+- The generic stack-subset producer for `maybe_pop` is now proved as
+  `MaybePopActivePostImpliesPreSnapshotCandidate_proof`
+  (`Active post -> Active pre`, assuming the pop root is active in the
+  snapshot).  It is separate from the frame-specific boundary and is consumed
+  by `LowFrontierCandidate`.
+- The child pop-closedness producer for `SettledClosedCandidate` is now proved
+  as `MaybePopPreservesSettledClosedWithSegmentClosedCandidate_proof`: active
+  pop root, stack order, and `PoppedSegmentClosedCandidate` are enough to
+  preserve settled closedness through `maybe_pop`.
+- `FramePopBoundarySnapshotPreservesDoneClosednessCandidate_proof` closes the
+  `DoneClosednessCandidate` consumer over the frame snapshot.
+- `FramePopSnapshotsPreservePartialRootLowEquationCandidate_proof` closes the
+  low-equation consumer over the frame snapshot plus the generic stack-subset
+  fact.
+- The remaining structural producers are now proved:
+  `PopSccKeepsDfnInjectiveCandidate_proof`,
+  `MaybePopPreservesGlobalShapeCandidate_proof`, and
+  `MaybePopPreservesOrderFactsCandidate_proof`.
+- `MaybePopPreservesLoopInvLowWithFramePopBoundaryCandidate_proof` closes the
+  concrete `LoopInvLowCandidate` Hoare preservation lemma at the frame-pop
+  cut, without widening the frame-specific boundary.
+- `MaybePopPreservesDoneClosednessWithFramePopBoundaryCandidate_proof` closes
+  the analogous Hoare wrapper for `DoneClosednessCandidate`.
+- The `ActiveProcessedChildSegmentSummaryCandidate` refinement is now closed at
+  the cut level.  `PreloopPreservesActiveProcessedChildSegmentSummaryCandidate_proof`
+  preserves the child-root self summary through later sibling `preloop`.
+  `MaybePopPreservesActiveProcessedChildSegmentSummaryCandidate_proof` preserves
+  it through inner `maybe_pop`; this proof deliberately requires the actual
+  pop root `Active u`, and uses `old_anchor_in_rest_when_child_in_rest` to keep
+  old-anchor witnesses below any surviving active processed child.
+- `ProcessedTreeChildrenCorrectCandidate` preservation is now closed at the
+  frame-pop cut level.  The decisive split is:
+  active processed children consume lower-anchor preservation through
+  `old_anchor_in_rest_when_child_in_rest`, while inactive processed children
+  consume `ChildInactiveSelfLowForParentCandidate`.
+- The closed producer chain includes
+  `ChildRootCorrectTransportFromStackShrinkCandidate_proof`,
+  `ChildRootCorrectTransportFromInactiveSelfLowCandidate_proof`,
+  `MaybePopProducesChildLowerStackAnchorsPreservedCandidate_proof`, and
+  `MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_proof`.
+- Phase 8 is therefore complete as a cut-level frame-contract audit.  The next
+  dependency is Phase 9 body-level assembly of the actual frame field producer,
+  especially
+  `FramePreservesProcessedTreeChildrenCorrectCandidate (tarjan_scc_f g W)`,
+  from the audited cuts.
 
 This mirrors Kosaraju's continuation idea: `dfs_finish_after` / `dfs_scc_after`
 resume an outer traversal after an inner DFS. Tarjan's frame mode is the Hoare
@@ -460,9 +773,24 @@ pop_scc preserves dfn/low/fa fields needed by root-pop lemmas
 ### Layer 2: root bridge before pop
 
 ```coq
+LoopDoneProvidesRootBridgeInputCandidate
 low_segment_loop_done_implies_low_valid_root
 low_segment_loop_done_implies_is_low_root
 ```
+
+Phase-7a/7b status:
+
+- `LoopDoneProvidesRootBridgeInputCandidate_proof` is proved in the skeleton.
+- It projects `LoopInvPhase6Candidate u (edge_set u)` into the exact root
+  bridge input fields.
+- `RootBridgeLowValidInputBuildsLowIterationDoneCandidate_proof` adapts the
+  consumer-ledger fields to the existing pure `low_iteration_done` record.
+- `RootBridgeLowValidCandidate_proof` proves the low-valid half by reusing
+  `low_frontier_and_src_imply_low_valid`.
+- `RootBridgeIsLowCandidate_proof` proves the is-low half by reusing
+  `scc_is_low_induction_is_low`.
+- `RootBridgePrePopCandidate_proof` combines the two halves into
+  `RootLowPrePopCandidate`.
 
 The second lemma depends on:
 
@@ -470,7 +798,14 @@ The second lemma depends on:
 scc_is_low_induction_is_low
 children_is_low u (dg_step g u) s
 tree_child_characterization
+fa_child_of_u u s
 ```
+
+The `fa_child_of_u` dependency is not optional: `tree_step_char` turns a
+DFS-tree edge into `fa s child = u /\ fa s child <> child`, but
+`ProcessedTreeChildrenIsLowCandidate` is indexed by original outgoing edges.
+The bridge therefore consumes `ParentFrameResumeCandidate` to recover
+`dg_step g u child`.
 
 ### Layer 3: segment closure and root pop
 
@@ -483,6 +818,90 @@ if_pop_preserves_low_full_post
 
 Important: root correctness after pop should be a dedicated lemma. It should not
 be treated as automatic preservation of stack-sensitive low-valid facts.
+
+Phase-7c status:
+
+- The skeleton now defines the pop-bridge consumer interfaces:
+  `PoppedSegmentClosedCandidate`,
+  `SegmentClosedAtRootInputCandidate`,
+  `RootFinalLowValidCandidate`,
+  `RootFinalIsLowCandidate`,
+  `RootFinalCandidate`,
+  `RootPopLowValidStableFieldsCandidate_statement`,
+  `RootPopSettledClosedCandidate_statement`,
+  `RootPopIsLowCandidate_statement`,
+  `RootPopBridgeCandidate_statement`,
+  `PopBranchInputCandidate`, and
+  `SkipBranchInputCandidate`.
+- The unchanged-state path is proved:
+  `RootFinalFromPrePopCandidate_proof`.
+- Loop-done structural fields are projected into the final pre-pop bundle by
+  `LoopDonePhase6ProvidesFinalFromPrePopCandidate_proof`.
+- The no-pop branch is closed by
+  `SkipBranchProducesRootFinalCandidate_proof`.
+- `LoopInvPhase7Candidate` adds the root-level
+  `SegmentEscapeAccountingCandidate` field needed by pop.
+- `SegmentClosedAtRootCandidate_proof` proves the segment-closed consequence
+  from `LoopDonePhase7Candidate` and `root_pop_guard`.
+- `PopBranchInputCandidate` now uses `LoopDonePhase7Candidate`, so the segment
+  field has a real pop consumer.  `PopBranchProvidesSegmentClosedAtRootCandidate_proof`
+  performs this projection.
+- The low-valid/stable-fields part of the pop bridge is already proved:
+  `RootPopLowValidStableFieldsCandidate_proof` adapts
+  `pop_scc_preserves_low_valid_post_when_root`.
+- The final predicate is split into final low-valid and final is-low fields;
+  this avoids hiding the fact that their pop producers are different.
+- The pop branch is factored through the explicit root-pop bridge:
+  `RootPopBridgeCandidate_from_parts_proof` assembles the bridge from
+  low-valid/stable fields, settled-closed, and root-is-low components.
+  `PopBranchProducesRootFinalCandidate_from_root_pop_bridge_proof` proves
+  `PopBranchProducesRootFinalCandidate_statement` from
+  `RootPopBridgeCandidate_statement`.
+- The remaining pop producers are now proved:
+  `RootPopSettledClosedCandidate_proof` and
+  `RootPopIsLowCandidate_proof`.
+- `RootPopBridgeCandidate_proof`,
+  `PopBranchProducesRootFinalCandidate_proof`, and
+  `MaybePopFinalCandidate_proof` close the Phase 7c pop bridge.
+
+Segment-producer status:
+
+- The empty producer is proved as
+  `SegmentEscapeAccountingCandidate_empty_proof`.
+- The child-step producer is proved as
+  `SegmentEscapeAccountingCandidate_step_child_proof`, factored through
+  `ChildSegmentEscapeLiftsToParentCandidate_proof`.
+- The fact consumed by that step is now explicit:
+  `ParentPendingChildEscapeAccountedCandidate u done child s`.
+  It is the minimal repair for the only stale pending escape introduced by
+  adding `child` to `done`.
+- Two producers for that fact are proved:
+  `ParentPendingChildEscapeAccountedCandidate_from_closed_proof` and
+  `ParentPendingChildEscapeAccountedCandidate_from_old_anchor_proof`.
+- The active-descendant parent lift is also proved:
+  `ParentPendingChildEscapeAccountedCandidate_from_active_descendant_proof`.
+  It consumes parent segment accounting and the exact step-side assumptions on
+  the source vertex `x`.
+- The self-cycle case is further factored:
+  `ChildSelfPendingEscapeAccountedCandidate_from_child_summary_proof` derives
+  `ChildSelfPendingEscapeAccountedCandidate` from child segment accounting plus
+  the non-vacuous old-anchor vocabulary-lift fact.
+- `ChildOldAnchorLiftsToParentCandidate_from_all_older_proof` proves one
+  sufficient old-anchor lift condition.
+- The former child-pending-root lift was rejected during producer audit.  Under
+  the actual consumer, child segment accounting is at `done = edge_set child`;
+  therefore a pending child root edge would require both `Edge child a` and
+  `~ edge_set child a`, which is contradictory by definition.
+- The pop branch now consumes `LoopDonePhase7Candidate`, so
+  `SegmentClosedAtRootCandidate_proof` is connected to the real branch input.
+  `RootPopSettledClosedCandidate_proof` uses the stack split helper
+  `stack_split_removed_vertex_dfn_ge_root` to connect the actual popped list
+  to the dfn-defined segment.  `RootPopIsLowCandidate_proof` is deliberately
+  narrowed to `RootPopIsLowInputCandidate`: active root membership, pre-pop
+  `RootIsLowPrePopCandidate`, and the root guard.  It is independent of
+  `PoppedSegmentClosedCandidate`; the bridge lemma projects this smaller input
+  out of the full pop-branch precondition before composing the three pop
+  producers.
 
 ### Layer 4: process-edge branch theorem
 
@@ -534,6 +953,7 @@ The mode design follows directly from the ledger:
 Inductive low_fix_mode: Type :=
 | LowRootMode
 | LowChildMode (parent: V) (done: V -> Prop)
+| LowContributionMode (parent: V) (done: V -> Prop)
 | LowFrameMode (outer: low_frame)
                (direct_parent: V)
                (direct_done: V -> Prop).
@@ -547,9 +967,73 @@ C0 -> C1 -> Cdone -> Croot -> Cfinal
 
 `LowChildMode` exists because parent `process_edge` needs a child post.
 
+`LowContributionMode` exists because the tree branch low update consumes a
+recursive Hoare contract whose precondition includes parent
+`PartialRootLowEquation`; this is not derivable from a state-only child post.
+
 `LowFrameMode` exists because an inner recursive call must preserve the outer continuation state.
 
-Do not add a new mode unless a ledger consumer cannot be served by these three.
+Do not add a new mode unless a ledger consumer cannot be served by these four.
+
+Phase-9a status:
+
+- The fixed-point mode assembly is now proved in `Tarjan_scc_is_low.v`.
+- `FixIHProvidesChildContract_proof` projects the combined mode IH to
+  `ChildContract I W`.
+- `FixIHProvidesLowContributionContract_proof` projects the combined mode IH
+  to `LowContributionContract I W`.
+- `FixIHProvidesFrameContract_proof` projects the same IH to
+  `FrameContract I W`.
+- `FixpointModeStep_from_obligations_proof` proves the one-step recursive
+  body obligation for `LowRootMode`, `LowChildMode`, `LowContributionMode`,
+  and `LowFrameMode` from `LowProofObligations I`.
+- `LowLayerCorrect_from_obligations_proof` applies `Hoare_fix_logicv` with
+  `LowFixMode` as the logic variable and closes
+  `LowLayerCorrect_from_obligations_statement`.
+- The remaining Phase 9 dependency is not another fixpoint mode.  It is the
+  concrete body-contract assembly:
+  `BodySatisfiesChildContract_statement` and
+  `BodyPreservesFrameContract_statement` for `tarjan_scc_f g W`, with the
+  latter consuming the audited Phase 8 frame-preservation bundle.
+- Phase 9b has started on the concrete child-contract side:
+  `ChildPostCandidate` bundles the audited child-return fields, and
+  `ChildContractCandidate_from_field_statements_proof` shows that
+  `ProcessEdgeUnvisitedChildPostCandidate_statement` implies this combined
+  child contract.
+- The bundled child post now includes `Visited child s`.  This is not a
+  generic preservation claim: it is consumed specifically by per-edge
+  done-extension after the child returns.  The bundled contract is projected by
+  `ChildContractCandidate_provides_post_fields_proof`.
+- Phase 9b also aligned the abstract interface with the concrete
+  low-contribution consumer: `LowContributionContract` is now an explicit
+  recursive contract, `LowCandidateInterface` maps it to
+  `ChildProvidesLowContributionCandidate`, and
+  `LowContributionCandidate_to_interface_proof` provides the adapter.  The
+  body-prefix entry side is also connected:
+  `PreloopProducesLoopInvPhase7InitialCandidate_proof` proves that `preloop`
+  establishes the concrete Phase 7 loop invariant with empty done, and
+  `PreloopEntryCandidate_to_interface_proof` exposes it through
+  `LowCandidateInterface`.
+- The edge-loop dependency is now factored instead of duplicated:
+  `EdgeLoopDone_from_process_edge_step_proof` derives `EdgeLoopDone_statement`
+  from `ProcessEdgeStep_statement` using `Hoare_forset`; the only extra
+  requirement is done-set extensionality of `LoopInv`.
+  `LoopInvPhase7Candidate_done_proper_proof` closes that requirement for the
+  concrete invariant, and
+  `EdgeLoopDoneCandidate_from_process_edge_step_proof` gives the concrete
+  adapter.
+- The candidate-level per-edge obligation is now named explicitly as
+  `ProcessEdgeStepCandidate_statement`, and
+  `ProcessEdgeStepCandidate_to_interface_proof` adapts it to the abstract
+  interface.
+- The tree-branch entry into the recursive child call has one more audited
+  producer: `SetFaCreatesSuspendedParentFrameCandidate_proof` proves that
+  `set_fa child parent` creates the suspended parent-frame field and
+  `ParentResumeShapeCandidate` needed by the frame contract.
+- The remaining concrete body dependency is therefore the actual per-edge
+  `ProcessEdgeStep_statement LowCandidateInterface`, followed by production of
+  the child, low-contribution, and frame contracts for `tarjan_scc_f g W`; the
+  frame side still consumes the Phase 8 preservation bundle.
 
 ## 11. Open Checks Before Implementation
 

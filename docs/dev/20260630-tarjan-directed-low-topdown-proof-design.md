@@ -479,13 +479,24 @@ Frame facts are also derived from consumers, not old modes.
 An outer frame is needed when a recursive call occurs while another parent loop is suspended.
 
 ```coq
+Frame F := {
+  frame_parent : V;
+  frame_child  : V;
+  frame_done   : V -> Prop
+}
+
 FrameInv F s :=
-  outer_parent_resume_shape F s /\
-  outer_partial_root_low_equation F s /\
-  outer_processed_tree_children_low_correct F s /\
-  outer_segment_escape_accounting F s /\
-  outer_segment_coverage F s /\
-  outer_active_child_segment_summaries F s.
+  parent_resume_shape
+    (frame_parent F) (frame_child F) (frame_done F) s /\
+  outer_loop_low_fields (frame_parent F) (frame_done F) s /\
+  suspended_parent_frame_resume
+    (frame_parent F) (frame_child F) (frame_done F) s /\
+  outer_done_closedness (frame_parent F) (frame_done F) s /\
+  outer_processed_tree_children_correct
+    (frame_parent F) (frame_done F) s /\
+  outer_active_child_segment_summaries
+    (frame_parent F) (frame_done F) s /\
+  outer_segment_escape_accounting (frame_parent F) (frame_done F) s.
 ```
 
 `FrameContract`:
@@ -494,7 +505,10 @@ FrameInv F s :=
 FrameContract W :=
   forall F direct_parent child direct_done,
     Hoare
-      (fun s => FrameInv F s /\ ChildEntry direct_parent child direct_done s)
+      (fun s =>
+         FrameInv F s /\
+         frame_compatible_with_call F child s /\
+         ChildEntry direct_parent child direct_done s)
       (W child)
       (fun _ s => FrameInv F s).
 ```
@@ -503,6 +517,22 @@ Audit rule:
 
 - If a frame field is not needed after the inner call returns, remove it.
 - If a frame field is not preserved by `preloop`, edge loop, or pop of the inner call, it must not be in `FrameInv`; replace it by a weaker pop-stable summary.
+- A frame is produced from an outer loop invariant plus the pending child's
+  resume shape, not from the loop invariant alone.  The pending child is part
+  of the continuation state because later child-post reconstruction consumes
+  exactly that resume shape.
+- During the suspended call, normal `parent_frame_resume parent done` is too
+  strong: the current pending child is deliberately `~ done` and has
+  `fa child = parent`.  Use a suspended variant that allows this one exception,
+  and prove a closure lemma that restores the normal parent-frame field after
+  adding the child to `done_after`.
+- The frame contract should only cover compatible calls: either the recursive
+  call is the frame's own pending child, or the frame child has already been
+  visited before a deeper call.  Do not require preservation for arbitrary
+  unrelated frames.
+- Field-level producers may consume the whole frame invariant.  The design
+  should decompose the postcondition by consumer fields, not artificially
+  restrict each proof to a single-field precondition.
 
 ## 12. Candidate Mapping to Existing Names
 
@@ -605,14 +635,34 @@ MaybePopFinal:
 ```coq
 BodySatisfiesChildContract:
   ChildContract W ->
+  LowContributionContract W ->
   FrameContract W ->
   ChildContract (tarjan_scc_f g W).
 
+BodyProvidesLowContributionContract:
+  ChildContract W ->
+  LowContributionContract W ->
+  FrameContract W ->
+  LowContributionContract (tarjan_scc_f g W).
+
 BodyPreservesFrameContract:
   ChildContract W ->
+  LowContributionContract W ->
   FrameContract W ->
   FrameContract (tarjan_scc_f g W).
 ```
+
+Status:
+
+- The concrete child-contract bundle has started with
+  `ChildPostCandidate` and `ChildContractCandidate`.
+- `ChildContractCandidate_from_field_statements_proof` composes the previously
+  audited child-post field statements into the combined child contract.
+- `LowContributionContract` is now explicit in the abstract interface because
+  `process_edge`'s tree branch consumes parent low-equation preservation
+  across the recursive call.
+- The body-level producers for the child, low-contribution, and
+  frame-preservation contracts remain to be assembled for `tarjan_scc_f g W`.
 
 ### Layer D: fixpoint theorem
 
@@ -620,6 +670,16 @@ BodyPreservesFrameContract:
 FixpointLowLayerCorrect:
   Hoare EntryPre (tarjan_scc g u) RootFinal.
 ```
+
+Status:
+
+- The abstract fixed-point assembly is now proved by
+  `LowLayerCorrect_from_obligations_proof`.
+- The proof uses `LowFixMode` as the `Hoare_fix_logicv` logic variable and
+  projects the combined IH into `ChildContract`, `LowContributionContract`,
+  and `FrameContract` before each body step.
+- The remaining work is below this layer: prove the concrete
+  body obligations for `tarjan_scc_f g W`.
 
 Then derive public projections/wrappers only after the low-layer theorem is stable.
 
