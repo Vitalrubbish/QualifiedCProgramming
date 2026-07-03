@@ -1335,8 +1335,9 @@ Phase-8b producer-audit result:
 Phase-8c producer-audit result:
 
 - The frame contract is not for arbitrary unrelated frames.  It is restricted
-  by `FrameCompatibleWithCallCandidate F child s`, meaning either the call is
-  the frame's own pending child or the frame child is already visited.
+  by `FrameCompatibleWithCallCandidate F parent child s`, meaning either the
+  call is the frame's own pending child or the direct parent is already inside
+  the frame child's pending segment.
 - This compatibility is required by the `ParentResumeShape` producer: without
   it, a deeper call could discover the frame child as an unvisited vertex and
   rewrite its `fa`.
@@ -1356,8 +1357,8 @@ Phase-8d producer-audit result:
 - `FrameParentResumeShapeAfterPreloopCandidate_proof` consumes the full
   `FrameInvCandidate`, compatibility, and direct `ChildEntryCandidate`.
   Compatibility is not ornamental: after `preloop child`, the proof of
-  `Visited (frame_child F)` comes either from the already-visited frame child
-  case or from the own-pending-child equality.
+  `Visited (frame_child F)` comes either from the pending-parent segment case
+  or from the own-pending-child equality.
 - `FrameParentResumeShapePreservedByMaybePopCandidate_proof` audits the pop
   edge of the same field.  It uses only `pop_scc_keep_fa`; the inequality is
   re-derived in the post-state from the preserved `fa` value instead of
@@ -1377,7 +1378,7 @@ Phase-8e remaining-field cut-level audit:
 | `LoopInvLowCandidate` | `preloop` preservation is plausible but not field-local; `maybe_pop` needs a frame-pop separation fact so active low-source witnesses and `Active parent` are not removed by an inner pop. |
 | `SuspendedParentFrameResumeCandidate` | Passed. It depends only on `done_visited`, `fa_child_of_u`, and the suspended `fa_not_done` discipline. `FrameSuspendedParentFrameResumeAfterPreloopCandidate_proof` and `FrameSuspendedParentFrameResumePreservedByMaybePopCandidate_proof` are proved. |
 | `DoneClosednessCandidate` | `preloop` is monotone for visited/stack, but `maybe_pop` can turn an active `done` vertex into a non-active vertex. Preservation needs a producer saying frame-`done` vertices are below the inner pop boundary, or a closedness contribution for any popped frame-`done` vertex. |
-| `ProcessedTreeChildrenCorrectCandidate` | Cut-level preservation is closed after refining the field with `ProcessedTreeChildrenInactiveSelfLowCandidate`. It is still not a primitive frame-stable fact: active processed children are transported by lower-anchor preservation, while inactive processed children use `ChildInactiveSelfLowForParentCandidate`. The closed cut-level producers include `ChildRootCorrectTransportFromStackShrinkCandidate_proof`, `ChildRootCorrectTransportFromInactiveSelfLowCandidate_proof`, `MaybePopProducesChildLowerStackAnchorsPreservedCandidate_proof`, and `MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_proof`. The body-level producer `FramePreservesProcessedTreeChildrenCorrectCandidate (tarjan_scc_f g W)` remains Phase 9 assembly work. |
+| `ProcessedTreeChildrenCorrectCandidate` | Cut-level preservation is closed after refining the field with `ProcessedTreeChildrenInactiveSelfLowCandidate`. It is still not a primitive frame-stable fact: active processed children are transported by lower-anchor preservation, while inactive processed children use `ChildInactiveSelfLowForParentCandidate`. The closed cut-level producers include `ChildRootCorrectTransportFromStackShrinkCandidate_proof`, `ChildRootCorrectTransportFromInactiveSelfLowCandidate_proof`, `MaybePopProducesChildLowerStackAnchorsPreservedCandidate_proof`, and `MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_proof`. Later Phase 9 assembly closes the body-level producer through `PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof` and `BodyPreservesFrameContractCandidate_from_phase9_cuts_proof`; this field is no longer the active Phase 9 gap. |
 | `ActiveProcessedChildSegmentSummaryCandidate` | Refined. The frame stores only the child-root self escape summary, not full child segment coverage. The refined field is stable through later sibling `preloop` and through inner `maybe_pop`; the latter consumes the actual pop root `Active u`, because stack-split reasoning cannot use the suspended parent active fact as a substitute. |
 | `SegmentEscapeAccountingCandidate` | Full accounting over all active vertices is too strong as suspended frame state. `preloop` for the pending child introduces the child/descendants into the active segment before they are part of `done`; the frame should store a suspended accounting that excludes the pending child segment and closes it with the returned child summary. |
 
@@ -1565,9 +1566,13 @@ Frame-pop boundary audit:
   producer.
 - The closed cut-level producer is
   `MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_proof`.
-  This does not yet prove the full body-level frame field
-  `FramePreservesProcessedTreeChildrenCorrectCandidate (tarjan_scc_f g W)`;
-  that connection belongs to Phase 9 fixed-point/body assembly.
+  The later Phase 9 body assembly closes the full frame-field path with
+  `PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof` and the
+  premise-free
+  `BodyPreservesFrameContractCandidate_from_phase9_cuts_proof`.  The remaining
+  active Phase 9 gap is not a frame-field transport issue; it is the framed
+  low-contribution accounting producer currently hidden behind
+  `BodyChildPostTailCandidate_statement`.
 
 ## 6. Root-Pop Predicate Ledger
 

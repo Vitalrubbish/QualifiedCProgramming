@@ -485,12 +485,13 @@ Phase-8b status:
 Phase-8c status:
 
 - `FrameContractCandidate` and `FrameFieldPreservationCandidate` now require
-  `FrameCompatibleWithCallCandidate F child s`.  This removes the over-strong
-  obligation to preserve arbitrary unrelated frames.
+  `FrameCompatibleWithCallCandidate F parent child s`.  This removes the
+  over-strong obligation to preserve arbitrary unrelated frames and records the
+  direct parent needed by pending-segment transport.
 - Compatibility has exactly two producers:
   `FrameCompatibleWithOwnCallCandidate_proof` for the frame's own pending
-  child, and `FrameCompatibleWithVisitedFrameCandidate_proof` for deeper calls
-  after that child has been visited.
+  child, and `FrameCompatibleWithPendingParentCandidate_proof` for deeper calls
+  whose direct parent is already in the frame child's pending segment.
 - Field producers now consume the whole `FrameInvCandidate`, not just their
   individual field.  This avoids artificial proof obligations where a field
   would need facts intentionally stored in another frame field.
@@ -738,11 +739,25 @@ ParentPendingChildEscapeAccounted parent done child s
   `ChildRootCorrectTransportFromInactiveSelfLowCandidate_proof`,
   `MaybePopProducesChildLowerStackAnchorsPreservedCandidate_proof`, and
   `MaybePopPreservesProcessedTreeChildrenCorrectWithFramePopBoundaryCandidate_proof`.
-- Phase 8 is therefore complete as a cut-level frame-contract audit.  The next
-  dependency is Phase 9 body-level assembly of the actual frame field producer,
-  especially
-  `FramePreservesProcessedTreeChildrenCorrectCandidate (tarjan_scc_f g W)`,
-  from the audited cuts.
+- The two suspended segment fields are now also preserved through inner
+  `maybe_pop` by
+  `MaybePopPreservesFrameSuspendedSegmentFieldsWithBoundaryCandidate_proof`.
+  The key consumer-side bridge is not a new frame field: if a post-pop active
+  vertex would be in the suspended child segment in the snapshot, then the
+  suspended child itself remains in the post-pop rest side.  This is supplied
+  by `stack_split_tree_ancestor_of_rest_active_in_rest`.
+- `MaybePopPreservesFrameNonSegmentFieldsWithBoundaryCandidate_proof` covers
+  the non-segment frame fields, and
+  `MaybePopPreservesFrameInvWithBoundaryCandidate_proof` assembles the full
+  frame invariant from the non-segment and suspended-segment cuts.
+- The body-facing wrapper is
+  `MaybePopPreservesFrameInvFromLoopDoneOlderVerticesCandidate_proof`: it
+  produces `FramePopBoundaryCandidate` from inner loop-done plus older-frame
+  facts, then consumes `MaybePopPreservesFrameInvWithBoundaryCandidate_proof`.
+- Phase 8 is therefore complete as a cut-level frame-contract audit, and the
+  first Phase 9 body-level frame-pop cut is also closed.  The remaining frame
+  dependency is to produce and carry the older-frame facts through the body
+  prefix and edge loop.
 
 This mirrors Kosaraju's continuation idea: `dfs_finish_after` / `dfs_scc_after`
 resume an outer traversal after an inner DFS. Tarjan's frame mode is the Hoare
@@ -991,10 +1006,7 @@ Phase-9a status:
   `LowFixMode` as the logic variable and closes
   `LowLayerCorrect_from_obligations_statement`.
 - The remaining Phase 9 dependency is not another fixpoint mode.  It is the
-  concrete body-contract assembly:
-  `BodySatisfiesChildContract_statement` and
-  `BodyPreservesFrameContract_statement` for `tarjan_scc_f g W`, with the
-  latter consuming the audited Phase 8 frame-preservation bundle.
+  concrete body-contract assembly for `tarjan_scc_f g W`.
 - Phase 9b has started on the concrete child-contract side:
   `ChildPostCandidate` bundles the audited child-return fields, and
   `ChildContractCandidate_from_field_statements_proof` shows that
@@ -1004,6 +1016,11 @@ Phase-9a status:
   generic preservation claim: it is consumed specifically by per-edge
   done-extension after the child returns.  The bundled contract is projected by
   `ChildContractCandidate_provides_post_fields_proof`.
+- Current Phase 9 cleanup narrows this bundled post to child-owned facts only:
+  `Visited child`, child low-valid, child is-low, inactive-self-low,
+  closedness contribution, and the conditional active child segment summary.
+  Parent resume shape and parent accounting are no longer fields of
+  `ChildPostCandidate`.
 - Phase 9b also aligned the abstract interface with the concrete
   low-contribution consumer: `LowContributionContract` is now an explicit
   recursive contract, `LowCandidateInterface` maps it to
@@ -1026,14 +1043,68 @@ Phase-9a status:
   `ProcessEdgeStepCandidate_statement`, and
   `ProcessEdgeStepCandidate_to_interface_proof` adapts it to the abstract
   interface.
+- `ProcessEdgeStepCandidate_proof` now proves the concrete per-edge
+  obligation.  `ProcessEdgeStepCandidate_interface_proof` exposes it through
+  `LowCandidateInterface`, while `EdgeLoopDoneCandidate_proof` and
+  `EdgeLoopDoneCandidate_direct_proof` close the concrete edge-loop adapter.
 - The tree-branch entry into the recursive child call has one more audited
   producer: `SetFaCreatesSuspendedParentFrameCandidate_proof` proves that
   `set_fa child parent` creates the suspended parent-frame field and
   `ParentResumeShapeCandidate` needed by the frame contract.
-- The remaining concrete body dependency is therefore the actual per-edge
-  `ProcessEdgeStep_statement LowCandidateInterface`, followed by production of
-  the child, low-contribution, and frame contracts for `tarjan_scc_f g W`; the
-  frame side still consumes the Phase 8 preservation bundle.
+- The concrete child-body core is now proved by
+  `BodyChildProducesRootFinalCandidate_proof`,
+  `RootFinalProvidesChildPostCoreCandidate_proof`,
+  `BodyChildProducesPostCoreCandidate_proof`,
+  `BodyChildProducesInactiveSelfLowCandidate_proof`, and
+  `BodyChildProducesActiveSegmentSummaryCandidate_proof`.
+- `BodySatisfiesChildContractCandidate_from_phase9_cuts_proof` is now closed
+  directly from these child-body producers.
+- The frame-pop side of body preservation is now packaged by
+  `MaybePopPreservesFrameInvFromLoopDoneOlderVerticesCandidate_proof`.
+  `PreloopMakesFrameVerticesOlderThanChildCandidate_proof` is the first
+  producer for its older-frame-vertex premises after the direct child's
+  `preloop`.
+- `PreloopProducesFrameBodyPrefixFactsCandidate_proof` packages the currently
+  proved preloop prefix for the frame body path: parent resume shape,
+  `Visited (frame_child F)`, suspended parent-frame resume, and the
+  older-frame-vertex facts.  It intentionally does not claim full
+  `FrameInvCandidate` preservation through `preloop`.
+- The compatibility field is now parent-aware:
+  `FrameCompatibleWithCallCandidate F parent child s`.  This is a
+  consumer-driven strengthening: the later suspended segment proofs need to
+  know that a deeper call's direct parent is already in the frame child's
+  pending segment.
+- `dfs_tree_step_transport_from_monotone_fields` and
+  `dfs_tree_reachable_transport_from_monotone_fields` are the one-way tree
+  transport lemmas for phases like `preloop`, where visited grows rather than
+  staying equivalent.
+- `PreloopProducesPendingChildSegmentFromFrameCompatibilityCandidate_proof`
+  consumes the parent-aware compatibility and direct `ChildEntryCandidate` to
+  prove that the direct child is in the suspended frame child's pending segment
+  after `preloop child`.
+- `PreloopPreservesFrameSuspendedSegmentFieldsFromCompatibilityCandidate_proof`
+  closes the two suspended segment fields through `preloop child`.
+- The compiled preloop adapters now also include
+  `PreloopPreservesFrameLoopInvLowCandidate_proof`,
+  `PreloopPreservesFrameDoneClosednessCandidate_proof`, and
+  `PreloopPreservesFrameActiveProcessedChildSegmentSummaryCandidate_proof`.
+  These do not widen `FrameInvCandidate`; they transport only the old
+  frame-`done` and frame-parent facts that their consumers require.
+- `PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof` closes
+  the remaining preloop frame-field transport.  The body frame contract is now
+  premise-free via
+  `BodyPreservesFrameContractCandidate_from_phase9_cuts_proof`.
+- `BodyPreservesFrameProgressContractCandidate_proof` closes the auxiliary
+  frame-progress recursive contract.
+- The remaining concrete body dependency is the low-contribution accounting
+  producer.  The current transitional premise
+  `BodyChildPostTailCandidate_statement` is intentionally treated as
+  over-strong: its `ChildEntryCandidate` precondition is weaker than the
+  parent accounting facts it tries to produce.  The next target should be a
+  framed accounting Hoare lemma under the full
+  `FramedChildProvidesLowContributionCandidate` precondition, producing
+  `ParentPendingChildEscapeAccountedCandidate parent done child` and
+  `ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`.
 
 ## 11. Open Checks Before Implementation
 

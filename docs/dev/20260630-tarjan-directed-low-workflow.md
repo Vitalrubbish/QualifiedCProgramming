@@ -762,14 +762,14 @@ Current Phase 8 status:
   `edge_loop`, and inner `maybe_pop` without widening the frame again.
 - Phase 8c further narrows the contract to compatible recursive calls.  A
   frame must be preserved only when the call is its own pending child or when
-  the frame child is already visited:
-  `FrameCompatibleWithCallCandidate F child s`.
+  the direct parent is already inside the frame child's pending segment:
+  `FrameCompatibleWithCallCandidate F parent child s`.
 - `FrameFieldPreservationCandidate` now lets every field producer consume the
   full `FrameInvCandidate`, plus compatibility and the direct `ChildEntry`.
   The earlier field-only precondition was too strong: some field producers may
   legitimately need other frame fields.
 - `FrameCompatibleWithOwnCallCandidate_proof` and
-  `FrameCompatibleWithVisitedFrameCandidate_proof` record the two legal
+  `FrameCompatibleWithPendingParentCandidate_proof` record the two legal
   compatibility sources.  `FrameContractCandidate_to_field_preservation_bundle_proof`
   records the recursive-IH direction: an existing whole-frame contract can be
   projected into the seven field producers.
@@ -978,10 +978,12 @@ Current Phase 9a status:
 
 Current Phase 9b status:
 
-- The concrete child-post bundle has started.
-- `ChildPostCandidate` now combines the already audited child-return fields:
-  child low-valid, child is-low, inactive-self-low, closedness contribution,
-  conditional child segment summary, and parent resume shape.
+- The concrete child-post bundle is closed at the child-owned field level.
+- `ChildPostCandidate` now combines only the audited child-return fields:
+  `Visited child`, child low-valid, child is-low, inactive-self-low,
+  closedness contribution, and conditional child segment summary.
+  Parent resume shape and parent accounting are not part of this naked child
+  post; they belong to framed continuation paths.
 - `ChildContractCandidate` packages this combined post as the concrete child
   contract for a recursive program `W`.
 - `ChildContractCandidate_from_field_statements_proof` proves that the existing
@@ -1012,15 +1014,79 @@ Current Phase 9b status:
 - `ProcessEdgeStepCandidate_statement` is now the concrete candidate-level
   per-edge obligation.  `ProcessEdgeStepCandidate_to_interface_proof` lifts it
   to `ProcessEdgeStep_statement LowCandidateInterface`.
+- `ProcessEdgeStepCandidate_proof` proves this concrete per-edge obligation.
+  `ProcessEdgeStepCandidate_interface_proof` exposes it through the abstract
+  interface, and `EdgeLoopDoneCandidate_proof` /
+  `EdgeLoopDoneCandidate_direct_proof` close the concrete edge-loop adapter.
 - The tree-branch frame-entry producer
   `SetFaCreatesSuspendedParentFrameCandidate_proof` is proved: after `set_fa`
   it provides the suspended parent frame shape and the direct
   `ParentResumeShapeCandidate` consumed by the recursive-call frame contract.
-- The frame-preservation bundle and concrete body producers still need to be
-  assembled before the
-  concrete `BodySatisfiesChildContract_statement` /
-  `BodyProvidesLowContributionContract_statement` /
-  `BodyPreservesFrameContract_statement` obligations can be closed.
+- The concrete child-body core is now available:
+  `BodyChildProducesRootFinalCandidate_proof`,
+  `RootFinalProvidesChildPostCoreCandidate_proof`,
+  `BodyChildProducesPostCoreCandidate_proof`,
+  `BodyChildProducesInactiveSelfLowCandidate_proof`, and
+  `BodyChildProducesActiveSegmentSummaryCandidate_proof`.
+- `BodySatisfiesChildContractCandidate_from_phase9_cuts_proof` is now proved
+  directly from those concrete body producers.  It no longer depends on a
+  parent-accounting tail cut.
+- The major frame-pop cut is now closed without widening `FrameInvCandidate`.
+  `MaybePopPreservesFrameSuspendedSegmentFieldsWithBoundaryCandidate_proof`
+  transports the two suspended segment fields through inner `maybe_pop`;
+  `MaybePopPreservesFrameNonSegmentFieldsWithBoundaryCandidate_proof` covers
+  the other six fields; and
+  `MaybePopPreservesFrameInvWithBoundaryCandidate_proof` assembles the full
+  frame invariant.
+- `MaybePopPreservesFrameInvFromLoopDoneOlderVerticesCandidate_proof` packages
+  the consumer-facing body cut: from inner loop-done, older-frame-vertex facts,
+  and popped-segment closedness, `maybe_pop child` preserves `FrameInv F`.
+- `PreloopMakesFrameVerticesOlderThanChildCandidate_proof` records the first
+  body-level producer for those older-frame-vertex facts: after
+  `preloop child`, the suspended frame parent and every suspended frame-done
+  vertex are older than the direct child.
+- `PreloopProducesFrameBodyPrefixFactsCandidate_proof` packages the current
+  `preloop child` body-prefix facts without claiming full frame preservation:
+  outer parent resume shape, `Visited (frame_child F)`, suspended parent-frame
+  resume, and the older-frame-vertex facts.  This is the safe input material
+  for the next frame-body assembly step.
+- The compatibility field has been strengthened to be parent-aware:
+  `FrameCompatibleWithCallCandidate F parent child s`.  The deeper-call case
+  now requires the direct parent to be in the suspended frame child's pending
+  segment, not merely that `frame_child F` has been visited.
+- `dfs_tree_step_transport_from_monotone_fields` and
+  `dfs_tree_reachable_transport_from_monotone_fields` provide the one-way tree
+  transport needed by `preloop`, whose visited set grows.  Using them,
+  `PreloopProducesPendingChildSegmentFromFrameCompatibilityCandidate_proof`
+  proves that after `preloop child`, the direct child lies in the suspended
+  frame child's pending segment whenever the call is frame-compatible.
+- `PreloopPreservesFrameSuspendedSegmentFieldsFromCompatibilityCandidate_proof`
+  is now closed: the suspended escape-accounting and suspended tree-coverage
+  fields survive `preloop child` by excluding the new direct child through the
+  freshly produced pending segment and transporting old DFS-tree reachability
+  with monotone visited/unchanged-`fa` fields.
+- The non-segment preloop frame adapters now closed are
+  `PreloopPreservesFrameLoopInvLowCandidate_proof`,
+  `PreloopPreservesFrameDoneClosednessCandidate_proof`, and
+  `PreloopPreservesFrameActiveProcessedChildSegmentSummaryCandidate_proof`.
+  Their common pattern is consumer-driven: frame `done` vertices are old visited
+  vertices, so they are not the new direct child; `preloop` only adds the direct
+  child to `visited`/`stack` and preserves the old `fa` field.
+- `PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof` closes
+  the remaining preloop frame-field gap.  The body frame path is now assembled:
+  `BodyPreservesFrameContractCandidate_from_phase9_cuts_proof` is
+  premise-free.
+- The auxiliary frame-progress mode is also closed by
+  `BodyPreservesFrameProgressContractCandidate_proof`.
+- The remaining concrete body dependency is the low-contribution accounting
+  tail.  The current transitional surface is
+  `BodyChildPostTailCandidate_statement`, but its naked
+  `ChildEntryCandidate` precondition is too weak for parent accounting.
+  The next proof should instead produce the accounting facts from the framed
+  low-contribution precondition:
+  `FrameInvCandidate (FrameOfCallCandidate parent child done)`,
+  `ChildEntryCandidate parent child done`, and
+  `PartialRootLowEquationCandidate parent done`.
 
 Pass condition:
 
@@ -1079,6 +1145,28 @@ Current completed phases:
 15. Phase 9b contract alignment:
     `LowContributionContract` is an explicit recursive mode/contract and the
     concrete child/root/final/preloop/edge-loop adapters are in place.
+16. Phase 9b concrete process-edge and child-body core:
+    `ProcessEdgeStepCandidate_proof`,
+    `ProcessEdgeStepCandidate_interface_proof`,
+    `EdgeLoopDoneCandidate_proof`,
+    `EdgeLoopDoneCandidate_direct_proof`, and the child-body core producers
+    are proved.
+17. Phase 9b frame-pop body cut:
+    `MaybePopPreservesFrameInvWithBoundaryCandidate_proof` and
+    `MaybePopPreservesFrameInvFromLoopDoneOlderVerticesCandidate_proof` are
+    proved; the remaining frame work is preloop/edge-loop assembly.
+18. Phase 9b preloop frame-field cuts:
+    suspended segment fields, `LoopInvLowCandidate`, `DoneClosednessCandidate`,
+    and `ActiveProcessedChildSegmentSummaryCandidate` now have compiled
+    preloop frame adapters; `ProcessedTreeChildrenCorrectCandidate` is also
+    closed by `PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof`.
+19. Phase 9b body frame/progress assembly:
+    `BodyPreservesFrameContractCandidate_from_phase9_cuts_proof` and
+    `BodyPreservesFrameProgressContractCandidate_proof` are proved.
+20. Phase 9b child-contract body assembly:
+    `ChildPostCandidate` is child-only and
+    `BodySatisfiesChildContractCandidate_from_phase9_cuts_proof` is proved
+    without parent accounting.
 
 Current next phase:
 
@@ -1089,10 +1177,12 @@ Phase 9b: Concrete body contract assembly
 Immediate next work item:
 
 ```text
-Continue Phase 9b by proving the concrete `ProcessEdgeStep_statement
-LowCandidateInterface`, then use it with the preloop/edge-loop/root/maybe-pop
-adapters to assemble the child, low-contribution, and frame-preservation body
-producers for `tarjan_scc_f g W`.
+Continue Phase 9b by replacing `BodyChildPostTailCandidate_statement` with a
+framed low-contribution accounting producer.  The target facts are
+`ParentPendingChildEscapeAccountedCandidate parent done child` and
+`ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`,
+produced under the full framed low-contribution precondition rather than under
+bare `ChildEntryCandidate`.
 ```
 
 ## 15. General Stop Rules
