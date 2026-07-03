@@ -478,16 +478,6 @@ Proof.
   subst s. simpl. right. exact H.
 Qed.
 
-(** [preloop_visited_reverse]: preloop [u] only adds [u] to [visited];
-    all other vertices in [visited] after preloop were already visited.
-    Proof sketch: preloop = get;; set_dfn u;; set_low u;; incr_timer;;
-    push_stack u;; visit u.  Only [visit u] touches [visited], and only
-    sets [u] to true.  Induction on the trace gives the result. *)
-Lemma preloop_visited_reverse (u v: V) (s0 s_pre: @SCCSt V):
-  (s0, tt, s_pre) ∈ preloop u ->
-  v ∈ visited s_pre -> v <> u -> v ∈ visited s0.
-Proof. Admitted.
-
 (** [preloop_a_no_child]: after preloop [a], the vertex [a] has no
     outgoing tree edges in [state_to_dfs_tree].  Requires [wf_scc_state s0]
     to use [fa_visited] for the proof that [fa s0 w = a → w = a]. *)

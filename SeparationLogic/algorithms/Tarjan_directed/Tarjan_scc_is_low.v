@@ -1255,11 +1255,7 @@ Section IS_LOW_SKELETON.
     ChildIsLowForParentCandidate child s /\
     ChildInactiveSelfLowForParentCandidate child s /\
     ChildClosednessContributionCandidate child s /\
-    (Active child s -> ChildSegmentSummaryCandidate child s) /\
-    ParentResumeShapeCandidate parent child done s /\
-    ParentPendingChildEscapeAccountedCandidate parent done child s /\
-    ActiveTargetBlocksEscapeAccountedCandidate
-      parent (done_after done child) s.
+    (Active child s -> ChildSegmentSummaryCandidate child s).
 
   Definition ChildContractCandidate (W: RecProgram): Prop :=
     forall parent child done,
@@ -1314,14 +1310,7 @@ Section IS_LOW_SKELETON.
             (ChildEntryCandidate parent child done)
             (W child)
             (fun _ s =>
-               Active child s -> ChildSegmentSummaryCandidate child s)) /\
-      (forall parent child done,
-          Edge parent child ->
-          ~ done child ->
-          Hoare
-            (ChildEntryCandidate parent child done)
-            (W child)
-            (fun _ s => ParentResumeShapeCandidate parent child done s)).
+               Active child s -> ChildSegmentSummaryCandidate child s)).
 
   (* ---------------------------------------------------------------- *)
   (* Phase 6 loop-invariant extension                                  *)
@@ -1975,6 +1964,7 @@ Section IS_LOW_SKELETON.
   Definition FrameProgressCandidate
              (F: SuspendedFrameCandidate) (direct_parent: V)
              (s: St): Prop :=
+    Visited (frame_parent F) s /\
     PendingChildSegmentCandidate (frame_child F) s direct_parent /\
     dfn s (frame_parent F) < dfn s direct_parent /\
     forall v,
@@ -2116,16 +2106,18 @@ Section IS_LOW_SKELETON.
         (W child)
         (fun _ s => FrameInvCandidate F s).
 
-  Definition FrameProgressContractCandidate (W: RecProgram): Prop :=
-    forall F parent child done,
-      Edge parent child ->
-      ~ done child ->
-      Hoare
-        (fun s =>
-           FrameProgressCandidate F parent s /\
-           ChildEntryCandidate parent child done s)
-        (W child)
-        (fun _ s => FrameProgressCandidate F parent s).
+	  Definition FrameProgressContractCandidate (W: RecProgram): Prop :=
+	    forall F progress_parent call_parent child done,
+	      Edge call_parent child ->
+	      ~ done child ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F call_parent s /\
+	           FrameProgressCandidate F progress_parent s /\
+	           ChildEntryCandidate call_parent child done s)
+	        (W child)
+	        (fun _ s => FrameProgressCandidate F progress_parent s).
 
   Definition FramedChildProvidesLowContributionCandidate
              (W: RecProgram): Prop :=
@@ -2142,7 +2134,11 @@ Section IS_LOW_SKELETON.
            PartialRootLowEquationCandidate parent done s /\
            fa s child = parent /\
            fa s child <> child /\
-           low s child <= dfn s child).
+           low s child <= dfn s child /\
+           ParentPendingChildEscapeAccountedCandidate
+             parent done child s /\
+           ActiveTargetBlocksEscapeAccountedCandidate
+             parent (done_after done child) s).
 
   Definition FrameFieldPreservationCandidate
              (Field: SuspendedFrameCandidate -> St -> Prop)
@@ -2252,7 +2248,8 @@ Section IS_LOW_SKELETON.
   Definition RecursiveCallContractsCandidate (W: RecProgram): Prop :=
     ChildContractCandidate W /\
     FramedChildProvidesLowContributionCandidate W /\
-    FrameContractCandidate W.
+    FrameContractCandidate W /\
+    FrameProgressContractCandidate W.
 
   Definition BodySatisfiesChildContractCandidate_statement: Prop :=
     forall W,
@@ -2269,10 +2266,16 @@ Section IS_LOW_SKELETON.
       RecursiveCallContractsCandidate W ->
       FrameContractCandidate (tarjan_scc_f g W).
 
+  Definition BodyPreservesFrameProgressContractCandidate_statement: Prop :=
+    forall W,
+      RecursiveCallContractsCandidate W ->
+      FrameProgressContractCandidate (tarjan_scc_f g W).
+
   Definition BodyRecursiveCallContractsCandidate_from_parts_statement: Prop :=
     BodySatisfiesChildContractCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement ->
     BodyPreservesFrameContractCandidate_statement ->
+    BodyPreservesFrameProgressContractCandidate_statement ->
     forall W,
       RecursiveCallContractsCandidate W ->
       RecursiveCallContractsCandidate (tarjan_scc_f g W).
@@ -4506,6 +4509,42 @@ Section IS_LOW_SKELETON.
         * exact Hsnd_v.
   Qed.
 
+  Lemma dfs_tree_step_transport_to_snapshot_except_new:
+    forall snap s fresh x y,
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      y <> fresh ->
+      dg_step (state_to_dfs_tree g s root) x y ->
+      dg_step (state_to_dfs_tree g snap root) x y.
+  Proof.
+    unfold Visited.
+    intros snap s fresh x y Hvisited Hfa Hy_not_fresh Hstep.
+    unfold dg_step in Hstep |- *.
+    destruct Hstep as [e [Hedge [Hfst Hsnd]]].
+    exists e.
+    split; [| split; [exact Hfst | exact Hsnd]].
+    unfold state_to_dfs_tree in Hedge |- *.
+    simpl in *.
+    destruct Hedge as [v [Hvis [Hfa_neq [Hfst_fa Hsnd_v]]]].
+    rewrite Hsnd_v in Hsnd.
+    subst y.
+    exists v.
+    split.
+    - destruct (Hvisited v Hvis) as [Hv_fresh | Hvis_snap].
+      + exfalso. apply Hy_not_fresh. exact Hv_fresh.
+      + exact Hvis_snap.
+    - split.
+      + intro Hfa_self.
+        apply Hfa_neq.
+        rewrite Hfa; [exact Hfa_self |].
+        intro Hv_fresh. apply Hy_not_fresh. exact Hv_fresh.
+      + split.
+        * rewrite <- Hfa.
+          -- exact Hfst_fa.
+          -- intro Hv_fresh. apply Hy_not_fresh. exact Hv_fresh.
+        * exact Hsnd_v.
+  Qed.
+
   Lemma dfs_tree_reachable_transport_from_monotone_fields:
     forall snap s x y,
       (forall z, Visited z snap -> Visited z s) ->
@@ -4520,6 +4559,142 @@ Section IS_LOW_SKELETON.
       eapply dfs_tree_step_transport_from_monotone_fields; eauto.
     - apply Coq.Relations.Relation_Operators.rt_refl.
     - eapply Coq.Relations.Relation_Operators.rt_trans; eauto.
+  Qed.
+
+  Lemma dfs_tree_reachable_from_no_out_eq:
+    forall s fresh y,
+      (forall z, ~ dg_step (state_to_dfs_tree g s root) fresh z) ->
+      dg_reachable (state_to_dfs_tree g s root) fresh y ->
+      fresh = y.
+  Proof.
+    intros s fresh y Hno_out Hreach.
+    unfold dg_reachable in Hreach.
+    induction Hreach as [x y Hstep | x | x y z _ IHxy _ IHyz].
+    - exfalso. apply (Hno_out y). exact Hstep.
+    - reflexivity.
+    - specialize (IHxy Hno_out). subst y.
+      exact (IHyz Hno_out).
+  Qed.
+
+  Lemma dfs_tree_reachable_transport_to_snapshot_except_new:
+    forall snap s fresh x y,
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      (forall z, ~ dg_step (state_to_dfs_tree g s root) fresh z) ->
+      y <> fresh ->
+      dg_reachable (state_to_dfs_tree g s root) x y ->
+      dg_reachable (state_to_dfs_tree g snap root) x y.
+  Proof.
+    intros snap s fresh x y Hvisited Hfa Hno_out Hy_not_fresh Hreach.
+    unfold dg_reachable in *.
+    induction Hreach as [x0 y0 Hstep | x0 | x0 y0 z0 Hxy IHxy Hyz IHyz].
+    - apply Coq.Relations.Relation_Operators.rt_step.
+      eapply dfs_tree_step_transport_to_snapshot_except_new; eauto.
+    - apply Coq.Relations.Relation_Operators.rt_refl.
+    - assert (Hy0_not_fresh: y0 <> fresh).
+      { intro Hy0_fresh. subst y0.
+        pose proof
+          (dfs_tree_reachable_from_no_out_eq
+             s fresh z0 Hno_out Hyz) as Hz0_fresh.
+        apply Hy_not_fresh. symmetry. exact Hz0_fresh. }
+      eapply Coq.Relations.Relation_Operators.rt_trans.
+      + apply IHxy. exact Hy0_not_fresh.
+      + apply IHyz. exact Hy_not_fresh.
+  Qed.
+
+  Lemma scc_back_edge_transport_post_to_snapshot_except_new:
+    forall snap s fresh x y,
+      (forall z, Visited z snap -> Visited z s) ->
+      (forall z, Visited z snap -> fa s z = fa snap z) ->
+      (forall z, Active z s -> z = fresh \/ Active z snap) ->
+      y <> fresh ->
+      scc_back_edge g root s x y ->
+      scc_back_edge g root snap x y.
+  Proof.
+    unfold scc_back_edge.
+    intros snap s fresh x y Hvisited_mono Hfa_mono Hactive_cases
+           Hy_not_fresh [Hedge [Hactive_y Hnot_tree_post]].
+    split; [exact Hedge |].
+    split.
+    - destruct (Hactive_cases y Hactive_y) as [Hy_fresh | Hactive_snap].
+      + exfalso. apply Hy_not_fresh. exact Hy_fresh.
+      + exact Hactive_snap.
+    - intro Htree_snap.
+      apply Hnot_tree_post.
+      eapply dfs_tree_step_transport_from_monotone_fields; eauto.
+  Qed.
+
+  Lemma scc_back_edge_transport_snapshot_to_post_except_new:
+    forall snap s fresh x y,
+      (forall z, Visited z snap -> Visited z s) ->
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, Visited z snap -> fa s z = fa snap z) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      (forall z, Active z snap -> Active z s) ->
+      y <> fresh ->
+      scc_back_edge g root snap x y ->
+      scc_back_edge g root s x y.
+  Proof.
+    unfold scc_back_edge.
+    intros snap s fresh x y Hvisited_mono Hvisited_cases Hfa_mono
+           Hfa_keep Hactive_mono Hy_not_fresh
+           [Hedge [Hactive_y Hnot_tree_snap]].
+    split; [exact Hedge |].
+    split; [apply Hactive_mono; exact Hactive_y |].
+    intro Htree_post.
+    apply Hnot_tree_snap.
+    eapply dfs_tree_step_transport_to_snapshot_except_new; eauto.
+  Qed.
+
+  Lemma scc_low_tree_transport_post_to_snapshot_except_new:
+    forall target snap s fresh x,
+      (forall z, Visited z snap -> Visited z s) ->
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, Visited z snap -> fa s z = fa snap z) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      (forall z, Active z s -> z = fresh \/ Active z snap) ->
+      (forall z, ~ dg_step (state_to_dfs_tree g s root) fresh z) ->
+      x <> fresh ->
+      ~ dg_reachable (state_to_dfs_tree g s root) target fresh ->
+      scc_low_tree g root s target x ->
+      scc_low_tree g root snap target x.
+  Proof.
+    unfold scc_low_tree, scc_low_reachable.
+    intros target snap s fresh x Hvisited_mono Hvisited_cases Hfa_mono
+           Hfa_keep Hactive_cases Hno_out Hx_not_fresh
+           Hnot_reach_fresh [z [Hreach Hcase]].
+    assert (Hz_not_fresh: z <> fresh).
+    { intro Hz_fresh. subst z. apply Hnot_reach_fresh. exact Hreach. }
+    exists z.
+    split.
+    - eapply dfs_tree_reachable_transport_to_snapshot_except_new; eauto.
+    - destruct Hcase as [Hz_x | Hback].
+      + left. exact Hz_x.
+      + right.
+        eapply scc_back_edge_transport_post_to_snapshot_except_new; eauto.
+  Qed.
+
+  Lemma scc_low_tree_transport_snapshot_to_post_except_new:
+    forall target snap s fresh x,
+      (forall z, Visited z snap -> Visited z s) ->
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, Visited z snap -> fa s z = fa snap z) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      (forall z, Active z snap -> Active z s) ->
+      x <> fresh ->
+      scc_low_tree g root snap target x ->
+      scc_low_tree g root s target x.
+  Proof.
+    unfold scc_low_tree, scc_low_reachable.
+    intros target snap s fresh x Hvisited_mono Hvisited_cases Hfa_mono
+           Hfa_keep Hactive_mono Hx_not_fresh [z [Hreach Hcase]].
+    exists z.
+    split.
+    - eapply dfs_tree_reachable_transport_from_monotone_fields; eauto.
+    - destruct Hcase as [Hz_x | Hback].
+      + left. exact Hz_x.
+      + right.
+        eapply scc_back_edge_transport_snapshot_to_post_except_new; eauto.
   Qed.
 
   Lemma dfs_tree_reachable_unvisited_endpoint_eq:
@@ -5505,8 +5680,8 @@ Section IS_LOW_SKELETON.
     destruct Hfields as [Hinactive Hfields].
     destruct Hfields as [Hclosed Hfields].
     destruct Hfields as [Hsegment Hfields].
-    destruct Hfields as [Hresume Hfields].
-    destruct Hfields as [Hparent_pending Hactive_blocks].
+    destruct Hfields as [_Hresume Hfields].
+    destruct Hfields as [_Hparent_pending _Hactive_blocks].
     destruct Hroot as [Hlow_valid Hchild_is_low].
     unfold Hoare.
     intros s1 r s2 Hentry Hrun.
@@ -5528,24 +5703,12 @@ Section IS_LOW_SKELETON.
     pose proof
       (Hsegment W parent child done Hedge Hnot_done)
       as Hsegment_run.
-    pose proof
-      (Hresume W parent child done Hedge Hnot_done)
-      as Hresume_run.
-    pose proof
-      (Hparent_pending W parent child done Hedge Hnot_done)
-      as Hparent_pending_run.
-    pose proof
-      (Hactive_blocks W parent child done Hedge Hnot_done)
-      as Hactive_blocks_run.
     unfold Hoare in
       Hlow_valid_run,
       Hchild_is_low_run,
       Hinactive_run,
       Hclosed_run,
-      Hsegment_run,
-      Hresume_run,
-      Hparent_pending_run,
-      Hactive_blocks_run.
+      Hsegment_run.
     split.
     - eapply Hvisited_run; eauto.
     - split.
@@ -5556,14 +5719,8 @@ Section IS_LOW_SKELETON.
           -- eapply Hinactive_run; eauto.
           -- split.
              ++ eapply Hclosed_run; eauto.
-             ++ split.
-                ** intros Hactive.
-                   exact (Hsegment_run s1 r s2 Hentry Hrun Hactive).
-                ** split.
-                   --- eapply Hresume_run; eauto.
-                   --- split.
-                       { eapply Hparent_pending_run; eauto. }
-                       { eapply Hactive_blocks_run; eauto. }
+             ++ intros Hactive.
+                exact (Hsegment_run s1 r s2 Hentry Hrun Hactive).
   Qed.
 
   Lemma ChildContractCandidate_provides_returns_visited_proof:
@@ -5613,21 +5770,13 @@ Section IS_LOW_SKELETON.
              unfold ChildPostCandidate in Hpost.
              destruct Hpost as [_ [_ [_ [_ [Hclosed _]]]]].
              exact Hclosed.
-          -- split.
-             ++ intros parent child done Hedge Hnot_done.
-                eapply Hoare_conseq_post.
-                2: { apply (Hcontract parent child done Hedge Hnot_done). }
-                intros r s Hpost.
-                unfold ChildPostCandidate in Hpost.
-                destruct Hpost as [_ [_ [_ [_ [_ [Hsegment _]]]]]].
-                exact Hsegment.
-             ++ intros parent child done Hedge Hnot_done.
-                eapply Hoare_conseq_post.
-                2: { apply (Hcontract parent child done Hedge Hnot_done). }
-                intros r s Hpost.
-                unfold ChildPostCandidate in Hpost.
-                destruct Hpost as [_ [_ [_ [_ [_ [_ [Hresume _Htail]]]]]]].
-                exact Hresume.
+          -- intros parent child done Hedge Hnot_done.
+             eapply Hoare_conseq_post.
+             2: { apply (Hcontract parent child done Hedge Hnot_done). }
+             intros r s Hpost.
+             unfold ChildPostCandidate in Hpost.
+             destruct Hpost as [_ [_ [_ [_ [_ Hsegment]]]]].
+             exact Hsegment.
   Qed.
 
   (* ================================================================ *)
@@ -7045,9 +7194,9 @@ Section IS_LOW_SKELETON.
     intros s [Heq_s _]. subst s. exact Hprogress.
   Qed.
 
-  Lemma set_fa_unvisited_preserves_frame_progress_candidate:
-    forall F parent child,
-      Hoare
+	  Lemma set_fa_unvisited_preserves_frame_progress_candidate:
+	    forall F parent child,
+	      Hoare
         (fun s =>
            FrameProgressCandidate F parent s /\
            Unvisited child s)
@@ -7057,10 +7206,12 @@ Section IS_LOW_SKELETON.
     intros F parent child.
     unfold set_fa. intro_state. hoare_auto_s.
     subst s. simpl.
-    destruct H as [[Hpending [Hparent_older Hdone_older]] Hunvis].
+    destruct H as
+      [[Hvisited_parent [Hpending [Hparent_older Hdone_older]]] Hunvis].
     unfold PendingChildSegmentCandidate in Hpending |- *.
     destruct Hpending as
       [Hvisited_frame_child [Hactive_frame_child Htree_frame_parent]].
+    split; [exact Hvisited_parent |].
     split.
     - split; [exact Hvisited_frame_child |].
       split; [exact Hactive_frame_child |].
@@ -7078,19 +7229,138 @@ Section IS_LOW_SKELETON.
     - split; [exact Hparent_older |].
       intros v Hdone_v Hactive_v.
       apply Hdone_older; assumption.
-  Qed.
+	  Qed.
 
-  Lemma ProcessEdgeVisitedActivePreservesFrameProgressCandidate_proof:
-    forall W F child (done: V -> Prop) a,
+	  Lemma set_fa_unvisited_preserves_frame_progress_any_parent_candidate:
+	    forall F progress_parent set_parent child,
+	      Hoare
+	        (fun s =>
+	           FrameProgressCandidate F progress_parent s /\
+	           Unvisited child s)
+	        (set_fa child set_parent)
+	        (fun _ s => FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros F progress_parent set_parent child.
+	    unfold set_fa. intro_state. hoare_auto_s.
+	    subst s. simpl.
+	    destruct H as
+	      [[Hvisited_parent [Hpending [Hparent_older Hdone_older]]] Hunvis].
+	    unfold PendingChildSegmentCandidate in Hpending |- *.
+	    destruct Hpending as
+	      [Hvisited_frame_child [Hactive_frame_child Htree_frame_parent]].
+	    split; [exact Hvisited_parent |].
+	    split.
+	    - split; [exact Hvisited_frame_child |].
+	      split; [exact Hactive_frame_child |].
+	      eapply dfs_tree_reachable_transport_from_monotone_fields
+	        with (snap := s0).
+	      + intros z Hvis_z. exact Hvis_z.
+	      + intros z Hvis_z.
+	        destruct (equiv_decb z child) eqn:Hz_child; simpl.
+	        * unfold equiv_decb in Hz_child.
+	          destruct (equiv_dec z child) as [Hz_eq | Hz_neq].
+	          -- exfalso. apply Hunvis. rewrite <- Hz_eq. exact Hvis_z.
+	          -- discriminate Hz_child.
+	        * rewrite Hz_child. reflexivity.
+	      + exact Htree_frame_parent.
+	    - split; [exact Hparent_older |].
+	      intros v Hdone_v Hactive_v.
+	      apply Hdone_older; assumption.
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_frame_parent_resume_shape_candidate:
+    forall F parent child,
       Hoare
         (fun s =>
-           FrameProgressCandidate F child s /\
-           Visited a s /\
-           Active a s)
-        (process_edge child W a)
-        (fun _ s => FrameProgressCandidate F child s).
+           ParentResumeShapeCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s /\
+           FrameProgressCandidate F parent s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           ParentResumeShapeCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s).
   Proof.
-    intros W F child done a.
+    intros F parent child.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hresume [Hprogress Hunvis]].
+    unfold ParentResumeShapeCandidate in Hresume |- *.
+    destruct Hresume as [Hedge [Hnot_done [Hfa Hfa_neq]]].
+    destruct Hprogress as [_Hvisited_parent [Hpending _]].
+    unfold PendingChildSegmentCandidate in Hpending.
+    destruct Hpending as [Hvisited_frame_child _].
+    assert (Hframe_child_neq: frame_child F <> child).
+    { intro Hbad. apply Hunvis. rewrite <- Hbad. exact Hvisited_frame_child. }
+    split; [exact Hedge |].
+    split; [exact Hnot_done |].
+    split.
+    - destruct (equiv_decb (frame_child F) child) eqn:Hdecb.
+      + unfold equiv_decb in Hdecb.
+        destruct (equiv_dec (frame_child F) child) as [Hbad | Hneq].
+        * exfalso. apply Hframe_child_neq. exact Hbad.
+        * discriminate Hdecb.
+      + simpl. rewrite Hdecb. exact Hfa.
+    - destruct (equiv_decb (frame_child F) child) eqn:Hdecb.
+      + unfold equiv_decb in Hdecb.
+        destruct (equiv_dec (frame_child F) child) as [Hbad | Hneq].
+        * exfalso. apply Hframe_child_neq. exact Hbad.
+        * discriminate Hdecb.
+      + simpl. rewrite Hdecb. exact Hfa_neq.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_frame_suspended_parent_resume_candidate:
+    forall F parent child,
+      Hoare
+        (fun s =>
+           SuspendedParentFrameResumeCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s /\
+           FrameProgressCandidate F parent s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           SuspendedParentFrameResumeCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s).
+  Proof.
+    intros F parent child.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hsuspended [Hprogress Hunvis]].
+    unfold SuspendedParentFrameResumeCandidate in Hsuspended |- *.
+    destruct Hsuspended as [Hdone_vis [Hfa_child Hfa_not_done]].
+	    destruct Hprogress as
+	      [_Hvisited_parent [Hpending [Hparent_older _Hdone_older]]].
+    assert (Hframe_parent_neq_parent: frame_parent F <> parent).
+    { intro Hbad. subst parent. lia. }
+    split.
+    - intros v Hdone_v.
+      apply Hdone_vis. exact Hdone_v.
+    - split.
+      + intros v [Hfa_v Hfa_neq_v].
+        simpl in Hfa_v, Hfa_neq_v.
+        unfold equiv_decb in Hfa_v, Hfa_neq_v.
+        destruct (equiv_dec v child) as [Hv_child | Hv_not_child].
+        * exfalso. apply Hframe_parent_neq_parent. symmetry. exact Hfa_v.
+        * apply Hfa_child. split; assumption.
+      + intros v Hnot_done_v Hv_not_frame_child Hfa_v.
+        simpl in Hfa_v.
+        unfold equiv_decb in Hfa_v.
+        destruct (equiv_dec v child) as [Hv_child | Hv_not_child].
+        * exfalso. apply Hframe_parent_neq_parent. symmetry. exact Hfa_v.
+        * eapply Hfa_not_done; eauto.
+  Qed.
+
+	  Lemma ProcessEdgeVisitedActivePreservesFrameProgressCandidate_proof:
+	    forall W F progress_parent child (done: V -> Prop) a,
+	      Hoare
+	        (fun s =>
+	           FrameProgressCandidate F progress_parent s /\
+	           Visited a s /\
+	           Active a s)
+	        (process_edge child W a)
+	        (fun _ s => FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros W F progress_parent child done a.
     unfold process_edge, if_else, If.
     intro_state.
     apply Hoare_choice.
@@ -7106,9 +7376,9 @@ Section IS_LOW_SKELETON.
       + apply Hoare_assume_bind. simpl.
         eapply Hoare_conseq_pre.
         2: {
-          apply
-            (get_dfn_update_low_preserves_frame_progress_candidate
-               F child a child).
+	          apply
+	            (get_dfn_update_low_preserves_frame_progress_candidate
+	               F progress_parent a child).
         }
         intros s [Hactive_guard Heq_s]. subst s.
         exact (proj1 H).
@@ -7120,17 +7390,17 @@ Section IS_LOW_SKELETON.
         exfalso. apply Hnot_active. exact Hactive.
   Qed.
 
-  Lemma ProcessEdgeVisitedNonStackPreservesFrameProgressCandidate_proof:
-    forall W F child (done: V -> Prop) a,
-      Hoare
-        (fun s =>
-           FrameProgressCandidate F child s /\
-           Visited a s /\
-           ~ Active a s)
-        (process_edge child W a)
-        (fun _ s => FrameProgressCandidate F child s).
-  Proof.
-    intros W F child done a.
+	  Lemma ProcessEdgeVisitedNonStackPreservesFrameProgressCandidate_proof:
+	    forall W F progress_parent child (done: V -> Prop) a,
+	      Hoare
+	        (fun s =>
+	           FrameProgressCandidate F progress_parent s /\
+	           Visited a s /\
+	           ~ Active a s)
+	        (process_edge child W a)
+	        (fun _ s => FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros W F progress_parent child done a.
     unfold process_edge, if_else, If.
     intro_state.
     apply Hoare_choice.
@@ -7155,118 +7425,7 @@ Section IS_LOW_SKELETON.
         exact (proj1 H).
   Qed.
 
-  Lemma ProcessEdgeTreeBranchPreservesFrameProgressCandidate_proof:
-    forall W F child done a,
-      FrameProgressContractCandidate W ->
-      Edge child a ->
-      ~ done a ->
-      Hoare
-        (fun s =>
-           FrameProgressCandidate F child s /\
-           LoopInvPhase7Candidate child done s /\
-           Unvisited a s)
-        (set_fa a child;; W a;;
-         lv <- get' (fun s => low s a);; update_low child lv)
-        (fun _ s => FrameProgressCandidate F child s).
-  Proof.
-    intros W F child done a Hprogress_contract Hedge Hnot_done.
-    eapply Hoare_bind.
-    - apply Hoare_conj
-        with
-          (Q1 := fun _ s => ChildEntryCandidate child a done s)
-          (Q2 := fun _ s => FrameProgressCandidate F child s).
-      + eapply Hoare_conseq_pre.
-        2: {
-          apply
-            (SetFaCreatesPendingChildCandidate_proof
-               child a done Hedge Hnot_done).
-        }
-        intros s [_Hprogress [Hloop Hunvis]].
-        unfold LoopInvPhase7Candidate,
-          LoopInvPhase6Candidate,
-          LoopInvLowCandidate,
-          LoopInvDoneCandidate in Hloop.
-        destruct Hloop as [Hphase6 _Htail].
-        destruct Hphase6 as [Hlow _Hphase6_tail].
-        destruct Hlow as [Hdone_loop _Hpartial].
-        destruct Hdone_loop as [Hlocal _Hdiscipline].
-        split.
-        * exact Hlocal.
-        * split; [exact Hunvis |].
-          unfold LocalActiveRootCandidate in Hlocal.
-          exact (proj2 (proj2 (proj2 (proj2 Hlocal)))).
-      + eapply Hoare_conseq_pre.
-        2: {
-          apply
-            (set_fa_unvisited_preserves_frame_progress_candidate
-               F child a).
-        }
-        intros s [Hprogress [_Hloop Hunvis]].
-        split; [exact Hprogress | exact Hunvis].
-    - simpl. intros _.
-      eapply Hoare_bind.
-      + eapply Hoare_conseq_pre.
-        2: {
-          apply
-            (Hprogress_contract F child a done Hedge Hnot_done).
-        }
-        intros s [Hentry Hprogress].
-        split; [exact Hprogress | exact Hentry].
-      + simpl. intros _.
-        apply get_low_update_low_preserves_frame_progress_candidate.
-  Qed.
-
-  Lemma ProcessEdgePreservesFrameProgressCandidate_proof:
-    forall W F child done a,
-      FrameProgressContractCandidate W ->
-      Edge child a ->
-      ~ done a ->
-      Hoare
-        (fun s =>
-           FrameProgressCandidate F child s /\
-           LoopInvPhase7Candidate child done s)
-        (process_edge child W a)
-        (fun _ s => FrameProgressCandidate F child s).
-  Proof.
-    intros W F child done a Hprogress_contract Hedge Hnot_done.
-    unfold process_edge, if_else, If.
-    intro_state.
-    apply Hoare_choice.
-    - apply Hoare_assume_bind. simpl.
-      eapply Hoare_conseq_pre.
-      2: {
-        apply
-          (ProcessEdgeTreeBranchPreservesFrameProgressCandidate_proof
-             W F child done a Hprogress_contract Hedge Hnot_done).
-      }
-      intros s [Hunvis Heq_s]. subst s.
-      destruct H as [Hprogress Hloop].
-      split; [exact Hprogress |].
-      split; [exact Hloop | exact Hunvis].
-    - apply Hoare_assume_bind. simpl.
-      intro_state.
-      destruct H1 as [Hnot_unvis Heq_s]. subst s1.
-      assert (Hvis: Visited a s0).
-      { unfold Unvisited in Hnot_unvis.
-        unfold Visited. apply NNPP. exact Hnot_unvis. }
-      apply Hoare_choice.
-      + apply Hoare_assume_bind. simpl.
-        eapply Hoare_conseq_pre.
-        2: {
-          apply
-            (get_dfn_update_low_preserves_frame_progress_candidate
-               F child a child).
-        }
-        intros s [Hactive_guard Heq_s]. subst s.
-        exact (proj1 H).
-      + eapply Hoare_conseq_post.
-        2: { apply Hoare_assume_s. }
-        intros _ s [Heq_s _Hnot_active].
-        subst s.
-        exact (proj1 H).
-  Qed.
-
-  Lemma SuspendedLoopInvPhase7ProvidesFrameInvCandidate_proof:
+	  Lemma SuspendedLoopInvPhase7ProvidesFrameInvCandidate_proof:
     SuspendedLoopInvPhase7ProvidesFrameInvCandidate_statement.
   Proof.
     unfold SuspendedLoopInvPhase7ProvidesFrameInvCandidate_statement,
@@ -7386,6 +7545,81 @@ Section IS_LOW_SKELETON.
         destruct (equiv_dec x child) as [Hx_child | Hx_not_child].
         * exfalso. apply Hnot_done. rewrite <- Hx_child. exact Hdone_x.
 	    * apply Hinactive; try assumption.
+  Qed.
+
+  Lemma set_fa_unvisited_preserves_processed_tree_children_correct_any_parent:
+    forall set_parent child u done,
+      Hoare
+        (fun s =>
+           ProcessedTreeChildrenCorrectCandidate u done s /\
+           DoneVisitedCandidate done s /\
+           Unvisited child s)
+        (set_fa child set_parent)
+        (fun _ s => ProcessedTreeChildrenCorrectCandidate u done s).
+  Proof.
+    intros set_parent child u done.
+    unfold ProcessedTreeChildrenCorrectCandidate,
+      ProcessedTreeChildrenLowValidCandidate,
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
+      ChildLowValidForParentCandidate,
+      ChildIsLowForParentCandidate,
+      Unvisited,
+      Visited.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [[Hlow_valid [His_low Hinactive]]
+                   [Hdone_vis Hunvis]].
+    assert (Hdone_not_child:
+              forall x, done x -> x <> child).
+    { intros x Hdone_x Hx_child.
+      apply Hunvis. rewrite <- Hx_child.
+      apply Hdone_vis. exact Hdone_x. }
+    split.
+    - intros x Hdone_x Hedge_x Hfa_x Hfa_neq_x.
+      assert (Hx_not_child: x <> child).
+      { apply Hdone_not_child. exact Hdone_x. }
+      simpl in Hfa_x, Hfa_neq_x.
+      destruct (equiv_decb x child) eqn:Hx_child.
+      + unfold equiv_decb in Hx_child.
+        destruct (equiv_dec x child) as [Hx_eq | Hx_neq].
+        * exfalso. apply Hx_not_child. exact Hx_eq.
+        * discriminate Hx_child.
+	      + match goal with
+	        | |- scc_low_valid_v _ _ (RecordSet.set _ _ ?st) _ =>
+	            apply
+	              (set_fa_preserves_scc_low_valid_v_when_unvisited
+	                 g root x child set_parent st Hunvis)
+	        end.
+	        exact (Hlow_valid x Hdone_x Hedge_x Hfa_x Hfa_neq_x).
+    - split.
+      + intros x Hdone_x Hedge_x Hfa_x Hfa_neq_x.
+        assert (Hx_not_child: x <> child).
+        { apply Hdone_not_child. exact Hdone_x. }
+        simpl in Hfa_x, Hfa_neq_x.
+        destruct (equiv_decb x child) eqn:Hx_child.
+        * unfold equiv_decb in Hx_child.
+          destruct (equiv_dec x child) as [Hx_eq | Hx_neq].
+          -- exfalso. apply Hx_not_child. exact Hx_eq.
+          -- discriminate Hx_child.
+	        * match goal with
+	          | |- scc_is_low_v _ _ (RecordSet.set _ _ ?st) _ =>
+	              apply
+	                (set_fa_unvisited_preserves_scc_is_low_v
+	                   x child set_parent st Hunvis)
+	          end.
+	          exact (His_low x Hdone_x Hedge_x Hfa_x Hfa_neq_x).
+      + intros x Hdone_x Hedge_x Hfa_x Hfa_neq_x Hnot_active.
+        assert (Hx_not_child: x <> child).
+        { apply Hdone_not_child. exact Hdone_x. }
+        simpl in Hfa_x, Hfa_neq_x, Hnot_active |- *.
+        destruct (equiv_decb x child) eqn:Hx_child.
+        * unfold equiv_decb in Hx_child.
+          destruct (equiv_dec x child) as [Hx_eq | Hx_neq].
+          -- exfalso. apply Hx_not_child. exact Hx_eq.
+          -- discriminate Hx_child.
+	        * exact
+	            (Hinactive x Hdone_x Hedge_x Hfa_x Hfa_neq_x Hnot_active).
   Qed.
 
   Lemma set_fa_unvisited_preserves_done_closedness_candidate:
@@ -10720,7 +10954,1510 @@ Section IS_LOW_SKELETON.
       split; [exact Hcoverage | exact Hblocks].
   Qed.
 
-  Lemma FrameContractCandidate_from_field_preservation_proof:
+	  Lemma set_fa_unvisited_preserves_frame_suspended_segment_fields_candidate:
+	    forall F parent child,
+	      Hoare
+        (fun s =>
+           FrameInvCandidate F s /\
+           FrameProgressCandidate F parent s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           SuspendedSegmentEscapeAccountingCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s /\
+           SuspendedSegmentTreeCoverageByDoneCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s).
+  Proof.
+    intros F parent child.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    set (sp :=
+           RecordSet.set fa
+             (fun fa0 z => if equiv_decb z child then parent else fa0 z)
+             s0).
+    change
+      (SuspendedSegmentEscapeAccountingCandidate
+         (frame_parent F) (frame_child F) (frame_done F) sp /\
+       SuspendedSegmentTreeCoverageByDoneCandidate
+         (frame_parent F) (frame_child F) (frame_done F) sp).
+    destruct H as [Hframe [Hprogress Hunvis]].
+    pose proof
+      (FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof
+         F s0 Hframe) as Hescape.
+    pose proof
+      (FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof
+         F s0 Hframe) as Hcoverage.
+    pose proof
+      (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe) as Hlow.
+    unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+    destruct Hlow as [[_Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
+    assert (Hpending_pre_to_post:
+              forall x,
+                PendingChildSegmentCandidate (frame_child F) s0 x ->
+                PendingChildSegmentCandidate (frame_child F) sp x).
+    { intros x [Hvis_fc [Hactive_fc Htree]].
+      unfold PendingChildSegmentCandidate.
+      split; [exact Hvis_fc |].
+      split; [exact Hactive_fc |].
+      subst sp.
+      apply
+        (proj2
+           (set_fa_unvisited_preserves_tree_reachable
+              child parent s0 (frame_child F) x Hunvis)).
+      exact Htree. }
+    assert (Hprocessed_pre_to_post:
+              forall x,
+                ProcessedTreeReachableFromCandidate
+                  (frame_parent F) (frame_done F) s0 x ->
+                ProcessedTreeReachableFromCandidate
+                  (frame_parent F) (frame_done F) sp x).
+    {
+      unfold ProcessedTreeReachableFromCandidate.
+      intros x Hprocessed.
+      destruct Hprocessed as [Hx_parent | Hprocessed].
+      - left. exact Hx_parent.
+      - right.
+        destruct Hprocessed as
+          [v [Hdone_v [Hedge_v [Hfa_v [Hfa_neq_v
+            [Htree_vx Hreach_vx]]]]]].
+        assert (Hv_not_child: v <> child).
+        { intro Hv_child. apply Hunvis. rewrite <- Hv_child.
+          apply Hdone_vis. exact Hdone_v. }
+        exists v.
+        split; [exact Hdone_v |].
+        split; [exact Hedge_v |].
+        split.
+        + subst sp. simpl.
+          destruct (equiv_decb v child) eqn:Hdecb.
+          * unfold equiv_decb in Hdecb.
+            destruct (equiv_dec v child) as [Hv_child | Hv_neq].
+            -- exfalso. apply Hv_not_child. exact Hv_child.
+            -- discriminate Hdecb.
+          * exact Hfa_v.
+        + split.
+          * subst sp. simpl.
+            destruct (equiv_decb v child) eqn:Hdecb.
+            -- unfold equiv_decb in Hdecb.
+               destruct (equiv_dec v child) as [Hv_child | Hv_neq].
+               ++ exfalso. apply Hv_not_child. exact Hv_child.
+               ++ discriminate Hdecb.
+            -- exact Hfa_neq_v.
+          * split.
+            -- subst sp.
+               apply
+                 (proj2
+                    (set_fa_unvisited_preserves_tree_reachable
+                       child parent s0 v x Hunvis)).
+               exact Htree_vx.
+            -- exact Hreach_vx.
+    }
+    split.
+    - unfold SuspendedSegmentEscapeAccountingCandidate.
+      intros x w Hactive_x Hdfn_x Houtside Hreach Hnot_vis.
+      assert (Houtside_pre:
+                ~ PendingChildSegmentCandidate (frame_child F) s0 x).
+      { intro Hpending_pre.
+        apply Houtside. exact (Hpending_pre_to_post x Hpending_pre). }
+      specialize (Hescape x w Hactive_x Hdfn_x Houtside_pre
+                    Hreach Hnot_vis) as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right.
+        unfold OldStackEscapeAnchorCandidate in Hanchor |- *.
+        destruct Hanchor as
+          [anchor [Hactive_anchor [Hdfn_anchor
+            [Hlow_anchor [Hx_anchor Hanchor_w]]]]].
+        exists anchor.
+        split; [exact Hactive_anchor |].
+        split; [exact Hdfn_anchor |].
+        split; [exact Hlow_anchor |].
+        split; [exact Hx_anchor | exact Hanchor_w].
+    - unfold SuspendedSegmentTreeCoverageByDoneCandidate.
+      intros x Hactive_x Hdfn_x Houtside.
+      assert (Houtside_pre:
+                ~ PendingChildSegmentCandidate (frame_child F) s0 x).
+      { intro Hpending_pre.
+        apply Houtside. exact (Hpending_pre_to_post x Hpending_pre). }
+      specialize (Hcoverage x Hactive_x Hdfn_x Houtside_pre)
+        as Hprocessed.
+	      apply Hprocessed_pre_to_post.
+	      exact Hprocessed.
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_local_active_root_candidate_any_parent:
+	    forall set_parent child u,
+	      Hoare
+	        (fun s =>
+	           LocalActiveRootCandidate u s /\
+	           LocalActiveRootCandidate set_parent s /\
+	           Unvisited child s)
+	        (set_fa child set_parent)
+	        (fun _ s => LocalActiveRootCandidate u s).
+	  Proof.
+	    intros set_parent child u.
+	    unfold LocalActiveRootCandidate.
+	    apply Hoare_conj.
+	    - eapply Hoare_conseq_post.
+	      2: {
+	        eapply Hoare_conseq_pre.
+	        2: { apply (SetFaGlobalShapePreCandidate_proof set_parent child). }
+	        intros s [Hlocal_u [Hlocal_parent Hunvis]].
+	        destruct Hlocal_u as [Hglobal _].
+	        destruct Hlocal_parent as [_ [_ [Hvisited_parent _]]].
+	        split; [exact Hglobal |].
+	        split; [exact Hvisited_parent | exact Hunvis].
+	      }
+	      intros _ s [[Hglobal _] _].
+	      exact Hglobal.
+	    - apply Hoare_conj.
+	      + eapply Hoare_conseq_pre.
+	        2: { apply SetFaSettledClosedCandidate_proof. }
+	        intros s [Hlocal_u _].
+	        exact (proj1 (proj2 Hlocal_u)).
+	      + apply Hoare_conj.
+	        * eapply Hoare_conseq_pre.
+	          2: { apply set_fa_keep_visited. }
+	          intros s [Hlocal_u _].
+	          exact (proj1 (proj2 (proj2 Hlocal_u))).
+	        * apply Hoare_conj.
+	          -- eapply Hoare_conseq_pre.
+	             2: { apply set_fa_keep_in_stack. }
+	             intros s [Hlocal_u _].
+	             exact (proj1 (proj2 (proj2 (proj2 Hlocal_u)))).
+	          -- eapply Hoare_conseq_pre.
+	             2: { apply SetFaOrderFactsCandidate_proof. }
+	             intros s [Hlocal_u _].
+	             exact (proj2 (proj2 (proj2 (proj2 Hlocal_u)))).
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_partial_root_low_equation_candidate_any_parent:
+	    forall set_parent child u done,
+	      Hoare
+	        (fun s =>
+	           PartialRootLowEquationCandidate u done s /\
+	           DoneVisitedCandidate done s /\
+	           Unvisited child s)
+	        (set_fa child set_parent)
+	        (fun _ s => PartialRootLowEquationCandidate u done s).
+	  Proof.
+	    intros set_parent child u done.
+	    unfold PartialRootLowEquationCandidate,
+	      LowFrontierCandidate,
+	      LowSourceCandidate,
+	      DoneVisitedCandidate,
+	      Unvisited,
+	      Visited.
+	    unfold set_fa. intro_state. hoare_auto_s.
+	    subst s. simpl.
+	    destruct H as [[Hfront Hsrc] [Hdone_vis Hunvis]].
+	    assert (Hdone_not_child:
+	              forall a, done a -> a <> child).
+	    { intros a Hdone_a Ha_child.
+	      apply Hunvis. rewrite <- Ha_child.
+	      apply Hdone_vis. exact Hdone_a. }
+	    split.
+	    - destruct Hfront as [Hlow_self Hfront_edges].
+	      split; [exact Hlow_self |].
+	      intros a Hdone_a Hedge_a.
+	      specialize (Hfront_edges a Hdone_a Hedge_a) as [Htree Hstack].
+	      split.
+	      + intro Hfa.
+	        unfold equiv_decb in Hfa.
+	        destruct (equiv_dec a child) as [Ha_child | Ha_not_child].
+	        * exfalso. apply (Hdone_not_child a Hdone_a). exact Ha_child.
+	        * simpl in Hfa. apply Htree. exact Hfa.
+	      + intro Hactive.
+	        apply Hstack. exact Hactive.
+	    - destruct Hsrc as [Hself | [Htree_src | Hstack_src]].
+	      + left. exact Hself.
+	      + right. left.
+	        destruct Htree_src as
+	          [a [Hdone_a [Hedge_a [Hfa_a [Hfa_neq_a Hlow_a]]]]].
+	        exists a.
+	        split; [exact Hdone_a |].
+	        split; [exact Hedge_a |].
+	        split.
+	        * unfold equiv_decb.
+	          destruct (equiv_dec a child) as [Ha_child | Ha_not_child].
+	          -- exfalso. apply (Hdone_not_child a Hdone_a). exact Ha_child.
+	          -- simpl. exact Hfa_a.
+	        * split.
+	          -- unfold equiv_decb.
+	             destruct (equiv_dec a child) as [Ha_child | Ha_not_child].
+	             ++ exfalso. apply (Hdone_not_child a Hdone_a). exact Ha_child.
+	             ++ simpl. exact Hfa_neq_a.
+	          -- exact Hlow_a.
+	      + right. right.
+	        destruct Hstack_src as
+	          [a [Hdone_a [Hedge_a [Hactive_a [Hfa_neq_a Hlow_a]]]]].
+	        exists a.
+	        split; [exact Hdone_a |].
+	        split; [exact Hedge_a |].
+	        split; [exact Hactive_a |].
+	        split.
+	        * unfold equiv_decb.
+	          destruct (equiv_dec a child) as [Ha_child | Ha_not_child].
+	          -- exfalso. apply (Hdone_not_child a Hdone_a). exact Ha_child.
+	          -- simpl. exact Hfa_neq_a.
+	        * exact Hlow_a.
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_done_closedness_candidate_any_parent:
+	    forall set_parent child u done,
+	      Hoare
+	        (fun s =>
+	           DoneClosednessCandidate u done s /\
+	           DoneVisitedCandidate done s /\
+	           Unvisited child s)
+	        (set_fa child set_parent)
+	        (fun _ s => DoneClosednessCandidate u done s).
+	  Proof.
+	    intros set_parent child u done.
+	    unfold set_fa. intro_state. hoare_auto_s.
+	    subst s. simpl.
+	    destruct H as [[Hdone_closed Htree_closed] [Hdone_vis Hunvis]].
+	    assert (Hdone_not_child:
+	              forall a, done a -> a <> child).
+	    { intros a Hdone_a Ha_child.
+	      apply Hunvis. rewrite <- Ha_child.
+	      apply Hdone_vis. exact Hdone_a. }
+	    unfold DoneClosednessCandidate,
+	      done_reachable_closed,
+	      done_tree_reachable_closed in Hdone_closed, Htree_closed |- *.
+	    split.
+	    - intros v w Hdone_v Hnot_active Hreach.
+	      simpl in Hnot_active.
+	      eapply Hdone_closed; eauto.
+	    - intros v w Hdone_v Hnot_active Hfa_v Hfa_neq_v Hreach.
+	      simpl in Hnot_active, Hfa_v, Hfa_neq_v.
+	      unfold equiv_decb in Hfa_v, Hfa_neq_v.
+	      destruct (equiv_dec v child) as [Hv_child | Hv_not_child].
+	      + exfalso. apply (Hdone_not_child v Hdone_v). exact Hv_child.
+	      + eapply Htree_closed; eauto.
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_active_processed_child_segment_summary_any_parent:
+	    forall set_parent child u done,
+	      Hoare
+	        (fun s =>
+	           ActiveProcessedChildSegmentSummaryCandidate u done s /\
+	           DoneVisitedCandidate done s /\
+	           Unvisited child s)
+	        (set_fa child set_parent)
+	        (fun _ s =>
+	           ActiveProcessedChildSegmentSummaryCandidate u done s).
+	  Proof.
+	    intros set_parent child u done.
+	    unfold set_fa. intro_state. hoare_auto_s.
+	    subst s. simpl.
+	    destruct H as [Hsummary [Hdone_vis Hunvis]].
+	    assert (Hdone_not_child:
+	              forall a, done a -> a <> child).
+	    { intros a Hdone_a Ha_child.
+	      apply Hunvis. rewrite <- Ha_child.
+	      apply Hdone_vis. exact Hdone_a. }
+	    unfold ActiveProcessedChildSegmentSummaryCandidate,
+	      ChildSelfSegmentEscapeSummaryCandidate,
+	      PendingRootEscapeCandidate,
+	      OldStackEscapeAnchorCandidate in Hsummary |- *.
+	    intros c Hdone_c Hedge_c Hfa_c Hfa_neq_c Hactive_c.
+	    simpl in Hfa_c, Hfa_neq_c, Hactive_c.
+	    unfold equiv_decb in Hfa_c, Hfa_neq_c.
+	    destruct (equiv_dec c child) as [Hc_child | Hc_not_child].
+	    - exfalso. apply (Hdone_not_child c Hdone_c). exact Hc_child.
+	    - specialize (Hsummary c Hdone_c Hedge_c Hfa_c Hfa_neq_c Hactive_c).
+	      intros w Hreach Hnot_vis.
+	      specialize (Hsummary w Hreach Hnot_vis) as [Hpending | Hanchor].
+	      + left. exact Hpending.
+	      + right. exact Hanchor.
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_loop_inv_low_candidate_any_parent:
+	    forall set_parent child u done,
+	      Hoare
+	        (fun s =>
+	           LoopInvLowCandidate u done s /\
+	           LocalActiveRootCandidate set_parent s /\
+	           Unvisited child s)
+	        (set_fa child set_parent)
+	        (fun _ s => LoopInvLowCandidate u done s).
+	  Proof.
+	    intros set_parent child u done.
+	    eapply Hoare_conseq_post.
+	    2: {
+	      apply Hoare_conj
+	        with
+	          (Q1 := fun _ s => LoopInvDoneCandidate u done s)
+	          (Q2 := fun _ s => PartialRootLowEquationCandidate u done s).
+	      - apply Hoare_conj
+	          with
+	            (Q1 := fun _ s => LocalActiveRootCandidate u s)
+	            (Q2 := fun _ s => DoneDisciplineCandidate u done s).
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (set_fa_unvisited_preserves_local_active_root_candidate_any_parent
+	                 set_parent child u).
+	          }
+	          intros s [Hlow [Hlocal_parent Hunvis]].
+	          destruct Hlow as [[Hlocal_u _Hdone_disc] _Hpartial].
+	          split; [exact Hlocal_u |].
+	          split; [exact Hlocal_parent | exact Hunvis].
+	        + apply Hoare_conj.
+	          * unfold Hoare.
+	            intros s1 _ s2 Hpre _.
+	            destruct Hpre as
+	              [[[Hlocal_u [Hsubset Hdone_vis]] _Hpartial]
+	               [_Hlocal_parent _Hunvis]].
+	            exact Hsubset.
+	          * eapply Hoare_conseq_pre.
+	            2: { apply (set_fa_keep_visited_forall child set_parent done). }
+	            intros s [Hlow _].
+	            exact (proj2 (proj2 (proj1 Hlow))).
+	      - eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (set_fa_unvisited_preserves_partial_root_low_equation_candidate_any_parent
+	               set_parent child u done).
+	        }
+	        intros s [Hlow [_Hlocal_parent Hunvis]].
+	        split.
+	        + exact (proj2 Hlow).
+	        + split; [exact (proj2 (proj2 (proj1 Hlow))) | exact Hunvis].
+	    }
+	    intros _ s [Hdone Hpartial].
+	    split; [exact Hdone | exact Hpartial].
+	  Qed.
+
+	  Lemma set_fa_unvisited_preserves_frame_inv_candidate:
+	    forall F parent child,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F parent s /\
+	           LocalActiveRootCandidate parent s /\
+	           Unvisited child s)
+	        (set_fa child parent)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros F parent child.
+	    eapply Hoare_conseq_post.
+	    2: {
+	      apply Hoare_conj
+	        with
+	          (Q1 := fun _ s =>
+	             ParentResumeShapeCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             LoopInvLowCandidate (frame_parent F) (frame_done F) s /\
+	             SuspendedParentFrameResumeCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	             ProcessedTreeChildrenCorrectCandidate
+	               (frame_parent F) (frame_done F) s /\
+	             ActiveProcessedChildSegmentSummaryCandidate
+	               (frame_parent F) (frame_done F) s)
+	          (Q2 := fun _ s =>
+	             SuspendedSegmentEscapeAccountingCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             SuspendedSegmentTreeCoverageByDoneCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s).
+	      - apply Hoare_conj
+	          with
+	            (Q1 := fun _ s =>
+	               ParentResumeShapeCandidate
+	                 (frame_parent F) (frame_child F) (frame_done F) s)
+	            (Q2 := fun _ s =>
+	               LoopInvLowCandidate (frame_parent F) (frame_done F) s /\
+	               SuspendedParentFrameResumeCandidate
+	                 (frame_parent F) (frame_child F) (frame_done F) s /\
+	               DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	               ProcessedTreeChildrenCorrectCandidate
+	                 (frame_parent F) (frame_done F) s /\
+	               ActiveProcessedChildSegmentSummaryCandidate
+	                 (frame_parent F) (frame_done F) s).
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (set_fa_unvisited_preserves_frame_parent_resume_shape_candidate
+	                 F parent child).
+	          }
+	          intros s [Hframe [Hprogress [_Hlocal_parent Hunvis]]].
+	          split.
+	          * eapply FrameInvProvidesParentResumeShapeCandidate_proof.
+	            exact Hframe.
+	          * split; [exact Hprogress | exact Hunvis].
+	        + apply Hoare_conj
+	            with
+	              (Q1 := fun _ s =>
+	                 LoopInvLowCandidate (frame_parent F) (frame_done F) s)
+	              (Q2 := fun _ s =>
+	                 SuspendedParentFrameResumeCandidate
+	                   (frame_parent F) (frame_child F) (frame_done F) s /\
+	                 DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	                 ProcessedTreeChildrenCorrectCandidate
+	                   (frame_parent F) (frame_done F) s /\
+	                 ActiveProcessedChildSegmentSummaryCandidate
+	                   (frame_parent F) (frame_done F) s).
+		          * eapply Hoare_conseq_pre.
+		            2: {
+		              apply
+		                (set_fa_unvisited_preserves_loop_inv_low_candidate_any_parent
+		                   parent child (frame_parent F) (frame_done F)).
+		            }
+		            intros s [Hframe [_Hprogress [Hlocal_parent Hunvis]]].
+		            split.
+		            -- eapply FrameInvProvidesLoopInvLowCandidate_proof.
+		               exact Hframe.
+		            -- split; [exact Hlocal_parent | exact Hunvis].
+	          * apply Hoare_conj
+	              with
+	                (Q1 := fun _ s =>
+	                   SuspendedParentFrameResumeCandidate
+	                     (frame_parent F) (frame_child F) (frame_done F) s)
+	                (Q2 := fun _ s =>
+	                   DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	                   ProcessedTreeChildrenCorrectCandidate
+	                     (frame_parent F) (frame_done F) s /\
+	                   ActiveProcessedChildSegmentSummaryCandidate
+	                     (frame_parent F) (frame_done F) s).
+	            -- eapply Hoare_conseq_pre.
+	               2: {
+	                 apply
+	                   (set_fa_unvisited_preserves_frame_suspended_parent_resume_candidate
+	                      F parent child).
+	               }
+		               intros s [Hframe [Hprogress [_Hlocal_parent Hunvis]]].
+	               split.
+	               ++ eapply FrameInvProvidesSuspendedParentFrameResumeCandidate_proof.
+	                  exact Hframe.
+	               ++ split; [exact Hprogress | exact Hunvis].
+	            -- apply Hoare_conj
+	                with
+	                  (Q1 := fun _ s =>
+	                     DoneClosednessCandidate
+	                       (frame_parent F) (frame_done F) s)
+	                  (Q2 := fun _ s =>
+	                     ProcessedTreeChildrenCorrectCandidate
+	                       (frame_parent F) (frame_done F) s /\
+	                     ActiveProcessedChildSegmentSummaryCandidate
+	                       (frame_parent F) (frame_done F) s).
+		               ++ eapply Hoare_conseq_pre.
+		                  2: {
+		                    apply
+		                      (set_fa_unvisited_preserves_done_closedness_candidate_any_parent
+		                         parent child (frame_parent F) (frame_done F)).
+		                  }
+		                  intros s [Hframe [_Hprogress [_Hlocal_parent Hunvis]]].
+		                  pose proof
+		                    (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+		                    as Hlow.
+		                  unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+		                  split.
+		                  ** eapply FrameInvProvidesDoneClosednessCandidate_proof.
+		                     exact Hframe.
+		                  ** split; [exact (proj2 (proj2 (proj1 Hlow))) | exact Hunvis].
+	               ++ apply Hoare_conj.
+	                  ** eapply Hoare_conseq_pre.
+	                     2: {
+	                       apply
+	                         (set_fa_unvisited_preserves_processed_tree_children_correct_any_parent
+	                            parent child (frame_parent F) (frame_done F)).
+	                     }
+		                     intros s [Hframe [_Hprogress [_Hlocal_parent Hunvis]]].
+	                     pose proof
+	                       (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+	                       as Hlow.
+	                     unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+	                     split.
+	                     --- eapply
+	                           FrameInvProvidesProcessedTreeChildrenCorrectCandidate_proof.
+	                         exact Hframe.
+	                     --- split; [exact (proj2 (proj2 (proj1 Hlow))) | exact Hunvis].
+		                  ** eapply Hoare_conseq_pre.
+		                     2: {
+		                       apply
+		                         (set_fa_unvisited_preserves_active_processed_child_segment_summary_any_parent
+		                            parent child (frame_parent F) (frame_done F)).
+		                     }
+		                     intros s [Hframe [_Hprogress [_Hlocal_parent Hunvis]]].
+		                     pose proof
+		                       (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+		                       as Hlow.
+		                     unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+		                     split.
+		                     --- eapply
+		                           FrameInvProvidesActiveProcessedChildSegmentSummaryCandidate_proof.
+		                         exact Hframe.
+		                     --- split; [exact (proj2 (proj2 (proj1 Hlow))) | exact Hunvis].
+		      - eapply Hoare_conseq_pre.
+		        2: {
+		          apply
+		            (set_fa_unvisited_preserves_frame_suspended_segment_fields_candidate
+		               F parent child).
+		        }
+		        intros s [Hframe [Hprogress [_Hlocal_parent Hunvis]]].
+		        split; [exact Hframe |].
+		        split; [exact Hprogress | exact Hunvis].
+	    }
+	    intros _ s
+	      [[Hresume
+	        [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
+	       [Hescape Hcoverage]].
+	    unfold FrameInvCandidate.
+	    split; [exact Hresume |].
+	    split; [exact Hlow |].
+	    split; [exact Hsuspended |].
+	    split; [exact Hclosed |].
+	    split; [exact Hchildren |].
+	    split; [exact Hactive_segments |].
+	    split; [exact Hescape | exact Hcoverage].
+	  Qed.
+
+	  Lemma frame_processed_child_not_current_tree_child_candidate:
+	    forall F current processed s,
+	      FrameInvCandidate F s ->
+	      FrameProgressCandidate F current s ->
+	      frame_done F processed ->
+	      Edge (frame_parent F) processed ->
+	      fa s processed = frame_parent F ->
+	      fa s processed <> processed ->
+	      ~ dg_step (state_to_dfs_tree g s root) processed current.
+	  Proof.
+	    intros F current processed s Hframe Hprogress Hdone_processed
+	           Hedge_processed Hfa_processed Hfa_neq_processed Htree_processed.
+	    pose proof
+	      (FrameInvProvidesParentResumeShapeCandidate_proof F s Hframe)
+	      as Hresume.
+	    unfold ParentResumeShapeCandidate in Hresume.
+	    destruct Hresume as
+	      [Hedge_frame_child [Hnot_done_frame_child
+	       [Hfa_frame_child Hfa_neq_frame_child]]].
+	    pose proof
+	      (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe) as Hlow.
+	    unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+	    destruct Hlow as [[Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
+	    unfold LocalActiveRootCandidate in Hlocal.
+	    destruct Hlocal as [Hshape _Hlocal_tail].
+	    destruct Hprogress as [_Hvisited_parent [Hpending _Holder]].
+	    unfold PendingChildSegmentCandidate in Hpending.
+	    destruct Hpending as
+	      [Hvisited_frame_child [_Hactive_frame_child Hreach_frame_current]].
+	    assert (Hvisited_processed: Visited processed s).
+	    { apply Hdone_vis. exact Hdone_processed. }
+	    assert (Hreach_processed_current:
+	              dg_reachable
+	                (state_to_dfs_tree g s root) processed current).
+	    { apply dg_reachable_step. exact Htree_processed. }
+	    pose proof
+	      (dfs_tree_direct_child_subtrees_disjoint
+	         s (frame_parent F) processed (frame_child F) current
+	         Hshape
+	         Hedge_processed Hfa_processed Hfa_neq_processed Hvisited_processed
+	         Hedge_frame_child Hfa_frame_child Hfa_neq_frame_child
+	         Hvisited_frame_child
+	         Hreach_processed_current Hreach_frame_current) as Hsame.
+	    subst processed.
+	    apply Hnot_done_frame_child. exact Hdone_processed.
+	  Qed.
+
+	  Lemma frame_processed_child_not_direct_parent_reachable_from_compat_candidate:
+	    forall F direct_parent direct_child processed s,
+	      FrameInvCandidate F s ->
+	      FrameCompatibleWithCallCandidate F direct_parent direct_child s ->
+	      frame_done F processed ->
+	      Edge (frame_parent F) processed ->
+	      fa s processed = frame_parent F ->
+	      fa s processed <> processed ->
+	      ~ dg_reachable
+	          (state_to_dfs_tree g s root) processed direct_parent.
+	  Proof.
+	    intros F direct_parent direct_child processed s Hframe Hcompat
+	           Hdone_processed Hedge_processed Hfa_processed
+	           Hfa_neq_processed Hreach_processed_parent.
+	    pose proof
+	      (FrameInvProvidesParentResumeShapeCandidate_proof F s Hframe)
+	      as Hresume.
+	    unfold ParentResumeShapeCandidate in Hresume.
+	    destruct Hresume as
+	      [Hedge_frame_child [Hnot_done_frame_child
+	       [Hfa_frame_child Hfa_neq_frame_child]]].
+	    pose proof
+	      (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe) as Hlow.
+	    unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+	    destruct Hlow as [[Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
+	    unfold LocalActiveRootCandidate in Hlocal.
+	    destruct Hlocal as [Hshape _Hlocal_tail].
+	    assert (Hvisited_processed: Visited processed s).
+	    { apply Hdone_vis. exact Hdone_processed. }
+	    destruct Hcompat as [[Hparent_eq _Hchild_eq] | Hpending_parent].
+	    - subst direct_parent.
+	      assert (Htree_parent_processed:
+	                dg_step
+	                  (state_to_dfs_tree g s root)
+	                  (frame_parent F) processed).
+	      { apply tree_step_char_backward; assumption. }
+	      unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	      destruct Hshape as [_Hstack [_Hdfn_inv [Hdfn_valid _Hfa_vis]]].
+	      pose proof
+	        (Hdfn_valid (frame_parent F) processed Htree_parent_processed)
+	        as Hdfn_parent_processed.
+	      pose proof
+	        (dfs_tree_reachable_dfn_le
+	           s processed (frame_parent F)
+	           (conj _Hstack (conj _Hdfn_inv (conj Hdfn_valid _Hfa_vis)))
+	           Hreach_processed_parent) as Hdfn_processed_parent.
+	      lia.
+	    - unfold PendingChildSegmentCandidate in Hpending_parent.
+	      destruct Hpending_parent as
+	        [Hvisited_frame_child [_Hactive_frame_child
+	         Hreach_frame_parent]].
+	      pose proof
+	        (dfs_tree_direct_child_subtrees_disjoint
+	           s (frame_parent F) processed (frame_child F) direct_parent
+	           Hshape
+	           Hedge_processed Hfa_processed Hfa_neq_processed
+	           Hvisited_processed
+	           Hedge_frame_child Hfa_frame_child Hfa_neq_frame_child
+	           Hvisited_frame_child
+	           Hreach_processed_parent Hreach_frame_parent) as Hsame.
+	      subst processed.
+	      apply Hnot_done_frame_child. exact Hdone_processed.
+	  Qed.
+
+	  Lemma update_low_current_preserves_frame_processed_tree_children_correct_candidate:
+	    forall F current n,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s /\
+	           Active current s)
+	        (update_low current n)
+	        (fun _ s =>
+	           ProcessedTreeChildrenCorrectCandidate
+	             (frame_parent F) (frame_done F) s).
+	  Proof.
+	    intros F current n.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl.
+	      destruct H as [Hframe [Hprogress Hactive_current]].
+	      pose proof
+	        (FrameInvProvidesProcessedTreeChildrenCorrectCandidate_proof
+	           F s0 Hframe) as Hchildren.
+	      assert (Hcurrent_not_done: ~ frame_done F current).
+	      { intro Hdone_current.
+		        destruct Hprogress as [_ [_ [_ Hdone_older]]].
+	        specialize (Hdone_older current Hdone_current Hactive_current).
+	        lia. }
+	      unfold ProcessedTreeChildrenCorrectCandidate,
+	        ProcessedTreeChildrenLowValidCandidate,
+	        ProcessedTreeChildrenIsLowCandidate,
+	        ProcessedTreeChildrenInactiveSelfLowCandidate,
+	        ChildLowValidForParentCandidate,
+	        ChildIsLowForParentCandidate in Hchildren |- *.
+	      destruct Hchildren as [Hvalid [His_low Hinactive]].
+	      split.
+	      + intros processed Hdone_processed Hedge_processed
+	               Hfa_processed Hfa_neq_processed.
+	        simpl in Hfa_processed, Hfa_neq_processed.
+	        assert (Hprocessed_ne_current: processed <> current).
+	        { intro Hprocessed_current.
+	          subst processed.
+	          apply Hcurrent_not_done. exact Hdone_processed. }
+	        apply
+	          (set_low_preserves_scc_low_valid_v_when_not_child
+	             g root processed current n s0).
+	        * exact Hprocessed_ne_current.
+	        * eapply frame_processed_child_not_current_tree_child_candidate;
+	            eauto.
+	        * apply Hvalid; assumption.
+	      + split.
+	        * intros processed Hdone_processed Hedge_processed
+	                 Hfa_processed Hfa_neq_processed.
+	          simpl in Hfa_processed, Hfa_neq_processed.
+	          assert (Hprocessed_ne_current: processed <> current).
+	          { intro Hprocessed_current.
+	            subst processed.
+	            apply Hcurrent_not_done. exact Hdone_processed. }
+	          apply set_low_other_preserves_scc_is_low_v.
+	          -- exact Hprocessed_ne_current.
+	          -- apply His_low; assumption.
+	        * intros processed Hdone_processed Hedge_processed
+	                 Hfa_processed Hfa_neq_processed Hnot_active_processed.
+	          simpl in Hfa_processed, Hfa_neq_processed,
+	            Hnot_active_processed |- *.
+	          assert (Hprocessed_ne_current: processed <> current).
+	          { intro Hprocessed_current.
+	            subst processed.
+	            apply Hnot_active_processed. exact Hactive_current. }
+	          unfold equiv_decb.
+	          destruct (equiv_dec processed current) as [Hprocessed_current | _].
+	          -- exfalso. apply Hprocessed_ne_current.
+	             exact Hprocessed_current.
+	          -- apply Hinactive; try assumption.
+	    - destruct H1 as [Heq _]. subst.
+	      destruct H as [Hframe _Htail].
+	      eapply FrameInvProvidesProcessedTreeChildrenCorrectCandidate_proof.
+	      exact Hframe.
+	  Qed.
+
+	  Lemma update_low_current_preserves_frame_active_processed_child_segment_summary_candidate:
+	    forall F current n,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s)
+	        (update_low current n)
+	        (fun _ s =>
+	           ActiveProcessedChildSegmentSummaryCandidate
+	             (frame_parent F) (frame_done F) s).
+	  Proof.
+	    intros F current n.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl.
+	      destruct H as [Hframe Hprogress].
+	      pose proof
+	        (FrameInvProvidesActiveProcessedChildSegmentSummaryCandidate_proof
+	           F s0 Hframe) as Hsummary.
+	      unfold ActiveProcessedChildSegmentSummaryCandidate,
+	        ChildSelfSegmentEscapeSummaryCandidate,
+	        PendingRootEscapeCandidate,
+	        OldStackEscapeAnchorCandidate in Hsummary |- *.
+	      intros processed Hdone_processed Hedge_processed
+	             Hfa_processed Hfa_neq_processed Hactive_processed.
+	      simpl in Hfa_processed, Hfa_neq_processed, Hactive_processed.
+	      assert (Hprocessed_ne_current: processed <> current).
+	      { intro Hprocessed_current.
+	        subst processed.
+		        destruct Hprogress as [_ [_ [_ Hdone_older]]].
+	        specialize
+	          (Hdone_older current Hdone_processed Hactive_processed).
+	        lia. }
+	      specialize
+	        (Hsummary processed Hdone_processed Hedge_processed
+	           Hfa_processed Hfa_neq_processed Hactive_processed)
+	        as Hchild_summary.
+	      intros w Hreach Hnot_vis.
+	      specialize (Hchild_summary w Hreach Hnot_vis) as [Hpending | Hanchor].
+	      + left. exact Hpending.
+	      + right.
+	        destruct Hanchor as
+	          [anchor [Hactive_anchor [Hdfn_anchor
+	            [Hlow_processed_anchor [Hprocessed_anchor Hanchor_w]]]]].
+	        exists anchor.
+	        simpl.
+	        split; [exact Hactive_anchor |].
+	        split; [exact Hdfn_anchor |].
+	        split.
+	        * unfold equiv_decb.
+	          destruct (equiv_dec processed current) as [Hprocessed_current | _].
+	          -- exfalso. apply Hprocessed_ne_current.
+	             exact Hprocessed_current.
+	          -- exact Hlow_processed_anchor.
+	        * split; [exact Hprocessed_anchor | exact Hanchor_w].
+	    - destruct H1 as [Heq _]. subst.
+	      destruct H as [Hframe _Hprogress].
+	      eapply FrameInvProvidesActiveProcessedChildSegmentSummaryCandidate_proof.
+	      exact Hframe.
+	  Qed.
+
+	  Lemma update_low_current_preserves_frame_partial_root_low_equation_candidate:
+	    forall F current n,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s /\
+	           Active current s)
+	        (update_low current n)
+	        (fun _ s =>
+	           PartialRootLowEquationCandidate
+	             (frame_parent F) (frame_done F) s).
+	  Proof.
+	    intros F current n.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl.
+	      set (sp :=
+	             RecordSet.set low
+	               (fun low0 x => if equiv_decb x current then n else low0 x)
+	               s0).
+	      change
+	        (PartialRootLowEquationCandidate
+	           (frame_parent F) (frame_done F) sp).
+	      destruct H as [Hframe [Hprogress Hactive_current]].
+	      pose proof
+	        (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe)
+	        as Hlow.
+	      destruct Hlow as [[_Hlocal _Hdiscipline] Hpartial].
+		      destruct Hprogress as
+		        [_Hvisited_parent [_Hpending [Hparent_older Hdone_older]]].
+	      assert (Hframe_parent_ne_current: frame_parent F <> current).
+	      { intro Hsame. subst current. lia. }
+	      assert (Hcurrent_not_done: ~ frame_done F current).
+	      { intro Hdone_current.
+	        specialize (Hdone_older current Hdone_current Hactive_current).
+	        lia. }
+	      assert (Hlow_keep:
+	                forall x, x <> current -> low sp x = low s0 x).
+	      { intros x Hx_ne_current.
+	        subst sp. simpl. unfold equiv_decb.
+	        destruct (equiv_dec x current) as [Hx_current | _].
+	        - exfalso. apply Hx_ne_current. exact Hx_current.
+	        - reflexivity. }
+	      assert (Hdfn_keep: forall x, dfn sp x = dfn s0 x).
+	      { intro x. subst sp. reflexivity. }
+	      assert (Hactive_post_pre: forall x, Active x sp -> Active x s0).
+	      { intros x Hactive_x. subst sp. exact Hactive_x. }
+	      assert (Hactive_pre_post: forall x, Active x s0 -> Active x sp).
+	      { intros x Hactive_x. subst sp. exact Hactive_x. }
+	      assert (Hfa_keep: forall x, fa sp x = fa s0 x).
+	      { intro x. subst sp. reflexivity. }
+	      destruct Hpartial as [Hfront Hsrc].
+	      split.
+	      + unfold LowFrontierCandidate in Hfront |- *.
+	        destruct Hfront as [Hself Hfront].
+	        split.
+	        * rewrite Hlow_keep by exact Hframe_parent_ne_current.
+	          rewrite Hdfn_keep. exact Hself.
+	        * intros processed Hdone_processed Hedge_processed.
+	          assert (Hprocessed_ne_current: processed <> current).
+	          { intro Hprocessed_current.
+	            subst processed.
+	            apply Hcurrent_not_done. exact Hdone_processed. }
+	          specialize (Hfront processed Hdone_processed Hedge_processed)
+	            as [Htree Hstack].
+	          split.
+	          -- intro Hfa_processed.
+	             rewrite Hlow_keep by exact Hframe_parent_ne_current.
+	             rewrite Hlow_keep by exact Hprocessed_ne_current.
+	             apply Htree.
+	             rewrite <- Hfa_keep. exact Hfa_processed.
+	          -- intro Hactive_processed.
+	             rewrite Hlow_keep by exact Hframe_parent_ne_current.
+	             rewrite Hdfn_keep.
+	             apply Hstack.
+	             apply Hactive_post_pre. exact Hactive_processed.
+	      + unfold LowSourceCandidate in Hsrc |- *.
+	        destruct Hsrc as [Hself | [Htree_src | Hstack_src]].
+	        * left.
+	          rewrite Hlow_keep by exact Hframe_parent_ne_current.
+	          rewrite Hdfn_keep. exact Hself.
+	        * right. left.
+	          destruct Htree_src as
+	            [processed [Hdone_processed [Hedge_processed
+	             [Hfa_processed [Hfa_neq_processed Hlow_processed]]]]].
+	          assert (Hprocessed_ne_current: processed <> current).
+	          { intro Hprocessed_current.
+	            subst processed.
+	            apply Hcurrent_not_done. exact Hdone_processed. }
+	          exists processed.
+	          split; [exact Hdone_processed |].
+	          split; [exact Hedge_processed |].
+	          split.
+	          -- rewrite Hfa_keep. exact Hfa_processed.
+	          -- split.
+	             ++ intro Hfa_post.
+	                apply Hfa_neq_processed.
+	                rewrite <- Hfa_keep. exact Hfa_post.
+	             ++ rewrite Hlow_keep by exact Hframe_parent_ne_current.
+	                rewrite Hlow_keep by exact Hprocessed_ne_current.
+	                exact Hlow_processed.
+	        * right. right.
+	          destruct Hstack_src as
+	            [processed [Hdone_processed [Hedge_processed
+	             [Hactive_processed [Hfa_neq_processed Hlow_processed]]]]].
+	          exists processed.
+	          split; [exact Hdone_processed |].
+	          split; [exact Hedge_processed |].
+	          split; [apply Hactive_pre_post; exact Hactive_processed |].
+	          split.
+	          -- intro Hfa_post.
+	             apply Hfa_neq_processed.
+	             rewrite <- Hfa_keep. exact Hfa_post.
+	          -- rewrite Hlow_keep by exact Hframe_parent_ne_current.
+	             rewrite Hdfn_keep. exact Hlow_processed.
+	    - destruct H1 as [Heq _]. subst.
+	      destruct H as [Hframe _Htail].
+	      pose proof
+	        (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe)
+	        as Hlow.
+	      exact (proj2 Hlow).
+	  Qed.
+
+	  Lemma update_low_current_preserves_frame_loop_inv_low_candidate:
+	    forall F current n,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s /\
+	           Active current s)
+	        (update_low current n)
+	        (fun _ s =>
+	           LoopInvLowCandidate (frame_parent F) (frame_done F) s).
+	  Proof.
+	    intros F current n.
+	    eapply Hoare_conseq_post.
+	    2: {
+	      apply Hoare_conj
+	        with
+	          (Q1 := fun _ s =>
+	             LoopInvDoneCandidate (frame_parent F) (frame_done F) s)
+	          (Q2 := fun _ s =>
+	             PartialRootLowEquationCandidate
+	               (frame_parent F) (frame_done F) s).
+	      - eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (update_low_preserves_loop_inv_done_candidate
+	               current n (frame_parent F) (frame_done F)).
+	        }
+	        intros s [Hframe _Htail].
+	        pose proof
+	          (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+	          as Hlow.
+	        exact (proj1 Hlow).
+	      - apply update_low_current_preserves_frame_partial_root_low_equation_candidate.
+	    }
+	    intros _ s [Hdone Hpartial].
+	    split; [exact Hdone | exact Hpartial].
+	  Qed.
+
+	  Lemma update_low_preserves_parent_resume_shape_candidate:
+	    forall changed n parent child done,
+	      Hoare
+	        (ParentResumeShapeCandidate parent child done)
+	        (update_low changed n)
+	        (fun _ s => ParentResumeShapeCandidate parent child done s).
+	  Proof.
+	    intros changed n parent child done.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl. exact H.
+	    - destruct H1 as [Heq _]. subst. exact H.
+	  Qed.
+
+	  Lemma update_low_preserves_suspended_parent_frame_resume_candidate:
+	    forall changed n parent child done,
+	      Hoare
+	        (SuspendedParentFrameResumeCandidate parent child done)
+	        (update_low changed n)
+	        (fun _ s =>
+	           SuspendedParentFrameResumeCandidate parent child done s).
+	  Proof.
+	    intros changed n parent child done.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl. exact H.
+	    - destruct H1 as [Heq _]. subst. exact H.
+	  Qed.
+
+	  Lemma update_low_current_preserves_frame_suspended_segment_escape_accounting_candidate:
+	    forall F current n,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s)
+	        (update_low current n)
+	        (fun _ s =>
+	           SuspendedSegmentEscapeAccountingCandidate
+	             (frame_parent F) (frame_child F) (frame_done F) s).
+	  Proof.
+	    intros F current n.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl.
+	      destruct H as [Hframe Hprogress].
+	      pose proof
+	        (FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof
+	           F s0 Hframe) as Hescape.
+		      destruct Hprogress as
+		        [_Hvisited_parent [_Hpending [Hparent_older _Hdone_older]]].
+	      assert (Hframe_parent_ne_current: frame_parent F <> current).
+	      { intro Hsame. subst current. lia. }
+	      unfold SuspendedSegmentEscapeAccountingCandidate,
+	        PendingRootEscapeCandidate,
+	        OldStackEscapeAnchorCandidate in Hescape |- *.
+	      intros x w Hactive_x Hdfn_parent_x Houtside Hreach Hnot_vis.
+	      simpl in Hactive_x, Hdfn_parent_x, Houtside, Hnot_vis.
+	      specialize (Hescape x w Hactive_x Hdfn_parent_x Houtside
+	                    Hreach Hnot_vis) as [Hpending | Hanchor].
+	      + left. exact Hpending.
+	      + right.
+	        destruct Hanchor as
+	          [anchor [Hactive_anchor [Hdfn_anchor
+	            [Hlow_parent_anchor [Hx_anchor Hanchor_w]]]]].
+	        exists anchor.
+	        simpl.
+	        split; [exact Hactive_anchor |].
+	        split; [exact Hdfn_anchor |].
+	        split.
+	        * unfold equiv_decb.
+	          destruct (equiv_dec (frame_parent F) current)
+	            as [Hparent_current | _].
+	          -- exfalso. apply Hframe_parent_ne_current.
+	             exact Hparent_current.
+	          -- exact Hlow_parent_anchor.
+	        * split; [exact Hx_anchor | exact Hanchor_w].
+	    - destruct H1 as [Heq _]. subst.
+	      destruct H as [Hframe _Hprogress].
+	      eapply FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof.
+	      exact Hframe.
+	  Qed.
+
+	  Lemma update_low_preserves_suspended_segment_tree_coverage_candidate:
+	    forall changed n parent child done,
+	      Hoare
+	        (SuspendedSegmentTreeCoverageByDoneCandidate parent child done)
+	        (update_low changed n)
+	        (fun _ s =>
+	           SuspendedSegmentTreeCoverageByDoneCandidate
+	             parent child done s).
+	  Proof.
+	    intros changed n parent child done.
+	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+	    - subst. simpl. exact H.
+	    - destruct H1 as [Heq _]. subst. exact H.
+	  Qed.
+
+	  Lemma update_low_current_preserves_frame_inv_candidate:
+	    forall F current n,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s /\
+	           Active current s)
+	        (update_low current n)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros F current n.
+	    eapply Hoare_conseq_post.
+	    2: {
+	      apply Hoare_conj
+	        with
+	          (Q1 := fun _ s =>
+	             ParentResumeShapeCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             LoopInvLowCandidate (frame_parent F) (frame_done F) s /\
+	             SuspendedParentFrameResumeCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	             ProcessedTreeChildrenCorrectCandidate
+	               (frame_parent F) (frame_done F) s /\
+	             ActiveProcessedChildSegmentSummaryCandidate
+	               (frame_parent F) (frame_done F) s)
+	          (Q2 := fun _ s =>
+	             SuspendedSegmentEscapeAccountingCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             SuspendedSegmentTreeCoverageByDoneCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s).
+	      - apply Hoare_conj
+	          with
+	            (Q1 := fun _ s =>
+	               ParentResumeShapeCandidate
+	                 (frame_parent F) (frame_child F) (frame_done F) s)
+	            (Q2 := fun _ s =>
+	               LoopInvLowCandidate (frame_parent F) (frame_done F) s /\
+	               SuspendedParentFrameResumeCandidate
+	                 (frame_parent F) (frame_child F) (frame_done F) s /\
+	               DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	               ProcessedTreeChildrenCorrectCandidate
+	                 (frame_parent F) (frame_done F) s /\
+	               ActiveProcessedChildSegmentSummaryCandidate
+	                 (frame_parent F) (frame_done F) s).
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (update_low_preserves_parent_resume_shape_candidate
+	                 current n (frame_parent F) (frame_child F) (frame_done F)).
+	          }
+	          intros s [Hframe _Htail].
+	          eapply FrameInvProvidesParentResumeShapeCandidate_proof.
+	          exact Hframe.
+	        + apply Hoare_conj
+	            with
+	              (Q1 := fun _ s =>
+	                 LoopInvLowCandidate (frame_parent F) (frame_done F) s)
+	              (Q2 := fun _ s =>
+	                 SuspendedParentFrameResumeCandidate
+	                   (frame_parent F) (frame_child F) (frame_done F) s /\
+	                 DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	                 ProcessedTreeChildrenCorrectCandidate
+	                   (frame_parent F) (frame_done F) s /\
+	                 ActiveProcessedChildSegmentSummaryCandidate
+	                   (frame_parent F) (frame_done F) s).
+	          * apply update_low_current_preserves_frame_loop_inv_low_candidate.
+	          * apply Hoare_conj
+	              with
+	                (Q1 := fun _ s =>
+	                   SuspendedParentFrameResumeCandidate
+	                     (frame_parent F) (frame_child F) (frame_done F) s)
+	                (Q2 := fun _ s =>
+	                   DoneClosednessCandidate (frame_parent F) (frame_done F) s /\
+	                   ProcessedTreeChildrenCorrectCandidate
+	                     (frame_parent F) (frame_done F) s /\
+	                   ActiveProcessedChildSegmentSummaryCandidate
+	                     (frame_parent F) (frame_done F) s).
+	            -- eapply Hoare_conseq_pre.
+	               2: {
+	                 apply
+	                   (update_low_preserves_suspended_parent_frame_resume_candidate
+	                      current n (frame_parent F) (frame_child F)
+	                      (frame_done F)).
+	               }
+	               intros s [Hframe _Htail].
+	               eapply FrameInvProvidesSuspendedParentFrameResumeCandidate_proof.
+	               exact Hframe.
+	            -- apply Hoare_conj
+	                with
+	                  (Q1 := fun _ s =>
+	                     DoneClosednessCandidate
+	                       (frame_parent F) (frame_done F) s)
+	                  (Q2 := fun _ s =>
+	                     ProcessedTreeChildrenCorrectCandidate
+	                       (frame_parent F) (frame_done F) s /\
+	                     ActiveProcessedChildSegmentSummaryCandidate
+	                       (frame_parent F) (frame_done F) s).
+	               ++ eapply Hoare_conseq_pre.
+	                  2: {
+	                    apply
+	                      (update_low_preserves_done_closedness_candidate
+	                         current n (frame_parent F) (frame_done F)).
+	                  }
+	                  intros s [Hframe _Htail].
+	                  eapply FrameInvProvidesDoneClosednessCandidate_proof.
+	                  exact Hframe.
+	               ++ apply Hoare_conj.
+	                  ** apply
+	                       update_low_current_preserves_frame_processed_tree_children_correct_candidate.
+	                  ** eapply Hoare_conseq_pre.
+	                     2: {
+	                       apply
+	                         update_low_current_preserves_frame_active_processed_child_segment_summary_candidate.
+	                     }
+	                     intros s [Hframe [Hprogress _Hactive_current]].
+	                     split; [exact Hframe | exact Hprogress].
+	      - apply Hoare_conj.
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              update_low_current_preserves_frame_suspended_segment_escape_accounting_candidate.
+	          }
+	          intros s [Hframe [Hprogress _Hactive_current]].
+	          split; [exact Hframe | exact Hprogress].
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (update_low_preserves_suspended_segment_tree_coverage_candidate
+	                 current n (frame_parent F) (frame_child F) (frame_done F)).
+	          }
+	          intros s [Hframe _Htail].
+	          eapply FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof.
+	          exact Hframe.
+	    }
+	    intros _ s
+	      [[Hresume
+	        [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
+	       [Hescape Hcoverage]].
+	    unfold FrameInvCandidate.
+	    split; [exact Hresume |].
+	    split; [exact Hlow |].
+	    split; [exact Hsuspended |].
+	    split; [exact Hclosed |].
+	    split; [exact Hchildren |].
+	    split; [exact Hactive_segments |].
+	    split; [exact Hescape | exact Hcoverage].
+	  Qed.
+
+	  Lemma get_low_update_low_current_preserves_frame_inv_candidate:
+	    forall F current source,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s /\
+	           Active current s)
+	        (lv <- get' (fun s => low s source);; update_low current lv)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros F current source.
+	    apply Hoare_normalize. intros snap Hpre.
+	    eapply Hoare_bind. { apply Hoare_get'. }
+	    simpl. intros lv.
+	    eapply Hoare_conseq_pre.
+	    2: {
+	      apply
+	        (update_low_current_preserves_frame_inv_candidate F current lv).
+	    }
+	    intros s [Heq_s _]. subst s. exact Hpre.
+	  Qed.
+
+	  Lemma get_dfn_update_low_current_preserves_frame_inv_candidate:
+	    forall F current source,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F current s /\
+	           Active current s)
+	        (dv <- get' (fun s => dfn s source);; update_low current dv)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros F current source.
+	    apply Hoare_normalize. intros snap Hpre.
+	    eapply Hoare_bind. { apply Hoare_get'. }
+	    simpl. intros dv.
+	    eapply Hoare_conseq_pre.
+	    2: {
+	      apply
+	        (update_low_current_preserves_frame_inv_candidate F current dv).
+	    }
+	    intros s [Heq_s _]. subst s. exact Hpre.
+	  Qed.
+
+	  Lemma ProcessEdgeTreeBranchPreservesFrameInvCandidate_proof:
+	    forall W F child done a,
+	      RecursiveCallContractsCandidate W ->
+	      FrameProgressContractCandidate W ->
+	      Edge child a ->
+	      ~ done a ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           LoopInvPhase7Candidate child done s /\
+	           FrameProgressCandidate F child s /\
+	           Unvisited a s)
+	        (set_fa a child;; W a;;
+	         lv <- get' (fun s => low s a);; update_low child lv)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros W F child done a Hcontracts Hprogress_contract Hedge Hnot_done.
+	    destruct Hcontracts as
+	      [_Hchild [_Hlow [Hframe_contract Hprogress_from_contracts]]].
+	    eapply Hoare_bind.
+	    - apply Hoare_conj
+	        with
+	          (Q1 := fun _ s =>
+	             FrameInvCandidate F s /\
+	             FrameProgressCandidate F child s)
+	          (Q2 := fun _ s =>
+	             ChildEntryCandidate child a done s /\
+	             FrameInvCandidate (FrameOfCallCandidate child a done) s).
+	      + apply Hoare_conj.
+	        * eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (set_fa_unvisited_preserves_frame_inv_candidate F child a).
+	          }
+	          intros s [Hframe [Hloop [Hprogress Hunvis]]].
+	          unfold LoopInvPhase7Candidate,
+	            LoopInvPhase6Candidate,
+	            LoopInvLowCandidate,
+	            LoopInvDoneCandidate in Hloop.
+	          destruct Hloop as [Hphase6 _Htail].
+	          destruct Hphase6 as [Hlow _Hphase6_tail].
+	          destruct Hlow as [Hdone_loop _Hpartial].
+	          destruct Hdone_loop as [Hlocal _Hdiscipline].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress |].
+	          split; [exact Hlocal | exact Hunvis].
+	        * eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (set_fa_unvisited_preserves_frame_progress_candidate
+	                 F child a).
+	          }
+	          intros s [_Hframe [_Hloop [Hprogress Hunvis]]].
+	          split; [exact Hprogress | exact Hunvis].
+	      + apply Hoare_conj.
+	        * eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (SetFaCreatesPendingChildCandidate_proof
+	                 child a done Hedge Hnot_done).
+	          }
+	          intros s [_Hframe [Hloop [_Hprogress Hunvis]]].
+	          unfold LoopInvPhase7Candidate,
+	            LoopInvPhase6Candidate,
+	            LoopInvLowCandidate,
+	            LoopInvDoneCandidate in Hloop.
+	          destruct Hloop as [Hphase6 _Htail].
+	          destruct Hphase6 as [Hlow _Hphase6_tail].
+	          destruct Hlow as [Hdone_loop _Hpartial].
+	          destruct Hdone_loop as [Hlocal _Hdiscipline].
+	          split; [exact Hlocal |].
+	          split; [exact Hunvis |].
+	          unfold LocalActiveRootCandidate in Hlocal.
+	          exact (proj2 (proj2 (proj2 (proj2 Hlocal)))).
+	        * eapply Hoare_conseq_post.
+	          2: {
+	            eapply Hoare_conseq_pre.
+	            2: {
+	              apply
+	                (set_fa_unvisited_creates_frame_inv_candidate
+	                   child a done Hedge Hnot_done).
+	            }
+	            intros s [_Hframe [Hloop [_Hprogress Hunvis]]].
+	            split; [exact Hloop | exact Hunvis].
+	          }
+	          intros _ s [Hown_frame [_Hentry _Hresume]].
+	          exact Hown_frame.
+	    - simpl. intros _.
+	      eapply Hoare_bind.
+	      + apply Hoare_conj
+	          with
+	            (Q1 := fun _ s =>
+	               FrameInvCandidate F s /\
+	               FrameProgressCandidate F child s)
+	            (Q2 := fun _ s =>
+	               FrameInvCandidate (FrameOfCallCandidate child a done) s).
+	        * apply Hoare_conj.
+	          -- eapply Hoare_conseq_pre.
+	             2: {
+	               apply
+	                 (Hframe_contract F child a done Hedge Hnot_done).
+	             }
+	             intros s [[Hframe Hprogress] [Hentry _Hown_frame]].
+	             split; [exact Hframe |].
+	             split.
+	             ++ eapply FrameCompatibleWithPendingParentCandidate_proof.
+	                exact (proj1 (proj2 Hprogress)).
+	             ++ exact Hentry.
+		          -- eapply Hoare_conseq_pre.
+		             2: {
+		               apply
+		                 (Hprogress_contract F child child a done Hedge Hnot_done).
+		             }
+		             intros s [[_Hframe Hprogress] [Hentry _Hown_frame]].
+		             split; [exact _Hframe |].
+		             split; [exact Hprogress |].
+		             split; [exact Hprogress | exact Hentry].
+	        * eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (Hframe_contract
+	                 (FrameOfCallCandidate child a done)
+	                 child a done Hedge Hnot_done).
+	          }
+	          intros s [[_Hframe _Hprogress] [Hentry Hown_frame]].
+	          split; [exact Hown_frame |].
+	          split.
+	          -- apply FrameCompatibleWithOwnCallCandidate_proof.
+	          -- exact Hentry.
+	      + simpl. intros _.
+	        eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (get_low_update_low_current_preserves_frame_inv_candidate
+	               F child a).
+	        }
+	        intros s [[Hframe Hprogress] Hown_frame].
+	        split; [exact Hframe |].
+	        split; [exact Hprogress |].
+	        pose proof
+	          (FrameInvProvidesLoopInvLowCandidate_proof
+	             (FrameOfCallCandidate child a done) s Hown_frame)
+	          as Hown_low.
+	        simpl in Hown_low.
+	        unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+	          LocalActiveRootCandidate in Hown_low.
+	        destruct Hown_low as [[Hlocal _Hdisc] _Hpartial].
+	        exact (proj1 (proj2 (proj2 (proj2 Hlocal)))).
+	  Qed.
+
+	  Lemma LoopInvPhase7Candidate_active_root:
+	    forall u done s,
+	      LoopInvPhase7Candidate u done s ->
+	      Active u s.
+	  Proof.
+	    intros u done s Hloop.
+	    unfold LoopInvPhase7Candidate,
+	      LoopInvPhase6Candidate,
+	      LoopInvLowCandidate,
+	      LoopInvDoneCandidate,
+	      LocalActiveRootCandidate in Hloop.
+	    destruct Hloop as [Hphase6 _Htail].
+	    destruct Hphase6 as [Hlow _Hphase6_tail].
+	    destruct Hlow as [Hdone_loop _Hpartial].
+	    destruct Hdone_loop as [Hlocal _Hdiscipline].
+	    exact (proj1 (proj2 (proj2 (proj2 Hlocal)))).
+	  Qed.
+
+	  Lemma ProcessEdgeVisitedActivePreservesFrameInvCandidate_proof:
+	    forall W F child done a,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           LoopInvPhase7Candidate child done s /\
+	           FrameProgressCandidate F child s /\
+	           Visited a s /\
+	           Active a s)
+	        (process_edge child W a)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros W F child done a.
+	    unfold process_edge, if_else, If.
+	    intro_state.
+	    apply Hoare_choice.
+	    - apply Hoare_assume_bind. simpl.
+	      intro_state.
+	      destruct H1 as [Hunvis Heq_s]. subst s1.
+	      destruct H as [_Hframe [_Hloop [_Hprogress [Hvis _Hactive]]]].
+	      exfalso. apply Hunvis. exact Hvis.
+	    - apply Hoare_assume_bind. simpl.
+	      intro_state.
+	      destruct H1 as [_Hnot_unvis Heq_s]. subst s1.
+	      apply Hoare_choice.
+	      + apply Hoare_assume_bind. simpl.
+	        eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (get_dfn_update_low_current_preserves_frame_inv_candidate
+	               F child a).
+	        }
+	        intros s [Hactive_guard Heq_s]. subst s.
+	        destruct H as [Hframe [Hloop [Hprogress _Htarget]]].
+	        split; [exact Hframe |].
+	        split; [exact Hprogress |].
+	        apply LoopInvPhase7Candidate_active_root with (done := done).
+	        exact Hloop.
+	      + eapply Hoare_conseq_post.
+	        2: { apply Hoare_assume_s. }
+	        intros _ s [Heq_s Hnot_active].
+	        subst s.
+	        destruct H as [_Hframe [_Hloop [_Hprogress [_Hvis Hactive]]]].
+	        exfalso. apply Hnot_active. exact Hactive.
+	  Qed.
+
+	  Lemma ProcessEdgeVisitedNonStackPreservesFrameInvCandidate_proof:
+	    forall W F child done a,
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           LoopInvPhase7Candidate child done s /\
+	           FrameProgressCandidate F child s /\
+	           Visited a s /\
+	           ~ Active a s)
+	        (process_edge child W a)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros W F child done a.
+	    unfold process_edge, if_else, If.
+	    intro_state.
+	    apply Hoare_choice.
+	    - apply Hoare_assume_bind. simpl.
+	      intro_state.
+	      destruct H1 as [Hunvis Heq_s]. subst s1.
+	      destruct H as [_Hframe [_Hloop [_Hprogress [Hvis _Hnot_active]]]].
+	      exfalso. apply Hunvis. exact Hvis.
+	    - apply Hoare_assume_bind. simpl.
+	      intro_state.
+	      destruct H1 as [_Hnot_unvis Heq_s]. subst s1.
+	      apply Hoare_choice.
+	      + apply Hoare_assume_bind. simpl.
+	        intro_state.
+	        destruct H1 as [Hactive_guard Heq_s]. subst s1.
+	        destruct H as [_Hframe [_Hloop [_Hprogress [_Hvis Hnot_active]]]].
+	        exfalso. apply Hnot_active. exact Hactive_guard.
+	      + eapply Hoare_conseq_post.
+	        2: { apply Hoare_assume_s. }
+	        intros _ s [Heq_s _Hnot_active_guard].
+	        subst s.
+	        exact (proj1 H).
+  Qed.
+
+	  Lemma FrameContractCandidate_from_field_preservation_proof:
     FrameContractCandidate_from_field_preservation_statement.
   Proof.
     unfold FrameContractCandidate_from_field_preservation_statement,
@@ -10987,7 +12724,8 @@ Section IS_LOW_SKELETON.
            LoopInvPhase6Candidate u (done_after done a) s).
   Proof.
     intros W u a done Hcontracts Hedge Hnot_done.
-    destruct Hcontracts as [Hchild [Hlow_contribution Hframe]].
+    destruct Hcontracts as
+      [Hchild [Hlow_contribution [Hframe _Hprogress_contract]]].
     eapply Hoare_bind.
     - apply (set_fa_unvisited_creates_frame_inv_candidate
                u a done Hedge Hnot_done).
@@ -10999,7 +12737,10 @@ Section IS_LOW_SKELETON.
 	           (PartialRootLowEquationCandidate u done s /\
             fa s a = u /\
             fa s a <> a /\
-            low s a <= dfn s a)).
+            low s a <= dfn s a /\
+            ParentPendingChildEscapeAccountedCandidate u done a s /\
+            ActiveTargetBlocksEscapeAccountedCandidate
+              u (done_after done a) s)).
       + eapply Hoare_conseq_post.
         2: {
           apply Hoare_conj
@@ -11011,7 +12752,10 @@ Section IS_LOW_SKELETON.
                  (PartialRootLowEquationCandidate u done s /\
                   fa s a = u /\
                   fa s a <> a /\
-                  low s a <= dfn s a)).
+                  low s a <= dfn s a /\
+                  ParentPendingChildEscapeAccountedCandidate u done a s /\
+                  ActiveTargetBlocksEscapeAccountedCandidate
+                    u (done_after done a) s)).
           - eapply Hoare_conseq_pre.
             2: {
               apply
@@ -11030,7 +12774,10 @@ Section IS_LOW_SKELETON.
                    PartialRootLowEquationCandidate u done s /\
                    fa s a = u /\
                    fa s a <> a /\
-                   low s a <= dfn s a).
+                   low s a <= dfn s a /\
+                   ParentPendingChildEscapeAccountedCandidate u done a s /\
+                   ActiveTargetBlocksEscapeAccountedCandidate
+                     u (done_after done a) s).
             + eapply Hoare_conseq_pre.
               2: { apply (Hchild u a done Hedge Hnot_done). }
               intros s [_Hframe_inv [Hentry _Hresume]].
@@ -11063,17 +12810,17 @@ Section IS_LOW_SKELETON.
         destruct Hchild_post as
           [Hvis_child [Hchild_low_valid [Hchild_is_low
            [Hchild_inactive [Hchild_closed
-           [Hchild_segment Hresume_pending]]]]]].
-        destruct Hresume_pending as [Hresume_child Hresume_pending].
-        destruct Hresume_pending as [Hparent_pending_unused Hactive_blocks_unused].
-        destruct Hlow_post as [Hpartial [Hfa [Hfa_neq Hlow_child]]].
+           Hchild_segment]]]]].
+        destruct Hlow_post as
+          [Hpartial [Hfa [Hfa_neq
+           [Hlow_child [_Hparent_pending _Hactive_blocks]]]]].
         split; [exact Hloop_low |].
         split; [exact Hsuspended_frame |].
         split; [exact Hvis_child |].
         split; [exact Hclosed |].
         split; [exact Hchildren |].
         split; [exact Hactive_segments |].
-        split; [exact Hresume_child |].
+        split; [exact Hresume_frame |].
         split.
         * split; [exact Hchild_low_valid | exact Hchild_is_low].
         * split; [exact Hchild_inactive |].
@@ -11101,7 +12848,8 @@ Section IS_LOW_SKELETON.
              u (done_after done a) s).
   Proof.
     intros W u a done Hcontracts Hedge Hnot_done.
-    destruct Hcontracts as [Hchild [_Hlow_contribution Hframe]].
+    destruct Hcontracts as
+      [Hchild [Hlow_contribution [Hframe _Hprogress_contract]]].
     eapply Hoare_bind.
     - apply (set_fa_unvisited_creates_frame_inv_candidate
                u a done Hedge Hnot_done).
@@ -11110,8 +12858,29 @@ Section IS_LOW_SKELETON.
         with
           (Q := fun (_: unit) s =>
              FrameInvCandidate (FrameOfCallCandidate u a done) s /\
-             ChildPostCandidate u a done s).
-      + apply Hoare_conj.
+             ChildPostCandidate u a done s /\
+             (PartialRootLowEquationCandidate u done s /\
+              fa s a = u /\
+              fa s a <> a /\
+              low s a <= dfn s a /\
+              ParentPendingChildEscapeAccountedCandidate u done a s /\
+              ActiveTargetBlocksEscapeAccountedCandidate
+                u (done_after done a) s)).
+      + eapply Hoare_conseq_post.
+        2: {
+          apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 FrameInvCandidate (FrameOfCallCandidate u a done) s)
+              (Q2 := fun _ s =>
+                 ChildPostCandidate u a done s /\
+                 (PartialRootLowEquationCandidate u done s /\
+                  fa s a = u /\
+                  fa s a <> a /\
+                  low s a <= dfn s a /\
+                  ParentPendingChildEscapeAccountedCandidate u done a s /\
+                  ActiveTargetBlocksEscapeAccountedCandidate
+                    u (done_after done a) s)).
         * eapply Hoare_conseq_pre.
           2: {
             apply
@@ -11123,10 +12892,26 @@ Section IS_LOW_SKELETON.
           split.
           -- apply FrameCompatibleWithOwnCallCandidate_proof.
           -- exact Hentry.
-        * eapply Hoare_conseq_pre.
-          2: { apply (Hchild u a done Hedge Hnot_done). }
-          intros s [_Hframe_inv [Hentry _Hresume]].
-          exact Hentry.
+        * apply Hoare_conj.
+          -- eapply Hoare_conseq_pre.
+             2: { apply (Hchild u a done Hedge Hnot_done). }
+             intros s [_Hframe_inv [Hentry _Hresume]].
+             exact Hentry.
+          -- eapply Hoare_conseq_pre.
+             2: { apply (Hlow_contribution u a done Hedge Hnot_done). }
+             intros s [Hframe_inv [Hentry _Hresume]].
+             split; [exact Hframe_inv |].
+             split; [exact Hentry |].
+             pose proof
+               (FrameInvProvidesLoopInvLowCandidate_proof
+                  (FrameOfCallCandidate u a done) s Hframe_inv)
+               as Hloop_low.
+             simpl in Hloop_low.
+             exact (proj2 Hloop_low).
+        }
+        intros r s [Hframe_inv [Hchild_post Hlow_post]].
+        split; [exact Hframe_inv |].
+        split; [exact Hchild_post | exact Hlow_post].
       + simpl. intros _.
         eapply Hoare_conseq_post.
         2: {
@@ -11153,7 +12938,7 @@ Section IS_LOW_SKELETON.
                     (get_low_update_low_preserves_suspended_segment_escape_accounting_candidate
                        u done a).
                 }
-                intros s [Hframe_inv _Hchild_post].
+                intros s [Hframe_inv [_Hchild_post _Hlow_post]].
                 destruct Hframe_inv as
                   [_Hresume_frame [_Hloop_low [_Hsuspended_frame [_Hclosed
                    [_Hchildren [_Hactive_segments
@@ -11166,13 +12951,10 @@ Section IS_LOW_SKELETON.
                       (get_low_update_low_preserves_parent_pending_child_escape_accounted_candidate
                          u done a).
                   }
-                  intros s [_Hframe_inv Hchild_post].
-                  destruct Hchild_post as
-                    [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
-                     [_Hchild_inactive [_Hchild_closed
-                     [_Hchild_segment Hresume_pending]]]]]].
-                  destruct Hresume_pending as [_Hresume_child Hresume_pending].
-                  destruct Hresume_pending as [Hparent_pending _Hactive_blocks].
+                  intros s [_Hframe_inv [_Hchild_post Hlow_post]].
+                  destruct Hlow_post as
+                    [_Hpartial_low [_Hfa_low [_Hfa_neq_low
+                     [_Hlow_child [Hparent_pending _Hactive_blocks]]]]].
                   exact Hparent_pending.
                 * eapply Hoare_conseq_pre.
                   2: {
@@ -11180,9 +12962,9 @@ Section IS_LOW_SKELETON.
                       (GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedConditionalCandidate_proof
                          u done a).
                   }
-                  intros s [Hframe_inv Hchild_post].
+                  intros s [Hframe_inv [Hchild_post Hlow_post]].
                   destruct Hframe_inv as
-                    [_Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
+                    [Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
                      [_Hchildren [_Hactive_segments
                      [Hsuspended_escape _Hsuspended_coverage]]]]]]].
                   destruct Hloop_low as [Hdone_loop _Hpartial].
@@ -11191,12 +12973,13 @@ Section IS_LOW_SKELETON.
                   destruct Hchild_post as
                     [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
                      [_Hchild_inactive [_Hchild_closed
-                     [Hchild_segment_if Hresume_pending]]]]]].
-                  destruct Hresume_pending as [Hresume_child Hresume_pending].
-                  destruct Hresume_pending as [Hparent_pending _Hactive_blocks].
+                     Hchild_segment_if]]]]].
+                  destruct Hlow_post as
+                    [_Hpartial_low2 [_Hfa_low2 [_Hfa_neq_low2
+                     [_Hlow_child [Hparent_pending _Hactive_blocks]]]]].
                   split; [exact Hshape |].
                   split; [exact Hvis_u |].
-                  split; [exact Hresume_child |].
+                  split; [exact Hresume_frame |].
                   split; [exact Hchild_segment_if |].
                   split; [exact Hsuspended_escape | exact Hparent_pending].
             }
@@ -11211,9 +12994,9 @@ Section IS_LOW_SKELETON.
                   (get_low_update_low_preserves_segment_tree_coverage_candidate
                      u a (done_after done a)).
               }
-              intros s [Hframe_inv Hchild_post].
+              intros s [Hframe_inv [Hchild_post _Hlow_post]].
               destruct Hframe_inv as
-                [_Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
+                [Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
                  [_Hchildren [_Hactive_segments
                  [_Hsuspended_escape Hsuspended_coverage]]]]]]].
               destruct Hloop_low as [Hdone_loop _Hpartial].
@@ -11222,12 +13005,10 @@ Section IS_LOW_SKELETON.
               destruct Hchild_post as
                 [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
                  [_Hchild_inactive [_Hchild_closed
-                 [Hchild_segment_if Hresume_pending]]]]]].
-              destruct Hresume_pending as [Hresume_child Hresume_pending].
-              destruct Hresume_pending as [_Hparent_pending _Hactive_blocks].
-              destruct Hresume_child as [_Hedge_child Hresume_child].
-              destruct Hresume_child as [_Hnot_done_child Hresume_child].
-              destruct Hresume_child as [Hfa Hfa_neq].
+                 Hchild_segment_if]]]]].
+              destruct Hresume_frame as [_Hedge_child Hresume_frame].
+              destruct Hresume_frame as [_Hnot_done_child Hresume_frame].
+              destruct Hresume_frame as [Hfa Hfa_neq].
               eapply SegmentTreeCoverageClosesAfterChildCandidate_proof;
                 eauto.
             + eapply Hoare_conseq_pre.
@@ -11236,13 +13017,10 @@ Section IS_LOW_SKELETON.
                   (get_low_update_low_preserves_active_target_blocks_escape_accounted_candidate
                      u (done_after done a) a).
               }
-              intros s [_Hframe_inv Hchild_post].
-              destruct Hchild_post as
-                [_Hvis_child [_Hchild_low_valid [_Hchild_is_low
-                 [_Hchild_inactive [_Hchild_closed
-                 [_Hchild_segment Hresume_pending]]]]]].
-              destruct Hresume_pending as [_Hresume_child Hresume_pending].
-              destruct Hresume_pending as [_Hparent_pending Hactive_blocks].
+              intros s [_Hframe_inv [_Hchild_post Hlow_post]].
+              destruct Hlow_post as
+                [_Hpartial [_Hfa [_Hfa_neq
+                 [_Hlow_child [_Hparent_pending Hactive_blocks]]]]].
               exact Hactive_blocks.
         }
         intros _ s [Hsegment [Hcoverage Hblocks]].
@@ -11338,10 +13116,12 @@ Section IS_LOW_SKELETON.
       BodySatisfiesChildContractCandidate_statement,
       BodyProvidesLowContributionCandidate_statement,
       BodyPreservesFrameContractCandidate_statement,
+      BodyPreservesFrameProgressContractCandidate_statement,
       RecursiveCallContractsCandidate.
-    intros Hchild Hlow Hframe W Hcontracts.
+    intros Hchild Hlow Hframe Hprogress W Hcontracts.
     split. apply Hchild. exact Hcontracts.
-    split. apply Hlow. exact Hcontracts. apply Hframe. exact Hcontracts.
+    split. apply Hlow. exact Hcontracts.
+    split. apply Hframe. exact Hcontracts. apply Hprogress. exact Hcontracts.
   Qed.
 
   Lemma FrameParentResumeShapeAfterPreloopCandidate_proof:
@@ -13659,14 +15439,759 @@ Section IS_LOW_SKELETON.
       exact (proj2 Hglobal_pre).
   Qed.
 
+  Lemma PreloopNewChildHasNoTreeSuccessorCandidate_proof:
+    forall parent child done,
+      Hoare
+        (ChildEntryCandidate parent child done)
+        (preloop child)
+        (fun _ s =>
+           forall z,
+             ~ dg_step (state_to_dfs_tree g s root) child z).
+  Proof.
+    intros parent child done.
+    unfold ChildEntryCandidate,
+      ParentLoopSuspendedBaseCandidate,
+      ParentActiveBaseCandidate,
+      PendingChildShapeCandidate,
+      GlobalShapePreCandidate,
+      Visited,
+      Unvisited.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as
+      [[_Hparent_active _Hnot_done_child]
+       [[Hwf Hchild_unvisited]
+        [_Hsettled [Hparent_visited
+         [_Hedge_child [Hfa_child _Horder]]]]]].
+    unfold wf_scc_state in Hwf.
+    destruct Hwf as [_Hstack [_Hdfn_inv [_Hdfn_valid Hfa_visited]]].
+    assert (Hparent_neq_child: parent <> child).
+    { intro Hbad. apply Hchild_unvisited.
+      rewrite <- Hbad. exact Hparent_visited. }
+    intro Htree_child_succ.
+    apply tree_step_char in Htree_child_succ as
+      [Hfa_succ_child [Hfa_succ_neq_succ Hvis_succ_post]].
+    destruct (equiv_dec z child) as [Hsucc_child | Hsucc_not_child].
+    - apply Hfa_succ_neq_succ.
+      transitivity child; [exact Hfa_succ_child |].
+      symmetry. exact Hsucc_child.
+    - simpl in Hfa_succ_child, Hvis_succ_post.
+      destruct Hvis_succ_post as [Hvis_succ_old | Hsucc_child_eq].
+      + assert (Hfa_old_neq: fa s0 z <> z).
+        { intro Hfa_succ_self.
+          apply Hsucc_not_child.
+          rewrite <- Hfa_succ_self.
+          exact Hfa_succ_child. }
+        apply Hfa_visited in Hfa_old_neq.
+        apply Hchild_unvisited.
+        rewrite <- Hfa_succ_child.
+        exact Hfa_old_neq.
+      + apply Hsucc_not_child. symmetry. exact Hsucc_child_eq.
+  Qed.
+
+  Lemma PreloopFrameProcessedChildCannotReachNewChildCandidate_proof:
+    forall F parent child done processed,
+      Hoare
+        (fun s =>
+           FrameInvCandidate F s /\
+           FrameCompatibleWithCallCandidate F parent child s /\
+           ChildEntryCandidate parent child done s /\
+           frame_done F processed /\
+           Edge (frame_parent F) processed)
+        (preloop child)
+        (fun _ s =>
+           fa s processed = frame_parent F ->
+           fa s processed <> processed ->
+           ~ dg_reachable (state_to_dfs_tree g s root) processed child).
+  Proof.
+    intros F parent child done processed.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as
+      [Hframe [Hcompat [Hentry [Hdone_processed Hedge_processed]]]].
+    pose proof
+      (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe) as Hlow.
+    unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+      LocalActiveRootCandidate, DoneDisciplineCandidate in Hlow.
+    destruct Hlow as [[_Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
+    unfold ChildEntryCandidate,
+      ParentLoopSuspendedBaseCandidate,
+      ParentActiveBaseCandidate,
+      PendingChildShapeCandidate,
+      GlobalShapePreCandidate,
+      Visited,
+      Unvisited in Hentry.
+    destruct Hentry as
+      [[_Hparent_active _Hnot_done_child]
+       [[Hwf Hchild_unvisited]
+        [_Hsettled [Hparent_visited
+         [_Hedge_parent_child [Hfa_child _Horder]]]]]].
+    unfold wf_scc_state in Hwf.
+    destruct Hwf as [_Hstack [_Hdfn_inv [_Hdfn_valid Hfa_visited]]].
+    assert (Hprocessed_neq_child: processed <> child).
+    { intro Hbad. apply Hchild_unvisited.
+      rewrite <- Hbad. apply Hdone_vis. exact Hdone_processed. }
+    assert (Hparent_neq_child: parent <> child).
+    { intro Hbad. apply Hchild_unvisited.
+      rewrite <- Hbad. exact Hparent_visited. }
+    set (sp :=
+           {|
+             visited := visited s0 ∪ [child];
+             timer := S (timer s0);
+             fa := fa s0;
+             dfn := fun x => if equiv_decb x child then timer s0 else dfn s0 x;
+             low := fun x => if equiv_decb x child then timer s0 else low s0 x;
+             stack := child :: stack s0;
+             sccs := sccs s0
+           |}) in *.
+    assert (Hvisited_sp_cases:
+              forall z, Visited z sp -> z = child \/ Visited z s0).
+    { intros z Hvis_z. subst sp. unfold Visited in *. simpl in Hvis_z.
+      sets_unfold in Hvis_z. destruct Hvis_z as [Hvis_z | Hz_child].
+      - right. exact Hvis_z.
+      - left. symmetry. exact Hz_child. }
+    assert (Hfa_keep:
+              forall z, z <> child -> fa sp z = fa s0 z).
+    { intros z _Hz. subst sp. reflexivity. }
+    assert (Hno_out:
+              forall z,
+                ~ dg_step (state_to_dfs_tree g sp root) child z).
+    { intros z Htree_child_z.
+      subst sp. simpl in Htree_child_z.
+      apply tree_step_char in Htree_child_z as
+        [Hfa_z_child [Hfa_z_neq_z Hvis_z_post]].
+      destruct (equiv_dec z child) as [Hz_child | Hz_not_child].
+      - apply Hfa_z_neq_z.
+        transitivity child; [exact Hfa_z_child |].
+        symmetry. exact Hz_child.
+      - simpl in Hfa_z_child, Hvis_z_post.
+        destruct Hvis_z_post as [Hvis_z_old | Hz_child_eq].
+        + assert (Hfa_old_neq: fa s0 z <> z).
+          { intro Hfa_z_self.
+            apply Hz_not_child.
+            rewrite <- Hfa_z_self.
+            exact Hfa_z_child. }
+          apply Hfa_visited in Hfa_old_neq.
+          apply Hchild_unvisited.
+          rewrite <- Hfa_z_child.
+          exact Hfa_old_neq.
+        + apply Hz_not_child. symmetry. exact Hz_child_eq. }
+    intro Hreach_processed_child.
+    match goal with
+    | Hfa: fa sp processed = frame_parent F |- _ =>
+        rename Hfa into Hfa_processed_post
+    | Hfa: fa s0 processed = frame_parent F |- _ =>
+        rename Hfa into Hfa_processed_post
+    end.
+    match goal with
+    | Hfa_neq: fa sp processed <> processed |- _ =>
+        rename Hfa_neq into Hfa_neq_processed_post
+    | Hfa_neq: fa s0 processed <> processed |- _ =>
+        rename Hfa_neq into Hfa_neq_processed_post
+    end.
+    destruct
+      (dg_reachable_last_step_candidate
+         (state_to_dfs_tree g sp root) processed child
+         Hprocessed_neq_child Hreach_processed_child) as
+      [p [Hreach_processed_p Hstep_p_child]].
+    apply tree_step_char in Hstep_p_child as
+      [Hfa_child_p [_Hfa_child_neq_child _Hvis_child_post]].
+    assert (Hp_parent: p = parent).
+    { transitivity (fa sp child).
+      - symmetry. exact Hfa_child_p.
+      - subst sp. simpl. exact Hfa_child. }
+    subst p.
+	    assert (Hreach_processed_parent_pre:
+	              dg_reachable
+	                (state_to_dfs_tree g s0 root) processed parent).
+	    { eapply
+	        (dfs_tree_reachable_transport_to_snapshot_except_new
+	           s0 sp child processed parent).
+	      - exact Hvisited_sp_cases.
+	      - exact Hfa_keep.
+	      - exact Hno_out.
+	      - exact Hparent_neq_child.
+	      - subst parent. exact Hreach_processed_p. }
+    assert (Hfa_processed_pre:
+              fa s0 processed = frame_parent F).
+    { rewrite <- (Hfa_keep processed Hprocessed_neq_child).
+      exact Hfa_processed_post. }
+    assert (Hfa_neq_processed_pre:
+              fa s0 processed <> processed).
+    { intro Hbad. apply Hfa_neq_processed_post.
+      rewrite Hfa_keep; [exact Hbad | exact Hprocessed_neq_child]. }
+    eapply frame_processed_child_not_direct_parent_reachable_from_compat_candidate;
+      eauto.
+  Qed.
+
+  Lemma preloop_old_target_preserves_scc_is_low_v_candidate:
+    forall snap s fresh target,
+      (forall z, Visited z snap -> Visited z s) ->
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, Visited z snap -> fa s z = fa snap z) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      (forall z, Active z snap -> Active z s) ->
+      (forall z, Active z s -> z = fresh \/ Active z snap) ->
+      (forall z, z <> fresh -> dfn s z = dfn snap z) ->
+      (forall z, ~ dg_step (state_to_dfs_tree g s root) fresh z) ->
+      GlobalShapeCandidate snap ->
+      Visited target snap ->
+      Unvisited fresh snap ->
+      target <> fresh ->
+      dfn s fresh = timer snap ->
+      low s target = low snap target ->
+      ~ dg_reachable (state_to_dfs_tree g s root) target fresh ->
+      scc_is_low_v g root snap target ->
+      scc_is_low_v g root s target.
+  Proof.
+    unfold scc_is_low_v, scc_is_low_v_val.
+    intros snap s fresh target Hvisited_mono Hvisited_cases Hfa_mono
+           Hfa_keep Hactive_mono Hactive_cases Hdfn_keep Hno_out
+           Hshape Htarget_visited Hfresh_unvisited Htarget_neq_fresh
+           Hdfn_fresh Hlow_target Hnot_reach_fresh His_low.
+    replace (low s target) with (low snap target) by (symmetry; exact Hlow_target).
+    eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+    - exact His_low.
+    - intros x Hx.
+      assert (Hx_not_fresh: x <> fresh).
+      { intro Hx_fresh. subst x.
+        unfold scc_low_tree, scc_low_reachable in Hx.
+        destruct Hx as [z [Hreach Hcase]].
+        destruct Hcase as [Hz_fresh | Hback].
+        - subst z.
+          pose proof
+            (dfs_tree_reachable_endpoint_visited
+               snap target fresh Htarget_visited Hreach) as Hfresh_vis.
+          apply Hfresh_unvisited. exact Hfresh_vis.
+        - unfold scc_back_edge in Hback.
+          destruct Hback as [_Hedge [Hactive_fresh _Hnot_tree]].
+          unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+          destruct Hshape as [Hstack_in _].
+          apply Hfresh_unvisited.
+          apply Hstack_in. exact Hactive_fresh. }
+      exists x.
+      split.
+      + eapply scc_low_tree_transport_snapshot_to_post_except_new;
+          eauto.
+      + rewrite Hdfn_keep; [lia | exact Hx_not_fresh].
+    - intros x Hx.
+      destruct (equiv_dec x fresh) as [Hx_fresh | Hx_not_fresh].
+      + exists target.
+        split.
+        * unfold scc_low_tree, scc_low_reachable.
+          exists target.
+          split.
+          -- apply Coq.Relations.Relation_Operators.rt_refl.
+          -- left. reflexivity.
+        * rewrite Hx_fresh. rewrite Hdfn_fresh.
+          unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+          destruct Hshape as [_Hstack [Hdfn_inv _Htail]].
+          destruct Hdfn_inv as [Hdfn_lt _Hdfn_tail].
+          specialize (Hdfn_lt target Htarget_visited).
+          lia.
+      + exists x.
+        split.
+        * eapply scc_low_tree_transport_post_to_snapshot_except_new;
+            eauto.
+        * rewrite Hdfn_keep; [lia | exact Hx_not_fresh].
+  Qed.
+
+  Lemma preloop_old_target_preserves_scc_low_valid_v_candidate:
+    forall snap s fresh target,
+      (forall z, Visited z snap -> Visited z s) ->
+      (forall z, Visited z s -> z = fresh \/ Visited z snap) ->
+      (forall z, Visited z snap -> fa s z = fa snap z) ->
+      (forall z, z <> fresh -> fa s z = fa snap z) ->
+      (forall z, Active z snap -> Active z s) ->
+      (forall z, Active z s -> z = fresh \/ Active z snap) ->
+      (forall z, z <> fresh -> dfn s z = dfn snap z) ->
+      (forall z, z <> fresh -> low s z = low snap z) ->
+      (forall z, ~ dg_step (state_to_dfs_tree g s root) fresh z) ->
+      GlobalShapeCandidate snap ->
+      Visited target snap ->
+      Unvisited fresh snap ->
+      target <> fresh ->
+      dfn s fresh = timer snap ->
+      low s target = low snap target ->
+      ~ dg_reachable (state_to_dfs_tree g s root) target fresh ->
+      scc_low_valid_v g root snap target ->
+      scc_low_valid_v g root s target.
+  Proof.
+    unfold scc_low_valid_v.
+    intros snap s fresh target Hvisited_mono Hvisited_cases Hfa_mono
+           Hfa_keep Hactive_mono Hactive_cases Hdfn_keep Hlow_keep
+           Hno_out Hshape Htarget_visited Hfresh_unvisited
+           Htarget_neq_fresh Hdfn_fresh Hlow_target Hnot_reach_fresh
+           Hvalid.
+    replace (low s target) with (low snap target)
+      by (symmetry; exact Hlow_target).
+    assert (Hdfn_target_le_fresh:
+              dfn snap target <= dfn s fresh).
+    { rewrite Hdfn_fresh.
+      unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+      destruct Hshape as [_Hstack [Hdfn_inv _Htail]].
+      destruct Hdfn_inv as [Hdfn_lt _Hdfn_tail].
+      specialize (Hdfn_lt target Htarget_visited).
+      lia. }
+    assert (Htree_old_endpoint_not_fresh:
+              forall y,
+                dg_step (state_to_dfs_tree g snap root) target y ->
+                y <> fresh).
+    { intros y Htree_y Hy_fresh.
+      apply tree_step_char in Htree_y as [_ [_ Hvis_y]].
+      subst y. apply Hfresh_unvisited. exact Hvis_y. }
+    assert (Htree_post_endpoint_not_fresh:
+              forall y,
+                dg_step (state_to_dfs_tree g s root) target y ->
+                y <> fresh).
+    { intros y Htree_y Hy_fresh.
+      subst y. apply Hnot_reach_fresh.
+      apply dg_reachable_step. exact Htree_y. }
+    assert (Hback_old_endpoint_not_fresh:
+              forall y,
+                y ∈ scc_back_edge g root snap target ∪ [target] ->
+                y <> fresh).
+    { intros y Hy Hy_fresh.
+      sets_unfold in Hy.
+      destruct Hy as [Hback | Hy_target].
+      - unfold scc_back_edge in Hback.
+        destruct Hback as [_Hedge [Hactive_y _Hnot_tree]].
+        unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+        destruct Hshape as [Hstack_in _].
+        apply Hfresh_unvisited.
+        subst y. apply Hstack_in. exact Hactive_y.
+      - subst y. apply Htarget_neq_fresh. exact Hy_fresh. }
+    eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+    - exact Hvalid.
+    - intros n Hn.
+      destruct Hn as [Htree_min | Hback_min].
+      + exists n.
+        split; [left | lia].
+        eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+        * exact Htree_min.
+        * intros y Htree_y.
+          assert (Hy_not_fresh: y <> fresh).
+          { eapply Htree_old_endpoint_not_fresh. exact Htree_y. }
+          exists y.
+          split.
+          -- eapply dfs_tree_step_transport_from_monotone_fields; eauto.
+          -- rewrite Hlow_keep; [lia | exact Hy_not_fresh].
+        * intros y Htree_y.
+          assert (Hy_not_fresh: y <> fresh).
+          { eapply Htree_post_endpoint_not_fresh. exact Htree_y. }
+          exists y.
+          split.
+          -- eapply dfs_tree_step_transport_to_snapshot_except_new; eauto.
+          -- rewrite Hlow_keep; [lia | exact Hy_not_fresh].
+      + exists n.
+        split; [right | lia].
+        eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+        * exact Hback_min.
+        * intros y Hy.
+          assert (Hy_not_fresh: y <> fresh).
+          { eapply Hback_old_endpoint_not_fresh. exact Hy. }
+          exists y.
+          split.
+          -- sets_unfold in Hy. sets_unfold.
+             destruct Hy as [Hback | Hy_target].
+             ++ left.
+                eapply scc_back_edge_transport_snapshot_to_post_except_new;
+                  eauto.
+             ++ right. exact Hy_target.
+          -- rewrite Hdfn_keep; [lia | exact Hy_not_fresh].
+        * intros y Hy.
+          destruct (equiv_dec y fresh) as [Hy_fresh | Hy_not_fresh].
+          -- exists target.
+             split.
+             ++ sets_unfold. right. reflexivity.
+             ++ rewrite Hy_fresh. exact Hdfn_target_le_fresh.
+          -- exists y.
+             split.
+             ++ sets_unfold in Hy. sets_unfold.
+                destruct Hy as [Hback | Hy_target].
+                ** left.
+                   eapply scc_back_edge_transport_post_to_snapshot_except_new;
+                     eauto.
+                ** right. exact Hy_target.
+             ++ rewrite Hdfn_keep; [lia | exact Hy_not_fresh].
+    - intros n Hn.
+      destruct Hn as [Htree_min | Hback_min].
+      + exists n.
+        split; [left | lia].
+        eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+        * exact Htree_min.
+        * intros y Htree_y.
+          assert (Hy_not_fresh: y <> fresh).
+          { eapply Htree_post_endpoint_not_fresh. exact Htree_y. }
+          exists y.
+          split.
+          -- eapply dfs_tree_step_transport_to_snapshot_except_new; eauto.
+          -- rewrite Hlow_keep; [lia | exact Hy_not_fresh].
+        * intros y Htree_y.
+          assert (Hy_not_fresh: y <> fresh).
+          { eapply Htree_old_endpoint_not_fresh. exact Htree_y. }
+          exists y.
+          split.
+          -- eapply dfs_tree_step_transport_from_monotone_fields; eauto.
+          -- rewrite Hlow_keep; [lia | exact Hy_not_fresh].
+      + exists n.
+        split; [right | lia].
+        eapply (@min_eq_forward' _ le NatLe_TotalOrder).
+        * exact Hback_min.
+        * intros y Hy.
+          destruct (equiv_dec y fresh) as [Hy_fresh | Hy_not_fresh].
+          -- exists target.
+             split.
+             ++ sets_unfold. right. reflexivity.
+             ++ rewrite Hy_fresh. exact Hdfn_target_le_fresh.
+          -- exists y.
+             split.
+             ++ sets_unfold in Hy. sets_unfold.
+                destruct Hy as [Hback | Hy_target].
+                ** left.
+                   eapply scc_back_edge_transport_post_to_snapshot_except_new;
+                     eauto.
+                ** right. exact Hy_target.
+             ++ rewrite Hdfn_keep; [lia | exact Hy_not_fresh].
+        * intros y Hy.
+          assert (Hy_not_fresh: y <> fresh).
+          { eapply Hback_old_endpoint_not_fresh. exact Hy. }
+          exists y.
+          split.
+          -- sets_unfold in Hy. sets_unfold.
+             destruct Hy as [Hback | Hy_target].
+             ++ left.
+                eapply scc_back_edge_transport_snapshot_to_post_except_new;
+                  eauto.
+             ++ right. exact Hy_target.
+          -- rewrite Hdfn_keep; [lia | exact Hy_not_fresh].
+  Qed.
+
+  Lemma preloop_snapshot_frame_processed_child_cannot_reach_new_child_candidate:
+    forall F parent child done processed s0 sp,
+      sp =
+        {|
+          visited := visited s0 ∪ [child];
+          timer := S (timer s0);
+          fa := fa s0;
+          dfn := fun x => if equiv_decb x child then timer s0 else dfn s0 x;
+          low := fun x => if equiv_decb x child then timer s0 else low s0 x;
+          stack := child :: stack s0;
+          sccs := sccs s0
+        |} ->
+      FrameInvCandidate F s0 ->
+      FrameCompatibleWithCallCandidate F parent child s0 ->
+      ChildEntryCandidate parent child done s0 ->
+      frame_done F processed ->
+      Edge (frame_parent F) processed ->
+      fa sp processed = frame_parent F ->
+      fa sp processed <> processed ->
+      ~ dg_reachable (state_to_dfs_tree g sp root) processed child.
+  Proof.
+    intros F parent child done processed s0 sp Hsp Hframe Hcompat Hentry
+           Hdone_processed Hedge_processed Hfa_processed_post
+           Hfa_neq_processed_post Hreach_processed_child.
+    subst sp.
+    set (sp :=
+           {|
+             visited := visited s0 ∪ [child];
+             timer := S (timer s0);
+             fa := fa s0;
+             dfn := fun x => if equiv_decb x child then timer s0 else dfn s0 x;
+             low := fun x => if equiv_decb x child then timer s0 else low s0 x;
+             stack := child :: stack s0;
+             sccs := sccs s0
+           |}) in *.
+    pose proof
+      (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe) as Hlow.
+    unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+      LocalActiveRootCandidate, DoneDisciplineCandidate in Hlow.
+    destruct Hlow as [[_Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
+    unfold ChildEntryCandidate,
+      ParentLoopSuspendedBaseCandidate,
+      ParentActiveBaseCandidate,
+      PendingChildShapeCandidate,
+      GlobalShapePreCandidate,
+      Visited,
+      Unvisited in Hentry.
+    destruct Hentry as
+      [[_Hparent_active _Hnot_done_child]
+       [[Hwf Hchild_unvisited]
+        [_Hsettled [Hparent_visited
+         [_Hedge_parent_child [Hfa_child _Horder]]]]]].
+    unfold wf_scc_state in Hwf.
+    destruct Hwf as [_Hstack [_Hdfn_inv [_Hdfn_valid Hfa_visited]]].
+    assert (Hprocessed_neq_child: processed <> child).
+    { intro Hbad. apply Hchild_unvisited.
+      rewrite <- Hbad. apply Hdone_vis. exact Hdone_processed. }
+    assert (Hparent_neq_child: parent <> child).
+    { intro Hbad. apply Hchild_unvisited.
+      rewrite <- Hbad. exact Hparent_visited. }
+    assert (Hvisited_sp_cases:
+              forall z, Visited z sp -> z = child \/ Visited z s0).
+    { intros z Hvis_z. subst sp. unfold Visited in *. simpl in Hvis_z.
+      sets_unfold in Hvis_z. destruct Hvis_z as [Hvis_z | Hz_child].
+      - right. exact Hvis_z.
+      - left. symmetry. exact Hz_child. }
+    assert (Hfa_keep:
+              forall z, z <> child -> fa sp z = fa s0 z).
+    { intros z _Hz. subst sp. reflexivity. }
+    assert (Hno_out:
+              forall z,
+                ~ dg_step (state_to_dfs_tree g sp root) child z).
+    { intros z Htree_child_z.
+      subst sp. simpl in Htree_child_z.
+      apply tree_step_char in Htree_child_z as
+        [Hfa_z_child [Hfa_z_neq_z Hvis_z_post]].
+      destruct (equiv_dec z child) as [Hz_child | Hz_not_child].
+      - apply Hfa_z_neq_z.
+        transitivity child; [exact Hfa_z_child |].
+        symmetry. exact Hz_child.
+      - simpl in Hfa_z_child, Hvis_z_post.
+        destruct Hvis_z_post as [Hvis_z_old | Hz_child_eq].
+        + assert (Hfa_old_neq: fa s0 z <> z).
+          { intro Hfa_z_self.
+            apply Hz_not_child.
+            rewrite <- Hfa_z_self.
+            exact Hfa_z_child. }
+          apply Hfa_visited in Hfa_old_neq.
+          apply Hchild_unvisited.
+          rewrite <- Hfa_z_child.
+          exact Hfa_old_neq.
+        + apply Hz_not_child. symmetry. exact Hz_child_eq. }
+    destruct
+      (dg_reachable_last_step_candidate
+         (state_to_dfs_tree g sp root) processed child
+         Hprocessed_neq_child Hreach_processed_child) as
+      [p [Hreach_processed_p Hstep_p_child]].
+    apply tree_step_char in Hstep_p_child as
+      [Hfa_child_p [_Hfa_child_neq_child _Hvis_child_post]].
+    assert (Hp_parent: p = parent).
+    { transitivity (fa sp child).
+      - symmetry. exact Hfa_child_p.
+      - subst sp. simpl. exact Hfa_child. }
+    subst p.
+    assert (Hreach_processed_parent_pre:
+              dg_reachable
+                (state_to_dfs_tree g s0 root) processed parent).
+    { eapply
+        (dfs_tree_reachable_transport_to_snapshot_except_new
+           s0 sp child processed parent).
+      - exact Hvisited_sp_cases.
+      - exact Hfa_keep.
+      - exact Hno_out.
+      - exact Hparent_neq_child.
+      - subst parent. exact Hreach_processed_p. }
+    assert (Hfa_processed_pre:
+              fa s0 processed = frame_parent F).
+    { rewrite <- (Hfa_keep processed Hprocessed_neq_child).
+      exact Hfa_processed_post. }
+    assert (Hfa_neq_processed_pre:
+              fa s0 processed <> processed).
+    { intro Hbad. apply Hfa_neq_processed_post.
+      rewrite Hfa_keep; [exact Hbad | exact Hprocessed_neq_child]. }
+    eapply frame_processed_child_not_direct_parent_reachable_from_compat_candidate;
+      eauto.
+  Qed.
+
+  Lemma PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof:
+    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement.
+  Proof.
+    unfold PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement.
+    intros F parent child done.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hframe [Hcompat Hentry]].
+    pose proof Hentry as Hentry_full.
+    pose proof
+      (FrameInvProvidesProcessedTreeChildrenCorrectCandidate_proof
+         F s0 Hframe) as Hchildren.
+    pose proof
+      (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe) as Hlow.
+    unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+      LocalActiveRootCandidate, DoneDisciplineCandidate in Hlow.
+    destruct Hlow as [[Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
+    destruct Hlocal as [Hshape _Hlocal_tail].
+    unfold ChildEntryCandidate,
+      ParentLoopSuspendedBaseCandidate,
+      PendingChildShapeCandidate,
+      GlobalShapePreCandidate,
+      Unvisited in Hentry.
+    destruct Hentry as [_Hparent_base [Hglobal_pre _Hpending_tail]].
+    destruct Hglobal_pre as [_Hwf Hfresh_unvisited].
+    set (sp :=
+           {|
+             visited := visited s0 ∪ [child];
+             timer := S (timer s0);
+             fa := fa s0;
+             dfn := fun x => if equiv_decb x child then timer s0 else dfn s0 x;
+             low := fun x => if equiv_decb x child then timer s0 else low s0 x;
+             stack := child :: stack s0;
+             sccs := sccs s0
+           |}) in *.
+    assert (Hvisited_mono:
+              forall z, Visited z s0 -> Visited z sp).
+    { intros z Hvis_z. subst sp. unfold Visited in *. simpl.
+      sets_unfold. left. exact Hvis_z. }
+    assert (Hvisited_cases:
+              forall z, Visited z sp -> z = child \/ Visited z s0).
+    { intros z Hvis_z. subst sp. unfold Visited in *. simpl in Hvis_z.
+      sets_unfold in Hvis_z. destruct Hvis_z as [Hvis_z | Hz_child].
+      - right. exact Hvis_z.
+      - left. symmetry. exact Hz_child. }
+    assert (Hactive_mono:
+              forall z, Active z s0 -> Active z sp).
+    { intros z Hactive_z. subst sp. unfold Active in *. simpl.
+      right. exact Hactive_z. }
+    assert (Hactive_cases:
+              forall z, Active z sp -> z = child \/ Active z s0).
+    { intros z Hactive_z. subst sp. unfold Active in *. simpl in Hactive_z.
+      destruct Hactive_z as [Hz_child | Hactive_z].
+      - left. symmetry. exact Hz_child.
+      - right. exact Hactive_z. }
+    assert (Hfa_mono:
+              forall z, Visited z s0 -> fa sp z = fa s0 z).
+    { intros z _Hvis_z. subst sp. reflexivity. }
+    assert (Hfa_keep:
+              forall z, z <> child -> fa sp z = fa s0 z).
+    { intros z _Hz. subst sp. reflexivity. }
+    assert (Hdfn_keep:
+              forall z, z <> child -> dfn sp z = dfn s0 z).
+    { intros z Hz. subst sp. simpl. unfold equiv_decb.
+      destruct (equiv_dec z child) as [Hz_child | _].
+      - exfalso. apply Hz. exact Hz_child.
+      - reflexivity. }
+    assert (Hlow_keep:
+              forall z, z <> child -> low sp z = low s0 z).
+    { intros z Hz. subst sp. simpl. unfold equiv_decb.
+      destruct (equiv_dec z child) as [Hz_child | _].
+      - exfalso. apply Hz. exact Hz_child.
+      - reflexivity. }
+    assert (Hdfn_fresh: dfn sp child = timer s0).
+    { subst sp. simpl. unfold equiv_decb.
+      destruct (equiv_dec child child) as [_ | Hbad].
+      - reflexivity.
+      - exfalso. apply Hbad. reflexivity. }
+    assert (Hno_out:
+              forall z,
+                ~ dg_step (state_to_dfs_tree g sp root) child z).
+    { intros z Htree_child_z.
+      subst sp. simpl in Htree_child_z.
+      unfold ChildEntryCandidate,
+        ParentLoopSuspendedBaseCandidate,
+        PendingChildShapeCandidate,
+        GlobalShapePreCandidate,
+        Unvisited in Hentry_full.
+      apply tree_step_char in Htree_child_z as
+        [Hfa_z_child [Hfa_z_neq_z Hvis_z_post]].
+      destruct (equiv_dec z child) as [Hz_child | Hz_not_child].
+      - apply Hfa_z_neq_z.
+        transitivity child; [exact Hfa_z_child |].
+        symmetry. exact Hz_child.
+      - simpl in Hfa_z_child, Hvis_z_post.
+        destruct Hentry_full as
+          [[_Hparent_active _Hnot_done_child]
+           [[Hwf _Hchild_unvisited]
+            [_Hsettled [_Hparent_visited
+             [_Hedge_parent_child [_Hfa_child _Horder]]]]]].
+        unfold wf_scc_state in Hwf.
+        destruct Hwf as [_Hstack [_Hdfn_inv [_Hdfn_valid Hfa_visited]]].
+        destruct Hvis_z_post as [Hvis_z_old | Hz_child_eq].
+        + assert (Hfa_old_neq: fa s0 z <> z).
+          { intro Hfa_z_self.
+            apply Hz_not_child.
+            rewrite <- Hfa_z_self.
+            exact Hfa_z_child. }
+          apply Hfa_visited in Hfa_old_neq.
+          apply Hfresh_unvisited.
+          rewrite <- Hfa_z_child.
+          exact Hfa_old_neq.
+        + apply Hz_not_child. symmetry. exact Hz_child_eq. }
+    unfold ProcessedTreeChildrenCorrectCandidate,
+      ProcessedTreeChildrenLowValidCandidate,
+      ProcessedTreeChildrenIsLowCandidate,
+      ProcessedTreeChildrenInactiveSelfLowCandidate,
+      ChildLowValidForParentCandidate,
+      ChildIsLowForParentCandidate,
+      ChildInactiveSelfLowForParentCandidate in Hchildren |- *.
+    destruct Hchildren as [Hvalid [His_low Hinactive]].
+    split.
+    - intros processed Hdone_processed Hedge_processed
+             Hfa_processed_post Hfa_neq_processed_post.
+      assert (Hprocessed_visited: Visited processed s0).
+      { apply Hdone_vis. exact Hdone_processed. }
+      assert (Hprocessed_neq_child: processed <> child).
+      { intro Hbad. apply Hfresh_unvisited.
+        rewrite <- Hbad. exact Hprocessed_visited. }
+      assert (Hfa_processed_pre:
+                fa s0 processed = frame_parent F).
+      { rewrite <- (Hfa_keep processed Hprocessed_neq_child).
+        exact Hfa_processed_post. }
+      assert (Hfa_neq_processed_pre:
+                fa s0 processed <> processed).
+      { intro Hbad. apply Hfa_neq_processed_post.
+        rewrite Hfa_keep; [exact Hbad | exact Hprocessed_neq_child]. }
+      assert (Hnot_reach_child:
+                ~ dg_reachable
+                    (state_to_dfs_tree g sp root) processed child).
+      { eapply
+          (preloop_snapshot_frame_processed_child_cannot_reach_new_child_candidate
+             F parent child done processed s0 sp); eauto. }
+      eapply preloop_old_target_preserves_scc_low_valid_v_candidate;
+        eauto.
+    - split.
+      + intros processed Hdone_processed Hedge_processed
+               Hfa_processed_post Hfa_neq_processed_post.
+        assert (Hprocessed_visited: Visited processed s0).
+        { apply Hdone_vis. exact Hdone_processed. }
+        assert (Hprocessed_neq_child: processed <> child).
+        { intro Hbad. apply Hfresh_unvisited.
+          rewrite <- Hbad. exact Hprocessed_visited. }
+        assert (Hfa_processed_pre:
+                  fa s0 processed = frame_parent F).
+        { rewrite <- (Hfa_keep processed Hprocessed_neq_child).
+          exact Hfa_processed_post. }
+        assert (Hfa_neq_processed_pre:
+                  fa s0 processed <> processed).
+        { intro Hbad. apply Hfa_neq_processed_post.
+          rewrite Hfa_keep; [exact Hbad | exact Hprocessed_neq_child]. }
+        assert (Hnot_reach_child:
+                  ~ dg_reachable
+                      (state_to_dfs_tree g sp root) processed child).
+        { eapply
+            (preloop_snapshot_frame_processed_child_cannot_reach_new_child_candidate
+               F parent child done processed s0 sp); eauto. }
+        eapply preloop_old_target_preserves_scc_is_low_v_candidate;
+          eauto.
+      + intros processed Hdone_processed Hedge_processed
+               Hfa_processed_post Hfa_neq_processed_post Hnot_active_post.
+        assert (Hprocessed_visited: Visited processed s0).
+        { apply Hdone_vis. exact Hdone_processed. }
+        assert (Hprocessed_neq_child: processed <> child).
+        { intro Hbad. apply Hfresh_unvisited.
+          rewrite <- Hbad. exact Hprocessed_visited. }
+        assert (Hfa_processed_pre:
+                  fa s0 processed = frame_parent F).
+        { rewrite <- (Hfa_keep processed Hprocessed_neq_child).
+          exact Hfa_processed_post. }
+        assert (Hfa_neq_processed_pre:
+                  fa s0 processed <> processed).
+        { intro Hbad. apply Hfa_neq_processed_post.
+          rewrite Hfa_keep; [exact Hbad | exact Hprocessed_neq_child]. }
+        rewrite Hlow_keep; [| exact Hprocessed_neq_child].
+        rewrite Hdfn_keep; [| exact Hprocessed_neq_child].
+        apply Hinactive; try assumption.
+        intro Hactive_pre.
+        apply Hnot_active_post.
+        apply Hactive_mono. exact Hactive_pre.
+  Qed.
+
   Lemma BodyFrameAfterPreloopCandidate_from_processed_cut_proof:
-    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement ->
     BodyFrameAfterPreloopCandidate_statement.
   Proof.
     unfold
-      PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement,
       BodyFrameAfterPreloopCandidate_statement.
-    intros Hprocessed F parent child done Hedge Hnot_done.
+    intros F parent child done Hedge Hnot_done.
     eapply Hoare_conseq_post.
     2: {
       apply Hoare_conj
@@ -13770,7 +16295,9 @@ Section IS_LOW_SKELETON.
                          (frame_parent F) (frame_child F) (frame_done F) s /\
                        SuspendedSegmentTreeCoverageByDoneCandidate
                          (frame_parent F) (frame_child F) (frame_done F) s).
-                -- apply (Hprocessed F parent child done).
+                -- apply
+                     (PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof
+                        F parent child done).
                 -- apply Hoare_conj
                     with
                       (Q1 := fun _ s =>
@@ -13936,6 +16463,278 @@ Section IS_LOW_SKELETON.
       2: { apply Hoare_assume. }
       intros _ s [Hpre _Hnot_guard].
       exact (proj1 Hpre).
+  Qed.
+
+  Lemma MaybePopPreservesFrameProgressWithBoundaryCandidate_proof:
+    forall F u progress_parent,
+      Hoare
+        (fun snap =>
+           FrameProgressCandidate F u snap /\
+           FrameProgressCandidate F progress_parent snap /\
+           Active u snap /\
+           ~ frame_child F = u /\
+           GlobalShapeCandidate snap /\
+           OrderFactsCandidate snap /\
+           FramePopBoundaryCandidate F u snap)
+        (maybe_pop u)
+        (fun _ s => FrameProgressCandidate F progress_parent s).
+  Proof.
+    intros F u progress_parent.
+    unfold maybe_pop, root_pop_guard.
+    intro_state. hoare_auto_s.
+    - unfold pop_scc. intro_state. hoare_auto_s.
+      subst s1 s.
+      match goal with
+      | Hpre:
+          (FrameProgressCandidate F u s0 /\
+           FrameProgressCandidate F progress_parent s0 /\
+           Active u s0 /\
+           frame_child F <> u /\
+           GlobalShapeCandidate s0 /\
+           OrderFactsCandidate s0 /\
+           FramePopBoundaryCandidate F u s0) /\ _ |- _ =>
+          destruct Hpre as
+            [[Hprogress_u [Hprogress [Hu_active
+              [Hframe_child_neq_u
+               [Hshape [Horderfacts Hboundary]]]]]]
+             _Hguard]
+      | Hpre:
+          FrameProgressCandidate F u s0 /\
+          FrameProgressCandidate F progress_parent s0 /\
+          Active u s0 /\
+          frame_child F <> u /\
+          GlobalShapeCandidate s0 /\
+          OrderFactsCandidate s0 /\
+          FramePopBoundaryCandidate F u s0 |- _ =>
+          destruct Hpre as
+            [Hprogress_u [Hprogress [Hu_active
+              [Hframe_child_neq_u
+               [Hshape [Horderfacts Hboundary]]]]]]
+      end.
+      unfold FrameProgressCandidate in Hprogress_u.
+      destruct Hprogress_u as
+        [_Hvis_parent_u [Hpending_u [_Hframe_parent_u_older _Hdone_u_older]]].
+      unfold PendingChildSegmentCandidate in Hpending_u.
+      destruct Hpending_u as
+        [_Hvis_frame_child_u
+         [Hactive_frame_child_u Htree_child_u]].
+      unfold FrameProgressCandidate in Hprogress |- *.
+      destruct Hprogress as
+        [Hvis_parent [Hpending [Hparent_older Hdone_older]]].
+      unfold PendingChildSegmentCandidate in Hpending.
+      destruct Hpending as
+        [Hvis_frame_child [_Hactive_frame_child Htree_child_progress]].
+      unfold pop_scc_state.
+      destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
+      simpl.
+      assert (Hactive_frame_child_post: In (frame_child F) rest).
+      { destruct (classic (In (frame_child F) rest))
+          as [Hrest | Hnot_rest]; [exact Hrest |].
+        exfalso.
+        assert (Hdfn_u_frame_child:
+                  dfn s0 u <= dfn s0 (frame_child F)).
+        { destruct Horderfacts as [Hstack_order _Hdfn_inj].
+          eapply stack_split_removed_vertex_dfn_ge_root; eauto. }
+        assert (Hdfn_frame_child_u:
+                  dfn s0 (frame_child F) <= dfn s0 u).
+        { eapply dfs_tree_reachable_dfn_le; eauto. }
+        assert (Hvis_u: Visited u s0).
+        { unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+          destruct Hshape as [Hstack_visited _Hshape_tail].
+          apply Hstack_visited. exact Hu_active. }
+        destruct Horderfacts as [_Hstack_order Hdfn_inj].
+        pose proof
+          (Hdfn_inj (frame_child F) u Hframe_child_neq_u
+             _Hvis_frame_child_u Hvis_u) as Hdfn_neq.
+        apply Hdfn_neq. lia. }
+      split.
+      + exact Hvis_parent.
+      + split.
+        * unfold PendingChildSegmentCandidate.
+          split; [exact Hvis_frame_child |].
+          split; [exact Hactive_frame_child_post |].
+          exact Htree_child_progress.
+        * split; [exact Hparent_older |].
+          intros v Hdone_v Hactive_v_post.
+          apply Hdone_older; [exact Hdone_v |].
+          eapply stack_split_rest_in_original_stack; eauto.
+    - destruct H1 as [Hs _Hguard].
+      subst s.
+      destruct H as [_Hprogress_u [Hprogress _Htail]].
+      exact Hprogress.
+  Qed.
+
+  Lemma MaybePopPreservesFrameProgressFromLoopDoneOlderVerticesCandidate_proof:
+    forall F u progress_parent,
+      Hoare
+        (fun s =>
+           FrameInvCandidate F s /\
+           LoopDonePhase7Candidate u s /\
+           FrameProgressCandidate F u s /\
+           FrameProgressCandidate F progress_parent s /\
+           ~ frame_child F = u /\
+           dfn s (frame_parent F) < dfn s u /\
+           (forall v,
+               frame_done F v ->
+               Active v s ->
+               dfn s v < dfn s u))
+        (maybe_pop u)
+        (fun _ s => FrameProgressCandidate F progress_parent s).
+  Proof.
+    intros F u progress_parent.
+    eapply Hoare_conseq_pre.
+    2: {
+      apply
+        (MaybePopPreservesFrameProgressWithBoundaryCandidate_proof
+           F u progress_parent).
+    }
+    intros s
+      [Hframe [Hloop_done [Hprogress_u [Hprogress
+       [Hframe_child_neq_u [Hparent_older Hdone_older]]]]]].
+    split; [exact Hprogress_u |].
+    split; [exact Hprogress |].
+    split.
+    - unfold LoopDonePhase7Candidate,
+        LoopInvPhase7Candidate,
+        LoopInvPhase6Candidate,
+        LoopInvLowCandidate,
+        LoopInvDoneCandidate,
+        LocalActiveRootCandidate in Hloop_done.
+      destruct Hloop_done as [Hphase6 _Hphase7_tail].
+      destruct Hphase6 as [Hlow _Hphase6_tail].
+      destruct Hlow as [Hdone_loop _Hpartial].
+      destruct Hdone_loop as [Hlocal _Hdone_disc].
+      destruct Hlocal as [_Hshape [_Hsettled [_Hvis [Hactive _Horder]]]].
+      exact Hactive.
+    - split; [exact Hframe_child_neq_u |].
+      split.
+      + unfold LoopDonePhase7Candidate,
+          LoopInvPhase7Candidate,
+          LoopInvPhase6Candidate,
+          LoopInvLowCandidate,
+          LoopInvDoneCandidate,
+          LocalActiveRootCandidate in Hloop_done.
+        destruct Hloop_done as [Hphase6 _Hphase7_tail].
+        destruct Hphase6 as [Hlow _Hphase6_tail].
+        destruct Hlow as [Hdone_loop _Hpartial].
+        destruct Hdone_loop as [Hlocal _Hdone_disc].
+        destruct Hlocal as [Hshape [_Hsettled [_Hvis [_Hactive _Horder]]]].
+        exact Hshape.
+      + split.
+        * unfold LoopDonePhase7Candidate,
+            LoopInvPhase7Candidate,
+            LoopInvPhase6Candidate,
+            LoopInvLowCandidate,
+            LoopInvDoneCandidate,
+            LocalActiveRootCandidate in Hloop_done.
+          destruct Hloop_done as [Hphase6 _Hphase7_tail].
+          destruct Hphase6 as [Hlow _Hphase6_tail].
+          destruct Hlow as [Hdone_loop _Hpartial].
+          destruct Hdone_loop as [Hlocal _Hdone_disc].
+          destruct Hlocal as [_Hshape [_Hsettled [_Hvis [_Hactive Horder]]]].
+          exact Horder.
+        * eapply FramePopBoundaryCandidate_from_loop_done_older_vertices_proof;
+            eauto.
+  Qed.
+
+  Lemma PreloopPreservesFrameProgressCandidate_proof:
+    forall F progress_parent direct_parent child done,
+      Hoare
+        (fun s =>
+           FrameInvCandidate F s /\
+           FrameProgressCandidate F progress_parent s /\
+           ChildEntryCandidate direct_parent child done s)
+        (preloop child)
+        (fun _ s => FrameProgressCandidate F progress_parent s).
+  Proof.
+    intros F progress_parent direct_parent child done.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s.
+    destruct H as [Hframe [Hprogress Hentry]].
+    unfold FrameProgressCandidate in Hprogress |- *.
+    destruct Hprogress as
+      [Hvis_parent [Hpending [Hparent_older Hdone_older]]].
+    unfold PendingChildSegmentCandidate in Hpending.
+    destruct Hpending as
+      [Hvis_frame_child [Hactive_frame_child Htree_frame_progress]].
+    unfold ChildEntryCandidate,
+      ParentLoopSuspendedBaseCandidate,
+      PendingChildShapeCandidate,
+      GlobalShapePreCandidate in Hentry.
+    destruct Hentry as [_Hparent_base [Hglobal_pre _Hpending_shape]].
+    destruct Hglobal_pre as [Hshape Hchild_unvisited].
+    assert (Hframe_child_neq_child: ~ frame_child F = child).
+    { intro Hbad.
+      apply Hchild_unvisited.
+      rewrite <- Hbad.
+      exact Hvis_frame_child. }
+    assert (Hprogress_parent_neq_child: progress_parent <> child).
+    { intro Hbad.
+      apply Hchild_unvisited.
+      rewrite <- Hbad.
+      eapply dfs_tree_reachable_endpoint_visited.
+      - exact Hvis_frame_child.
+      - exact Htree_frame_progress. }
+    split.
+    - simpl. sets_unfold. left. exact Hvis_parent.
+    - split.
+      + unfold PendingChildSegmentCandidate.
+        split.
+        * simpl. sets_unfold. left. exact Hvis_frame_child.
+        * split.
+          -- simpl. right. exact Hactive_frame_child.
+          -- eapply dfs_tree_reachable_transport_from_monotone_fields
+               with (snap := s0).
+             ++ intros z Hz.
+                simpl. sets_unfold. left. exact Hz.
+             ++ intros z Hz.
+                simpl. unfold equiv_decb.
+                destruct (equiv_dec z child) as [Hz_child | _].
+                ** exfalso. apply Hchild_unvisited.
+                   rewrite <- Hz_child. exact Hz.
+                ** reflexivity.
+             ++ exact Htree_frame_progress.
+      + split.
+        * simpl. unfold equiv_decb.
+          destruct (equiv_dec (frame_parent F) child)
+            as [Hparent_child | _].
+          -- exfalso.
+             apply Hchild_unvisited.
+             rewrite <- Hparent_child.
+             exact Hvis_parent.
+          -- destruct (equiv_dec progress_parent child)
+               as [Hprogress_child | _].
+             ++ exfalso. apply Hprogress_parent_neq_child.
+                exact Hprogress_child.
+             ++ exact Hparent_older.
+        * intros v Hdone_v Hactive_v_post.
+          simpl in Hactive_v_post.
+          destruct Hactive_v_post as [Hv_child | Hactive_v].
+          -- subst v.
+             pose proof
+               (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe)
+               as Hlow.
+             unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+             destruct Hlow as [[_Hlocal [_Hdone_subset Hdone_visited]]
+                                _Hpartial].
+             exfalso. apply Hchild_unvisited.
+             apply Hdone_visited. exact Hdone_v.
+             -- simpl. unfold equiv_decb.
+             destruct (equiv_dec v child) as [Hv_child | _].
+             ++ pose proof
+                  (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe)
+                  as Hlow.
+                unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
+                destruct Hlow as [[_Hlocal [_Hdone_subset Hdone_visited]]
+                                   _Hpartial].
+                exfalso. apply Hchild_unvisited.
+                apply Hdone_visited.
+                rewrite <- Hv_child. exact Hdone_v.
+             ++ destruct (equiv_dec progress_parent child)
+                  as [Hprogress_child | _].
+                ** exfalso. apply Hprogress_parent_neq_child.
+                   exact Hprogress_child.
+                ** apply Hdone_older; assumption.
   Qed.
 
   (* ================================================================ *)
@@ -14312,6 +17111,7 @@ Section IS_LOW_SKELETON.
     Frame : Type;
     FrameInv : Frame -> St -> Prop;
     FrameCompatible : Frame -> V -> V -> St -> Prop;
+    FrameProgress : Frame -> V -> St -> Prop;
   }.
 
   Definition LoopEntry (I: LowProofInterface) (u: V): St -> Prop :=
@@ -14358,6 +17158,20 @@ Section IS_LOW_SKELETON.
         (W child)
         (fun _ s => FrameInv I F s).
 
+  Definition FrameProgressContract
+             (I: LowProofInterface) (W: RecProgram): Prop :=
+    forall (F: Frame I) progress_parent direct_parent child direct_done,
+      dg_step g direct_parent child ->
+      ~ direct_done child ->
+      Hoare
+        (fun s =>
+           FrameInv I F s /\
+           FrameProgress I F direct_parent s /\
+           FrameProgress I F progress_parent s /\
+           ChildEntry I direct_parent child direct_done s)
+        (W child)
+        (fun _ s => FrameProgress I F progress_parent s).
+
   Definition LowCandidateInterface: LowProofInterface :=
     {|
       EntryPre := EntryPreCandidate;
@@ -14376,10 +17190,15 @@ Section IS_LOW_SKELETON.
           PartialRootLowEquationCandidate parent done s /\
           fa s child = parent /\
           fa s child <> child /\
-          low s child <= dfn s child;
+          low s child <= dfn s child /\
+          ParentPendingChildEscapeAccountedCandidate
+            parent done child s /\
+          ActiveTargetBlocksEscapeAccountedCandidate
+            parent (done_after done child) s;
       Frame := SuspendedFrameCandidate;
       FrameInv := FrameInvCandidate;
       FrameCompatible := FrameCompatibleWithCallCandidate;
+      FrameProgress := FrameProgressCandidate;
     |}.
 
   Definition ChildContractCandidate_to_interface_statement: Prop :=
@@ -14397,6 +17216,11 @@ Section IS_LOW_SKELETON.
       FrameContractCandidate W ->
       FrameContract LowCandidateInterface W.
 
+  Definition FrameProgressContractCandidate_to_interface_statement: Prop :=
+    forall W,
+      FrameProgressContractCandidate W ->
+      FrameProgressContract LowCandidateInterface W.
+
   (* ================================================================ *)
   (* Cut-transition theorem statements                                *)
   (* ================================================================ *)
@@ -14413,6 +17237,7 @@ Section IS_LOW_SKELETON.
       ChildContract I W ->
       LowContributionContract I W ->
       FrameContract I W ->
+      FrameProgressContract I W ->
       dg_step g u a ->
       ~ done a ->
       Hoare
@@ -14425,6 +17250,7 @@ Section IS_LOW_SKELETON.
       ChildContract I W ->
       LowContributionContract I W ->
       FrameContract I W ->
+      FrameProgressContract I W ->
       Hoare
         (LoopEntry I u)
         (edge_loop u W)
@@ -14516,6 +17342,298 @@ Section IS_LOW_SKELETON.
         split; [exact Hvis | exact Hnot_active].
   Qed.
 
+	  Lemma ProcessEdgePreservesFrameInvCandidate_with_progress_proof:
+	    forall W F child done a,
+	      RecursiveCallContractsCandidate W ->
+	      FrameProgressContractCandidate W ->
+	      Edge child a ->
+	      ~ done a ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           LoopInvPhase7Candidate child done s /\
+	           FrameProgressCandidate F child s)
+	        (process_edge child W a)
+	        (fun _ s => FrameInvCandidate F s).
+	  Proof.
+	    intros W F child done a Hcontracts Hprogress_contract Hedge Hnot_done.
+	    unfold process_edge, if_else, If.
+	    intro_state.
+	    apply Hoare_choice.
+	    - apply Hoare_assume_bind. simpl.
+	      eapply Hoare_conseq_pre.
+	      2: {
+	        apply
+	          (ProcessEdgeTreeBranchPreservesFrameInvCandidate_proof
+	             W F child done a Hcontracts Hprogress_contract Hedge Hnot_done).
+	      }
+	      intros s [Hunvis Heq_s]. subst s.
+	      destruct H as [Hframe [Hloop Hprogress]].
+	      split; [exact Hframe |].
+	      split; [exact Hloop |].
+	      split; [exact Hprogress | exact Hunvis].
+	    - apply Hoare_assume_bind. simpl.
+	      intro_state.
+	      destruct H1 as [Hnot_unvis Heq_s]. subst s1.
+	      assert (Hvis: Visited a s0).
+	      { unfold Unvisited in Hnot_unvis.
+	        unfold Visited. apply NNPP. exact Hnot_unvis. }
+	      apply Hoare_choice.
+	      + apply Hoare_assume_bind. simpl.
+	        eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (get_dfn_update_low_current_preserves_frame_inv_candidate
+	               F child a).
+	        }
+	        intros s [Hactive_guard Heq_s]. subst s.
+	        destruct H as [Hframe [Hloop Hprogress]].
+	        split; [exact Hframe |].
+	        split; [exact Hprogress |].
+	        apply LoopInvPhase7Candidate_active_root with (done := done).
+	        exact Hloop.
+	      + eapply Hoare_conseq_post.
+	        2: { apply Hoare_assume_s. }
+	        intros _ s [Heq_s _Hnot_active_guard].
+	        subst s.
+	        exact (proj1 H).
+	  Qed.
+
+	  Lemma ProcessEdgeTreeBranchPreservesFrameProgressCandidate_proof:
+	    forall W F progress_parent child done a,
+	      FrameProgressContractCandidate W ->
+	      Edge child a ->
+	      ~ done a ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F child s /\
+	           FrameProgressCandidate F progress_parent s /\
+	           LoopInvPhase7Candidate child done s /\
+	           Unvisited a s)
+	        (set_fa a child;; W a;;
+	         lv <- get' (fun s => low s a);; update_low child lv)
+	        (fun _ s => FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros W F progress_parent child done a Hprogress_contract Hedge Hnot_done.
+	    eapply Hoare_bind.
+	    - apply Hoare_conj
+	        with
+	          (Q1 := fun _ s =>
+	             ChildEntryCandidate child a done s /\
+	             FrameInvCandidate F s /\
+	             FrameProgressCandidate F child s)
+	          (Q2 := fun _ s => FrameProgressCandidate F progress_parent s).
+	      + eapply Hoare_conseq_post.
+	        2: {
+	          apply Hoare_conj
+	            with
+	              (Q1 := fun _ s => ChildEntryCandidate child a done s)
+	              (Q2 := fun _ s =>
+	                 FrameInvCandidate F s /\
+	                 FrameProgressCandidate F child s).
+	          - eapply Hoare_conseq_pre.
+	            2: {
+	              apply
+	                (SetFaCreatesPendingChildCandidate_proof
+	                   child a done Hedge Hnot_done).
+	            }
+	            intros s [_Hframe [_Hprogress_child
+	                      [_Hprogress_target [Hloop Hunvis]]]].
+	            unfold LoopInvPhase7Candidate,
+	              LoopInvPhase6Candidate,
+	              LoopInvLowCandidate,
+	              LoopInvDoneCandidate in Hloop.
+	            destruct Hloop as [Hphase6 _Htail].
+	            destruct Hphase6 as [Hlow _Hphase6_tail].
+	            destruct Hlow as [Hdone_loop _Hpartial].
+	            destruct Hdone_loop as [Hlocal _Hdiscipline].
+	            split.
+	            + exact Hlocal.
+	            + split; [exact Hunvis |].
+	              unfold LocalActiveRootCandidate in Hlocal.
+	              exact (proj2 (proj2 (proj2 (proj2 Hlocal)))).
+	          - apply Hoare_conj.
+	            + eapply Hoare_conseq_pre.
+	              2: {
+	                apply
+	                  (set_fa_unvisited_preserves_frame_inv_candidate
+	                     F child a).
+	              }
+	              intros s [Hframe [Hprogress_child
+	                        [_Hprogress_target [Hloop Hunvis]]]].
+	              unfold LoopInvPhase7Candidate,
+	                LoopInvPhase6Candidate,
+	                LoopInvLowCandidate,
+	                LoopInvDoneCandidate in Hloop.
+	              destruct Hloop as [Hphase6 _Htail].
+	              destruct Hphase6 as [Hlow _Hphase6_tail].
+	              destruct Hlow as [Hdone_loop _Hpartial].
+	              destruct Hdone_loop as [Hlocal _Hdiscipline].
+	              split; [exact Hframe |].
+	              split; [exact Hprogress_child |].
+	              split; [exact Hlocal | exact Hunvis].
+	            + eapply Hoare_conseq_pre.
+	              2: {
+	                apply
+	                  (set_fa_unvisited_preserves_frame_progress_candidate
+	                     F child a).
+	              }
+	              intros s [_Hframe [Hprogress_child
+	                        [_Hprogress_target [_Hloop Hunvis]]]].
+	              split; [exact Hprogress_child | exact Hunvis].
+	        }
+	        intros _ s [Hentry [Hframe Hprogress_child]].
+	        split; [exact Hentry |].
+	        split; [exact Hframe | exact Hprogress_child].
+	      + eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (set_fa_unvisited_preserves_frame_progress_any_parent_candidate
+	               F progress_parent child a).
+	        }
+	        intros s [_Hframe [_Hprogress_child [Hprogress [_Hloop Hunvis]]]].
+	        split; [exact Hprogress | exact Hunvis].
+	    - simpl. intros _.
+	      eapply Hoare_bind.
+	      + eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (Hprogress_contract F progress_parent child a done Hedge Hnot_done).
+	        }
+		        intros s [[Hentry [Hframe Hprogress_child]] Hprogress].
+		        split; [exact Hframe |].
+		        split; [exact Hprogress_child |].
+		        split; [exact Hprogress | exact Hentry].
+	      + simpl. intros _.
+	        apply get_low_update_low_preserves_frame_progress_candidate.
+	  Qed.
+
+	  Lemma ProcessEdgePreservesFrameProgressCandidate_proof:
+	    forall W F progress_parent child done a,
+	      FrameProgressContractCandidate W ->
+	      Edge child a ->
+	      ~ done a ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F child s /\
+	           FrameProgressCandidate F progress_parent s /\
+	           LoopInvPhase7Candidate child done s)
+	        (process_edge child W a)
+	        (fun _ s => FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros W F progress_parent child done a Hprogress_contract Hedge Hnot_done.
+	    unfold process_edge, if_else, If.
+	    intro_state.
+	    apply Hoare_choice.
+	    - apply Hoare_assume_bind. simpl.
+	      eapply Hoare_conseq_pre.
+	      2: {
+	        apply
+	          (ProcessEdgeTreeBranchPreservesFrameProgressCandidate_proof
+	             W F progress_parent child done a
+	             Hprogress_contract Hedge Hnot_done).
+	      }
+	      intros s [Hunvis Heq_s]. subst s.
+	      destruct H as [Hframe [Hprogress_child [Hprogress Hloop]]].
+	      split; [exact Hframe |].
+	      split; [exact Hprogress_child |].
+	      split; [exact Hprogress |].
+	      split; [exact Hloop | exact Hunvis].
+	    - apply Hoare_assume_bind. simpl.
+	      intro_state.
+	      destruct H1 as [Hnot_unvis Heq_s]. subst s1.
+	      assert (Hvis: Visited a s0).
+	      { unfold Unvisited in Hnot_unvis.
+	        unfold Visited. apply NNPP. exact Hnot_unvis. }
+	      apply Hoare_choice.
+	      + apply Hoare_assume_bind. simpl.
+	        eapply Hoare_conseq_pre.
+	        2: {
+	          apply
+	            (get_dfn_update_low_preserves_frame_progress_candidate
+	               F progress_parent a child).
+	        }
+	        intros s [Hactive_guard Heq_s]. subst s.
+	        exact (proj1 (proj2 (proj2 H))).
+	      + eapply Hoare_conseq_post.
+	        2: { apply Hoare_assume_s. }
+	        intros _ s [Heq_s _Hnot_active].
+	        subst s.
+	        exact (proj1 (proj2 (proj2 H))).
+	  Qed.
+
+	  Lemma ProcessEdgePreservesFrameAndOlderCandidate_with_progress_proof:
+	    forall W F child done a,
+	      RecursiveCallContractsCandidate W ->
+	      FrameProgressContractCandidate W ->
+	      Edge child a ->
+	      ~ done a ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           LoopInvPhase7Candidate child done s /\
+	           FrameProgressCandidate F child s)
+	        (process_edge child W a)
+	        (fun _ s =>
+	           FrameInvCandidate F s /\
+	           LoopInvPhase7Candidate child (done_after done a) s /\
+	           FrameProgressCandidate F child s).
+	  Proof.
+	    intros W F child done a Hcontracts Hprogress_contract Hedge Hnot_done.
+	    eapply Hoare_conseq_post.
+	    2: {
+	      apply Hoare_conj
+	        with
+	          (Q1 := fun _ s => FrameInvCandidate F s)
+	          (Q2 := fun _ s =>
+	             LoopInvPhase7Candidate child (done_after done a) s /\
+	             FrameProgressCandidate F child s).
+	      - apply
+	          (ProcessEdgePreservesFrameInvCandidate_with_progress_proof
+	             W F child done a Hcontracts Hprogress_contract
+	             Hedge Hnot_done).
+	      - apply Hoare_conj.
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (ProcessEdgeStepCandidate_proof
+	                 W child a done Hcontracts Hedge Hnot_done).
+	          }
+	          intros s [_Hframe [Hloop _Hprogress]].
+	          exact Hloop.
+	        + eapply Hoare_conseq_pre.
+	          2: {
+	            apply
+	              (ProcessEdgePreservesFrameProgressCandidate_proof
+	                 W F child child done a
+	                 Hprogress_contract Hedge Hnot_done).
+	          }
+	          intros s [_Hframe [Hloop Hprogress]].
+	          split; [exact _Hframe |].
+	          split; [exact Hprogress |].
+	          split; [exact Hprogress | exact Hloop].
+	    }
+	    intros _ s [Hframe [Hloop Hprogress]].
+	    split; [exact Hframe |].
+	    split; [exact Hloop | exact Hprogress].
+	  Qed.
+
+	  Lemma ProcessEdgePreservesFrameAndOlderCandidate_proof:
+	    ProcessEdgePreservesFrameAndOlderCandidate_statement.
+	  Proof.
+	    unfold ProcessEdgePreservesFrameAndOlderCandidate_statement.
+	    intros W F child done a Hcontracts Hedge Hnot_done.
+	    pose proof Hcontracts as Hcontracts_full.
+	    destruct Hcontracts as
+	      [_Hchild [_Hlow [_Hframe Hprogress_contract]]].
+	    apply
+	      (ProcessEdgePreservesFrameAndOlderCandidate_with_progress_proof
+	         W F child done a Hcontracts_full Hprogress_contract
+	         Hedge Hnot_done).
+	  Qed.
+
   (* ================================================================ *)
   (* Recursive-body theorem statements                                *)
   (* ================================================================ *)
@@ -14526,6 +17644,7 @@ Section IS_LOW_SKELETON.
       ChildContract I W ->
       LowContributionContract I W ->
       FrameContract I W ->
+      FrameProgressContract I W ->
       ChildContract I (tarjan_scc_f g W).
 
   Definition BodyProvidesLowContributionContract_statement
@@ -14534,6 +17653,7 @@ Section IS_LOW_SKELETON.
       ChildContract I W ->
       LowContributionContract I W ->
       FrameContract I W ->
+      FrameProgressContract I W ->
       LowContributionContract I (tarjan_scc_f g W).
 
   Definition BodyPreservesFrameContract_statement
@@ -14542,7 +17662,17 @@ Section IS_LOW_SKELETON.
       ChildContract I W ->
       LowContributionContract I W ->
       FrameContract I W ->
+      FrameProgressContract I W ->
       FrameContract I (tarjan_scc_f g W).
+
+  Definition BodyPreservesFrameProgressContract_statement
+             (I: LowProofInterface): Prop :=
+    forall W,
+      ChildContract I W ->
+      LowContributionContract I W ->
+      FrameContract I W ->
+      FrameProgressContract I W ->
+      FrameProgressContract I (tarjan_scc_f g W).
 
   Definition FixpointLowLayerCorrect_statement
              (I: LowProofInterface): Prop :=
@@ -14569,6 +17699,8 @@ Section IS_LOW_SKELETON.
       BodyProvidesLowContributionContract_statement I;
     obligation_body_preserves_frame_contract :
       BodyPreservesFrameContract_statement I;
+    obligation_body_preserves_frame_progress_contract :
+      BodyPreservesFrameProgressContract_statement I;
   }.
 
   Definition LowLayerCorrect_from_obligations_statement
@@ -14586,7 +17718,10 @@ Section IS_LOW_SKELETON.
   | LowContributionMode (parent: V) (done: V -> Prop)
   | LowFrameMode (outer: Frame I)
                  (direct_parent: V)
-                 (direct_done: V -> Prop).
+                 (direct_done: V -> Prop)
+  | LowFrameProgressMode (outer: Frame I)
+                         (progress_parent direct_parent: V)
+                         (direct_done: V -> Prop).
 
   Definition FixPre
              (I: LowProofInterface)
@@ -14608,6 +17743,13 @@ Section IS_LOW_SKELETON.
         ChildEntry I direct_parent x direct_done s /\
         dg_step g direct_parent x /\
         ~ direct_done x
+    | LowFrameProgressMode _ outer progress_parent direct_parent direct_done =>
+        FrameInv I outer s /\
+        FrameProgress I outer direct_parent s /\
+        FrameProgress I outer progress_parent s /\
+        ChildEntry I direct_parent x direct_done s /\
+        dg_step g direct_parent x /\
+        ~ direct_done x
     end.
 
   Definition FixPost
@@ -14623,6 +17765,8 @@ Section IS_LOW_SKELETON.
         LowContributionPost I parent x done s
     | LowFrameMode _ outer _ _ =>
         FrameInv I outer s
+    | LowFrameProgressMode _ outer progress_parent _ _ =>
+        FrameProgress I outer progress_parent s
     end.
 
   Definition FixIHProvidesChildContract_statement: Prop :=
@@ -14642,6 +17786,12 @@ Section IS_LOW_SKELETON.
       (forall x mode,
           Hoare (FixPre I x mode) (W x) (FixPost I x mode)) ->
       FrameContract I W.
+
+  Definition FixIHProvidesFrameProgressContract_statement: Prop :=
+    forall I W,
+      (forall x mode,
+          Hoare (FixPre I x mode) (W x) (FixPost I x mode)) ->
+      FrameProgressContract I W.
 
   Definition FixpointModeStep_statement (I: LowProofInterface): Prop :=
     LowProofObligations I ->
@@ -14685,6 +17835,18 @@ Section IS_LOW_SKELETON.
       LowCandidateInterface.
     intros W Hframe F parent child done Hedge Hnot_done.
     exact (Hframe F parent child done Hedge Hnot_done).
+  Qed.
+
+  Lemma FrameProgressContractCandidate_to_interface_proof:
+    FrameProgressContractCandidate_to_interface_statement.
+  Proof.
+    unfold FrameProgressContractCandidate_to_interface_statement,
+      FrameProgressContractCandidate,
+      FrameProgressContract,
+      LowCandidateInterface.
+    intros W Hprogress F progress_parent parent child done Hedge Hnot_done.
+    exact
+      (Hprogress F progress_parent parent child done Hedge Hnot_done).
   Qed.
 
   Lemma RootBridgeCandidate_to_interface_proof:
@@ -14736,14 +17898,18 @@ Section IS_LOW_SKELETON.
       ChildContractCandidate,
       FramedChildProvidesLowContributionCandidate,
       FrameContractCandidate,
+      FrameProgressContractCandidate,
       ChildContract,
       LowContributionContract,
       FrameContract,
+      FrameProgressContract,
       LowCandidateInterface,
       Edge.
-    intros Hstep W u a done Hchild Hlow Hframe Hedge Hnot_done.
+    intros Hstep W u a done Hchild Hlow Hframe Hprogress Hedge Hnot_done.
     apply Hstep; try assumption.
-    split; [exact Hchild | split; [exact Hlow | exact Hframe]].
+    split; [exact Hchild |].
+    split; [exact Hlow |].
+    split; [exact Hframe | exact Hprogress].
   Qed.
 
   Lemma EdgeLoopDone_from_process_edge_step_proof:
@@ -14757,7 +17923,7 @@ Section IS_LOW_SKELETON.
       LoopEntry,
       LoopDone,
       edge_loop.
-    intros I Hproper Hstep W u Hchild Hlow Hframe.
+    intros I Hproper Hstep W u Hchild Hlow Hframe Hprogress.
     eapply Hoare_forset
       with (P := fun done s => LoopInv I u done s).
     - apply Hproper.
@@ -14992,28 +18158,32 @@ Section IS_LOW_SKELETON.
     - exact Hstep.
   Qed.
 
-  Lemma EdgeLoopPreservesFrameProgressCandidate_proof:
-    forall W F child,
-      RecursiveCallContractsCandidate W ->
-      FrameProgressContractCandidate W ->
-      Hoare
-        (fun s =>
-           LoopInvPhase7Candidate child ∅ s /\
-           FrameProgressCandidate F child s)
-        (edge_loop child W)
-        (fun _ s =>
-           LoopDonePhase7Candidate child s /\
-           FrameProgressCandidate F child s).
-  Proof.
-    intros W F child Hcontracts Hprogress_contract.
+	  Lemma EdgeLoopPreservesFrameProgressCandidate_proof:
+	    forall W F progress_parent child,
+	      RecursiveCallContractsCandidate W ->
+	      FrameProgressContractCandidate W ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F child s /\
+	           LoopInvPhase7Candidate child ∅ s /\
+	           FrameProgressCandidate F progress_parent s)
+	        (edge_loop child W)
+	        (fun _ s =>
+	           LoopDonePhase7Candidate child s /\
+	           FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros W F progress_parent child Hcontracts Hprogress_contract.
     unfold edge_loop.
     eapply Hoare_conseq_post.
     2: {
-      eapply Hoare_forset
-        with
-          (P := fun done s =>
-             LoopInvPhase7Candidate child done s /\
-             FrameProgressCandidate F child s).
+	      eapply Hoare_forset
+	        with
+		          (P := fun done s =>
+		             FrameInvCandidate F s /\
+		             FrameProgressCandidate F child s /\
+		             LoopInvPhase7Candidate child done s /\
+		             FrameProgressCandidate F progress_parent s).
       - unfold Proper, respectful.
         intros done1 done2 Hdone s1 s2 Hstate.
         subst s2.
@@ -15024,39 +18194,161 @@ Section IS_LOW_SKELETON.
         specialize (Hproper_loop done1 done2 Hdone s1 s1 eq_refl)
           as Hloop_iff.
         split.
-        + intros [Hloop Hprogress].
-          split.
-          * apply Hloop_iff. exact Hloop.
-          * exact Hprogress.
-        + intros [Hloop Hprogress].
-          split.
-          * apply Hloop_iff. exact Hloop.
-          * exact Hprogress.
-      - intros done a _Hsubset Hedge Hnot_done.
-        apply Hoare_conj
-          with
-            (Q1 := fun _ s =>
-               LoopInvPhase7Candidate child (done_after done a) s)
-            (Q2 := fun _ s => FrameProgressCandidate F child s).
-        + eapply Hoare_conseq_pre.
-          2: {
-            apply
-              (ProcessEdgeStepCandidate_proof
-                 W child a done Hcontracts Hedge Hnot_done).
-          }
-          intros s [Hloop _Hprogress]. exact Hloop.
-        + eapply Hoare_conseq_pre.
-          2: {
-            apply
-              (ProcessEdgePreservesFrameProgressCandidate_proof
-                 W F child done a Hprogress_contract Hedge Hnot_done).
-          }
-          intros s [Hloop Hprogress].
-          split; [exact Hprogress | exact Hloop].
-    }
-    intros _ s [Hloop Hprogress].
-    split; [exact Hloop | exact Hprogress].
-  Qed.
+	        + intros [Hframe [Hprogress_child [Hloop Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress_child |].
+	          split.
+	          * apply Hloop_iff. exact Hloop.
+	          * exact Hprogress.
+	        + intros [Hframe [Hprogress_child [Hloop Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress_child |].
+	          split.
+	          * apply Hloop_iff. exact Hloop.
+	          * exact Hprogress.
+	      - intros done a _Hsubset Hedge Hnot_done.
+	        eapply Hoare_conseq_post.
+	        2: {
+		        apply Hoare_conj
+		          with
+		            (Q1 := fun _ s =>
+		               FrameInvCandidate F s /\
+		               LoopInvPhase7Candidate child (done_after done a) s /\
+		               FrameProgressCandidate F child s)
+			            (Q2 := fun _ s => FrameProgressCandidate F progress_parent s).
+		        + eapply Hoare_conseq_pre.
+		          2: {
+		            apply
+	              (ProcessEdgePreservesFrameAndOlderCandidate_with_progress_proof
+	                 W F child done a Hcontracts Hprogress_contract
+	                 Hedge Hnot_done).
+	          }
+	          intros s [Hframe [Hprogress_child [Hloop _Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hloop | exact Hprogress_child].
+	        + eapply Hoare_conseq_pre.
+	          2: {
+		            apply
+		              (ProcessEdgePreservesFrameProgressCandidate_proof
+		                 W F progress_parent child done a
+		                 Hprogress_contract Hedge Hnot_done).
+		          }
+	          intros s [Hframe [Hprogress_child [Hloop Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress_child |].
+	          split; [exact Hprogress | exact Hloop].
+	        }
+	        intros _ s [[Hframe [Hloop Hprogress_child]] Hprogress].
+	        split; [exact Hframe |].
+	        split; [exact Hprogress_child |].
+	        split; [exact Hloop | exact Hprogress].
+	    }
+			    intros ret s Hpost.
+		    change ((FrameInvCandidate F s /\
+		             FrameProgressCandidate F child s /\
+		             LoopDonePhase7Candidate child s /\
+		             FrameProgressCandidate F progress_parent s)) in Hpost.
+		    destruct Hpost as [_Hframe [_Hprogress_child [Hloop Hprogress]]].
+		    split; [exact Hloop | exact Hprogress].
+	  Qed.
+
+	  Lemma EdgeLoopPreservesFrameProgressesCandidate_proof:
+	    forall W F progress_parent child,
+	      RecursiveCallContractsCandidate W ->
+	      FrameProgressContractCandidate W ->
+	      Hoare
+	        (fun s =>
+	           FrameInvCandidate F s /\
+	           FrameProgressCandidate F child s /\
+	           LoopInvPhase7Candidate child ∅ s /\
+	           FrameProgressCandidate F progress_parent s)
+	        (edge_loop child W)
+	        (fun _ s =>
+	           FrameInvCandidate F s /\
+	           LoopDonePhase7Candidate child s /\
+	           FrameProgressCandidate F child s /\
+	           FrameProgressCandidate F progress_parent s).
+	  Proof.
+	    intros W F progress_parent child Hcontracts Hprogress_contract.
+    unfold edge_loop.
+    eapply Hoare_conseq_post.
+    2: {
+	      eapply Hoare_forset
+	        with
+		          (P := fun done s =>
+		             FrameInvCandidate F s /\
+		             FrameProgressCandidate F child s /\
+		             LoopInvPhase7Candidate child done s /\
+		             FrameProgressCandidate F progress_parent s).
+      - unfold Proper, respectful.
+        intros done1 done2 Hdone s1 s2 Hstate.
+        subst s2.
+        pose proof
+          (LoopInvPhase7Candidate_done_proper_proof child)
+          as Hproper_loop.
+        unfold Proper, respectful in Hproper_loop.
+        specialize (Hproper_loop done1 done2 Hdone s1 s1 eq_refl)
+          as Hloop_iff.
+        split.
+	        + intros [Hframe [Hprogress_child [Hloop Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress_child |].
+	          split.
+	          * apply Hloop_iff. exact Hloop.
+	          * exact Hprogress.
+	        + intros [Hframe [Hprogress_child [Hloop Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress_child |].
+	          split.
+	          * apply Hloop_iff. exact Hloop.
+	          * exact Hprogress.
+	      - intros done a _Hsubset Hedge Hnot_done.
+	        eapply Hoare_conseq_post.
+	        2: {
+		        apply Hoare_conj
+		          with
+		            (Q1 := fun _ s =>
+		               FrameInvCandidate F s /\
+		               LoopInvPhase7Candidate child (done_after done a) s /\
+		               FrameProgressCandidate F child s)
+			            (Q2 := fun _ s => FrameProgressCandidate F progress_parent s).
+		        + eapply Hoare_conseq_pre.
+		          2: {
+		            apply
+	              (ProcessEdgePreservesFrameAndOlderCandidate_with_progress_proof
+	                 W F child done a Hcontracts Hprogress_contract
+	                 Hedge Hnot_done).
+	          }
+	          intros s [Hframe [Hprogress_child [Hloop _Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hloop | exact Hprogress_child].
+	        + eapply Hoare_conseq_pre.
+	          2: {
+		            apply
+		              (ProcessEdgePreservesFrameProgressCandidate_proof
+		                 W F progress_parent child done a
+		                 Hprogress_contract Hedge Hnot_done).
+		          }
+	          intros s [Hframe [Hprogress_child [Hloop Hprogress]]].
+	          split; [exact Hframe |].
+	          split; [exact Hprogress_child |].
+	          split; [exact Hprogress | exact Hloop].
+	        }
+	        intros _ s [[Hframe [Hloop Hprogress_child]] Hprogress].
+	        split; [exact Hframe |].
+	        split; [exact Hprogress_child |].
+	        split; [exact Hloop | exact Hprogress].
+	    }
+			    intros ret s Hpost.
+		    change ((FrameInvCandidate F s /\
+		             FrameProgressCandidate F child s /\
+		             LoopDonePhase7Candidate child s /\
+		             FrameProgressCandidate F progress_parent s)) in Hpost.
+		    destruct Hpost as [Hframe [Hprogress_child [Hloop Hprogress]]].
+		    split; [exact Hframe |].
+		    split; [exact Hloop |].
+		    split; [exact Hprogress_child | exact Hprogress].
+	  Qed.
 
   Lemma BodyFrameEdgeLoopPreservesCandidate_from_process_edge_cut_proof:
     ProcessEdgePreservesFrameAndOlderCandidate_statement ->
@@ -15105,7 +18397,8 @@ Section IS_LOW_SKELETON.
       exact Hprogress.
     }
     intros _ s [Hframe [Hloop_done Hprogress]].
-    destruct Hprogress as [_Hpending [Hparent_older Hdone_older]].
+	    destruct Hprogress as
+	      [_Hvisited_parent [_Hpending [Hparent_older Hdone_older]]].
     split; [exact Hframe |].
     split; [exact Hloop_done |].
     split; [exact Hparent_older | exact Hdone_older].
@@ -15133,7 +18426,7 @@ Section IS_LOW_SKELETON.
         (edge_loop u W)
         (fun _ s => LoopDonePhase7Candidate u s).
   Proof.
-    intros W u [Hchild [Hlow Hframe]].
+    intros W u [Hchild [Hlow [Hframe Hprogress]]].
     pose proof EdgeLoopDoneCandidate_proof as Hedge_loop.
     unfold EdgeLoopDone_statement, LoopEntry, LoopDone,
       LowCandidateInterface in Hedge_loop.
@@ -15142,6 +18435,7 @@ Section IS_LOW_SKELETON.
     - apply ChildContractCandidate_to_interface_proof. exact Hchild.
     - apply LowContributionCandidate_to_interface_proof. exact Hlow.
     - apply FrameContractCandidate_to_interface_proof. exact Hframe.
+    - apply FrameProgressContractCandidate_to_interface_proof. exact Hprogress.
   Qed.
 
   Lemma BodyChildProducesRootFinalCandidate_proof:
@@ -15259,6 +18553,105 @@ Section IS_LOW_SKELETON.
         exact Hactive.
   Qed.
 
+  Lemma MaybePopPreservesActiveChildSegmentSummaryFromLoopDoneCandidate_proof:
+    forall child,
+      Hoare
+        (LoopDonePhase7Candidate child)
+        (maybe_pop child)
+        (fun _ s =>
+           Active child s -> ChildSegmentSummaryCandidate child s).
+  Proof.
+    intros child.
+    unfold maybe_pop, root_pop_guard.
+    intro_state. hoare_auto_s.
+    - unfold pop_scc. intro_state. hoare_auto_s.
+      subst s1 s.
+      pose proof
+        (LoopDonePhase7ProvidesChildSegmentSummaryCandidate_proof
+           child s0 H)
+        as Hsummary_pre.
+      match goal with
+      | Hactive_post : Active child _ |- _ =>
+          let Hactive_child_post := fresh "Hactive_child_post" in
+          rename Hactive_post into Hactive_child_post
+      end.
+      unfold pop_scc_state in Hactive_child_post |- *.
+      destruct (stack_split_at (stack s0) child) as [popped rest] eqn:Hsplit.
+      simpl in Hactive_child_post |- *.
+      unfold LoopDonePhase7Candidate,
+        LoopInvPhase7Candidate,
+        LoopInvPhase6Candidate,
+        LoopInvLowCandidate,
+        LoopInvDoneCandidate,
+        LocalActiveRootCandidate in H.
+      destruct H as [[[[[_Hshape [_Hsettled [_Hvis_child [Hactive_child Horder]]]]
+                        _Hdisc] _Hpartial] _Hphase6_tail] _Hphase7_tail].
+      destruct Horder as [Hstack_order _Hdfn_inj].
+      unfold ChildSegmentSummaryCandidate in Hsummary_pre |- *.
+      destruct Hsummary_pre as [Hescape_pre Hcoverage_pre].
+      split.
+      + unfold SegmentEscapeAccountingCandidate in *.
+        intros x w Hactive_x_post Hdfn_x Hreach_xw Hnot_vis_w_post.
+        assert (Hactive_x_pre: Active x s0).
+        { unfold Active in *.
+          eapply stack_split_rest_in_original_stack; eauto. }
+        assert (Hnot_vis_w_pre: ~ Visited w s0).
+        { unfold Visited in *. intro Hvis_w.
+          apply Hnot_vis_w_post. exact Hvis_w. }
+        specialize
+          (Hescape_pre x w Hactive_x_pre Hdfn_x
+             Hreach_xw Hnot_vis_w_pre)
+          as [Hpending | Hanchor].
+        * left. exact Hpending.
+        * right.
+          unfold OldStackEscapeAnchorCandidate in *.
+          destruct Hanchor as
+            [anchor [Hactive_anchor
+             [Hdfn_anchor [Hlow_anchor [Hreach_x_anchor Hreach_anchor_w]]]]].
+          exists anchor.
+          split.
+          -- unfold Active in *.
+             eapply old_anchor_in_rest_when_child_in_rest
+               with (u := child) (c := child)
+                    (s := s0) (popped := popped) (rest := rest);
+               eauto.
+          -- split; [exact Hdfn_anchor |].
+             split; [exact Hlow_anchor |].
+             split; [exact Hreach_x_anchor | exact Hreach_anchor_w].
+      + unfold SegmentCoverageByDoneCandidate in *.
+        intros x Hactive_x_post Hdfn_x.
+        apply Hcoverage_pre; [| exact Hdfn_x].
+        unfold Active in *.
+        eapply stack_split_rest_in_original_stack; eauto.
+    - destruct H1 as [Hs _Hguard].
+      subst s.
+      apply LoopDonePhase7ProvidesChildSegmentSummaryCandidate_proof.
+      exact H.
+  Qed.
+
+  Lemma BodyChildProducesActiveSegmentSummaryCandidate_proof:
+    forall W parent child done,
+      RecursiveCallContractsCandidate W ->
+      Edge parent child ->
+      ~ done child ->
+      Hoare
+        (ChildEntryCandidate parent child done)
+        (tarjan_scc_f g W child)
+        (fun _ s =>
+           Active child s -> ChildSegmentSummaryCandidate child s).
+  Proof.
+    intros W parent child done Hcontracts _Hedge _Hnot_done.
+    unfold tarjan_scc_f.
+    eapply Hoare_bind.
+    - apply PreloopFromChildEntryProducesLoopInvPhase7InitialCandidate_proof.
+    - simpl. intros _.
+      eapply Hoare_bind.
+      + apply EdgeLoopDoneCandidate_direct_proof.
+        exact Hcontracts.
+      + simpl. intros _.
+        apply MaybePopPreservesActiveChildSegmentSummaryFromLoopDoneCandidate_proof.
+  Qed.
+
   Lemma BodyProducesChildLowDfnBoundCandidate_proof:
     BodyProducesChildLowDfnBoundCandidate_statement.
   Proof.
@@ -15286,14 +18679,12 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma BodySatisfiesChildContractCandidate_from_tail_cut_proof:
-    BodyChildPostTailCandidate_statement ->
     BodySatisfiesChildContractCandidate_statement.
   Proof.
-    unfold BodyChildPostTailCandidate_statement,
-      BodySatisfiesChildContractCandidate_statement,
+    unfold BodySatisfiesChildContractCandidate_statement,
       ChildContractCandidate,
       ChildPostCandidate.
-    intros Htail W Hcontracts parent child done Hedge Hnot_done.
+    intros W Hcontracts parent child done Hedge Hnot_done.
     eapply Hoare_conseq_post.
     2: {
       apply Hoare_conj
@@ -15304,12 +18695,7 @@ Section IS_LOW_SKELETON.
              ChildClosednessContributionCandidate child s)
           (Q2 := fun _ s =>
              ChildInactiveSelfLowForParentCandidate child s /\
-             (Active child s -> ChildSegmentSummaryCandidate child s) /\
-             ParentResumeShapeCandidate parent child done s /\
-             ParentPendingChildEscapeAccountedCandidate
-               parent done child s /\
-             ActiveTargetBlocksEscapeAccountedCandidate
-               parent (done_after done child) s).
+             (Active child s -> ChildSegmentSummaryCandidate child s)).
       - apply
           (BodyChildProducesPostCoreCandidate_proof
              W parent child done Hcontracts Hedge Hnot_done).
@@ -15318,43 +18704,40 @@ Section IS_LOW_SKELETON.
             (Q1 := fun _ s =>
                ChildInactiveSelfLowForParentCandidate child s)
             (Q2 := fun _ s =>
-               (Active child s -> ChildSegmentSummaryCandidate child s) /\
-               ParentResumeShapeCandidate parent child done s /\
-               ParentPendingChildEscapeAccountedCandidate
-                 parent done child s /\
-               ActiveTargetBlocksEscapeAccountedCandidate
-                 parent (done_after done child) s).
+               Active child s -> ChildSegmentSummaryCandidate child s).
         + apply
             (BodyChildProducesInactiveSelfLowCandidate_proof
                W parent child done Hcontracts Hedge Hnot_done).
-        + apply (Htail W parent child done Hcontracts Hedge Hnot_done).
+        + apply
+            (BodyChildProducesActiveSegmentSummaryCandidate_proof
+               W parent child done Hcontracts Hedge Hnot_done).
     }
     intros _ s
       [[Hvis [Hroot Hclosed]]
-       [Hinactive [Hsegment [Hresume [Hpending Hblocks]]]]].
+       [Hinactive Hsegment]].
     destruct Hroot as [Hlow_valid His_low].
     split; [exact Hvis |].
     split; [exact Hlow_valid |].
     split; [exact His_low |].
     split; [exact Hinactive |].
     split; [exact Hclosed |].
-    split; [exact Hsegment |].
-    split; [exact Hresume |].
-    split; [exact Hpending | exact Hblocks].
+    exact Hsegment.
   Qed.
 
   Lemma BodyProvidesLowContributionCandidate_from_field_cuts_proof:
+    BodyChildPostTailCandidate_statement ->
     BodyPreservesPartialRootLowEquationCandidate_statement ->
     BodyPreservesChildParentPointerCandidate_statement ->
     BodyProducesChildLowDfnBoundCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement.
   Proof.
-    unfold BodyPreservesPartialRootLowEquationCandidate_statement,
+    unfold BodyChildPostTailCandidate_statement,
+      BodyPreservesPartialRootLowEquationCandidate_statement,
       BodyPreservesChildParentPointerCandidate_statement,
       BodyProducesChildLowDfnBoundCandidate_statement,
       BodyProvidesLowContributionCandidate_statement,
       FramedChildProvidesLowContributionCandidate.
-    intros Hpartial Hparent_pointer Hlow_bound
+    intros Htail Hpartial Hparent_pointer Hlow_bound
            W Hcontracts parent child done Hedge Hnot_done.
     eapply Hoare_conseq_post.
     2: {
@@ -15364,20 +18747,56 @@ Section IS_LOW_SKELETON.
              PartialRootLowEquationCandidate parent done s)
           (Q2 := fun _ s =>
              (fa s child = parent /\ fa s child <> child) /\
-             low s child <= dfn s child).
+             low s child <= dfn s child /\
+             ParentPendingChildEscapeAccountedCandidate
+               parent done child s /\
+             ActiveTargetBlocksEscapeAccountedCandidate
+               parent (done_after done child) s).
       - apply
           (Hpartial W parent child done Hcontracts Hedge Hnot_done).
-      - apply Hoare_conj.
+      - apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               fa s child = parent /\ fa s child <> child)
+            (Q2 := fun _ s =>
+               low s child <= dfn s child /\
+               ParentPendingChildEscapeAccountedCandidate
+                 parent done child s /\
+               ActiveTargetBlocksEscapeAccountedCandidate
+                 parent (done_after done child) s).
         + apply
             (Hparent_pointer W parent child done
                Hcontracts Hedge Hnot_done).
-        + apply
-            (Hlow_bound W parent child done Hcontracts Hedge Hnot_done).
+        + apply Hoare_conj
+            with
+              (Q1 := fun _ s => low s child <= dfn s child)
+              (Q2 := fun _ s =>
+                 ParentPendingChildEscapeAccountedCandidate
+                   parent done child s /\
+                 ActiveTargetBlocksEscapeAccountedCandidate
+                   parent (done_after done child) s).
+          * apply
+              (Hlow_bound W parent child done Hcontracts Hedge Hnot_done).
+          * eapply Hoare_conseq_post.
+            2: {
+              eapply Hoare_conseq_pre.
+              2: {
+                apply (Htail W parent child done Hcontracts Hedge Hnot_done).
+              }
+              intros s [_Hframe [Hentry _Hpartial]].
+              exact Hentry.
+            }
+            intros _ s [_Hsegment [_Hresume [Hpending Hblocks]]].
+            split; [exact Hpending | exact Hblocks].
     }
-    intros _ s [Hpartial_post [[Hfa Hfa_neq] Hlow_bound_post]].
+    intros _ s
+      [Hpartial_post
+       [[Hfa Hfa_neq] [Hlow_bound_post [Hparent_pending Hactive_blocks]]]].
     split; [exact Hpartial_post |].
     split; [exact Hfa |].
-    split; [exact Hfa_neq | exact Hlow_bound_post].
+    split; [exact Hfa_neq |].
+    split; [exact Hlow_bound_post |].
+    split; [exact Hparent_pending | exact Hactive_blocks].
   Qed.
 
   Lemma BodyPreservesFrameContractCandidate_from_frame_cuts_proof:
@@ -15401,14 +18820,23 @@ Section IS_LOW_SKELETON.
         2: {
           apply (Hedge_loop W F child Hcontracts).
         }
-        intros s
-          [Hframe [Hloop [Hpending [Hparent_older Hdone_older]]]].
-        split; [exact Hframe |].
-        split; [exact Hloop |].
-        split; [exact Hpending |].
-        split; [exact Hparent_older |].
-        intros v Hdone_v _Hactive_v.
-        apply Hdone_older. exact Hdone_v.
+	        intros s
+	          [Hframe [Hloop [Hpending [Hparent_older Hdone_older]]]].
+	        pose proof
+	          (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+	          as Hframe_low.
+	        unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+	          LocalActiveRootCandidate in Hframe_low.
+	        destruct Hframe_low as [[Hlocal _Hdisc] _Hpartial].
+	        destruct Hlocal as
+	          [_Hshape [_Hsettled [Hvisited_parent _Hactive_order]]].
+	        split; [exact Hframe |].
+	        split; [exact Hloop |].
+	        split; [exact Hvisited_parent |].
+	        split; [exact Hpending |].
+	        split; [exact Hparent_older |].
+	        intros v Hdone_v _Hactive_v.
+	        apply Hdone_older. exact Hdone_v.
       + simpl. intros _.
         eapply Hoare_conseq_pre.
         2: {
@@ -15422,49 +18850,271 @@ Section IS_LOW_SKELETON.
         split; [exact Hparent_older | exact Hdone_older].
   Qed.
 
+  Lemma BodyPreservesFrameProgressContractCandidate_proof:
+    BodyPreservesFrameProgressContractCandidate_statement.
+  Proof.
+    unfold BodyPreservesFrameProgressContractCandidate_statement,
+      FrameProgressContractCandidate.
+    intros W Hcontracts F progress_parent call_parent child done
+           Hedge Hnot_done.
+    pose proof Hcontracts as Hcontracts_full.
+    destruct Hcontracts as [Hchild_contract
+      [Hlow_contract [Hframe_contract Hprogress_contract]]].
+    unfold tarjan_scc_f.
+    eapply Hoare_bind
+      with (Q := fun _ s =>
+        FrameInvCandidate F s /\
+        LoopInvPhase7Candidate child ∅ s /\
+        PendingChildSegmentCandidate (frame_child F) s child /\
+        dfn s (frame_parent F) < dfn s child /\
+        (forall v,
+            frame_done F v ->
+            dfn s v < dfn s child) /\
+        ~ frame_child F = child /\
+        FrameProgressCandidate F progress_parent s).
+    - eapply Hoare_conseq_post.
+      2: {
+        apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
+               FrameInvCandidate F s /\
+               LoopInvPhase7Candidate child ∅ s /\
+               PendingChildSegmentCandidate (frame_child F) s child /\
+               dfn s (frame_parent F) < dfn s child /\
+               forall v,
+                 frame_done F v ->
+                 dfn s v < dfn s child)
+            (Q2 := fun _ s =>
+               ~ frame_child F = child /\
+               FrameProgressCandidate F progress_parent s).
+        - eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (BodyFrameAfterPreloopCandidate_from_processed_cut_proof
+                 F call_parent child done Hedge Hnot_done).
+          }
+          intros s [Hframe [Hprogress_call [_Hprogress_target Hentry]]].
+          split; [exact Hframe |].
+          split.
+          + apply FrameCompatibleWithPendingParentCandidate_proof.
+            exact (proj1 (proj2 Hprogress_call)).
+          + exact Hentry.
+        - eapply Hoare_conseq_post.
+          2: {
+            apply Hoare_conj
+              with
+                (Q1 := fun _ s => ~ frame_child F = child)
+                (Q2 := fun _ s =>
+                   FrameProgressCandidate F progress_parent s).
+            - unfold Hoare.
+              intros s1 ret s2
+                     [Hframe [Hprogress_call [Hprogress_target Hentry]]]
+                     _Hrun.
+              destruct Hprogress_call as
+                [_Hvis_parent_call [Hpending_call _Hcall_tail]].
+              unfold PendingChildSegmentCandidate in Hpending_call.
+              destruct Hpending_call as
+                [Hvis_frame_child _Hpending_call_tail].
+              unfold ChildEntryCandidate,
+                ParentLoopSuspendedBaseCandidate,
+                PendingChildShapeCandidate,
+                GlobalShapePreCandidate in Hentry.
+              destruct Hentry as [_Hparent_base [Hglobal_pre _Hshape]].
+              destruct Hglobal_pre as [_Hwf Hchild_unvisited].
+              intro Hbad. apply Hchild_unvisited.
+              rewrite <- Hbad. exact Hvis_frame_child.
+            - eapply Hoare_conseq_pre.
+              2: {
+                apply
+                  (PreloopPreservesFrameProgressCandidate_proof
+                     F progress_parent call_parent child done).
+              }
+              intros s [Hframe [_Hprogress_call [Hprogress_target Hentry]]].
+              split; [exact Hframe |].
+              split; [exact Hprogress_target | exact Hentry].
+          }
+          intros ret s [Hneq Hprogress_post].
+          split; [exact Hneq | exact Hprogress_post].
+      }
+      intros ret s Hpost.
+      destruct Hpost as
+        [[Hframe [Hloop [Hpending [Hparent_older Hdone_older]]]]
+         [Hframe_child_neq_child Hprogress_target]].
+      split; [exact Hframe |].
+      split; [exact Hloop |].
+      split; [exact Hpending |].
+      split; [exact Hparent_older |].
+      split; [exact Hdone_older |].
+      split; [exact Hframe_child_neq_child | exact Hprogress_target].
+    - simpl. intros _.
+      eapply Hoare_bind
+        with (Q := fun _ s =>
+          FrameInvCandidate F s /\
+          LoopDonePhase7Candidate child s /\
+          FrameProgressCandidate F child s /\
+          ~ frame_child F = child /\
+          FrameProgressCandidate F progress_parent s).
+      + eapply Hoare_conseq_post.
+        2: {
+          apply Hoare_conj
+            with
+              (Q1 := fun _ s =>
+                 FrameInvCandidate F s /\
+                 LoopDonePhase7Candidate child s /\
+                 FrameProgressCandidate F child s)
+              (Q2 := fun _ s =>
+                 ~ frame_child F = child /\
+                 FrameProgressCandidate F progress_parent s).
+          - eapply Hoare_conseq_post.
+            2: {
+              eapply Hoare_conseq_pre.
+              2: {
+                apply
+                  (EdgeLoopPreservesFrameProgressesCandidate_proof
+                     W F progress_parent child).
+                + exact Hcontracts_full.
+                + exact Hprogress_contract.
+              }
+              intros s
+                [Hframe [Hloop [Hpending
+                 [Hparent_older [Hdone_older
+                  [_Hframe_child_neq_child Hprogress_target]]]]]].
+              split; [exact Hframe |].
+              split.
+              + unfold FrameProgressCandidate.
+                split; [| split; [exact Hpending |]].
+                * pose proof
+                    (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+                    as Hlow.
+                  unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+                    LocalActiveRootCandidate in Hlow.
+                  destruct Hlow as [[Hlocal _Hdisc] _Hpartial].
+                  destruct Hlocal as
+                    [_Hshape [_Hsettled [Hvis_parent _Hactive_order]]].
+                  exact Hvis_parent.
+                * split; [exact Hparent_older |].
+                  intros v Hdone_v Hactive_v.
+                  apply Hdone_older. exact Hdone_v.
+              + split; [exact Hloop | exact Hprogress_target].
+            }
+            intros _ s [Hframe [Hloop [Hprogress_child _Hprogress_target]]].
+            split; [exact Hframe |].
+            split; [exact Hloop | exact Hprogress_child].
+          - eapply Hoare_conseq_post.
+            2: {
+              apply Hoare_conj
+                with
+                  (Q1 := fun _ _ => ~ frame_child F = child)
+                  (Q2 := fun _ s =>
+                     FrameInvCandidate F s /\
+                     LoopDonePhase7Candidate child s /\
+                     FrameProgressCandidate F child s /\
+                     FrameProgressCandidate F progress_parent s).
+              - unfold Hoare.
+                intros s1 ret s2
+                  [Hframe [Hloop [Hpending
+                   [Hparent_older [Hdone_older
+                    [Hframe_child_neq_child Hprogress_target]]]]]]
+                  _Hrun.
+                exact Hframe_child_neq_child.
+              - eapply Hoare_conseq_pre.
+                2: {
+                  apply
+                    (EdgeLoopPreservesFrameProgressesCandidate_proof
+                       W F progress_parent child).
+                  + exact Hcontracts_full.
+                  + exact Hprogress_contract.
+                }
+                intros s
+                  [Hframe [Hloop [Hpending
+                   [Hparent_older [Hdone_older
+                    [_Hframe_child_neq_child Hprogress_target]]]]]].
+                split; [exact Hframe |].
+                split.
+                + pose proof
+                    (FrameInvProvidesLoopInvLowCandidate_proof F s Hframe)
+                    as Hlow.
+                  unfold LoopInvLowCandidate, LoopInvDoneCandidate,
+                    LocalActiveRootCandidate in Hlow.
+                  destruct Hlow as [[Hlocal _Hdisc] _Hpartial].
+                  destruct Hlocal as
+                    [_Hshape [_Hsettled [Hvis_parent _Hactive_order]]].
+                  unfold FrameProgressCandidate.
+                  split; [exact Hvis_parent |].
+                  split; [exact Hpending |].
+                  split; [exact Hparent_older |].
+                  intros v Hdone_v Hactive_v.
+                  apply Hdone_older. exact Hdone_v.
+                + split; [exact Hloop | exact Hprogress_target].
+            }
+            intros _ s
+              [Hframe_child_neq_child
+               [Hframe [Hloop_done [Hprogress_child Hprogress_target]]]].
+            exact (conj Hframe_child_neq_child Hprogress_target).
+        }
+        intros _ s
+          [[Hframe [Hloop_done Hprogress_child]]
+           [Hframe_child_neq_child Hprogress_target]].
+        split; [exact Hframe |].
+        split; [exact Hloop_done |].
+        split; [exact Hprogress_child |].
+        split; [exact Hframe_child_neq_child | exact Hprogress_target].
+      + simpl. intros _.
+        eapply Hoare_conseq_pre.
+        2: {
+          apply
+            (MaybePopPreservesFrameProgressFromLoopDoneOlderVerticesCandidate_proof
+               F child progress_parent).
+        }
+        intros s
+          [Hframe [Hloop_done [Hprogress_child
+           [Hframe_child_neq_child Hprogress_target]]]].
+        split; [exact Hframe |].
+        split; [exact Hloop_done |].
+        split; [exact Hprogress_child |].
+        * split; [exact Hprogress_target |].
+          split; [exact Hframe_child_neq_child |].
+          destruct Hprogress_child as
+            [_Hvis_parent [_Hpending [Hparent_older Hdone_older]]].
+          split; [exact Hparent_older | exact Hdone_older].
+  Qed.
+
   Lemma BodySatisfiesChildContractCandidate_from_phase9_cuts_proof:
-    BodyChildPostTailCandidate_statement ->
     BodySatisfiesChildContractCandidate_statement.
   Proof.
     apply BodySatisfiesChildContractCandidate_from_tail_cut_proof.
   Qed.
 
   Lemma BodyProvidesLowContributionCandidate_from_phase9_cuts_proof:
+    BodyChildPostTailCandidate_statement ->
     BodyPreservesPartialRootLowEquationCandidate_statement ->
     BodyPreservesChildParentPointerCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement.
   Proof.
-    intros Hpartial Hparent_pointer.
+    intros Htail Hpartial Hparent_pointer.
     apply BodyProvidesLowContributionCandidate_from_field_cuts_proof.
+    - exact Htail.
     - exact Hpartial.
     - exact Hparent_pointer.
     - exact BodyProducesChildLowDfnBoundCandidate_proof.
   Qed.
 
   Lemma BodyPreservesFrameContractCandidate_from_phase9_cuts_proof:
-    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement ->
-    ProcessEdgePreservesFrameAndOlderCandidate_statement ->
     BodyPreservesFrameContractCandidate_statement.
   Proof.
-    intros Hpreloop_processed Hprocess_edge.
     apply BodyPreservesFrameContractCandidate_from_frame_cuts_proof.
     - apply BodyFrameAfterPreloopCandidate_from_processed_cut_proof.
-      exact Hpreloop_processed.
     - apply BodyFrameEdgeLoopPreservesCandidate_from_process_edge_cut_proof.
-      exact Hprocess_edge.
+      apply ProcessEdgePreservesFrameAndOlderCandidate_proof.
   Qed.
 
   Lemma BodyPreservesPartialRootLowEquationCandidate_from_frame_cuts_proof:
-    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement ->
-    ProcessEdgePreservesFrameAndOlderCandidate_statement ->
     BodyPreservesPartialRootLowEquationCandidate_statement.
   Proof.
     unfold BodyPreservesPartialRootLowEquationCandidate_statement.
-    intros Hpreloop_processed Hprocess_edge
-           W parent child done Hcontracts Hedge Hnot_done.
+    intros W parent child done Hcontracts Hedge Hnot_done.
     pose proof
-      (BodyPreservesFrameContractCandidate_from_phase9_cuts_proof
-         Hpreloop_processed Hprocess_edge)
+      BodyPreservesFrameContractCandidate_from_phase9_cuts_proof
       as Hbody_frame.
     unfold BodyPreservesFrameContractCandidate_statement,
       FrameContractCandidate in Hbody_frame.
@@ -15493,16 +19143,12 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma BodyPreservesChildParentPointerCandidate_from_frame_cuts_proof:
-    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement ->
-    ProcessEdgePreservesFrameAndOlderCandidate_statement ->
     BodyPreservesChildParentPointerCandidate_statement.
   Proof.
     unfold BodyPreservesChildParentPointerCandidate_statement.
-    intros Hpreloop_processed Hprocess_edge
-           W parent child done Hcontracts Hedge Hnot_done.
+    intros W parent child done Hcontracts Hedge Hnot_done.
     pose proof
-      (BodyPreservesFrameContractCandidate_from_phase9_cuts_proof
-         Hpreloop_processed Hprocess_edge)
+      BodyPreservesFrameContractCandidate_from_phase9_cuts_proof
       as Hbody_frame.
     unfold BodyPreservesFrameContractCandidate_statement,
       FrameContractCandidate in Hbody_frame.
@@ -15532,6 +19178,17 @@ Section IS_LOW_SKELETON.
     split; [exact Hfa | exact Hfa_neq].
   Qed.
 
+  Lemma BodyProvidesLowContributionCandidate_from_frame_phase9_cut_proof:
+    BodyChildPostTailCandidate_statement ->
+    BodyProvidesLowContributionCandidate_statement.
+  Proof.
+    intros Htail.
+    apply BodyProvidesLowContributionCandidate_from_phase9_cuts_proof.
+    - exact Htail.
+    - apply BodyPreservesPartialRootLowEquationCandidate_from_frame_cuts_proof.
+    - apply BodyPreservesChildParentPointerCandidate_from_frame_cuts_proof.
+  Qed.
+
   Lemma BodySatisfiesChildContractCandidate_to_interface_proof:
     BodySatisfiesChildContractCandidate_statement ->
     BodySatisfiesChildContract_statement LowCandidateInterface.
@@ -15542,13 +19199,17 @@ Section IS_LOW_SKELETON.
       ChildContractCandidate,
       FramedChildProvidesLowContributionCandidate,
       FrameContractCandidate,
+      FrameProgressContractCandidate,
       ChildContract,
       LowContributionContract,
       FrameContract,
+      FrameProgressContract,
       LowCandidateInterface.
-    intros Hbody W Hchild Hlow Hframe.
+    intros Hbody W Hchild Hlow Hframe Hprogress.
     apply Hbody.
-    split; [exact Hchild | split; [exact Hlow | exact Hframe]].
+    split; [exact Hchild |].
+    split; [exact Hlow |].
+    split; [exact Hframe | exact Hprogress].
   Qed.
 
   Lemma BodyProvidesLowContributionCandidate_to_interface_proof:
@@ -15561,13 +19222,17 @@ Section IS_LOW_SKELETON.
       ChildContractCandidate,
       FramedChildProvidesLowContributionCandidate,
       FrameContractCandidate,
+      FrameProgressContractCandidate,
       ChildContract,
       LowContributionContract,
       FrameContract,
+      FrameProgressContract,
       LowCandidateInterface.
-    intros Hbody W Hchild Hlow Hframe.
+    intros Hbody W Hchild Hlow Hframe Hprogress.
     apply Hbody.
-    split; [exact Hchild | split; [exact Hlow | exact Hframe]].
+    split; [exact Hchild |].
+    split; [exact Hlow |].
+    split; [exact Hframe | exact Hprogress].
   Qed.
 
   Lemma BodyPreservesFrameContractCandidate_to_interface_proof:
@@ -15580,22 +19245,50 @@ Section IS_LOW_SKELETON.
       ChildContractCandidate,
       FramedChildProvidesLowContributionCandidate,
       FrameContractCandidate,
+      FrameProgressContractCandidate,
       ChildContract,
       LowContributionContract,
       FrameContract,
+      FrameProgressContract,
       LowCandidateInterface.
-    intros Hbody W Hchild Hlow Hframe.
+    intros Hbody W Hchild Hlow Hframe Hprogress.
     apply Hbody.
-    split; [exact Hchild | split; [exact Hlow | exact Hframe]].
+    split; [exact Hchild |].
+    split; [exact Hlow |].
+    split; [exact Hframe | exact Hprogress].
+  Qed.
+
+  Lemma BodyPreservesFrameProgressContractCandidate_to_interface_proof:
+    BodyPreservesFrameProgressContractCandidate_statement ->
+    BodyPreservesFrameProgressContract_statement LowCandidateInterface.
+  Proof.
+    unfold BodyPreservesFrameProgressContractCandidate_statement,
+      BodyPreservesFrameProgressContract_statement,
+      RecursiveCallContractsCandidate,
+      ChildContractCandidate,
+      FramedChildProvidesLowContributionCandidate,
+      FrameContractCandidate,
+      FrameProgressContractCandidate,
+      ChildContract,
+      LowContributionContract,
+      FrameContract,
+      FrameProgressContract,
+      LowCandidateInterface.
+    intros Hbody W Hchild Hlow Hframe Hprogress.
+    apply Hbody.
+    split; [exact Hchild |].
+    split; [exact Hlow |].
+    split; [exact Hframe | exact Hprogress].
   Qed.
 
   Lemma LowCandidateObligations_from_body_contracts_proof:
     BodySatisfiesChildContractCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement ->
     BodyPreservesFrameContractCandidate_statement ->
+    BodyPreservesFrameProgressContractCandidate_statement ->
     LowProofObligations LowCandidateInterface.
   Proof.
-    intros Hbody_child Hbody_low Hbody_frame.
+    intros Hbody_child Hbody_low Hbody_frame Hbody_progress.
     refine
       {| obligation_preloop_entry :=
            PreloopEntryCandidate_to_interface_proof;
@@ -15615,28 +19308,23 @@ Section IS_LOW_SKELETON.
              Hbody_low;
          obligation_body_preserves_frame_contract :=
            BodyPreservesFrameContractCandidate_to_interface_proof
-             Hbody_frame |}.
+             Hbody_frame;
+         obligation_body_preserves_frame_progress_contract :=
+           BodyPreservesFrameProgressContractCandidate_to_interface_proof
+             Hbody_progress |}.
   Qed.
 
   Lemma LowCandidateObligations_from_phase9_cuts_proof:
     BodyChildPostTailCandidate_statement ->
-    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement ->
-    ProcessEdgePreservesFrameAndOlderCandidate_statement ->
     LowProofObligations LowCandidateInterface.
   Proof.
-    intros Hchild_tail Hpreloop_processed Hprocess_edge.
+    intros Hchild_tail.
     apply LowCandidateObligations_from_body_contracts_proof.
     - apply BodySatisfiesChildContractCandidate_from_phase9_cuts_proof.
+    - apply BodyProvidesLowContributionCandidate_from_frame_phase9_cut_proof.
       exact Hchild_tail.
-    - apply BodyProvidesLowContributionCandidate_from_phase9_cuts_proof.
-      + apply
-          BodyPreservesPartialRootLowEquationCandidate_from_frame_cuts_proof;
-          assumption.
-      + apply
-          BodyPreservesChildParentPointerCandidate_from_frame_cuts_proof;
-          assumption.
-    - apply BodyPreservesFrameContractCandidate_from_phase9_cuts_proof;
-        assumption.
+    - apply BodyPreservesFrameContractCandidate_from_phase9_cuts_proof.
+    - apply BodyPreservesFrameProgressContractCandidate_proof.
   Qed.
 
   Lemma FixIHProvidesChildContract_proof:
@@ -15695,6 +19383,32 @@ Section IS_LOW_SKELETON.
     - apply (HIH child (LowFrameMode I F direct_parent direct_done)).
   Qed.
 
+  Lemma FixIHProvidesFrameProgressContract_proof:
+    FixIHProvidesFrameProgressContract_statement.
+  Proof.
+    unfold FixIHProvidesFrameProgressContract_statement,
+      FrameProgressContract.
+    intros I W HIH F progress_parent direct_parent child direct_done
+           Hedge Hnot_done.
+    eapply Hoare_conseq with
+      (P2 := FixPre I child
+               (LowFrameProgressMode
+                  I F progress_parent direct_parent direct_done))
+      (Q2 := FixPost I child
+               (LowFrameProgressMode
+                  I F progress_parent direct_parent direct_done)).
+	    - intros s [Hframe [Hcompatible [Hprogress Hentry]]].
+	      unfold FixPre; simpl.
+	      repeat split; assumption.
+    - intros r s Hpost.
+      unfold FixPost in Hpost; simpl in Hpost.
+      exact Hpost.
+    - apply
+        (HIH child
+           (LowFrameProgressMode
+              I F progress_parent direct_parent direct_done)).
+  Qed.
+
   Lemma FixpointModeStep_from_obligations_proof:
     forall I,
       FixpointModeStep_statement I.
@@ -15702,11 +19416,14 @@ Section IS_LOW_SKELETON.
     unfold FixpointModeStep_statement.
     intros I Hobs W HIH x mode.
     destruct mode as
-      [| parent done | parent done | outer direct_parent direct_done];
+      [| parent done
+       | parent done
+       | outer direct_parent direct_done
+       | outer progress_parent direct_parent direct_done];
       simpl.
     - destruct Hobs as
         [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
-         Hbody_child Hbody_low Hbody_frame].
+         Hbody_child Hbody_low Hbody_frame Hbody_progress].
       unfold tarjan_scc_f.
       eapply Hoare_bind.
       { apply Hpreloop. }
@@ -15718,6 +19435,8 @@ Section IS_LOW_SKELETON.
         - apply FixIHProvidesLowContributionContract_proof.
           exact HIH.
         - apply FixIHProvidesFrameContract_proof.
+          exact HIH.
+        - apply FixIHProvidesFrameProgressContract_proof.
           exact HIH. }
       simpl. intros _.
       eapply Hoare_conseq_pre.
@@ -15730,7 +19449,7 @@ Section IS_LOW_SKELETON.
         exact Hdone.
     - destruct Hobs as
         [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
-         Hbody_child Hbody_low Hbody_frame].
+         Hbody_child Hbody_low Hbody_frame Hbody_progress].
       unfold Hoare.
       intros s1 r s2 [Hentry [Hedge Hnot_done]] Hrun.
       pose proof
@@ -15738,12 +19457,13 @@ Section IS_LOW_SKELETON.
            (FixIHProvidesChildContract_proof I W HIH)
            (FixIHProvidesLowContributionContract_proof I W HIH)
            (FixIHProvidesFrameContract_proof I W HIH)
+           (FixIHProvidesFrameProgressContract_proof I W HIH)
            parent x done Hedge Hnot_done) as Hchild_body.
       unfold Hoare in Hchild_body.
       eapply Hchild_body; [exact Hentry | exact Hrun].
     - destruct Hobs as
         [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
-         Hbody_child Hbody_low Hbody_frame].
+         Hbody_child Hbody_low Hbody_frame Hbody_progress].
       unfold Hoare.
       intros s1 r s2 [Hpre [Hedge Hnot_done]] Hrun.
       pose proof
@@ -15751,12 +19471,13 @@ Section IS_LOW_SKELETON.
            (FixIHProvidesChildContract_proof I W HIH)
            (FixIHProvidesLowContributionContract_proof I W HIH)
            (FixIHProvidesFrameContract_proof I W HIH)
+           (FixIHProvidesFrameProgressContract_proof I W HIH)
            parent x done Hedge Hnot_done) as Hlow_body.
       unfold Hoare in Hlow_body.
       eapply Hlow_body; [exact Hpre | exact Hrun].
     - destruct Hobs as
         [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
-         Hbody_child Hbody_low Hbody_frame].
+         Hbody_child Hbody_low Hbody_frame Hbody_progress].
       unfold Hoare.
       intros s1 r s2
              [Hframe [Hcompatible [Hentry [Hedge Hnot_done]]]] Hrun.
@@ -15765,6 +19486,7 @@ Section IS_LOW_SKELETON.
            (FixIHProvidesChildContract_proof I W HIH)
            (FixIHProvidesLowContributionContract_proof I W HIH)
            (FixIHProvidesFrameContract_proof I W HIH)
+           (FixIHProvidesFrameProgressContract_proof I W HIH)
            outer direct_parent x direct_done Hedge Hnot_done) as Hframe_body.
       unfold Hoare in Hframe_body.
       assert (Hframe_pre:
@@ -15773,6 +19495,31 @@ Section IS_LOW_SKELETON.
                 ChildEntry I direct_parent x direct_done s1).
       { split; [exact Hframe | split; [exact Hcompatible | exact Hentry]]. }
       eapply Hframe_body; [exact Hframe_pre | exact Hrun].
+    - destruct Hobs as
+        [Hpreloop Hprocess Hedge_loop Hroot_bridge Hmaybe_pop
+         Hbody_child Hbody_low Hbody_frame Hbody_progress].
+      unfold Hoare.
+	      intros s1 r s2
+	             [Hframe [Hcompatible [Hprogress
+	              [Hentry [Hedge Hnot_done]]]]] Hrun.
+      pose proof
+        (Hbody_progress W
+           (FixIHProvidesChildContract_proof I W HIH)
+           (FixIHProvidesLowContributionContract_proof I W HIH)
+           (FixIHProvidesFrameContract_proof I W HIH)
+           (FixIHProvidesFrameProgressContract_proof I W HIH)
+           outer progress_parent direct_parent x direct_done Hedge Hnot_done)
+        as Hprogress_body.
+      unfold Hoare in Hprogress_body.
+		      assert (Hprogress_pre:
+		                FrameInv I outer s1 /\
+		                FrameProgress I outer direct_parent s1 /\
+		                FrameProgress I outer progress_parent s1 /\
+		                ChildEntry I direct_parent x direct_done s1).
+	      { split; [exact Hframe |].
+	        split; [exact Hcompatible |].
+	        split; [exact Hprogress | exact Hentry]. }
+      eapply Hprogress_body; [exact Hprogress_pre | exact Hrun].
   Qed.
 
   Lemma LowLayerCorrect_from_obligations_proof:
@@ -15798,11 +19545,9 @@ Section IS_LOW_SKELETON.
 
   Lemma LowCandidateLayerCorrect_from_phase9_cuts_proof:
     BodyChildPostTailCandidate_statement ->
-    PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_statement ->
-    ProcessEdgePreservesFrameAndOlderCandidate_statement ->
     FixpointLowLayerCorrect_statement LowCandidateInterface.
   Proof.
-    intros Hchild_tail Hpreloop_processed Hprocess_edge.
+    intros Hchild_tail.
     apply LowLayerCorrect_from_obligations_proof.
     apply LowCandidateObligations_from_phase9_cuts_proof; assumption.
   Qed.
