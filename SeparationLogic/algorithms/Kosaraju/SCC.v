@@ -42,9 +42,7 @@ Lemma mutually_reachable_trans : forall u v w,
   mutually_reachable u v -> mutually_reachable v w -> mutually_reachable u w.
 Proof.
   intros u v w [Huv Hvu] [Hvw Hwv].
-  unfold mutually_reachable.
-  split; unfold reachable in *;
-  etransitivity; eauto.
+  split; eapply reachable_trans; eauto.
 Qed.
 
 (* ================================================================= *)
@@ -271,13 +269,11 @@ Proof.
         apply condensation_reachable_In in Hcr1 as [_ Hin2].
         apply Hsccs in Hin2; destruct Hin2 as [_ [Hinternal2 _]].
         assert (Hmr2 : mutually_reachable v2 u2) by (apply Hinternal2; auto).
+        destruct Hmr2 as [Hv2u2 _].
         exists u1, v3.
         split; [|split]; auto.
-        unfold reachable in *.
-        etransitivity; [apply Hreach12|].
-        destruct Hmr2 as [Hv2u2 _].
-        etransitivity; [apply Hv2u2|].
-        apply Hreach23.
+        eapply reachable_trans; [exact Hreach12|].
+        eapply reachable_trans; [exact Hv2u2 | exact Hreach23].
 Qed.
 
 Theorem no_cycle_between_different_SCCs : forall sccs,
@@ -304,12 +300,9 @@ Proof.
   assert (Hmr_s1 : mutually_reachable v2 u1) by (apply Hinternal1; auto).
 
   assert (Hmr_u1u2 : mutually_reachable u1 u2).
-  { unfold mutually_reachable.
-    split; unfold reachable in *.
-    - etransitivity; [apply Hreach_fwd|].
-      destruct Hmr_s2. exact H.
-    - etransitivity; [apply Hreach_bwd|].
-      destruct Hmr_s1. exact H. }
+  { split.
+    - eapply reachable_trans; [exact Hreach_fwd | exact (proj1 Hmr_s2)].
+    - eapply reachable_trans; [exact Hreach_bwd | exact (proj1 Hmr_s1)]. }
 
   assert (Hs1u2 : s1 u2).
   { apply (is_SCC_closed_under_mr s1 u1 u2 (Hsccs _ Hin1)); auto. }
@@ -338,12 +331,9 @@ Proof.
   destruct Hscc1_full as [_ [Hinternal1 _]].
   assert (Hmr1 : mutually_reachable v' u) by (apply Hinternal1; auto).
   assert (Hcycle : mutually_reachable u u').
-  { unfold mutually_reachable.
-    split; unfold reachable in *.
-    - etransitivity; [apply Hfwd|].
-      destruct Hmr2 as [Hvu' _]. exact Hvu'.
-    - etransitivity; [apply Hback_reach|].
-      destruct Hmr1 as [Hv'u _]. exact Hv'u. }
+  { split.
+    - eapply reachable_trans; [exact Hfwd | exact (proj1 Hmr2)].
+    - eapply reachable_trans; [exact Hback_reach | exact (proj1 Hmr1)]. }
   assert (Hu'_in_s1 : s1 u').
   { exact (is_SCC_closed_under_mr s1 u u' (Hsccs _ Hin1) Hu Hcycle). }
   apply Hneq.
@@ -360,26 +350,23 @@ Proof.
   intros sccs s1 s2 u v Hpart Hin1 Hin2 Hsu Hsv Hreach.
   destruct Hpart as [Hcover [Hsccs Hdisjoint]].
   unfold reachable in Hreach.
-  destruct Hreach as [n Hreach].
-  revert u v Hreach s1 Hin1 Hsu s2 Hin2 Hsv.
-  induction n as [|n IH]; intros u v Hreach s1 Hin1 Hsu s2 Hin2 Hsv.
-  - simpl in Hreach; compute in Hreach.
-    destruct Hreach; subst.
-    left; eapply Hdisjoint; eauto.
-  - simpl in Hreach; compute in Hreach.
-    sets_unfold in Hreach.
-    destruct Hreach as [w [Hstep Hrest]].
-    assert (Hvw : vvalid g w) by (apply step_vvalid in Hstep; destruct Hstep; auto).
-    destruct (Hcover w Hvw) as [sw [Hin_sw Hsw]].
+  generalize dependent s1.
+  induction_1n Hreach.
+  - left; eapply Hdisjoint; eauto.
+  - destruct (step_vvalid _ _ H) as [_ Hvu0].
+    destruct (Hcover u0 Hvu0) as [sw [Hin_sw Hsw]].
+    assert (IH : forall s0, In s0 sccs -> s0 u0 ->
+                 s0 = s2 \/ condensation_reachable sccs s0 s2).
+    { intros s0 Hin0 Hs0. apply IHrt; assumption. }
     destruct (classic (sw = s1)) as [Heq_same|Hneq].
-    + subst sw; apply IH with (u := w) (v := v) (s1 := s1); auto.
+    + subst sw; apply (IH s1 Hin1 Hsw).
     + assert (Hedge : condensation_edge sccs s1 sw).
       { unfold condensation_edge.
         split; [exact Hin1|].
         split; [exact Hin_sw|].
-        split; [intro H; apply Hneq; symmetry; exact H|].
-        exists u, w; split; [exact Hsu|]; split; [exact Hsw|]; exact Hstep. }
-      destruct (IH w v Hrest sw Hin_sw Hsw s2 Hin2 Hsv) as [Heq | Hcr].
+        split; [intro Heq; apply Hneq; symmetry; exact Heq|].
+        exists u, u0; split; [exact Hsu|]; split; [exact Hsw|]; exact H. }
+      destruct (IH sw Hin_sw Hsw) as [Heq | Hcr].
       * subst sw; right; apply cr_edge; exact Hedge.
       * right; apply cr_trans with (s2 := sw); [apply cr_edge; exact Hedge| exact Hcr].
 Qed.
@@ -413,15 +400,11 @@ Lemma reachable_rev_intro : forall x y,
 Proof.
   intros x y H.
   unfold reachable in H.
-  pose proof (nsteps_nsteps'_indexed_union (step g) : (clos_refl_trans (step g) == ⋃ (nsteps' (step g)))%sets) as Hconv.
-  apply Hconv in H.
-  destruct H as [n H].
-  revert x y H; induction n as [|n IH]; intros x y H.
-  - simpl in H; destruct H; subst; constructor.
-  - simpl in H; sets_unfold in H; destruct H as [w [Hrest Hstep]].
-    econstructor 2 with (v := w).
-    + unfold step_rev; exact Hstep.
-    + apply IH with (x := w); exact Hrest.
+  induction_n1 H.
+  - constructor.
+  - econstructor 2.
+    + unfold step_rev; eassumption.
+    + apply IHrt; auto.
 Qed.
 
 Lemma reachable_rev_step_reachable_rev : forall x y z,
@@ -497,15 +480,10 @@ Lemma tail_SCC_closed_under_reachable : forall sccs s u v,
 Proof.
   intros sccs s u v Hpart Htail Hsu Hreach.
   unfold reachable in Hreach.
-  destruct Hreach as [n Hreach].
-  revert u v Hreach Hsu.
-  induction n as [|n IH]; intros u v Hreach Hsu.
-  - simpl in Hreach.
-    destruct Hreach; subst; auto.
-  - simpl in Hreach.
-    sets_unfold in Hreach.
-    destruct Hreach as [w [Hstep Hrest]].
-    apply IH with (u := w); auto.
+  revert Hsu.
+  induction_1n Hreach.
+  - auto.
+  - apply IHrt; auto.
     eapply tail_SCC_no_outgoing; eauto.
 Qed.
 
@@ -533,18 +511,10 @@ Lemma head_SCC_closed_under_reachable : forall sccs s u v,
 Proof.
   intros sccs s u v Hpart Hhead Hsv Hreach.
   unfold reachable in Hreach.
-  pose proof (nsteps_nsteps'_indexed_union (step g) u v) as Hconv.
-  apply Hconv in Hreach.
-  destruct Hreach as [n' Hreach].
-  clear Hconv.
-  revert u v Hreach Hsv.
-  induction n' as [|n' IH]; intros u v Hreach Hsv.
-  - simpl in Hreach.
-    destruct Hreach; subst; auto.
-  - simpl in Hreach.
-    sets_unfold in Hreach.
-    destruct Hreach as [w [Hreach_w Hstep]].
-    apply (IH u w Hreach_w).
+  revert Hsv.
+  induction_n1 Hreach.
+  - auto.
+  - apply IHrt; auto.
     eapply head_SCC_no_incoming; eauto.
 Qed.
 
