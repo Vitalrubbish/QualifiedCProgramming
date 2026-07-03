@@ -391,43 +391,53 @@ Qed.
 Definition step_rev (x y: V) : Prop :=
   step g y x.
 
-Inductive reachable_rev (u : V) : V -> Prop :=
-| rr_refl : reachable_rev u u
-| rr_step v w : step_rev u v -> reachable_rev v w -> reachable_rev u w.
+Definition reachable_rev (x y: V) : Prop := reachable g y x.
+
+Lemma rr_refl : forall u, reachable_rev u u.
+Proof.
+  intros u; unfold reachable_rev, reachable; reflexivity.
+Qed.
+
+Lemma rr_step : forall u v w,
+  step_rev u v -> reachable_rev v w -> reachable_rev u w.
+Proof.
+  intros u v w Hs Hr; unfold reachable_rev, step_rev in *.
+  eapply reachable_step_reachable; [exact Hr | exact Hs].
+Qed.
+
+Lemma reachable_rev_ind : forall (P : V -> V -> Prop),
+  (forall u, P u u) ->
+  (forall u v w, step_rev u v -> reachable_rev v w -> P v w -> P u w) ->
+  forall u v, reachable_rev u v -> P u v.
+Proof.
+  intros P Hrefl Hstep u v Hrev.
+  unfold reachable_rev, reachable in Hrev.
+  clear Hgvalid stepvalid finitegraph gv gv0.
+  induction_n1 Hrev.
+  - apply Hrefl.
+  - eapply Hstep.
+    + unfold step_rev; exact H.
+    + unfold reachable_rev, reachable; exact Hrev.
+    + apply IHrt; assumption.
+Qed.
 
 Lemma reachable_rev_intro : forall x y,
   reachable g y x -> reachable_rev x y.
 Proof.
-  intros x y H.
-  unfold reachable in H.
-  induction_n1 H.
-  - constructor.
-  - econstructor 2.
-    + unfold step_rev; eassumption.
-    + apply IHrt; auto.
+  intros x y H; exact H.
 Qed.
 
 Lemma reachable_rev_step_reachable_rev : forall x y z,
   reachable_rev x y -> step_rev y z -> reachable_rev x z.
 Proof.
-  intros x y z H.
-  revert z.
-  induction H using reachable_rev_ind; intros z Hstep.
-  - econstructor 2 with (v := z); [exact Hstep | constructor].
-  - econstructor 2 with (v := v); [exact H | apply IHreachable_rev; exact Hstep].
+  intros x y z Hr Hs; unfold reachable_rev, step_rev in *.
+  eapply step_reachable_reachable; [exact Hs | exact Hr].
 Qed.
 
 Lemma reachable_iff_reachable_rev : forall x y,
   reachable g x y <-> reachable_rev y x.
 Proof.
-  split.
-  - intros H; apply reachable_rev_intro; auto.
-  - intros H; induction H using reachable_rev_ind.
-    + unfold reachable; reflexivity.
-    + match goal with
-      | Hstep : step_rev _ _ |- _ => rename Hstep into Hstep_edge
-      end.
-      eapply reachable_step_reachable; [exact IHreachable_rev | unfold step_rev; exact Hstep_edge].
+  intros x y; unfold reachable_rev; reflexivity.
 Qed.
 
 Definition mutually_reachable_rev (u v: V) : Prop :=

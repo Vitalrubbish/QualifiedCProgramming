@@ -110,11 +110,14 @@ Inductive reach_fwd (v : V) : V -> Prop :=
 Lemma reachable_rev_to_reach_fwd : forall x y,
   reachable_rev y x -> reach_fwd x y.
 Proof.
-  induction 1.
-  - constructor.
-  - econstructor 2.
-    + apply IHreachable_rev.
-    + unfold step_rev in H; exact H.
+  intros x y H.
+  unfold reachable_rev in H.
+  refine (SCC.reachable_rev_ind _ (fun a b => reach_fwd b a) _ _ _ _ H).
+  - intros u0. constructor.
+  - intros u0 v0 w0 Hstep Hrev IH.
+    econstructor 2.
+    + exact IH.
+    + unfold step_rev in Hstep; exact Hstep.
 Qed.
 
 Lemma reachable_to_reach_fwd : forall x y,
@@ -129,7 +132,7 @@ Lemma reach_fwd_to_reachable : forall x y,
   reach_fwd x y -> reachable g x y.
 Proof.
   induction 1.
-  - apply reachable_iff_reachable_rev; constructor.
+  - apply reachable_iff_reachable_rev; apply SCC.rr_refl.
   - eapply reachable_step_reachable; eauto.
 Qed.
 
@@ -746,7 +749,7 @@ Proof.
     + left; exact H_vis0.
     + subst v.
       right.
-      constructor.
+      apply SCC.rr_refl.
   - intro; apply Hoare_repeat_break with (P := fun e_set st => forall v, visited1 st v -> visited1 s0 v \/ reachable_rev u v).
     intros e_set.
     apply Hoare_normalize.
@@ -767,7 +770,7 @@ Proof.
         - apply Hs1'.
           exact Hw.
         - right.
-          econstructor 2 with (v := v).
+          eapply SCC.rr_step with (v := v).
           + unfold step_rev; eexists; exact H_step.
           + exact Hreach.
       }
@@ -987,10 +990,8 @@ Lemma reachable_rev_trans : forall x y z,
   reachable_rev x y -> reachable_rev y z -> reachable_rev x z.
 Proof.
   intros x y z Hxy Hyz.
-  unfold reachable_rev in *; revert z Hyz.
-  induction Hxy; intros z Hyz.
-  - exact Hyz.
-  - econstructor 2; eauto.
+  unfold reachable_rev in *.
+  eapply reachable_trans; [exact Hyz | exact Hxy].
 Qed.
 
 (** Combining two Hoare triples for the same program into a conjunction. *)
@@ -1040,20 +1041,18 @@ Proof.
     destruct (classic (visited1 s0 v)) as [Hv_s0 | Hv_not].
     + sets_unfold in Hsub; apply (Hsub w0); apply (Hclosed v w0); assumption.
     + sets_unfold in Hsub.
-      refine ((fix aux (v0 : V) (Hvis_v0 : visited1 s' v0) (Hnot0 : ~ visited1 s0 v0)
-                      (w' : V) (Hrev' : reachable_rev v0 w') {struct Hrev'} : visited1 s' w' :=
-        match Hrev' with
-        | SCC.rr_refl _ _ => Hvis_v0
-        | SCC.rr_step _ _ v1 w'' Hstep Hrest =>
-          match Hneigh v0 Hvis_v0 with
-          | or_introl Hv0_s0 => False_ind _ (Hnot0 Hv0_s0)
-          | or_intror Hn_v0 =>
-            match classic (visited1 s0 v1) with
-            | or_introl Hv1_s0 => Hsub w'' (Hclosed v1 w'' Hv1_s0 Hrest)
-            | or_intror Hv1_not_s0 => aux v1 (Hn_v0 v1 Hstep) Hv1_not_s0 w'' Hrest
-            end
-          end
-        end) v Hvis_v Hv_not w0 Hrev_vw0).
+      unfold reachable_rev in Hrev_vw0.
+      revert Hvis_v Hv_not.
+      refine (SCC.reachable_rev_ind _
+                (fun v0 w' => visited1 s' v0 -> ~ visited1 s0 v0 -> visited1 s' w')
+                _ _ _ _ Hrev_vw0).
+      * intros u0 Hvis_u0 _. exact Hvis_u0.
+      * intros u0 v1 w'' Hstep Hrest IH Hvis_u0 Hnot0.
+        destruct (Hneigh u0 Hvis_u0) as [Hu0_s0 | Hn_u0].
+        -- exact (False_ind _ (Hnot0 Hu0_s0)).
+        -- destruct (classic (visited1 s0 v1)) as [Hv1_s0 | Hv1_not].
+           ++ exact (Hsub w'' (Hclosed v1 w'' Hv1_s0 Hrest)).
+           ++ exact (IH (Hn_u0 v1 Hstep) Hv1_not).
 Qed.
 
 (** [DFS_finish_finish_ge_timer]
@@ -1169,17 +1168,23 @@ Lemma finished_rev_to_root :
   reachable_rev a b ->
   reachable_rev a u'.
 Proof.
-  fix aux 13.
   intros st s0' u' a b Hclosed Hsub Hvis_a Hnew_a Hne_a Hstep_vis Hunvis_b Hreach.
-  destruct Hreach as [| v w Hstep Hreach'].
-  - exfalso. exact (Hunvis_b Hvis_a).
-  - pose proof (Hstep_vis a v Hvis_a Hnew_a Hne_a Hstep) as Hvis_v.
+  unfold reachable_rev in Hreach.
+  revert Hvis_a Hnew_a Hne_a Hunvis_b.
+  refine (SCC.reachable_rev_ind _
+            (fun a b => visited1 st a -> ~ visited1 s0' a -> a <> u' ->
+                        ~ visited1 st b -> reachable_rev a u')
+            _ _ _ _ Hreach).
+  - intros u0 Hvis_u0 Hnew_u0 Hne_u0 Hunvis_u0.
+    exfalso. exact (Hunvis_u0 Hvis_u0).
+  - intros a0 v w Hstep Hreach' IH Hvis_a0 Hnew_a0 Hne_a0 Hunvis_w.
+    pose proof (Hstep_vis a0 v Hvis_a0 Hnew_a0 Hne_a0 Hstep) as Hvis_v.
     destruct (classic (visited1 s0' v)) as [Hv_s0 | Hv_new].
-    + exfalso. apply Hunvis_b. apply Hsub, (Hclosed v w Hv_s0 Hreach').
+    + exfalso. apply Hunvis_w. apply Hsub, (Hclosed v w Hv_s0 Hreach').
     + destruct (classic (v = u')) as [Hv_u' | Hv_ne].
-      * subst v. apply (SCC.rr_step g a u' u' Hstep (SCC.rr_refl g u')).
-      * apply (SCC.rr_step g a v u' Hstep).
-        apply (aux st s0' u' v w Hclosed Hsub Hvis_v Hv_new Hv_ne Hstep_vis Hunvis_b Hreach').
+      * subst v. apply (SCC.rr_step g a0 u' u' Hstep (SCC.rr_refl g u')).
+      * apply (SCC.rr_step g a0 v u' Hstep).
+        exact (IH Hvis_v Hv_new Hv_ne Hunvis_w).
 Qed.
 
 (** [visited_boundary_not_closed]
@@ -1195,17 +1200,21 @@ Lemma visited_boundary_not_closed :
   reachable_rev b c ->
   exists v, visited v /\ ~ (forall w, step_rev v w -> visited w) /\ reachable_rev b v.
 Proof.
-  unfold reachable_rev.
-  fix aux 6.
   intros visited b c Hvis_b Hunvis_c Hreach.
-  destruct Hreach as [| v w Hstep Hreach'].
-  - exfalso. exact (Hunvis_c Hvis_b).
-  - destruct (classic (visited v)) as [Hvis_v | Hunvis_v].
-    + destruct (aux visited v w Hvis_v Hunvis_c Hreach')
-        as [x [Hvis_x [Hnot_closed Hreach_x]]].
+  unfold reachable_rev in Hreach.
+  revert Hvis_b Hunvis_c.
+  refine (SCC.reachable_rev_ind _
+            (fun b c => visited b -> ~ visited c ->
+               exists v, visited v /\ ~ (forall w, step_rev v w -> visited w)
+                         /\ reachable_rev b v)
+            _ _ _ _ Hreach).
+  - intros u0 Hvis_u0 Hunvis_u0. exfalso. exact (Hunvis_u0 Hvis_u0).
+  - intros b0 v w Hstep Hreach' IH Hvis_b0 Hunvis_w.
+    destruct (classic (visited v)) as [Hvis_v | Hunvis_v].
+    + destruct (IH Hvis_v Hunvis_w) as [x [Hvis_x [Hnot_closed Hreach_x]]].
       exists x. split; [exact Hvis_x | split; [exact Hnot_closed |]].
-      apply (SCC.rr_step g b v x Hstep Hreach_x).
-    + exists b. split; [exact Hvis_b | split].
+      apply (SCC.rr_step g b0 v x Hstep Hreach_x).
+    + exists b0. split; [exact Hvis_b0 | split].
       * intro Hclosed_b. apply Hunvis_v, Hclosed_b. exact Hstep.
       * apply SCC.rr_refl.
 Qed.
@@ -1437,7 +1446,7 @@ Proof.
     - intros v w Hvis Hnew Hne. apply Hv in Hvis.
       destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; exfalso; exact (Hne eq_refl)].
     - intros v Hvis Hnew. apply Hv in Hvis.
-      destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; constructor].
+      destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; apply SCC.rr_refl].
     - intros z Hz. rewrite Hfin. reflexivity.
     - rewrite Htimer. lia.
     - intros v Hne Hvis. apply Hv in Hvis.
@@ -1449,11 +1458,11 @@ Proof.
       destruct Hvis as [H0|Heq].
       + apply HR; [exact H0|].
         intro Hcl. apply Hnot_closed. intros w Hstep. apply Hv. left. apply Hcl. exact Hstep.
-      + subst v. constructor.
+      + subst v. apply SCC.rr_refl.
     - intros HR a0 b0 Ha0 Hna0 Hb0 Hnb0. apply Hv in Ha0. apply Hv in Hb0.
       destruct Ha0 as [H0|Heq]; [exfalso; exact (Hna0 H0)|subst a0].
       destruct Hb0 as [H0|Heq]; [exfalso; exact (Hnb0 H0)|subst b0].
-      intros _ Hnot. exfalso. apply Hnot. constructor. }
+      intros _ Hnot. exfalso. apply Hnot. apply SCC.rr_refl. }
 
   intro a_res.
   apply Hoare_repeat_break with
@@ -1514,7 +1523,7 @@ Proof.
         destruct (classic (visited1 s1 x)) as [Hx_s1|Hx_ns1].
         + exact (Hreach_new x Hx_s1 Hnew_x).
         + apply (reachable_rev_trans u' v x).
-          * unfold reachable_rev. econstructor 2; [eexists; exact H_step | constructor].
+          * eapply SCC.rr_step; [eexists; exact H_step | apply SCC.rr_refl].
           * exact (Hreach2 x Hvis_x Hx_ns1).
       (* 5. old finish preserved *)
       - intros z Hz.
@@ -1563,9 +1572,9 @@ Proof.
       - intros HR0 a0 b0 Ha0 Hna0 Hb0 Hnb0 Hrev Hnrev.
         pose proof (HR_pres HR0) as HR1.
         assert (Hrv : reachable_rev u' v).
-        { unfold reachable_rev. econstructor 2.
+        { eapply SCC.rr_step.
           - eexists. exact H_step.
-          - constructor. }
+          - apply SCC.rr_refl. }
         assert (HR_v : R_non_closed v s1).
         { intros z Hz Hnc.
           apply (reachable_rev_trans z u' v); [exact (HR1 z Hz Hnc)|exact Hrv]. }
@@ -1798,7 +1807,7 @@ Proof.
         assert (HR_trivial : R_non_closed u s0').
         { intros v Hv Hnc. exfalso. apply Hnc.
           intros w Hstep. apply (HRC v w Hv).
-          econstructor 2; [exact Hstep | constructor]. }
+          eapply SCC.rr_step; [exact Hstep | apply SCC.rr_refl]. }
         assert (HInv_s2 : Inv s2).
         { unfold Inv. split; [exact HRC2 | split; [exact HTD2 | split]].
           - intros v Hv.
@@ -3230,7 +3239,7 @@ Proof.
                 - exfalso. apply Hnrev.
                   pose proof (Hmut_root a Ha Ha1) as [Hra Har].
                   pose proof (Hmut_root b Hb Hb1) as [Hrb Hbr].
-                  apply reachable_iff_reachable_rev.
+                  apply reachable_rev_intro.
                   unfold reachable; etransitivity; [exact Har | exact Hrb]. }
               eapply Hoare_imp_post.
               { exact (IH s2 tt (conj HR2 HAT2)). }
