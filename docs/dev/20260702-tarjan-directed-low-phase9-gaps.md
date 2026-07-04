@@ -162,8 +162,9 @@ ChildEntryCandidate parent child done s /\
 PartialRootLowEquationCandidate parent done s
 ```
 
-Therefore the next proof should introduce a framed accounting producer, shaped
-around the two facts still consumed by `LowContributionPost`:
+The first correction was to replace the naked child-entry cut with a framed
+accounting producer, shaped around the two facts still consumed by
+`LowContributionPost`:
 
 ```coq
 ParentPendingChildEscapeAccountedCandidate parent done child s /\
@@ -211,6 +212,52 @@ accounting, not a raw
 not derivable from the existing frame and post-child accounting cuts, the
 right fix is to refine the framed low-contribution path or frame invariant,
 not to re-expand `ChildPostCandidate`.
+
+2026-07-04 implementation check: the audit point is now active.  The framed
+child-body post target above is still too early for the parent accounting
+facts as currently defined.  In particular, existing producers for
+`ParentLowBelowChildCandidate` and
+`PendingChildSegmentEscapeAccountedCandidate` are intentionally placed after
+the parent continuation step:
+
+```coq
+lv <- get' (fun s => low s child);; update_low parent lv
+```
+
+Trying to prove `ParentPendingChildEscapeAccountedCandidate parent done child`
+and `ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`
+immediately after the recursive child body therefore crosses the current
+producer/consumer boundary.  The safe route is to stop treating those two
+facts as direct `LowContributionPost` fields of the recursive child body.
+Instead, keep the recursive low-contribution post child/local:
+
+```coq
+PartialRootLowEquationCandidate parent done s /\
+fa s child = parent /\
+fa s child <> child /\
+low s child <= dfn s child
+```
+
+and move the parent-accounting production to the tree-branch continuation,
+after the parent has read `low child` and updated `low parent`.  That
+continuation already has the required frame fields, child post fields,
+`ParentLowBelowChildCandidate`, and the existing
+`GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedCandidate_proof`
+machinery.
+
+The expected code change is therefore:
+
+- narrow `FramedChildProvidesLowContributionCandidate` and
+  `LowCandidateInterface.LowContributionPost` back to the four child/local
+  fields;
+- remove `BodyProducesLowContributionAccountingCandidate_statement` from the
+  body low-contribution assembler;
+- keep or add parent-accounting lemmas at the process-edge tree branch, where
+  `ProcessEdgeTreeBranchExtendsPhase7SegmentFieldsCandidate_proof` already
+  assembles segment accounting, coverage, and active-target blocks after the
+  parent update;
+- only add a new active-block closure lemma if the existing suspended
+  active-block field cannot be closed at that post-update point.
 
 ### 3.2 Tail Statement Retirement
 
@@ -345,15 +392,17 @@ Latest proof-level progress:
 - The body frame contract and frame-progress contract are closed.
 - The child recursive post has been narrowed and the concrete child contract is
   closed without parent accounting.
-- The remaining true Phase 9 gap is the framed low-contribution accounting
-  producer that should replace the transitional
-  `BodyChildPostTailCandidate_statement` premise.
+- The remaining true Phase 9 gap is no longer a child-body accounting
+  producer.  The remaining work is to move parent accounting to the
+  post-update tree-branch continuation and keep the recursive child
+  low-contribution post at the four child/local fields.
 
 ## 6. Recommended Next Step
 
-Close `BodyProducesLowContributionAccountingCandidate_proof` next, then use it
-to remove `BodyChildPostTailCandidate_statement` from the low-contribution and
-top-level Phase 9 assemblers.
+Narrow the recursive low-contribution post back to the four child/local
+fields, remove the missing `BodyProducesLowContributionAccountingCandidate`
+dependency, and finish the parent-accounting assembly in the tree branch after
+`get low child ;; update_low parent`.
 
 Do not prove `BodyChildPostTailCandidate_statement` as written unless its
 precondition is refined.  Its current naked `ChildEntryCandidate` precondition

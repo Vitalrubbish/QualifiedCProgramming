@@ -1177,12 +1177,17 @@ Phase 9b: Concrete body contract assembly
 Immediate next work item:
 
 ```text
-Continue Phase 9b by replacing `BodyChildPostTailCandidate_statement` with a
-framed low-contribution accounting producer.  The target facts are
+Continue Phase 9b by moving parent-accounting production out of the recursive
+child low-contribution post and into the tree-branch continuation after
+`get low child ;; update_low parent`.  Keep the recursive low-contribution
+post to the four child/local fields: partial root-low equation, child parent
+pointer equality, child self-parent disequality, and child low/dfn bound.
+
+The parent accounting facts
 `ParentPendingChildEscapeAccountedCandidate parent done child` and
-`ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`,
-produced under the full framed low-contribution precondition rather than under
-bare `ChildEntryCandidate`.
+`ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`
+should be assembled where the parent continuation has `ParentLowBelowChild`
+and the existing pending-child segment accounting producers available.
 ```
 
 ## 15. General Stop Rules

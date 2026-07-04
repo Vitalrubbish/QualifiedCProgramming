@@ -1096,15 +1096,15 @@ Phase-9a status:
   `BodyPreservesFrameContractCandidate_from_phase9_cuts_proof`.
 - `BodyPreservesFrameProgressContractCandidate_proof` closes the auxiliary
   frame-progress recursive contract.
-- The remaining concrete body dependency is the low-contribution accounting
-  producer.  The current transitional premise
-  `BodyChildPostTailCandidate_statement` is intentionally treated as
-  over-strong: its `ChildEntryCandidate` precondition is weaker than the
-  parent accounting facts it tries to produce.  The next target should be a
-  framed accounting Hoare lemma under the full
-  `FramedChildProvidesLowContributionCandidate` precondition, producing
-  `ParentPendingChildEscapeAccountedCandidate parent done child` and
-  `ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`.
+- The remaining concrete dependency is not a recursive child-body accounting
+  producer.  The attempted framed producer is still too early for the current
+  predicate boundaries because `ParentLowBelowChildCandidate` and
+  `PendingChildSegmentEscapeAccountedCandidate` are produced after
+  `get low child ;; update_low parent`.  The next target is to narrow the
+  recursive low-contribution post to the four child/local fields and assemble
+  `ParentPendingChildEscapeAccountedCandidate parent done child` plus
+  `ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`
+  in the tree-branch continuation after the parent update.
 
 ## 11. Open Checks Before Implementation
 
