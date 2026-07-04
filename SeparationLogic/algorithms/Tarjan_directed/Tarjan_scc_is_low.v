@@ -735,6 +735,55 @@ Section IS_LOW_SKELETON.
         (set_fa child parent)
         (fun _ s => PartialRootLowEquationCandidate parent done s).
 
+  Definition PendingRootEscapeCandidate
+             (u: V) (done: V -> Prop) (s: St)
+             (x w: V): Prop :=
+    exists a,
+      dg_reachable g x u /\
+      Edge u a /\
+      ~ done a /\
+      dg_reachable g a w.
+
+  Definition OldStackEscapeAnchorCandidate
+             (u: V) (s: St) (x w: V): Prop :=
+    exists b,
+      Active b s /\
+      dfn s b < dfn s u /\
+      low s u <= dfn s b /\
+      dg_reachable g x b /\
+      dg_reachable g b w.
+
+  Definition ParentPendingChildEscapeAccountedCandidate
+             (u: V) (done: V -> Prop) (child: V) (s: St): Prop :=
+    forall x w,
+      Active x s ->
+      dfn s u <= dfn s x ->
+      dg_reachable g x u ->
+      dg_reachable g child w ->
+      ~ Visited w s ->
+      PendingRootEscapeCandidate u (done_after done child) s x w \/
+      OldStackEscapeAnchorCandidate u s x w.
+
+  Definition ActiveTargetBlockEscapeAccountedCandidate
+             (u: V) (done block: V -> Prop) (s: St): Prop :=
+    forall a w,
+      block a ->
+      (forall b,
+          block b ->
+          Edge u b /\
+          ~ done b /\
+          Active b s /\
+          dfn s u <= dfn s b) ->
+      dg_reachable g a w ->
+      ~ Visited w s ->
+      PendingRootEscapeCandidate u (done ∪ block) s a w \/
+      OldStackEscapeAnchorCandidate u s a w.
+
+  Definition ActiveTargetBlocksEscapeAccountedCandidate
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    forall block,
+      ActiveTargetBlockEscapeAccountedCandidate u done block s.
+
   Definition ChildProvidesLowContributionCandidate (W: RecProgram): Prop :=
     forall parent child done,
       Edge parent child ->
@@ -856,24 +905,6 @@ Section IS_LOW_SKELETON.
       dg_reachable (state_to_dfs_tree g s root) v x /\
       dg_reachable g v x.
 
-  Definition PendingRootEscapeCandidate
-             (u: V) (done: V -> Prop) (s: St)
-             (x w: V): Prop :=
-    exists a,
-      dg_reachable g x u /\
-      Edge u a /\
-      ~ done a /\
-      dg_reachable g a w.
-
-  Definition OldStackEscapeAnchorCandidate
-             (u: V) (s: St) (x w: V): Prop :=
-    exists b,
-      Active b s /\
-      dfn s b < dfn s u /\
-      low s u <= dfn s b /\
-      dg_reachable g x b /\
-      dg_reachable g b w.
-
   Definition SegmentEscapeAccountingCandidate
              (u: V) (done: V -> Prop) (s: St): Prop :=
     forall x w,
@@ -899,17 +930,6 @@ Section IS_LOW_SKELETON.
       dg_reachable g x w ->
       ~ Visited w s ->
       PendingRootEscapeCandidate u done s x w \/
-      OldStackEscapeAnchorCandidate u s x w.
-
-  Definition ParentPendingChildEscapeAccountedCandidate
-             (u: V) (done: V -> Prop) (child: V) (s: St): Prop :=
-    forall x w,
-      Active x s ->
-      dfn s u <= dfn s x ->
-      dg_reachable g x u ->
-      dg_reachable g child w ->
-      ~ Visited w s ->
-      PendingRootEscapeCandidate u (done_after done child) s x w \/
       OldStackEscapeAnchorCandidate u s x w.
 
   Definition PendingChildSegmentEscapeAccountedCandidate
@@ -1026,25 +1046,28 @@ Section IS_LOW_SKELETON.
       PendingRootEscapeCandidate u (done_after done a) s a w \/
       OldStackEscapeAnchorCandidate u s a w.
 
-  Definition ActiveTargetBlockEscapeAccountedCandidate
-             (u: V) (done block: V -> Prop) (s: St): Prop :=
+  Definition SuspendedActiveTargetBlockEscapeAccountedCandidate
+             (u child: V) (done block: V -> Prop) (s: St): Prop :=
     forall a w,
       block a ->
+      ~ PendingChildSegmentCandidate child s a ->
       (forall b,
           block b ->
           Edge u b /\
           ~ done b /\
           Active b s /\
-          dfn s u <= dfn s b) ->
+          dfn s u <= dfn s b /\
+          ~ PendingChildSegmentCandidate child s b) ->
       dg_reachable g a w ->
       ~ Visited w s ->
       PendingRootEscapeCandidate u (done ∪ block) s a w \/
       OldStackEscapeAnchorCandidate u s a w.
 
-  Definition ActiveTargetBlocksEscapeAccountedCandidate
-             (u: V) (done: V -> Prop) (s: St): Prop :=
+  Definition SuspendedActiveTargetBlocksEscapeAccountedCandidate
+             (u child: V) (done: V -> Prop) (s: St): Prop :=
     forall block,
-      ActiveTargetBlockEscapeAccountedCandidate u done block s.
+      SuspendedActiveTargetBlockEscapeAccountedCandidate
+        u child done block s.
 
   Definition ActiveEdgeTargetSegmentEscapeAccountedCandidate
              (u: V) (done: V -> Prop) (s: St): Prop :=
@@ -1622,7 +1645,8 @@ Section IS_LOW_SKELETON.
              (u child: V) (done: V -> Prop) (s: St): Prop :=
     SuspendedLoopInvPhase6Candidate u child done s /\
     SuspendedSegmentEscapeAccountingCandidate u child done s /\
-    SuspendedSegmentTreeCoverageByDoneCandidate u child done s.
+    SuspendedSegmentTreeCoverageByDoneCandidate u child done s /\
+    SuspendedActiveTargetBlocksEscapeAccountedCandidate u child done s.
 
   Definition LoopDonePhase7Candidate (u: V) (s: St): Prop :=
     LoopInvPhase7Candidate u (edge_set u) s.
@@ -1684,6 +1708,11 @@ Section IS_LOW_SKELETON.
     forall u done child s,
       SegmentTreeCoverageByDoneCandidate u done s ->
       SuspendedSegmentTreeCoverageByDoneCandidate u child done s.
+
+  Definition ActiveTargetBlocksSuspendsCandidate_statement: Prop :=
+    forall u done child s,
+      ActiveTargetBlocksEscapeAccountedCandidate u done s ->
+      SuspendedActiveTargetBlocksEscapeAccountedCandidate u child done s.
 
   Definition SegmentTreeCoverageClosesAfterChildCandidate_statement: Prop :=
     forall u done child s,
@@ -1949,6 +1978,8 @@ Section IS_LOW_SKELETON.
     SuspendedSegmentEscapeAccountingCandidate
       (frame_parent F) (frame_child F) (frame_done F) s /\
     SuspendedSegmentTreeCoverageByDoneCandidate
+      (frame_parent F) (frame_child F) (frame_done F) s /\
+    SuspendedActiveTargetBlocksEscapeAccountedCandidate
       (frame_parent F) (frame_child F) (frame_done F) s.
 
   Definition FrameOfCallCandidate
@@ -2065,6 +2096,13 @@ Section IS_LOW_SKELETON.
       SuspendedSegmentTreeCoverageByDoneCandidate
         (frame_parent F) (frame_child F) (frame_done F) s.
 
+  Definition FrameInvProvidesSuspendedActiveTargetBlocksCandidate_statement:
+    Prop :=
+    forall F s,
+      FrameInvCandidate F s ->
+      SuspendedActiveTargetBlocksEscapeAccountedCandidate
+        (frame_parent F) (frame_child F) (frame_done F) s.
+
   Definition FrameInvForgetsSuspendedLoopInvPhase6Candidate_statement: Prop :=
     forall F s,
       FrameInvCandidate F s ->
@@ -2134,11 +2172,7 @@ Section IS_LOW_SKELETON.
            PartialRootLowEquationCandidate parent done s /\
            fa s child = parent /\
            fa s child <> child /\
-           low s child <= dfn s child /\
-           ParentPendingChildEscapeAccountedCandidate
-             parent done child s /\
-           ActiveTargetBlocksEscapeAccountedCandidate
-             parent (done_after done child) s).
+           low s child <= dfn s child).
 
   Definition FrameFieldPreservationCandidate
              (Field: SuspendedFrameCandidate -> St -> Prop)
@@ -2216,6 +2250,14 @@ Section IS_LOW_SKELETON.
            (frame_parent F) (frame_child F) (frame_done F) s)
       W.
 
+  Definition FramePreservesSuspendedActiveTargetBlocksCandidate
+             (W: RecProgram): Prop :=
+    FrameFieldPreservationCandidate
+      (fun F s =>
+         SuspendedActiveTargetBlocksEscapeAccountedCandidate
+           (frame_parent F) (frame_child F) (frame_done F) s)
+      W.
+
   Definition FramePreservationBundleCandidate (W: RecProgram): Prop :=
     FramePreservesParentResumeShapeCandidate W /\
     FramePreservesLoopInvLowCandidate W /\
@@ -2224,7 +2266,8 @@ Section IS_LOW_SKELETON.
     FramePreservesProcessedTreeChildrenCorrectCandidate W /\
     FramePreservesActiveProcessedChildSegmentSummaryCandidate W /\
     FramePreservesSuspendedSegmentEscapeAccountingCandidate W /\
-    FramePreservesSuspendedSegmentTreeCoverageCandidate W.
+    FramePreservesSuspendedSegmentTreeCoverageCandidate W /\
+    FramePreservesSuspendedActiveTargetBlocksCandidate W.
 
   Definition FrameContractCandidate_from_field_preservation_statement:
     Prop :=
@@ -2291,6 +2334,22 @@ Section IS_LOW_SKELETON.
         (fun _ s =>
            (Active child s -> ChildSegmentSummaryCandidate child s) /\
            ParentResumeShapeCandidate parent child done s /\
+           ParentPendingChildEscapeAccountedCandidate parent done child s /\
+           ActiveTargetBlocksEscapeAccountedCandidate
+             parent (done_after done child) s).
+
+  Definition BodyProducesLowContributionAccountingCandidate_statement: Prop :=
+    forall W parent child done,
+      RecursiveCallContractsCandidate W ->
+      Edge parent child ->
+      ~ done child ->
+      Hoare
+        (fun s =>
+           FrameInvCandidate (FrameOfCallCandidate parent child done) s /\
+           ChildEntryCandidate parent child done s /\
+           PartialRootLowEquationCandidate parent done s)
+        (tarjan_scc_f g W child)
+        (fun _ s =>
            ParentPendingChildEscapeAccountedCandidate parent done child s /\
            ActiveTargetBlocksEscapeAccountedCandidate
              parent (done_after done child) s).
@@ -3032,10 +3091,10 @@ Section IS_LOW_SKELETON.
             with (Q1 := fun _ s =>
                          Visited u s /\ Active u s /\ low s u = dfn s u)
                  (Q2 := fun _ s => OrderFactsCandidate s).
-          * eapply Hoare_conseq_pre.
+          -- eapply Hoare_conseq_pre.
             2: apply (PreloopActiveSelfLowCandidate_proof u).
             intros s [Hglobal _]. exact Hglobal.
-          * eapply Hoare_conseq_pre.
+          -- eapply Hoare_conseq_pre.
             2: apply (PreloopOrderFactsCandidate_proof u).
             intros s [Hglobal [_ Horder]]. split; assumption. }
     intros _ s [Hglobal [Hsettled [Hactive Horder]]].
@@ -6348,6 +6407,23 @@ Section IS_LOW_SKELETON.
     eapply Hcoverage; eauto.
   Qed.
 
+  Lemma ActiveTargetBlocksSuspendsCandidate_proof:
+    ActiveTargetBlocksSuspendsCandidate_statement.
+  Proof.
+    unfold ActiveTargetBlocksSuspendsCandidate_statement,
+      SuspendedActiveTargetBlocksEscapeAccountedCandidate,
+      SuspendedActiveTargetBlockEscapeAccountedCandidate,
+      ActiveTargetBlocksEscapeAccountedCandidate,
+      ActiveTargetBlockEscapeAccountedCandidate.
+    intros u done child s Hblocks block a w Hblock_a _Houtside
+           Hblock_valid Hreach Hnot_vis.
+    eapply Hblocks; eauto.
+    intros b Hb.
+    specialize (Hblock_valid b Hb) as
+      [Hedge_b [Hnot_done_b [Hactive_b [Hdfn_b _Houtside_b]]]].
+    repeat split; assumption.
+  Qed.
+
   Lemma SegmentTreeCoverageClosesAfterChildCandidate_proof:
     SegmentTreeCoverageClosesAfterChildCandidate_statement.
   Proof.
@@ -6414,9 +6490,9 @@ Section IS_LOW_SKELETON.
           split; [exact Htree_vx | exact Hreach_vx].
   Qed.
 
-  Lemma SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_proof:
-    SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_statement.
-  Proof.
+	  Lemma SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_proof:
+	    SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_statement.
+	  Proof.
     unfold SuspendedSegmentEscapeAccountingClosesAfterChildCandidate_statement,
       SuspendedSegmentEscapeAccountingCandidate,
       PendingChildSegmentEscapeAccountedCandidate,
@@ -7126,6 +7202,24 @@ Section IS_LOW_SKELETON.
       + split; [exact Hchild_b | exact Hbw].
   Qed.
 
+  Lemma ChildOldAnchorLiftsToParentCandidate_from_child_is_low_proof:
+    forall u done child s,
+      low s u <= low s child ->
+      scc_is_low_v g root s child ->
+      (forall b,
+          Active b s ->
+          dfn s b < dfn s child ->
+          low s child <= dfn s b ->
+          dg_reachable g child b ->
+          dfn s b < dfn s u) ->
+      ChildOldAnchorLiftsToParentCandidate u done child s.
+  Proof.
+    intros u done child s Hlow_u_child His_low Hall_older.
+    apply ChildOldAnchorLiftsToParentCandidate_from_all_older_proof.
+    - exact Hlow_u_child.
+    - exact Hall_older.
+  Qed.
+
   (* ================================================================ *)
   (* Phase-8 frame consumer audit proofs                              *)
   (* ================================================================ *)
@@ -7752,6 +7846,28 @@ Section IS_LOW_SKELETON.
           -- exact Hreach_vx.
   Qed.
 
+  Lemma set_fa_unvisited_preserves_active_target_blocks_escape_accounted_candidate:
+    forall parent child u done,
+      Hoare
+        (fun s =>
+           ActiveTargetBlocksEscapeAccountedCandidate u done s /\
+           Unvisited child s)
+        (set_fa child parent)
+        (fun _ s =>
+           ActiveTargetBlocksEscapeAccountedCandidate u done s).
+  Proof.
+    intros parent child u done.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. simpl.
+    destruct H as [Hblocks _Hunvis].
+    unfold ActiveTargetBlocksEscapeAccountedCandidate,
+      ActiveTargetBlockEscapeAccountedCandidate,
+      PendingRootEscapeCandidate,
+      OldStackEscapeAnchorCandidate in Hblocks |- *.
+    intros block a w Hblock_a Hblock_valid Hreach Hnot_vis.
+    eapply Hblocks; eauto.
+  Qed.
+
   Lemma set_fa_unvisited_preserves_loop_inv_low_candidate:
     forall parent child done,
       ~ done child ->
@@ -7823,14 +7939,15 @@ Section IS_LOW_SKELETON.
       apply Hoare_conj
         with (Q1 := fun _ s => ChildEntryCandidate parent child done s)
 	     (Q2 := fun _ s =>
-	              (SuspendedParentFrameResumeCandidate parent child done s /\
-	               ParentResumeShapeCandidate parent child done s) /\
-	              LoopInvLowCandidate parent done s /\
-	              DoneClosednessCandidate parent done s /\
-	              ProcessedTreeChildrenCorrectCandidate parent done s /\
-                      ActiveProcessedChildSegmentSummaryCandidate parent done s /\
-                      SegmentEscapeAccountingCandidate parent done s /\
-                      SegmentTreeCoverageByDoneCandidate parent done s).
+                ((SuspendedParentFrameResumeCandidate parent child done s /\
+                  ParentResumeShapeCandidate parent child done s) /\
+                 LoopInvLowCandidate parent done s /\
+                 DoneClosednessCandidate parent done s /\
+                 ProcessedTreeChildrenCorrectCandidate parent done s /\
+                 ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+                 SegmentEscapeAccountingCandidate parent done s /\
+                 SegmentTreeCoverageByDoneCandidate parent done s) /\
+                ActiveTargetBlocksEscapeAccountedCandidate parent done s).
       - eapply Hoare_conseq_pre.
         2: {
           apply (LoopInvDoneConsumesUnvisitedSetFaCandidate_proof
@@ -7843,6 +7960,19 @@ Section IS_LOW_SKELETON.
       - apply Hoare_conj
           with
             (Q1 := fun _ s =>
+	              (SuspendedParentFrameResumeCandidate parent child done s /\
+	               ParentResumeShapeCandidate parent child done s) /\
+	              LoopInvLowCandidate parent done s /\
+	              DoneClosednessCandidate parent done s /\
+	              ProcessedTreeChildrenCorrectCandidate parent done s /\
+                      ActiveProcessedChildSegmentSummaryCandidate parent done s /\
+                      SegmentEscapeAccountingCandidate parent done s /\
+                      SegmentTreeCoverageByDoneCandidate parent done s)
+            (Q2 := fun _ s =>
+               ActiveTargetBlocksEscapeAccountedCandidate parent done s).
+        + apply Hoare_conj
+          with
+            (Q1 := fun _ s =>
                SuspendedParentFrameResumeCandidate parent child done s /\
                ParentResumeShapeCandidate parent child done s)
             (Q2 := fun _ s =>
@@ -7852,7 +7982,7 @@ Section IS_LOW_SKELETON.
                ActiveProcessedChildSegmentSummaryCandidate parent done s /\
                SegmentEscapeAccountingCandidate parent done s /\
                SegmentTreeCoverageByDoneCandidate parent done s).
-        + eapply Hoare_conseq_pre.
+          * eapply Hoare_conseq_pre.
           2: {
             apply (SetFaCreatesSuspendedParentFrameCandidate_proof
                      parent child done Hedge Hnot_done_child).
@@ -7863,7 +7993,7 @@ Section IS_LOW_SKELETON.
           destruct Hdone_loop as [Hlocal _Hdone_disc].
           split; [exact Hlocal |].
           split; [exact Hframe | exact Hunvis].
-        + apply Hoare_conj
+          * apply Hoare_conj
             with
               (Q1 := fun _ s => LoopInvLowCandidate parent done s)
               (Q2 := fun _ s =>
@@ -7872,7 +8002,7 @@ Section IS_LOW_SKELETON.
                  ActiveProcessedChildSegmentSummaryCandidate parent done s /\
                  SegmentEscapeAccountingCandidate parent done s /\
                  SegmentTreeCoverageByDoneCandidate parent done s).
-          * eapply Hoare_conseq_pre.
+            -- eapply Hoare_conseq_pre.
             2: {
               apply
                 (set_fa_unvisited_preserves_loop_inv_low_candidate
@@ -7881,7 +8011,7 @@ Section IS_LOW_SKELETON.
             intros s [[Hphase6 _Hsegment] Hunvis].
             destruct Hphase6 as [Hlow _Htail].
             split; [exact Hlow | exact Hunvis].
-          * apply Hoare_conj
+            -- apply Hoare_conj
               with
                 (Q1 := fun _ s => DoneClosednessCandidate parent done s)
                 (Q2 := fun _ s =>
@@ -7889,7 +8019,7 @@ Section IS_LOW_SKELETON.
                    ActiveProcessedChildSegmentSummaryCandidate parent done s /\
                    SegmentEscapeAccountingCandidate parent done s /\
                    SegmentTreeCoverageByDoneCandidate parent done s).
-            -- eapply Hoare_conseq_pre.
+             ++ eapply Hoare_conseq_pre.
                2: {
                  apply
                    (set_fa_unvisited_preserves_done_closedness_candidate
@@ -7898,7 +8028,7 @@ Section IS_LOW_SKELETON.
                intros s [[Hphase6 _Hsegment] Hunvis].
                destruct Hphase6 as [_Hlow [_Hframe [Hclosed _Htail]]].
                split; [exact Hclosed | exact Hunvis].
-            -- apply Hoare_conj
+             ++ apply Hoare_conj
                 with
                   (Q1 := fun _ s =>
                      ProcessedTreeChildrenCorrectCandidate parent done s)
@@ -7906,7 +8036,7 @@ Section IS_LOW_SKELETON.
                      ActiveProcessedChildSegmentSummaryCandidate parent done s /\
                      SegmentEscapeAccountingCandidate parent done s /\
                      SegmentTreeCoverageByDoneCandidate parent done s).
-               ++ eapply Hoare_conseq_pre.
+                ** eapply Hoare_conseq_pre.
                   2: {
                     apply
                       (SetFaPreservesProcessedTreeChildrenCorrectCandidate_proof
@@ -7916,7 +8046,7 @@ Section IS_LOW_SKELETON.
                   destruct Hphase6 as
                     [_Hlow [_Hframe [_Hclosed [Hchildren _Hactive]]]].
                   split; [exact Hchildren | exact Hunvis].
-               ++ apply Hoare_conj
+                ** apply Hoare_conj
                     with
                       (Q1 := fun _ s =>
                          ActiveProcessedChildSegmentSummaryCandidate
@@ -7924,7 +8054,7 @@ Section IS_LOW_SKELETON.
                       (Q2 := fun _ s =>
                          SegmentEscapeAccountingCandidate parent done s /\
                          SegmentTreeCoverageByDoneCandidate parent done s).
-                  ** eapply Hoare_conseq_pre.
+                   --- eapply Hoare_conseq_pre.
                      2: {
                        apply
                          (set_fa_unvisited_preserves_active_processed_child_segment_summary
@@ -7934,8 +8064,8 @@ Section IS_LOW_SKELETON.
                      destruct Hphase6 as
                        [_Hlow [_Hframe [_Hclosed [_Hchildren Hactive]]]].
                      split; [exact Hactive | exact Hunvis].
-                  ** apply Hoare_conj.
-                     --- eapply Hoare_conseq_pre.
+                   --- apply Hoare_conj.
+                       +++ eapply Hoare_conseq_pre.
                          2: {
                            apply
                              (set_fa_unvisited_preserves_segment_escape_accounting_candidate
@@ -7943,7 +8073,7 @@ Section IS_LOW_SKELETON.
                          }
                          intros s [[_Hphase6 [Hsegment _Hcoverage]] Hunvis].
                          split; [exact Hsegment | exact Hunvis].
-                     --- eapply Hoare_conseq_pre.
+                       +++ eapply Hoare_conseq_pre.
                          2: {
                            apply
                              (set_fa_unvisited_preserves_segment_tree_coverage_candidate
@@ -7951,11 +8081,21 @@ Section IS_LOW_SKELETON.
                          }
                          intros s [[_Hphase6 [_Hsegment [Hcoverage _Hblocks]]] Hunvis].
                          split; [exact Hcoverage | exact Hunvis].
+        + eapply Hoare_conseq_pre.
+          2: {
+            apply
+              (set_fa_unvisited_preserves_active_target_blocks_escape_accounted_candidate
+                 parent child parent done).
+          }
+          intros s [Hloop7 Hunvis].
+          destruct Hloop7 as [_Hphase6 [_Hsegment [_Hcoverage Hblocks]]].
+          split; [exact Hblocks | exact Hunvis].
     }
     intros _ s
       [Hentry
-       [[Hsuspended_frame Hresume]
-        [Hlow [Hclosed [Hchildren [Hactive_segments [Hsegment Hcoverage]]]]]]].
+       [[[Hsuspended_frame Hresume]
+         [Hlow [Hclosed [Hchildren [Hactive_segments [Hsegment Hcoverage]]]]]]
+        Hblocks]].
     split.
     - unfold FrameInvCandidate, FrameOfCallCandidate. simpl.
       split; [exact Hresume |].
@@ -7967,8 +8107,11 @@ Section IS_LOW_SKELETON.
       split.
       + apply SegmentEscapeAccountingSuspendsCandidate_proof.
         exact Hsegment.
-      + apply SegmentTreeCoverageSuspendsCandidate_proof.
-        exact Hcoverage.
+      + split.
+        * apply SegmentTreeCoverageSuspendsCandidate_proof.
+          exact Hcoverage.
+        * apply ActiveTargetBlocksSuspendsCandidate_proof.
+          exact Hblocks.
     - split; [exact Hentry | exact Hresume].
   Qed.
 
@@ -10887,8 +11030,21 @@ Section IS_LOW_SKELETON.
   Proof.
     unfold FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_statement,
       FrameInvCandidate.
-    intros F s [_ [_ [_ [_ [_ [_ [_Hsegment Hcoverage]]]]]]].
+    intros F s Hframe.
+    destruct Hframe as
+      [_ [_ [_ [_ [_ [_ [_Hsegment [Hcoverage _Hblocks]]]]]]]].
     exact Hcoverage.
+  Qed.
+
+  Lemma FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof:
+    FrameInvProvidesSuspendedActiveTargetBlocksCandidate_statement.
+  Proof.
+    unfold FrameInvProvidesSuspendedActiveTargetBlocksCandidate_statement,
+      FrameInvCandidate.
+    intros F s Hframe.
+    destruct Hframe as
+      [_ [_ [_ [_ [_ [_ [_Hsegment [_Hcoverage Hblocks]]]]]]]].
+    exact Hblocks.
   Qed.
 
   Lemma FrameInvForgetsSuspendedLoopInvPhase6Candidate_proof:
@@ -10966,6 +11122,8 @@ Section IS_LOW_SKELETON.
            SuspendedSegmentEscapeAccountingCandidate
              (frame_parent F) (frame_child F) (frame_done F) s /\
            SuspendedSegmentTreeCoverageByDoneCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s /\
+           SuspendedActiveTargetBlocksEscapeAccountedCandidate
              (frame_parent F) (frame_child F) (frame_done F) s).
   Proof.
     intros F parent child.
@@ -10979,6 +11137,8 @@ Section IS_LOW_SKELETON.
       (SuspendedSegmentEscapeAccountingCandidate
          (frame_parent F) (frame_child F) (frame_done F) sp /\
        SuspendedSegmentTreeCoverageByDoneCandidate
+         (frame_parent F) (frame_child F) (frame_done F) sp /\
+       SuspendedActiveTargetBlocksEscapeAccountedCandidate
          (frame_parent F) (frame_child F) (frame_done F) sp).
     destruct H as [Hframe [Hprogress Hunvis]].
     pose proof
@@ -10987,6 +11147,9 @@ Section IS_LOW_SKELETON.
     pose proof
       (FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof
          F s0 Hframe) as Hcoverage.
+    pose proof
+      (FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof
+         F s0 Hframe) as Hblocks.
     pose proof
       (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe) as Hlow.
     unfold LoopInvLowCandidate, LoopInvDoneCandidate in Hlow.
@@ -11071,7 +11234,8 @@ Section IS_LOW_SKELETON.
         split; [exact Hdfn_anchor |].
         split; [exact Hlow_anchor |].
         split; [exact Hx_anchor | exact Hanchor_w].
-    - unfold SuspendedSegmentTreeCoverageByDoneCandidate.
+    - split.
+      + unfold SuspendedSegmentTreeCoverageByDoneCandidate.
       intros x Hactive_x Hdfn_x Houtside.
       assert (Houtside_pre:
                 ~ PendingChildSegmentCandidate (frame_child F) s0 x).
@@ -11081,6 +11245,23 @@ Section IS_LOW_SKELETON.
         as Hprocessed.
 	      apply Hprocessed_pre_to_post.
 	      exact Hprocessed.
+      + unfold SuspendedActiveTargetBlocksEscapeAccountedCandidate,
+          SuspendedActiveTargetBlockEscapeAccountedCandidate.
+        intros block a w Hblock_a Houtside_a Hblock_valid Hreach Hnot_vis.
+        assert (Houtside_pre:
+                  ~ PendingChildSegmentCandidate (frame_child F) s0 a).
+        { intro Hpending_pre.
+          apply Houtside_a. exact (Hpending_pre_to_post a Hpending_pre). }
+        specialize (Hblocks block a w Hblock_a Houtside_pre)
+          as Haccount.
+        eapply Haccount; eauto.
+        intros z Hz.
+        specialize (Hblock_valid z Hz) as
+          [Hedge_z [Hnot_done_z [Hactive_z [Hdfn_z Houtside_z]]]].
+        repeat split; try assumption.
+        intro Hpending_pre.
+        apply Houtside_z.
+        exact (Hpending_pre_to_post z Hpending_pre).
 	  Qed.
 
 	  Lemma set_fa_unvisited_preserves_local_active_root_candidate_any_parent:
@@ -11355,11 +11536,13 @@ Section IS_LOW_SKELETON.
 	               (frame_parent F) (frame_done F) s /\
 	             ActiveProcessedChildSegmentSummaryCandidate
 	               (frame_parent F) (frame_done F) s)
-	          (Q2 := fun _ s =>
-	             SuspendedSegmentEscapeAccountingCandidate
-	               (frame_parent F) (frame_child F) (frame_done F) s /\
-	             SuspendedSegmentTreeCoverageByDoneCandidate
-	               (frame_parent F) (frame_child F) (frame_done F) s).
+		          (Q2 := fun _ s =>
+		             SuspendedSegmentEscapeAccountingCandidate
+		               (frame_parent F) (frame_child F) (frame_done F) s /\
+		             SuspendedSegmentTreeCoverageByDoneCandidate
+		               (frame_parent F) (frame_child F) (frame_done F) s /\
+		             SuspendedActiveTargetBlocksEscapeAccountedCandidate
+		               (frame_parent F) (frame_child F) (frame_done F) s).
 	      - apply Hoare_conj
 	          with
 	            (Q1 := fun _ s =>
@@ -11498,18 +11681,19 @@ Section IS_LOW_SKELETON.
 		        split; [exact Hframe |].
 		        split; [exact Hprogress | exact Hunvis].
 	    }
-	    intros _ s
-	      [[Hresume
-	        [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
-	       [Hescape Hcoverage]].
+		    intros _ s
+		      [[Hresume
+		        [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
+		       [Hescape [Hcoverage Hblocks]]].
 	    unfold FrameInvCandidate.
 	    split; [exact Hresume |].
 	    split; [exact Hlow |].
 	    split; [exact Hsuspended |].
 	    split; [exact Hclosed |].
-	    split; [exact Hchildren |].
-	    split; [exact Hactive_segments |].
-	    split; [exact Hescape | exact Hcoverage].
+		    split; [exact Hchildren |].
+		    split; [exact Hactive_segments |].
+		    split; [exact Hescape |].
+		    split; [exact Hcoverage | exact Hblocks].
 	  Qed.
 
 	  Lemma frame_processed_child_not_current_tree_child_candidate:
@@ -11998,10 +12182,10 @@ Section IS_LOW_SKELETON.
 	      exact Hframe.
 	  Qed.
 
-	  Lemma update_low_preserves_suspended_segment_tree_coverage_candidate:
-	    forall changed n parent child done,
-	      Hoare
-	        (SuspendedSegmentTreeCoverageByDoneCandidate parent child done)
+  Lemma update_low_preserves_suspended_segment_tree_coverage_candidate:
+    forall changed n parent child done,
+      Hoare
+        (SuspendedSegmentTreeCoverageByDoneCandidate parent child done)
 	        (update_low changed n)
 	        (fun _ s =>
 	           SuspendedSegmentTreeCoverageByDoneCandidate
@@ -12010,10 +12194,77 @@ Section IS_LOW_SKELETON.
 	    intros changed n parent child done.
 	    unfold update_low. unfold_op. intro_state. hoare_auto_s.
 	    - subst. simpl. exact H.
-	    - destruct H1 as [Heq _]. subst. exact H.
-	  Qed.
+    - destruct H1 as [Heq _]. subst. exact H.
+  Qed.
 
-	  Lemma update_low_current_preserves_frame_inv_candidate:
+  Lemma update_low_current_preserves_frame_suspended_active_target_blocks_candidate:
+    forall F current n,
+      Hoare
+        (fun s =>
+           FrameInvCandidate F s /\
+           FrameProgressCandidate F current s)
+        (update_low current n)
+        (fun _ s =>
+           SuspendedActiveTargetBlocksEscapeAccountedCandidate
+             (frame_parent F) (frame_child F) (frame_done F) s).
+  Proof.
+    intros F current n.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst. simpl.
+      destruct H as [Hframe Hprogress].
+      pose proof
+        (FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof
+           F s0 Hframe) as Hblocks.
+      destruct Hprogress as
+        [_Hvisited_parent [_Hpending [Hparent_older _Hdone_older]]].
+      assert (Hframe_parent_ne_current: frame_parent F <> current).
+      { intro Hsame. subst current. lia. }
+      unfold SuspendedActiveTargetBlocksEscapeAccountedCandidate,
+        SuspendedActiveTargetBlockEscapeAccountedCandidate,
+        PendingRootEscapeCandidate,
+        OldStackEscapeAnchorCandidate in Hblocks |- *.
+      intros block a w Hblock_a Houtside_a Hblock_valid Hreach Hnot_vis.
+      simpl in Houtside_a, Hnot_vis.
+      specialize (Hblocks block a w Hblock_a Houtside_a) as Haccount.
+      assert (Hblock_valid_pre:
+                forall z,
+                  block z ->
+                  Edge (frame_parent F) z /\
+                  ~ frame_done F z /\
+                  Active z s0 /\
+                  dfn s0 (frame_parent F) <= dfn s0 z /\
+                  ~ PendingChildSegmentCandidate (frame_child F) s0 z).
+      { intros z Hz.
+        specialize (Hblock_valid z Hz) as
+          [Hedge_z [Hnot_done_z [Hactive_z [Hdfn_z Houtside_z]]]].
+        simpl in Hactive_z, Hdfn_z, Houtside_z.
+        repeat split; assumption. }
+      specialize (Haccount Hblock_valid_pre Hreach Hnot_vis)
+        as [Hpending | Hanchor].
+      + left. exact Hpending.
+      + right.
+        destruct Hanchor as
+          [anchor [Hactive_anchor [Hdfn_anchor
+            [Hlow_parent_anchor [Hx_anchor Hanchor_w]]]]].
+        exists anchor.
+        simpl.
+        split; [exact Hactive_anchor |].
+        split; [exact Hdfn_anchor |].
+        split.
+        * unfold equiv_decb.
+          destruct (equiv_dec (frame_parent F) current)
+            as [Hparent_current | _].
+          -- exfalso. apply Hframe_parent_ne_current.
+             exact Hparent_current.
+          -- exact Hlow_parent_anchor.
+        * split; [exact Hx_anchor | exact Hanchor_w].
+    - destruct H1 as [Heq _]. subst.
+      destruct H as [Hframe _Hprogress].
+      eapply FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof.
+      exact Hframe.
+  Qed.
+
+  Lemma update_low_current_preserves_frame_inv_candidate:
 	    forall F current n,
 	      Hoare
 	        (fun s =>
@@ -12039,11 +12290,13 @@ Section IS_LOW_SKELETON.
 	               (frame_parent F) (frame_done F) s /\
 	             ActiveProcessedChildSegmentSummaryCandidate
 	               (frame_parent F) (frame_done F) s)
-	          (Q2 := fun _ s =>
-	             SuspendedSegmentEscapeAccountingCandidate
-	               (frame_parent F) (frame_child F) (frame_done F) s /\
-	             SuspendedSegmentTreeCoverageByDoneCandidate
-	               (frame_parent F) (frame_child F) (frame_done F) s).
+		          (Q2 := fun _ s =>
+		             SuspendedSegmentEscapeAccountingCandidate
+		               (frame_parent F) (frame_child F) (frame_done F) s /\
+		             SuspendedSegmentTreeCoverageByDoneCandidate
+		               (frame_parent F) (frame_child F) (frame_done F) s /\
+		             SuspendedActiveTargetBlocksEscapeAccountedCandidate
+		               (frame_parent F) (frame_child F) (frame_done F) s).
 	      - apply Hoare_conj
 	          with
 	            (Q1 := fun _ s =>
@@ -12130,36 +12383,55 @@ Section IS_LOW_SKELETON.
 	                     }
 	                     intros s [Hframe [Hprogress _Hactive_current]].
 	                     split; [exact Hframe | exact Hprogress].
-	      - apply Hoare_conj.
-	        + eapply Hoare_conseq_pre.
-	          2: {
-	            apply
-	              update_low_current_preserves_frame_suspended_segment_escape_accounting_candidate.
-	          }
-	          intros s [Hframe [Hprogress _Hactive_current]].
-	          split; [exact Hframe | exact Hprogress].
-	        + eapply Hoare_conseq_pre.
-	          2: {
-	            apply
-	              (update_low_preserves_suspended_segment_tree_coverage_candidate
-	                 current n (frame_parent F) (frame_child F) (frame_done F)).
-	          }
-	          intros s [Hframe _Htail].
-	          eapply FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof.
-	          exact Hframe.
-	    }
-	    intros _ s
-	      [[Hresume
-	        [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
-	       [Hescape Hcoverage]].
+		      - apply Hoare_conj
+			          with
+			            (Q1 := fun _ s =>
+			               SuspendedSegmentEscapeAccountingCandidate
+			                 (frame_parent F) (frame_child F) (frame_done F) s)
+			            (Q2 := fun _ s =>
+			               SuspendedSegmentTreeCoverageByDoneCandidate
+			                 (frame_parent F) (frame_child F) (frame_done F) s /\
+			               SuspendedActiveTargetBlocksEscapeAccountedCandidate
+			                 (frame_parent F) (frame_child F) (frame_done F) s).
+		          * eapply Hoare_conseq_pre.
+		            2: {
+		              apply
+		                update_low_current_preserves_frame_suspended_segment_escape_accounting_candidate.
+		            }
+		            intros s [Hframe [Hprogress _Hactive_current]].
+		            split; [exact Hframe | exact Hprogress].
+		          * apply Hoare_conj.
+		            -- eapply Hoare_conseq_pre.
+		               2: {
+		                 apply
+		                   (update_low_preserves_suspended_segment_tree_coverage_candidate
+		                      current n (frame_parent F) (frame_child F)
+		                      (frame_done F)).
+		               }
+		               intros s [Hframe _Htail].
+		               eapply FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof.
+		               exact Hframe.
+		            -- eapply Hoare_conseq_pre.
+		               2: {
+		                 apply
+		                   update_low_current_preserves_frame_suspended_active_target_blocks_candidate.
+		               }
+		               intros s [Hframe [Hprogress _Hactive_current]].
+		               split; [exact Hframe | exact Hprogress].
+		    }
+		    intros _ s
+		      [[Hresume
+		        [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
+		       [Hescape [Hcoverage Hblocks]]].
 	    unfold FrameInvCandidate.
 	    split; [exact Hresume |].
 	    split; [exact Hlow |].
 	    split; [exact Hsuspended |].
 	    split; [exact Hclosed |].
-	    split; [exact Hchildren |].
-	    split; [exact Hactive_segments |].
-	    split; [exact Hescape | exact Hcoverage].
+		    split; [exact Hchildren |].
+		    split; [exact Hactive_segments |].
+		    split; [exact Hescape |].
+		    split; [exact Hcoverage | exact Hblocks].
 	  Qed.
 
 	  Lemma get_low_update_low_current_preserves_frame_inv_candidate:
@@ -12470,12 +12742,13 @@ Section IS_LOW_SKELETON.
       FramePreservesActiveProcessedChildSegmentSummaryCandidate,
       FramePreservesSuspendedSegmentEscapeAccountingCandidate,
       FramePreservesSuspendedSegmentTreeCoverageCandidate,
+      FramePreservesSuspendedActiveTargetBlocksCandidate,
       FrameFieldPreservationCandidate,
       FrameContractCandidate,
       FrameInvCandidate.
     intros W
       [Hresume [Hlow [Hsuspended_frame [Hclosed
-       [Hchildren [Hactive_segments [Hsegment Hcoverage]]]]]]]
+       [Hchildren [Hactive_segments [Hsegment [Hcoverage Hblocks]]]]]]]]
       F parent child done Hedge Hnot_done.
     eapply Hoare_conseq_post.
     2: {
@@ -12495,6 +12768,8 @@ Section IS_LOW_SKELETON.
           SuspendedSegmentEscapeAccountingCandidate
             (frame_parent F) (frame_child F) (frame_done F) s /\
           SuspendedSegmentTreeCoverageByDoneCandidate
+            (frame_parent F) (frame_child F) (frame_done F) s /\
+          SuspendedActiveTargetBlocksEscapeAccountedCandidate
             (frame_parent F) (frame_child F) (frame_done F) s).
       - eapply Hoare_conseq_pre.
         2: { exact (Hresume F parent child done Hedge Hnot_done). }
@@ -12515,6 +12790,8 @@ Section IS_LOW_SKELETON.
             SuspendedSegmentEscapeAccountingCandidate
               (frame_parent F) (frame_child F) (frame_done F) s /\
             SuspendedSegmentTreeCoverageByDoneCandidate
+              (frame_parent F) (frame_child F) (frame_done F) s /\
+            SuspendedActiveTargetBlocksEscapeAccountedCandidate
               (frame_parent F) (frame_child F) (frame_done F) s).
         + eapply Hoare_conseq_pre.
           2: { exact (Hlow F parent child done Hedge Hnot_done). }
@@ -12534,6 +12811,8 @@ Section IS_LOW_SKELETON.
               SuspendedSegmentEscapeAccountingCandidate
                 (frame_parent F) (frame_child F) (frame_done F) s /\
               SuspendedSegmentTreeCoverageByDoneCandidate
+                (frame_parent F) (frame_child F) (frame_done F) s /\
+              SuspendedActiveTargetBlocksEscapeAccountedCandidate
                 (frame_parent F) (frame_child F) (frame_done F) s).
           * eapply Hoare_conseq_pre.
             2: {
@@ -12553,6 +12832,8 @@ Section IS_LOW_SKELETON.
                 SuspendedSegmentEscapeAccountingCandidate
                   (frame_parent F) (frame_child F) (frame_done F) s /\
                 SuspendedSegmentTreeCoverageByDoneCandidate
+                  (frame_parent F) (frame_child F) (frame_done F) s /\
+                SuspendedActiveTargetBlocksEscapeAccountedCandidate
                   (frame_parent F) (frame_child F) (frame_done F) s).
             -- eapply Hoare_conseq_pre.
                2: { exact (Hclosed F parent child done Hedge Hnot_done). }
@@ -12569,6 +12850,8 @@ Section IS_LOW_SKELETON.
                   SuspendedSegmentEscapeAccountingCandidate
                     (frame_parent F) (frame_child F) (frame_done F) s /\
                   SuspendedSegmentTreeCoverageByDoneCandidate
+                    (frame_parent F) (frame_child F) (frame_done F) s /\
+                  SuspendedActiveTargetBlocksEscapeAccountedCandidate
                     (frame_parent F) (frame_child F) (frame_done F) s).
                ++ eapply Hoare_conseq_pre.
                   2: { exact (Hchildren F parent child done Hedge Hnot_done). }
@@ -12583,6 +12866,8 @@ Section IS_LOW_SKELETON.
                       SuspendedSegmentEscapeAccountingCandidate
                         (frame_parent F) (frame_child F) (frame_done F) s /\
                       SuspendedSegmentTreeCoverageByDoneCandidate
+                        (frame_parent F) (frame_child F) (frame_done F) s /\
+                      SuspendedActiveTargetBlocksEscapeAccountedCandidate
                         (frame_parent F) (frame_child F) (frame_done F) s).
                   ** eapply Hoare_conseq_pre.
                      2: {
@@ -12598,22 +12883,32 @@ Section IS_LOW_SKELETON.
                          intros s [Hframe [Hcompat Hchild_entry]].
                          split; [exact Hframe |].
                          split; [exact Hcompat | exact Hchild_entry].
-                     --- eapply Hoare_conseq_pre.
-                         2: { exact (Hcoverage F parent child done Hedge Hnot_done). }
-                         intros s [Hframe [Hcompat Hchild_entry]].
-                         split; [exact Hframe |].
-                         split; [exact Hcompat | exact Hchild_entry].
+                     --- apply Hoare_conj.
+                         +++ eapply Hoare_conseq_pre.
+                             2: { exact (Hcoverage F parent child done Hedge Hnot_done). }
+                             intros s [Hframe [Hcompat Hchild_entry]].
+                             split; [exact Hframe |].
+                             split; [exact Hcompat | exact Hchild_entry].
+                         +++ eapply Hoare_conseq_pre.
+                             2: { exact (Hblocks F parent child done Hedge Hnot_done). }
+                             intros s [Hframe [Hcompat Hchild_entry]].
+                             split; [exact Hframe |].
+                             split; [exact Hcompat | exact Hchild_entry].
     }
-    intros _ s [Hresume_field
-      [Hlow_field [Hsuspended_field [Hclosed_field
-       [Hchildren_field [Hactive_field [Hsegment_field Hcoverage_field]]]]]]].
+    intros ret s Hfields.
+    destruct Hfields as
+      [Hresume_field
+       [Hlow_field [Hsuspended_field [Hclosed_field
+        [Hchildren_field [Hactive_field
+         [Hsegment_field [Hcoverage_field Hblocks_field]]]]]]]].
     split; [exact Hresume_field |].
     split; [exact Hlow_field |].
     split; [exact Hsuspended_field |].
     split; [exact Hclosed_field |].
     split; [exact Hchildren_field |].
     split; [exact Hactive_field |].
-    split; [exact Hsegment_field | exact Hcoverage_field].
+    split; [exact Hsegment_field |].
+    split; [exact Hcoverage_field | exact Hblocks_field].
   Qed.
 
   Lemma FrameContractCandidate_provides_field_preservation_proof:
@@ -12640,10 +12935,11 @@ Section IS_LOW_SKELETON.
       FramePreservesSuspendedParentFrameResumeCandidate,
       FramePreservesDoneClosednessCandidate,
       FramePreservesProcessedTreeChildrenCorrectCandidate,
-      FramePreservesActiveProcessedChildSegmentSummaryCandidate,
-      FramePreservesSuspendedSegmentEscapeAccountingCandidate,
-      FramePreservesSuspendedSegmentTreeCoverageCandidate,
-      FrameFieldPreservationCandidate.
+	      FramePreservesActiveProcessedChildSegmentSummaryCandidate,
+	      FramePreservesSuspendedSegmentEscapeAccountingCandidate,
+	      FramePreservesSuspendedSegmentTreeCoverageCandidate,
+	      FramePreservesSuspendedActiveTargetBlocksCandidate,
+	      FrameFieldPreservationCandidate.
     split.
     - (* ParentResumeShape *)
       intros Fr p c d Hedge Hnot_done.
@@ -12692,21 +12988,31 @@ Section IS_LOW_SKELETON.
                    intros r s Hframe.
                    destruct Hframe as [_ [_ [_ [_ [_ [Hfield _]]]]]].
                    exact Hfield.
-                ** split.
-                   --- (* SegmentEscapeAccounting *)
-                       intros Fr p c d Hedge Hnot_done.
-                       eapply Hoare_conseq_post.
-                       2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
-                       intros r s Hframe.
-                       destruct Hframe as [_ [_ [_ [_ [_ [_ [Hfield _]]]]]]].
-                       exact Hfield.
-                   --- (* SegmentTreeCoverage *)
-                       intros Fr p c d Hedge Hnot_done.
-                       eapply Hoare_conseq_post.
-                       2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
-                       intros r s Hframe.
-                       destruct Hframe as [_ [_ [_ [_ [_ [_ [_ Hfield]]]]]]].
-                       exact Hfield.
+	                ** split.
+	                   --- (* SegmentEscapeAccounting *)
+	                       intros Fr p c d Hedge Hnot_done.
+	                       eapply Hoare_conseq_post.
+	                       2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
+	                       intros r s Hframe.
+	                       destruct Hframe as [_ [_ [_ [_ [_ [_ [Hfield _]]]]]]].
+	                       exact Hfield.
+	                   --- split.
+	                       +++ (* SegmentTreeCoverage *)
+	                           intros Fr p c d Hedge Hnot_done.
+	                           eapply Hoare_conseq_post.
+	                           2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
+	                           intros r s Hframe.
+	                           destruct Hframe as
+	                             [_ [_ [_ [_ [_ [_ [_ [Hfield _]]]]]]]].
+	                           exact Hfield.
+	                       +++ (* ActiveTargetBlocks *)
+	                           intros Fr p c d Hedge Hnot_done.
+	                           eapply Hoare_conseq_post.
+	                           2: { exact (Hcontract Fr p c d Hedge Hnot_done). }
+	                           intros r s Hframe.
+	                           destruct Hframe as
+	                             [_ [_ [_ [_ [_ [_ [_ [_ Hfield]]]]]]]].
+	                           exact Hfield.
   Qed.
 
   Lemma ProcessEdgeTreeBranchExtendsLoopInvPhase6Candidate_proof:
@@ -12734,13 +13040,10 @@ Section IS_LOW_SKELETON.
 	        (Q := fun (_: unit) s =>
 	           FrameInvCandidate (FrameOfCallCandidate u a done) s /\
 	           ChildPostCandidate u a done s /\
-	           (PartialRootLowEquationCandidate u done s /\
+		           (PartialRootLowEquationCandidate u done s /\
             fa s a = u /\
             fa s a <> a /\
-            low s a <= dfn s a /\
-            ParentPendingChildEscapeAccountedCandidate u done a s /\
-            ActiveTargetBlocksEscapeAccountedCandidate
-              u (done_after done a) s)).
+            low s a <= dfn s a)).
       + eapply Hoare_conseq_post.
         2: {
           apply Hoare_conj
@@ -12749,13 +13052,10 @@ Section IS_LOW_SKELETON.
                  FrameInvCandidate (FrameOfCallCandidate u a done) s)
               (Q2 := fun _ s =>
                  ChildPostCandidate u a done s /\
-                 (PartialRootLowEquationCandidate u done s /\
-                  fa s a = u /\
-                  fa s a <> a /\
-                  low s a <= dfn s a /\
-                  ParentPendingChildEscapeAccountedCandidate u done a s /\
-                  ActiveTargetBlocksEscapeAccountedCandidate
-                    u (done_after done a) s)).
+	                 (PartialRootLowEquationCandidate u done s /\
+	                  fa s a = u /\
+	                  fa s a <> a /\
+	                  low s a <= dfn s a)).
           - eapply Hoare_conseq_pre.
             2: {
               apply
@@ -12771,19 +13071,24 @@ Section IS_LOW_SKELETON.
               with
                 (Q1 := fun _ s => ChildPostCandidate u a done s)
                 (Q2 := fun _ s =>
-                   PartialRootLowEquationCandidate u done s /\
-                   fa s a = u /\
-                   fa s a <> a /\
-                   low s a <= dfn s a /\
-                   ParentPendingChildEscapeAccountedCandidate u done a s /\
-                   ActiveTargetBlocksEscapeAccountedCandidate
-                     u (done_after done a) s).
+	                   PartialRootLowEquationCandidate u done s /\
+	                   fa s a = u /\
+	                   fa s a <> a /\
+	                   low s a <= dfn s a).
             + eapply Hoare_conseq_pre.
               2: { apply (Hchild u a done Hedge Hnot_done). }
               intros s [_Hframe_inv [Hentry _Hresume]].
               exact Hentry.
             + eapply Hoare_conseq_pre.
-              2: { apply (Hlow_contribution u a done Hedge Hnot_done). }
+              2: {
+                eapply Hoare_conseq_post.
+	                2: { apply (Hlow_contribution u a done Hedge Hnot_done). }
+	                intros _ s
+	                  [Hpartial [Hfa [Hfa_neq Hlow_child]]].
+	                split; [exact Hpartial |].
+	                split; [exact Hfa |].
+	                split; [exact Hfa_neq | exact Hlow_child].
+              }
               intros s [Hframe_inv [Hentry _Hresume]].
               split; [exact Hframe_inv |].
               split; [exact Hentry |].
@@ -12811,9 +13116,8 @@ Section IS_LOW_SKELETON.
           [Hvis_child [Hchild_low_valid [Hchild_is_low
            [Hchild_inactive [Hchild_closed
            Hchild_segment]]]]].
-        destruct Hlow_post as
-          [Hpartial [Hfa [Hfa_neq
-           [Hlow_child [_Hparent_pending _Hactive_blocks]]]]].
+	        destruct Hlow_post as
+	          [Hpartial [Hfa [Hfa_neq Hlow_child]]].
         split; [exact Hloop_low |].
         split; [exact Hsuspended_frame |].
         split; [exact Hvis_child |].
@@ -12859,13 +13163,13 @@ Section IS_LOW_SKELETON.
           (Q := fun (_: unit) s =>
              FrameInvCandidate (FrameOfCallCandidate u a done) s /\
              ChildPostCandidate u a done s /\
-             (PartialRootLowEquationCandidate u done s /\
-              fa s a = u /\
-              fa s a <> a /\
-              low s a <= dfn s a /\
-              ParentPendingChildEscapeAccountedCandidate u done a s /\
-              ActiveTargetBlocksEscapeAccountedCandidate
-                u (done_after done a) s)).
+	             (PartialRootLowEquationCandidate u done s /\
+	              fa s a = u /\
+	              fa s a <> a /\
+	              low s a <= dfn s a /\
+	              ParentPendingChildEscapeAccountedCandidate u done a s /\
+	              ActiveTargetBlocksEscapeAccountedCandidate
+	                u (done_after done a) s)).
       + eapply Hoare_conseq_post.
         2: {
           apply Hoare_conj
@@ -12874,13 +13178,14 @@ Section IS_LOW_SKELETON.
                  FrameInvCandidate (FrameOfCallCandidate u a done) s)
               (Q2 := fun _ s =>
                  ChildPostCandidate u a done s /\
-                 (PartialRootLowEquationCandidate u done s /\
-                  fa s a = u /\
-                  fa s a <> a /\
-                  low s a <= dfn s a /\
-                  ParentPendingChildEscapeAccountedCandidate u done a s /\
-                  ActiveTargetBlocksEscapeAccountedCandidate
-                    u (done_after done a) s)).
+	                 (PartialRootLowEquationCandidate u done s /\
+	                  fa s a = u /\
+	                  fa s a <> a /\
+	                  low s a <= dfn s a /\
+	                  ParentPendingChildEscapeAccountedCandidate
+	                    u done a s /\
+	                  ActiveTargetBlocksEscapeAccountedCandidate
+	                    u (done_after done a) s)).
         * eapply Hoare_conseq_pre.
           2: {
             apply
@@ -12995,10 +13300,11 @@ Section IS_LOW_SKELETON.
                      u a (done_after done a)).
               }
               intros s [Hframe_inv [Hchild_post _Hlow_post]].
-              destruct Hframe_inv as
-                [Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
-                 [_Hchildren [_Hactive_segments
-                 [_Hsuspended_escape Hsuspended_coverage]]]]]]].
+	              destruct Hframe_inv as
+	                [Hresume_frame [Hloop_low [_Hsuspended_frame [_Hclosed
+	                 [_Hchildren [_Hactive_segments
+	                 [_Hsuspended_escape Hsuspended_tail]]]]]]].
+	              destruct Hsuspended_tail as [Hsuspended_coverage _Hblocks].
               destruct Hloop_low as [Hdone_loop _Hpartial].
               destruct Hdone_loop as [Hlocal _Hdiscipline].
               destruct Hlocal as [Hshape _Hlocal_tail].
@@ -14266,10 +14572,12 @@ Section IS_LOW_SKELETON.
            PoppedSegmentClosedCandidate u s)
         (maybe_pop u)
         (fun _ s =>
-           SuspendedSegmentEscapeAccountingCandidate
-             (frame_parent F) (frame_child F) (frame_done F) s /\
-           SuspendedSegmentTreeCoverageByDoneCandidate
-             (frame_parent F) (frame_child F) (frame_done F) s).
+	          SuspendedSegmentEscapeAccountingCandidate
+	            (frame_parent F) (frame_child F) (frame_done F) s /\
+	          SuspendedSegmentTreeCoverageByDoneCandidate
+	            (frame_parent F) (frame_child F) (frame_done F) s /\
+	          SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	            (frame_parent F) (frame_child F) (frame_done F) s).
   Proof.
     intros F u.
     unfold maybe_pop, root_pop_guard.
@@ -14282,9 +14590,12 @@ Section IS_LOW_SKELETON.
       pose proof
         (FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof
            F s0 Hframe) as Hescape.
-      pose proof
-        (FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof
-           F s0 Hframe) as Hcoverage.
+	      pose proof
+	        (FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof
+	           F s0 Hframe) as Hcoverage.
+	      pose proof
+	        (FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof
+	           F s0 Hframe) as Hblocks.
       unfold LoopInvLowCandidate, LoopInvDoneCandidate,
         LocalActiveRootCandidate in Hlow.
       destruct Hlow as [[Hlocal _Hdone_disc] _Hpartial].
@@ -14293,8 +14604,8 @@ Section IS_LOW_SKELETON.
          [_Hparent_active Horderfacts]]]].
       unfold pop_scc_state.
       destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
-      simpl.
-      split.
+	      simpl.
+	      split.
       + unfold SuspendedSegmentEscapeAccountingCandidate.
         intros x w Hactive_x_post Hdfn_parent_x_post Houtside_post
                Hreach_xw Hnot_vis_w_post.
@@ -14345,10 +14656,11 @@ Section IS_LOW_SKELETON.
           -- split; [exact Hdfn_anchor_parent |].
              split; [exact Hlow_parent_anchor |].
              split; [exact Hx_anchor | exact Hanchor_w].
-      + unfold SuspendedSegmentTreeCoverageByDoneCandidate.
-        intros x Hactive_x_post Hdfn_parent_x_post Houtside_post.
-        assert (Hactive_x_snap: Active x s0).
-        { eapply stack_split_rest_in_original_stack; eauto. }
+	      + split.
+	        * unfold SuspendedSegmentTreeCoverageByDoneCandidate.
+	        intros x Hactive_x_post Hdfn_parent_x_post Houtside_post.
+	        assert (Hactive_x_snap: Active x s0).
+	        { eapply stack_split_rest_in_original_stack; eauto. }
         assert (Hdfn_parent_x_snap:
                   dfn s0 (frame_parent F) <= dfn s0 x).
         { exact Hdfn_parent_x_post. }
@@ -14366,20 +14678,110 @@ Section IS_LOW_SKELETON.
               with (u := u) (x := x) (s := s0)
                    (popped := popped) (rest := rest); eauto.
           - exact Htree_child_x. }
-        specialize (Hcoverage x Hactive_x_snap Hdfn_parent_x_snap
-                      Houtside_snap) as Hprocessed.
-        eapply ProcessedTreeReachableFromCandidate_snapshot_to_post.
-        * intros z. split; intro Hz; exact Hz.
-        * intros z. reflexivity.
-        * exact Hprocessed.
+	        specialize (Hcoverage x Hactive_x_snap Hdfn_parent_x_snap
+	                      Houtside_snap) as Hprocessed.
+	        eapply ProcessedTreeReachableFromCandidate_snapshot_to_post.
+	        -- intros z. split; intro Hz; exact Hz.
+	        -- intros z. reflexivity.
+	        -- exact Hprocessed.
+	        * unfold SuspendedActiveTargetBlocksEscapeAccountedCandidate,
+	            SuspendedActiveTargetBlockEscapeAccountedCandidate.
+	          intros block target w Hblock_target Houtside_target_post
+	                 Hblock_valid Hreach Hnot_vis_w_post.
+	          pose proof (Hblock_valid target Hblock_target) as
+	            [_Hedge_target0 [_Hnot_done_target0
+	             [Hactive_target_post _Htail0]]].
+	          assert (Hactive_target_snap: Active target s0).
+	          { eapply stack_split_rest_in_original_stack; eauto. }
+	          assert (Hdfn_target_snap:
+	                    dfn s0 (frame_parent F) <= dfn s0 target).
+	          { specialize (Hblock_valid target Hblock_target) as
+	              [_Hedge_target [_Hnot_done_target
+	               [_Hactive_target_post [Hdfn_target_post _Houtside]]]].
+	            exact Hdfn_target_post. }
+	          assert (Houtside_target_snap:
+	                    ~ PendingChildSegmentCandidate
+	                        (frame_child F) s0 target).
+	          { intro Hpending_snap.
+	            apply Houtside_target_post.
+	            destruct Hpending_snap as
+	              [Hvisited_child [Hactive_child_snap Htree_child_target]].
+	            unfold PendingChildSegmentCandidate.
+	            split; [exact Hvisited_child |].
+	            split.
+	            - eapply stack_split_tree_ancestor_of_rest_active_in_rest
+	                with (u := u) (child := frame_child F) (x := target)
+	                     (s := s0) (popped := popped) (rest := rest);
+	                eauto.
+	            - exact Htree_child_target. }
+	          assert (Hnot_vis_w_snap: ~ Visited w s0).
+	          { intro Hvisited_w. apply Hnot_vis_w_post. exact Hvisited_w. }
+	          specialize (Hblocks block target w Hblock_target
+	                       Houtside_target_snap) as Haccount.
+	          assert (Hblock_valid_snap:
+	                    forall node,
+	                      block node ->
+	                      Edge (frame_parent F) node /\
+	                      ~ frame_done F node /\
+	                      Active node s0 /\
+	                      dfn s0 (frame_parent F) <= dfn s0 node /\
+	                      ~ PendingChildSegmentCandidate (frame_child F) s0 node).
+	          { intros node Hnode.
+	            specialize (Hblock_valid node Hnode) as
+	              [Hedge_node [Hnot_done_node [Hactive_node_post
+	               [Hdfn_node_post Houtside_node_post]]]].
+	            split; [exact Hedge_node |].
+	            split; [exact Hnot_done_node |].
+	            split.
+	            - eapply stack_split_rest_in_original_stack; eauto.
+	            - split; [exact Hdfn_node_post |].
+	              intro Hpending_snap.
+	              apply Houtside_node_post.
+	              destruct Hpending_snap as
+	                [Hvisited_child [Hactive_child_snap Htree_child_node]].
+	              unfold PendingChildSegmentCandidate.
+	              split; [exact Hvisited_child |].
+	              split.
+	              + eapply stack_split_tree_ancestor_of_rest_active_in_rest
+	                  with (u := u) (child := frame_child F) (x := node)
+	                       (s := s0) (popped := popped) (rest := rest);
+	                  eauto.
+	              + exact Htree_child_node. }
+	          specialize (Haccount Hblock_valid_snap Hreach Hnot_vis_w_snap)
+	            as [Hpending | Hanchor].
+	          -- left. exact Hpending.
+	          -- right.
+	             unfold OldStackEscapeAnchorCandidate in Hanchor |- *.
+	             destruct Hanchor as
+	               [anchor [Hactive_anchor [Hdfn_anchor_parent
+	                [Hlow_parent_anchor [Htarget_anchor Hanchor_w]]]]].
+	             exists anchor.
+	             split.
+	             ++ simpl.
+	                destruct Hboundary as [Hparent_rest _Hdone_rest].
+	                eapply old_anchor_in_rest_when_child_in_rest
+	                  with (u := u) (c := frame_parent F) (b := anchor)
+	                       (s := s0) (popped := popped) (rest := rest).
+	                ** exact Hsplit.
+	                ** exact Hu_active.
+	                ** exact (Hparent_rest popped rest Hsplit).
+	                ** exact Hactive_anchor.
+	                ** exact Hdfn_anchor_parent.
+	                ** exact (proj1 Horderfacts).
+	             ++ split; [exact Hdfn_anchor_parent |].
+	                split; [exact Hlow_parent_anchor |].
+	                split; [exact Htarget_anchor | exact Hanchor_w].
     - destruct H1 as [Hs _Hguard].
       subst s.
-      destruct H as [Hframe _Htail].
-      split.
-      + eapply FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof.
-        exact Hframe.
-      + eapply FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof.
-        exact Hframe.
+	      destruct H as [Hframe _Htail].
+	      split.
+	      + eapply FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof.
+	        exact Hframe.
+	      + split.
+	        * eapply FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof.
+	          exact Hframe.
+	        * eapply FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof.
+	          exact Hframe.
   Qed.
 
   Lemma MaybePopPreservesFrameNonSegmentFieldsWithBoundaryCandidate_proof:
@@ -14581,11 +14983,13 @@ Section IS_LOW_SKELETON.
                (frame_parent F) (frame_done F) s /\
              ActiveProcessedChildSegmentSummaryCandidate
                (frame_parent F) (frame_done F) s)
-          (Q2 := fun _ s =>
-             SuspendedSegmentEscapeAccountingCandidate
-               (frame_parent F) (frame_child F) (frame_done F) s /\
-             SuspendedSegmentTreeCoverageByDoneCandidate
-               (frame_parent F) (frame_child F) (frame_done F) s).
+	          (Q2 := fun _ s =>
+	             SuspendedSegmentEscapeAccountingCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             SuspendedSegmentTreeCoverageByDoneCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s /\
+	             SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	               (frame_parent F) (frame_child F) (frame_done F) s).
       - apply MaybePopPreservesFrameNonSegmentFieldsWithBoundaryCandidate_proof.
       - apply
           MaybePopPreservesFrameSuspendedSegmentFieldsWithBoundaryCandidate_proof.
@@ -14593,15 +14997,16 @@ Section IS_LOW_SKELETON.
     intros _ s
       [[Hresume
         [Hlow [Hsuspended [Hclosed [Hchildren Hactive_segments]]]]]
-       [Hescape Hcoverage]].
+	       [Hescape [Hcoverage Hblocks]]].
     unfold FrameInvCandidate.
     split; [exact Hresume |].
     split; [exact Hlow |].
     split; [exact Hsuspended |].
     split; [exact Hclosed |].
     split; [exact Hchildren |].
-    split; [exact Hactive_segments |].
-    split; [exact Hescape | exact Hcoverage].
+	    split; [exact Hactive_segments |].
+	    split; [exact Hescape |].
+	    split; [exact Hcoverage | exact Hblocks].
   Qed.
 
   Lemma PreloopMakesFrameVerticesOlderThanChildCandidate_proof:
@@ -14792,11 +15197,13 @@ Section IS_LOW_SKELETON.
            FrameCompatibleWithCallCandidate F parent child s /\
            ChildEntryCandidate parent child done s)
         (preloop child)
-        (fun _ s =>
-           SuspendedSegmentEscapeAccountingCandidate
-             (frame_parent F) (frame_child F) (frame_done F) s /\
-           SuspendedSegmentTreeCoverageByDoneCandidate
-             (frame_parent F) (frame_child F) (frame_done F) s).
+	        (fun _ s =>
+	           SuspendedSegmentEscapeAccountingCandidate
+	             (frame_parent F) (frame_child F) (frame_done F) s /\
+	           SuspendedSegmentTreeCoverageByDoneCandidate
+	            (frame_parent F) (frame_child F) (frame_done F) s /\
+	           SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	            (frame_parent F) (frame_child F) (frame_done F) s).
   Proof.
     intros F parent child done.
     unfold preloop. unfold_op. intro_state. hoare_auto_s.
@@ -14814,18 +15221,23 @@ Section IS_LOW_SKELETON.
                             if equiv_decb x child then timer s0 else dfn0 x)
                          s0))))).
     change
-      (SuspendedSegmentEscapeAccountingCandidate
-         (frame_parent F) (frame_child F) (frame_done F) sp /\
-       SuspendedSegmentTreeCoverageByDoneCandidate
-         (frame_parent F) (frame_child F) (frame_done F) sp).
+	      (SuspendedSegmentEscapeAccountingCandidate
+	         (frame_parent F) (frame_child F) (frame_done F) sp /\
+	       SuspendedSegmentTreeCoverageByDoneCandidate
+	        (frame_parent F) (frame_child F) (frame_done F) sp /\
+	       SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	        (frame_parent F) (frame_child F) (frame_done F) sp).
     pose proof
       (FrameInvProvidesLoopInvLowCandidate_proof F s0 Hframe) as Hlow.
     pose proof
       (FrameInvProvidesSuspendedSegmentEscapeAccountingCandidate_proof
          F s0 Hframe) as Hescape.
-    pose proof
-      (FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof
-         F s0 Hframe) as Hcoverage.
+	    pose proof
+	      (FrameInvProvidesSuspendedSegmentTreeCoverageCandidate_proof
+	         F s0 Hframe) as Hcoverage.
+	    pose proof
+	      (FrameInvProvidesSuspendedActiveTargetBlocksCandidate_proof
+	         F s0 Hframe) as Hblocks.
     unfold LoopInvLowCandidate, LoopInvDoneCandidate,
       LocalActiveRootCandidate, DoneDisciplineCandidate in Hlow.
     destruct Hlow as [[Hlocal [_Hdone_subset Hdone_vis]] _Hpartial].
@@ -14928,19 +15340,19 @@ Section IS_LOW_SKELETON.
               low sp (frame_parent F) =
               low s0 (frame_parent F)).
     { apply Hlow_sp_keep. exact Hframe_parent_neq_child. }
-    split.
-    - unfold SuspendedSegmentEscapeAccountingCandidate.
+	    split.
+	    - unfold SuspendedSegmentEscapeAccountingCandidate.
       intros x w Hactive_x_post Hdfn_parent_x_post Houtside_post
              Hreach_xw Hnot_vis_w_post.
-      destruct (Hactive_sp_cases x Hactive_x_post) as
-        [Hx_child | Hactive_x_pre].
-      + subst x.
-        exfalso. apply Houtside_post. exact Hpending_child_post.
-      + assert (Hx_neq_child: x <> child).
-        { intro Hx_child. subst x.
-          apply Hchild_unvisited.
-          unfold GlobalShapeCandidate, wf_scc_state in Hshape.
-          destruct Hshape as [Hstack_vis _].
+		      destruct (Hactive_sp_cases x Hactive_x_post) as
+		        [Hx_child | Hactive_x_pre].
+		      { subst x.
+		        exfalso. apply Houtside_post. exact Hpending_child_post. }
+		      { assert (Hx_neq_child: x <> child).
+	        { intro Hx_child. subst x.
+	          apply Hchild_unvisited.
+	          unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	          destruct Hshape as [Hstack_vis _].
           apply Hstack_vis. exact Hactive_x_pre. }
         assert (Hdfn_x_keep:
                   dfn sp x =
@@ -14960,68 +15372,163 @@ Section IS_LOW_SKELETON.
         { intro Hvisited_w_pre.
           apply Hnot_vis_w_post.
           apply Hvisited_sp_mono. exact Hvisited_w_pre. }
-        specialize (Hescape x w Hactive_x_pre Hdfn_parent_x_pre
-                      Houtside_pre Hreach_xw Hnot_vis_w_pre) as
-          [Hpending | Hanchor].
-        * left. exact Hpending.
-        * right.
-          unfold OldStackEscapeAnchorCandidate in Hanchor |- *.
-          destruct Hanchor as
-            [anchor
-             [Hactive_anchor [Hdfn_anchor_parent
-              [Hlow_parent_anchor [Hx_anchor Hanchor_w]]]]].
-          assert (Hanchor_neq_child: anchor <> child).
-          { intro Hanchor_child. subst anchor.
-            apply Hchild_unvisited.
-            unfold GlobalShapeCandidate, wf_scc_state in Hshape.
-            destruct Hshape as [Hstack_vis _].
-            apply Hstack_vis. exact Hactive_anchor. }
-          exists anchor.
-          split.
-          -- apply Hactive_sp_old. exact Hactive_anchor.
-          -- split.
-             ++ rewrite Hdfn_sp_keep; [rewrite Hdfn_parent_keep |].
-                ** exact Hdfn_anchor_parent.
-                ** exact Hanchor_neq_child.
-             ++ split.
-                ** rewrite Hlow_parent_keep.
-                   rewrite Hdfn_sp_keep; [exact Hlow_parent_anchor |].
-                   exact Hanchor_neq_child.
-                ** split; [exact Hx_anchor | exact Hanchor_w].
-    - unfold SuspendedSegmentTreeCoverageByDoneCandidate.
-      intros x Hactive_x_post Hdfn_parent_x_post Houtside_post.
-      destruct (Hactive_sp_cases x Hactive_x_post) as
-        [Hx_child | Hactive_x_pre].
-      + subst x.
-        exfalso. apply Houtside_post. exact Hpending_child_post.
-      + assert (Hx_neq_child: x <> child).
-        { intro Hx_child. subst x.
-          apply Hchild_unvisited.
-          unfold GlobalShapeCandidate, wf_scc_state in Hshape.
-          destruct Hshape as [Hstack_vis _].
-          apply Hstack_vis. exact Hactive_x_pre. }
-        assert (Hdfn_x_keep:
-                  dfn sp x =
-                  dfn s0 x).
-        { apply Hdfn_sp_keep. exact Hx_neq_child. }
-        assert (Hdfn_parent_x_pre:
-                  dfn s0 (frame_parent F) <= dfn s0 x).
-        { rewrite Hdfn_parent_keep in Hdfn_parent_x_post.
-          rewrite Hdfn_x_keep in Hdfn_parent_x_post.
-          exact Hdfn_parent_x_post. }
-        assert (Houtside_pre:
-                  ~ PendingChildSegmentCandidate (frame_child F) s0 x).
-        { intro Hpending_pre.
-          apply Houtside_post.
-          exact (Hpending_pre_to_post x Hpending_pre). }
-        specialize (Hcoverage x Hactive_x_pre Hdfn_parent_x_pre
-                      Houtside_pre) as Hprocessed.
-        eapply ProcessedTreeReachableFromCandidate_snapshot_to_post_monotone.
-        * exact Hvisited_sp_mono.
-        * intros z _Hvisited_z. apply Hfa_sp_keep.
-        * exact Hdone_vis.
-        * exact Hprocessed.
-  Qed.
+	        specialize (Hescape x w Hactive_x_pre Hdfn_parent_x_pre
+	                      Houtside_pre Hreach_xw Hnot_vis_w_pre) as
+	          [Hpending | Hanchor].
+	        { left. exact Hpending. }
+	        { right.
+	          unfold OldStackEscapeAnchorCandidate in Hanchor |- *.
+	          destruct Hanchor as
+	            [anchor
+	             [Hactive_anchor [Hdfn_anchor_parent
+	              [Hlow_parent_anchor [Hx_anchor Hanchor_w]]]]].
+	          assert (Hanchor_neq_child: anchor <> child).
+	          { intro Hanchor_child. subst anchor.
+	            apply Hchild_unvisited.
+	            unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	            destruct Hshape as [Hstack_vis _].
+	            apply Hstack_vis. exact Hactive_anchor. }
+	          exists anchor.
+	          split.
+	          - apply Hactive_sp_old. exact Hactive_anchor.
+	          - split.
+	            + rewrite Hdfn_sp_keep; [rewrite Hdfn_parent_keep |].
+	              * exact Hdfn_anchor_parent.
+	              * exact Hanchor_neq_child.
+	            + split.
+	              * rewrite Hlow_parent_keep.
+	                rewrite Hdfn_sp_keep; [exact Hlow_parent_anchor |].
+	                exact Hanchor_neq_child.
+              * split; [exact Hx_anchor | exact Hanchor_w]. } }
+	    - split.
+	      + unfold SuspendedSegmentTreeCoverageByDoneCandidate.
+	      intros x Hactive_x_post Hdfn_parent_x_post Houtside_post.
+	      destruct (Hactive_sp_cases x Hactive_x_post) as
+	        [Hx_child | Hactive_x_pre].
+	      { subst x.
+	        exfalso. apply Houtside_post. exact Hpending_child_post. }
+	      { assert (Hx_neq_child: x <> child).
+	        { intro Hx_child. subst x.
+	          apply Hchild_unvisited.
+	          unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	          destruct Hshape as [Hstack_vis _].
+	          apply Hstack_vis. exact Hactive_x_pre. }
+	        assert (Hdfn_x_keep:
+	                  dfn sp x =
+	                  dfn s0 x).
+	        { apply Hdfn_sp_keep. exact Hx_neq_child. }
+	        assert (Hdfn_parent_x_pre:
+	                  dfn s0 (frame_parent F) <= dfn s0 x).
+	        { rewrite Hdfn_parent_keep in Hdfn_parent_x_post.
+	          rewrite Hdfn_x_keep in Hdfn_parent_x_post.
+	          exact Hdfn_parent_x_post. }
+	        assert (Houtside_pre:
+	                  ~ PendingChildSegmentCandidate (frame_child F) s0 x).
+	        { intro Hpending_pre.
+	          apply Houtside_post.
+	          exact (Hpending_pre_to_post x Hpending_pre). }
+	        specialize (Hcoverage x Hactive_x_pre Hdfn_parent_x_pre
+	                      Houtside_pre) as Hprocessed.
+	        eapply ProcessedTreeReachableFromCandidate_snapshot_to_post_monotone.
+	        - exact Hvisited_sp_mono.
+	        - intros z _Hvisited_z. apply Hfa_sp_keep.
+	        - exact Hdone_vis.
+	        - exact Hprocessed. }
+	      + unfold SuspendedActiveTargetBlocksEscapeAccountedCandidate,
+	          SuspendedActiveTargetBlockEscapeAccountedCandidate.
+	        intros block target w Hblock_target Houtside_target_post
+	               Hblock_valid Hreach Hnot_vis_w_post.
+	        pose proof (Hblock_valid target Hblock_target) as
+	          [_Hedge_target [_Hnot_done_target
+	           [Hactive_target_post _Htarget_tail]]].
+	        destruct (Hactive_sp_cases target Hactive_target_post) as
+	          [Htarget_child | Hactive_target_pre].
+	        * subst target.
+	          exfalso. apply Houtside_target_post.
+	          exact Hpending_child_post.
+	        * assert (Htarget_neq_child: target <> child).
+	          { intro Htarget_child. subst target.
+	            apply Hchild_unvisited.
+	            unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	            destruct Hshape as [Hstack_vis _].
+	            apply Hstack_vis. exact Hactive_target_pre. }
+	          assert (Houtside_target_pre:
+	                    ~ PendingChildSegmentCandidate
+	                        (frame_child F) s0 target).
+	          { intro Hpending_pre.
+	            apply Houtside_target_post.
+	            exact (Hpending_pre_to_post target Hpending_pre). }
+	          assert (Hnot_vis_w_pre: ~ Visited w s0).
+	          { intro Hvisited_w_pre.
+	            apply Hnot_vis_w_post.
+	            apply Hvisited_sp_mono. exact Hvisited_w_pre. }
+	          specialize (Hblocks block target w Hblock_target
+	                       Houtside_target_pre) as Haccount.
+	          assert (Hblock_valid_pre:
+	                    forall node,
+	                      block node ->
+	                      Edge (frame_parent F) node /\
+	                      ~ frame_done F node /\
+	                      Active node s0 /\
+	                      dfn s0 (frame_parent F) <= dfn s0 node /\
+	                      ~ PendingChildSegmentCandidate
+	                          (frame_child F) s0 node).
+	          { intros node Hnode.
+	            specialize (Hblock_valid node Hnode) as
+	              [Hedge_node [Hnot_done_node [Hactive_node_post
+	               [Hdfn_node_post Houtside_node_post]]]].
+	            destruct (Hactive_sp_cases node Hactive_node_post) as
+	              [Hnode_child | Hactive_node_pre].
+	            - subst node.
+	              exfalso. apply Houtside_node_post.
+	              exact Hpending_child_post.
+	            - assert (Hnode_neq_child: node <> child).
+	              { intro Hnode_child. subst node.
+	                apply Hchild_unvisited.
+	                unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	                destruct Hshape as [Hstack_vis _].
+	                apply Hstack_vis. exact Hactive_node_pre. }
+	              assert (Hdfn_node_keep:
+	                        dfn sp node =
+	                        dfn s0 node).
+	              { apply Hdfn_sp_keep. exact Hnode_neq_child. }
+	              split; [exact Hedge_node |].
+	              split; [exact Hnot_done_node |].
+	              split; [exact Hactive_node_pre |].
+	              split.
+	              + rewrite Hdfn_parent_keep in Hdfn_node_post.
+	                rewrite Hdfn_node_keep in Hdfn_node_post.
+	                exact Hdfn_node_post.
+	              + intro Hpending_pre.
+	                apply Houtside_node_post.
+	                exact (Hpending_pre_to_post node Hpending_pre). }
+	          specialize (Haccount Hblock_valid_pre Hreach Hnot_vis_w_pre)
+	            as [Hpending | Hanchor].
+	          -- left. exact Hpending.
+	          -- right.
+	             unfold OldStackEscapeAnchorCandidate in Hanchor |- *.
+	             destruct Hanchor as
+	               [anchor [Hactive_anchor [Hdfn_anchor_parent
+	                [Hlow_parent_anchor [Htarget_anchor Hanchor_w]]]]].
+	             assert (Hanchor_neq_child: anchor <> child).
+	             { intro Hanchor_child. subst anchor.
+	               apply Hchild_unvisited.
+	               unfold GlobalShapeCandidate, wf_scc_state in Hshape.
+	               destruct Hshape as [Hstack_vis _].
+	               apply Hstack_vis. exact Hactive_anchor. }
+	             exists anchor.
+	             split.
+	             ++ apply Hactive_sp_old. exact Hactive_anchor.
+	             ++ split.
+	                ** rewrite Hdfn_sp_keep; [rewrite Hdfn_parent_keep |].
+	                   --- exact Hdfn_anchor_parent.
+	                   --- exact Hanchor_neq_child.
+	                ** split.
+	                   --- rewrite Hlow_parent_keep.
+	                       rewrite Hdfn_sp_keep;
+	                         [exact Hlow_parent_anchor | exact Hanchor_neq_child].
+	                   --- split; [exact Htarget_anchor | exact Hanchor_w].
+	  Qed.
 
   Lemma PreloopPreservesLocalActiveRootCandidate_proof:
     forall u child,
@@ -16224,10 +16731,12 @@ Section IS_LOW_SKELETON.
                    (frame_parent F) (frame_done F) s /\
                  ActiveProcessedChildSegmentSummaryCandidate
                    (frame_parent F) (frame_done F) s /\
-                 SuspendedSegmentEscapeAccountingCandidate
-                   (frame_parent F) (frame_child F) (frame_done F) s /\
-                 SuspendedSegmentTreeCoverageByDoneCandidate
-                   (frame_parent F) (frame_child F) (frame_done F) s).
+	                 SuspendedSegmentEscapeAccountingCandidate
+	                   (frame_parent F) (frame_child F) (frame_done F) s /\
+	                 SuspendedSegmentTreeCoverageByDoneCandidate
+	                   (frame_parent F) (frame_child F) (frame_done F) s /\
+	                 SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	                   (frame_parent F) (frame_child F) (frame_done F) s).
           - eapply Hoare_conseq_post.
             2: {
               apply
@@ -16249,10 +16758,12 @@ Section IS_LOW_SKELETON.
                      (frame_parent F) (frame_done F) s /\
                    ActiveProcessedChildSegmentSummaryCandidate
                      (frame_parent F) (frame_done F) s /\
-                   SuspendedSegmentEscapeAccountingCandidate
-                     (frame_parent F) (frame_child F) (frame_done F) s /\
-                   SuspendedSegmentTreeCoverageByDoneCandidate
-                     (frame_parent F) (frame_child F) (frame_done F) s).
+	                   SuspendedSegmentEscapeAccountingCandidate
+	                     (frame_parent F) (frame_child F) (frame_done F) s /\
+	                   SuspendedSegmentTreeCoverageByDoneCandidate
+	                     (frame_parent F) (frame_child F) (frame_done F) s /\
+	                   SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	                     (frame_parent F) (frame_child F) (frame_done F) s).
             + eapply Hoare_conseq_pre.
               2: {
                 apply
@@ -16271,10 +16782,12 @@ Section IS_LOW_SKELETON.
                        (frame_parent F) (frame_done F) s /\
                      ActiveProcessedChildSegmentSummaryCandidate
                        (frame_parent F) (frame_done F) s /\
-                     SuspendedSegmentEscapeAccountingCandidate
-                       (frame_parent F) (frame_child F) (frame_done F) s /\
-                     SuspendedSegmentTreeCoverageByDoneCandidate
-                       (frame_parent F) (frame_child F) (frame_done F) s).
+	                     SuspendedSegmentEscapeAccountingCandidate
+	                       (frame_parent F) (frame_child F) (frame_done F) s /\
+	                     SuspendedSegmentTreeCoverageByDoneCandidate
+	                       (frame_parent F) (frame_child F) (frame_done F) s /\
+	                     SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	                       (frame_parent F) (frame_child F) (frame_done F) s).
               * eapply Hoare_conseq_pre.
                 2: {
                   apply
@@ -16291,10 +16804,12 @@ Section IS_LOW_SKELETON.
                     (Q2 := fun _ s =>
                        ActiveProcessedChildSegmentSummaryCandidate
                          (frame_parent F) (frame_done F) s /\
-                       SuspendedSegmentEscapeAccountingCandidate
-                         (frame_parent F) (frame_child F) (frame_done F) s /\
-                       SuspendedSegmentTreeCoverageByDoneCandidate
-                         (frame_parent F) (frame_child F) (frame_done F) s).
+	                       SuspendedSegmentEscapeAccountingCandidate
+	                         (frame_parent F) (frame_child F) (frame_done F) s /\
+	                       SuspendedSegmentTreeCoverageByDoneCandidate
+	                         (frame_parent F) (frame_child F) (frame_done F) s /\
+	                       SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	                         (frame_parent F) (frame_child F) (frame_done F) s).
                 -- apply
                      (PreloopPreservesFrameProcessedTreeChildrenCorrectCandidate_proof
                         F parent child done).
@@ -16304,10 +16819,12 @@ Section IS_LOW_SKELETON.
                          ActiveProcessedChildSegmentSummaryCandidate
                            (frame_parent F) (frame_done F) s)
                       (Q2 := fun _ s =>
-                         SuspendedSegmentEscapeAccountingCandidate
-                           (frame_parent F) (frame_child F) (frame_done F) s /\
-                         SuspendedSegmentTreeCoverageByDoneCandidate
-                           (frame_parent F) (frame_child F) (frame_done F) s).
+	                         SuspendedSegmentEscapeAccountingCandidate
+	                           (frame_parent F) (frame_child F) (frame_done F) s /\
+	                         SuspendedSegmentTreeCoverageByDoneCandidate
+	                           (frame_parent F) (frame_child F) (frame_done F) s /\
+	                         SuspendedActiveTargetBlocksEscapeAccountedCandidate
+	                           (frame_parent F) (frame_child F) (frame_done F) s).
                    ++ eapply Hoare_conseq_pre.
                       2: {
                         apply
@@ -16321,17 +16838,18 @@ Section IS_LOW_SKELETON.
                            F parent child done).
         }
         intros _ s
-          [[Hresume [_Hvis_child Hsuspended]]
-           [Hlow [Hclosed [Hchildren
-            [Hactive_segments [Hsegment Hcoverage]]]]]].
+	          [[Hresume [_Hvis_child Hsuspended]]
+	           [Hlow [Hclosed [Hchildren
+	            [Hactive_segments [Hsegment [Hcoverage Hblocks]]]]]]].
         unfold FrameInvCandidate.
         split; [exact Hresume |].
         split; [exact Hlow |].
         split; [exact Hsuspended |].
         split; [exact Hclosed |].
         split; [exact Hchildren |].
-        split; [exact Hactive_segments |].
-        split; [exact Hsegment | exact Hcoverage].
+	        split; [exact Hactive_segments |].
+	        split; [exact Hsegment |].
+	        split; [exact Hcoverage | exact Hblocks].
       - apply Hoare_conj
           with
             (Q1 := fun _ s => LoopInvPhase7Candidate child ∅ s)
@@ -17190,11 +17708,7 @@ Section IS_LOW_SKELETON.
           PartialRootLowEquationCandidate parent done s /\
           fa s child = parent /\
           fa s child <> child /\
-          low s child <= dfn s child /\
-          ParentPendingChildEscapeAccountedCandidate
-            parent done child s /\
-          ActiveTargetBlocksEscapeAccountedCandidate
-            parent (done_after done child) s;
+          low s child <= dfn s child;
       Frame := SuspendedFrameCandidate;
       FrameInv := FrameInvCandidate;
       FrameCompatible := FrameCompatibleWithCallCandidate;
@@ -18725,19 +19239,17 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma BodyProvidesLowContributionCandidate_from_field_cuts_proof:
-    BodyChildPostTailCandidate_statement ->
     BodyPreservesPartialRootLowEquationCandidate_statement ->
     BodyPreservesChildParentPointerCandidate_statement ->
     BodyProducesChildLowDfnBoundCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement.
   Proof.
-    unfold BodyChildPostTailCandidate_statement,
-      BodyPreservesPartialRootLowEquationCandidate_statement,
+    unfold BodyPreservesPartialRootLowEquationCandidate_statement,
       BodyPreservesChildParentPointerCandidate_statement,
       BodyProducesChildLowDfnBoundCandidate_statement,
       BodyProvidesLowContributionCandidate_statement,
       FramedChildProvidesLowContributionCandidate.
-    intros Htail Hpartial Hparent_pointer Hlow_bound
+    intros Hpartial Hparent_pointer Hlow_bound
            W Hcontracts parent child done Hedge Hnot_done.
     eapply Hoare_conseq_post.
     2: {
@@ -18747,11 +19259,7 @@ Section IS_LOW_SKELETON.
              PartialRootLowEquationCandidate parent done s)
           (Q2 := fun _ s =>
              (fa s child = parent /\ fa s child <> child) /\
-             low s child <= dfn s child /\
-             ParentPendingChildEscapeAccountedCandidate
-               parent done child s /\
-             ActiveTargetBlocksEscapeAccountedCandidate
-               parent (done_after done child) s).
+             low s child <= dfn s child).
       - apply
           (Hpartial W parent child done Hcontracts Hedge Hnot_done).
       - apply Hoare_conj
@@ -18759,44 +19267,18 @@ Section IS_LOW_SKELETON.
             (Q1 := fun _ s =>
                fa s child = parent /\ fa s child <> child)
             (Q2 := fun _ s =>
-               low s child <= dfn s child /\
-               ParentPendingChildEscapeAccountedCandidate
-                 parent done child s /\
-               ActiveTargetBlocksEscapeAccountedCandidate
-                 parent (done_after done child) s).
+               low s child <= dfn s child).
         + apply
             (Hparent_pointer W parent child done
                Hcontracts Hedge Hnot_done).
-        + apply Hoare_conj
-            with
-              (Q1 := fun _ s => low s child <= dfn s child)
-              (Q2 := fun _ s =>
-                 ParentPendingChildEscapeAccountedCandidate
-                   parent done child s /\
-                 ActiveTargetBlocksEscapeAccountedCandidate
-                   parent (done_after done child) s).
-          * apply
-              (Hlow_bound W parent child done Hcontracts Hedge Hnot_done).
-          * eapply Hoare_conseq_post.
-            2: {
-              eapply Hoare_conseq_pre.
-              2: {
-                apply (Htail W parent child done Hcontracts Hedge Hnot_done).
-              }
-              intros s [_Hframe [Hentry _Hpartial]].
-              exact Hentry.
-            }
-            intros _ s [_Hsegment [_Hresume [Hpending Hblocks]]].
-            split; [exact Hpending | exact Hblocks].
+        + apply
+            (Hlow_bound W parent child done Hcontracts Hedge Hnot_done).
     }
     intros _ s
-      [Hpartial_post
-       [[Hfa Hfa_neq] [Hlow_bound_post [Hparent_pending Hactive_blocks]]]].
+      [Hpartial_post [[Hfa Hfa_neq] Hlow_bound_post]].
     split; [exact Hpartial_post |].
     split; [exact Hfa |].
-    split; [exact Hfa_neq |].
-    split; [exact Hlow_bound_post |].
-    split; [exact Hparent_pending | exact Hactive_blocks].
+    split; [exact Hfa_neq | exact Hlow_bound_post].
   Qed.
 
   Lemma BodyPreservesFrameContractCandidate_from_frame_cuts_proof:
@@ -19086,14 +19568,12 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma BodyProvidesLowContributionCandidate_from_phase9_cuts_proof:
-    BodyChildPostTailCandidate_statement ->
     BodyPreservesPartialRootLowEquationCandidate_statement ->
     BodyPreservesChildParentPointerCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement.
   Proof.
-    intros Htail Hpartial Hparent_pointer.
+    intros Hpartial Hparent_pointer.
     apply BodyProvidesLowContributionCandidate_from_field_cuts_proof.
-    - exact Htail.
     - exact Hpartial.
     - exact Hparent_pointer.
     - exact BodyProducesChildLowDfnBoundCandidate_proof.
@@ -19179,12 +19659,9 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma BodyProvidesLowContributionCandidate_from_frame_phase9_cut_proof:
-    BodyChildPostTailCandidate_statement ->
     BodyProvidesLowContributionCandidate_statement.
   Proof.
-    intros Htail.
     apply BodyProvidesLowContributionCandidate_from_phase9_cuts_proof.
-    - exact Htail.
     - apply BodyPreservesPartialRootLowEquationCandidate_from_frame_cuts_proof.
     - apply BodyPreservesChildParentPointerCandidate_from_frame_cuts_proof.
   Qed.
@@ -19315,14 +19792,11 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma LowCandidateObligations_from_phase9_cuts_proof:
-    BodyChildPostTailCandidate_statement ->
     LowProofObligations LowCandidateInterface.
   Proof.
-    intros Hchild_tail.
     apply LowCandidateObligations_from_body_contracts_proof.
     - apply BodySatisfiesChildContractCandidate_from_phase9_cuts_proof.
     - apply BodyProvidesLowContributionCandidate_from_frame_phase9_cut_proof.
-      exact Hchild_tail.
     - apply BodyPreservesFrameContractCandidate_from_phase9_cuts_proof.
     - apply BodyPreservesFrameProgressContractCandidate_proof.
   Qed.
@@ -19544,12 +20018,10 @@ Section IS_LOW_SKELETON.
   Qed.
 
   Lemma LowCandidateLayerCorrect_from_phase9_cuts_proof:
-    BodyChildPostTailCandidate_statement ->
     FixpointLowLayerCorrect_statement LowCandidateInterface.
   Proof.
-    intros Hchild_tail.
     apply LowLayerCorrect_from_obligations_proof.
-    apply LowCandidateObligations_from_phase9_cuts_proof; assumption.
+    apply LowCandidateObligations_from_phase9_cuts_proof.
   Qed.
 
 End IS_LOW_SKELETON.
