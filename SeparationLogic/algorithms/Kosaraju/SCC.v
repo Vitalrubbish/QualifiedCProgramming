@@ -147,35 +147,41 @@ Lemma build_scc_partition_aux : forall (vertices: list V),
   exists sccs,
     (forall v, vvalid g v -> In v vertices -> exists s, In s sccs /\ s v) /\
     (forall s, In s sccs -> is_SCC s) /\
-    (forall s1 s2 v, In s1 sccs -> In s2 sccs -> s1 v -> s2 v -> s1 = s2).
+    (forall s1 s2 v, In s1 sccs -> In s2 sccs -> s1 v -> s2 v -> s1 = s2) /\
+    NoDup sccs.
 Proof.
   induction vertices as [|a rest IH].
-  - exists nil; simpl; split; [|split].
-    + intros v Hv Hin. inversion Hin.
-    + intros s Hin. inversion Hin.
-    + intros s1 s2 v Hin1 Hin2. inversion Hin1.
-  - destruct IH as [sccs_rest [Hcover_rest [Hsccs_rest Hdisjoint_rest]]].
+  - exists nil.
+    refine (conj _ (conj _ (conj _ _))).
+    + intros v Hv Hin; inversion Hin.
+    + intros t Hin; inversion Hin.
+    + intros t1 t2 v Hin1 Hin2; inversion Hin1.
+    + exact (NoDup_nil _).
+  - destruct IH as [sccs_rest [Hcover_rest [Hsccs_rest [Hdisjoint_rest Hnodup_rest]]]].
     destruct (classic (exists s, In s sccs_rest /\ s a)).
-    + exists sccs_rest; split; [|split]; auto.
-      intros v Hv Hin.
-      destruct Hin as [Hva|Hrest'].
-      * subst v. destruct H as [s [Hin_s Hsa]].
-        exists s; split; auto.
-      * apply Hcover_rest; auto.
-    + destruct (classic (vvalid g a)).
+    + exists sccs_rest.
+      refine (conj _ (conj _ (conj _ _))).
+      * intros v Hv Hin.
+        destruct Hin as [Heqa|Hrest'].
+        -- subst v; destruct H as [s [Hin_s Hsa]]; exists s; split; auto.
+        -- apply Hcover_rest; auto.
+      * exact Hsccs_rest.
+      * exact Hdisjoint_rest.
+      * exact Hnodup_rest.
+    +     destruct (classic (vvalid g a)) as [Hva | Hnva].
       * exists (equiv_class a :: sccs_rest).
-        split; [|split].
-        -- intros v Hv Hin.
-           destruct Hin as [Hva|Hrest'].
-           ++ subst v.
+        refine (conj _ (conj _ (conj _ _))).
+         -- intros v Hv Hin.
+            destruct Hin as [Heqa|Hrest'].
+            ++ subst v.
               exists (equiv_class a); split; [left; reflexivity|].
               unfold equiv_class; split; auto.
               apply mutually_reachable_refl; auto.
            ++ destruct (Hcover_rest v Hv Hrest') as [s [Hin_s Hsv]].
-              exists s; split; auto. right; auto.
+              exists s; split; auto; right; auto.
         -- intros s Hin.
            destruct Hin as [Hin|Hin].
-           ++ subst s. apply equiv_class_is_SCC; auto.
+           ++ subst s; apply equiv_class_is_SCC; auto.
            ++ apply Hsccs_rest; auto.
         -- intros s1 s2 v Hind Hind' Hv1 Hv2.
            apply in_inv in Hind; apply in_inv in Hind'.
@@ -198,11 +204,18 @@ Proof.
                   apply mutually_reachable_sym; auto. }
                 exists s1; split; auto. }
            ++ eapply Hdisjoint_rest; eauto.
-      * exists sccs_rest; split; [|split]; auto.
-        intros v Hv Hin.
-        destruct Hin as [Hva|Hrest'].
-        -- subst v. exfalso; auto.
-        -- apply Hcover_rest; auto.
+        -- apply NoDup_cons; [| exact Hnodup_rest].
+           intro Hin; apply H; exists (equiv_class a); split; auto.
+           unfold equiv_class; split; [apply Hva | apply mutually_reachable_refl; auto].
+      * exists sccs_rest.
+        refine (conj _ (conj _ (conj _ _))).
+         -- intros v Hv Hin.
+            destruct Hin as [Heqa|Hrest'].
+            ++ subst v; exfalso; exact (Hnva Hv).
+            ++ apply Hcover_rest; auto.
+        -- exact Hsccs_rest.
+        -- exact Hdisjoint_rest.
+        -- exact Hnodup_rest.
 Qed.
 
 Lemma listV_contains_valid (v : V) : vvalid g v -> In v (listV g).
@@ -211,14 +224,15 @@ Proof.
   apply (finite_vertices g Hgvalid v); auto.
 Qed.
 
-Theorem scc_partition_exists : exists sccs, scc_partition sccs.
+Theorem scc_partition_exists : exists sccs, scc_partition sccs /\ NoDup sccs.
 Proof.
-  destruct (build_scc_partition_aux (listV g)) as [sccs [Hcover [Hsccs Hdisjoint]]].
-  exists sccs.
-  split; [|split].
-  - intros v Hv. apply (Hcover v Hv). apply listV_contains_valid; auto.
-  - apply Hsccs.
-  - apply Hdisjoint.
+  destruct (build_scc_partition_aux (listV g)) as [sccs [Hcover [Hsccs [Hdisjoint Hnodup]]]].
+  exists sccs; split.
+  - split; [|split].
+    + intros v Hv. apply (Hcover v Hv). apply listV_contains_valid; auto.
+    + apply Hsccs.
+    + apply Hdisjoint.
+  - apply Hnodup.
 Qed.
 
 (* ================================================================= *)
