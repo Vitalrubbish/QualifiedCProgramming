@@ -4,6 +4,9 @@ Require Import Coq.Logic.ClassicalDescription.
 Require Import Coq.Logic.PropExtensionality.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Relations.Relations.
+Require Import Coq.Arith.Wf_nat.
+Require Import Coq.Arith.Compare_dec.
+Require Import Lia.
 Require Import SetsClass.SetsClass.
 Require Import GraphLib.graph_basic.
 Require Import GraphLib.Syntax.
@@ -60,6 +63,396 @@ Section SCC_DEFS.
   Proof.
     intros x y Hstep.
     apply Coq.Relations.Relation_Operators.rt_step. exact Hstep.
+  Qed.
+
+  (* ================================================================ *)
+  (* Directed path witnesses                                          *)
+  (* ================================================================ *)
+
+  (** [dg_path_of_len g x y n] is a path-sensitive witness saying that
+      [y] is reachable from [x] by exactly [n] directed edges.  It is the
+      directed-graph analogue of the unweighted [path_of_len] interface. *)
+  Inductive dg_path_of_len (g0: OriginalGraphType V E)
+    : V -> V -> nat -> Prop :=
+  | dg_pol_0 u : dg_path_of_len g0 u u 0
+  | dg_pol_S u w v d :
+      dg_path_of_len g0 u w d ->
+      dg_step g0 w v ->
+      dg_path_of_len g0 u v (S d).
+
+  Lemma dg_path_of_len_reachable:
+    forall g0 u v d,
+      dg_path_of_len g0 u v d ->
+      dg_reachable g0 u v.
+  Proof.
+    intros g0 u v d Hpath.
+    induction Hpath.
+    - apply Coq.Relations.Relation_Operators.rt_refl.
+    - eapply Coq.Relations.Relation_Operators.rt_trans.
+      + exact IHHpath.
+      + apply Coq.Relations.Relation_Operators.rt_step.
+        exact H.
+  Qed.
+
+  Lemma dg_path_of_len_app:
+    forall g0 x y z d1 d2,
+      dg_path_of_len g0 x y d1 ->
+      dg_path_of_len g0 y z d2 ->
+      dg_path_of_len g0 x z (d1 + d2).
+  Proof.
+    intros g0 x y z d1 d2 Hxy Hyz.
+    revert x d1 Hxy.
+    induction Hyz as [y | y mid z d Hpath IHpath Hstep];
+      intros x d1 Hxy.
+    - replace (d1 + 0) with d1 by lia. exact Hxy.
+    - replace (d1 + S d) with (S (d1 + d)) by lia.
+      eapply dg_pol_S.
+      + apply IHpath. exact Hxy.
+      + exact Hstep.
+  Qed.
+
+  Lemma dg_reachable_path_of_len:
+    forall g0 u v,
+      dg_reachable g0 u v ->
+      exists d, dg_path_of_len g0 u v d.
+  Proof.
+    intros g0 u v Hreach.
+    unfold dg_reachable in Hreach.
+    induction Hreach as [x y Hstep | x | x y z _ IHxy _ IHyz].
+    - exists 1.
+      eapply dg_pol_S.
+      + apply dg_pol_0.
+      + exact Hstep.
+    - exists 0. apply dg_pol_0.
+    - destruct IHxy as [dxy Hxy].
+      destruct IHyz as [dyz Hyz].
+      exists (dxy + dyz).
+      eapply dg_path_of_len_app; eauto.
+  Qed.
+
+  Lemma dg_path_of_len_min:
+    forall g0 src v n,
+      dg_path_of_len g0 src v n ->
+      exists d,
+        dg_path_of_len g0 src v d /\
+        (forall d', dg_path_of_len g0 src v d' -> d <= d') /\
+        d <= n.
+  Proof.
+    intros g0 src v n.
+    revert v.
+    induction n as [n IH] using Wf_nat.lt_wf_ind.
+    intros v Hpath.
+    destruct (classic (exists d, d < n /\ dg_path_of_len g0 src v d))
+      as [[d [Hdlt Hdpath]] | Hnone].
+    - specialize (IH d Hdlt v Hdpath) as
+        [dmin [Hmin_path [Hmin Hle]]].
+      exists dmin.
+      split; [exact Hmin_path |].
+      split; [exact Hmin | lia].
+    - exists n.
+      split; [exact Hpath |].
+      split; [| lia].
+      intros d Hdpath.
+      destruct (le_lt_dec n d) as [Hle | Hlt]; [exact Hle |].
+      exfalso. apply Hnone.
+      exists d. split; assumption.
+  Qed.
+
+  Lemma dg_reachable_min_path:
+    forall g0 src v,
+      dg_reachable g0 src v ->
+      exists d,
+        dg_path_of_len g0 src v d /\
+        (forall d', dg_path_of_len g0 src v d' -> d <= d').
+  Proof.
+    intros g0 src v Hreach.
+    destruct (dg_reachable_path_of_len g0 src v Hreach) as [n Hpath].
+    destruct (dg_path_of_len_min g0 src v n Hpath) as
+      [d [Hmin_path [Hmin _Hle]]].
+    exists d.
+    split; [exact Hmin_path | exact Hmin].
+  Qed.
+
+  (** [dg_vertex_path g x y path] keeps the actual vertices of a directed
+      path.  [path] is the tail list after [x], so a one-edge path
+      [x -> y] is represented by [path = y :: nil]. *)
+  Inductive dg_vertex_path (g0: OriginalGraphType V E)
+    : V -> V -> list V -> Prop :=
+  | dg_vp_0 u : dg_vertex_path g0 u u nil
+  | dg_vp_step u v w tail :
+      dg_step g0 u v ->
+      dg_vertex_path g0 v w tail ->
+      dg_vertex_path g0 u w (v :: tail).
+
+  Lemma dg_vertex_path_reachable:
+    forall g0 u v path,
+      dg_vertex_path g0 u v path ->
+      dg_reachable g0 u v.
+  Proof.
+    intros g0 u v path Hpath.
+    induction Hpath.
+    - apply Coq.Relations.Relation_Operators.rt_refl.
+    - eapply Coq.Relations.Relation_Operators.rt_trans.
+      + apply Coq.Relations.Relation_Operators.rt_step.
+        exact H.
+      + exact IHHpath.
+  Qed.
+
+  Lemma dg_vertex_path_app:
+    forall g0 x y z p1 p2,
+      dg_vertex_path g0 x y p1 ->
+      dg_vertex_path g0 y z p2 ->
+      dg_vertex_path g0 x z (p1 ++ p2).
+  Proof.
+    intros g0 x y z p1 p2 Hxy Hyz.
+    induction Hxy as [x | x mid y p1 Hstep Hpath IHpath].
+    - simpl. exact Hyz.
+    - simpl. eapply dg_vp_step; eauto.
+  Qed.
+
+  Lemma dg_reachable_vertex_path:
+    forall g0 u v,
+      dg_reachable g0 u v ->
+      exists path, dg_vertex_path g0 u v path.
+  Proof.
+    intros g0 u v Hreach.
+    unfold dg_reachable in Hreach.
+    induction Hreach as [x y Hstep | x | x y z _ IHxy _ IHyz].
+    - exists (y :: nil).
+      eapply dg_vp_step.
+      + exact Hstep.
+      + apply dg_vp_0.
+    - exists nil. apply dg_vp_0.
+    - destruct IHxy as [px Hpx].
+      destruct IHyz as [py Hpy].
+      revert z py Hpy.
+      induction Hpx as [x | x mid y px Hstep Hpath IHpath];
+        intros z py Hpy.
+      + exists py. exact Hpy.
+      + destruct (IHpath z py Hpy) as [tail Htail].
+        exists (mid :: tail).
+        eapply dg_vp_step; eauto.
+  Qed.
+
+  Lemma dg_vertex_path_prefix_reachable:
+    forall g0 u v path z,
+      dg_vertex_path g0 u v path ->
+      In z (u :: path) ->
+      dg_reachable g0 u z.
+  Proof.
+    intros g0 u v path z Hpath Hin.
+    induction Hpath as [u | u mid v path Hstep Hpath IHpath].
+    - simpl in Hin. destruct Hin as [Hz | []].
+      subst z. apply Coq.Relations.Relation_Operators.rt_refl.
+    - simpl in Hin. destruct Hin as [Hz_u | Hin_tail].
+      + subst z. apply Coq.Relations.Relation_Operators.rt_refl.
+      + eapply Coq.Relations.Relation_Operators.rt_trans.
+        * apply Coq.Relations.Relation_Operators.rt_step.
+          exact Hstep.
+        * apply IHpath. exact Hin_tail.
+  Qed.
+
+  Lemma dg_vertex_path_suffix_reachable:
+    forall g0 u v path z,
+      dg_vertex_path g0 u v path ->
+      In z (u :: path) ->
+      dg_reachable g0 z v.
+  Proof.
+    intros g0 u v path z Hpath Hin.
+    induction Hpath as [u | u mid v path Hstep Hpath IHpath].
+    - simpl in Hin. destruct Hin as [Hz | []].
+      subst z. apply Coq.Relations.Relation_Operators.rt_refl.
+    - simpl in Hin. destruct Hin as [Hz_u | Hin_tail].
+      + subst z. eapply dg_vertex_path_reachable.
+        eapply dg_vp_step; eauto.
+      + apply IHpath. exact Hin_tail.
+  Qed.
+
+  Lemma dg_vertex_path_split_in:
+    forall g0 u v path z,
+      dg_vertex_path g0 u v path ->
+      In z (u :: path) ->
+      exists p1 p2,
+        dg_vertex_path g0 u z p1 /\
+        dg_vertex_path g0 z v p2.
+  Proof.
+    intros g0 u v path z Hpath Hin.
+    induction Hpath as [u | u mid v path Hstep Hpath IHpath].
+    - simpl in Hin. destruct Hin as [Hz | []].
+      subst z. exists nil. exists nil.
+      split; apply dg_vp_0.
+    - simpl in Hin. destruct Hin as [Hz_u | Hin_tail].
+      + subst z. exists nil. exists (mid :: path).
+        split.
+        * apply dg_vp_0.
+        * eapply dg_vp_step; eauto.
+      + destruct (IHpath Hin_tail) as
+          [p1 [p2 [Hmid_z Hz_v]]].
+        exists (mid :: p1). exists p2.
+        split; [| exact Hz_v].
+        eapply dg_vp_step; eauto.
+  Qed.
+
+  Lemma dg_vertex_path_last_exit_from_pred:
+    forall g0 (P: V -> Prop) x y path,
+      P x ->
+      ~ P y ->
+      dg_vertex_path g0 x y path ->
+      exists a b suffix,
+        P a /\
+        ~ P b /\
+        dg_step g0 a b /\
+        dg_reachable g0 x a /\
+        dg_vertex_path g0 b y suffix /\
+        (forall z, In z (b :: suffix) -> ~ P z).
+  Proof.
+    intros g0 P x y path HPx Hnot_y Hpath.
+    assert (Hexists: exists z, In z (x :: path) /\ P z).
+    { exists x. split; [simpl; left; reflexivity | exact HPx]. }
+    clear HPx.
+    revert Hnot_y Hexists.
+    induction Hpath as [x | x next y path Hstep Hpath IHpath].
+    - intros Hnot_y [z [Hz_in HPz]].
+      simpl in Hz_in. destruct Hz_in as [Hz_x | []].
+      subst z. exfalso. apply Hnot_y. exact HPz.
+    - intros Hnot_y Hexists.
+      destruct (classic (exists z, In z (next :: path) /\ P z))
+        as [Hexists_tail | Hno_tail].
+      + specialize (IHpath Hnot_y Hexists_tail) as
+          [a [b [suffix
+            [HPa [Hnot_b [Hstep_ab [Hnext_a [Hb_y Hsuffix]]]]]]]].
+        exists a. exists b. exists suffix.
+        split; [exact HPa |].
+        split; [exact Hnot_b |].
+        split; [exact Hstep_ab |].
+        split.
+        * eapply Coq.Relations.Relation_Operators.rt_trans.
+          -- apply Coq.Relations.Relation_Operators.rt_step.
+             exact Hstep.
+          -- exact Hnext_a.
+        * split; [exact Hb_y | exact Hsuffix].
+      + assert (HPx: P x).
+        { destruct Hexists as [z [Hz_in HPz]].
+          simpl in Hz_in.
+          destruct Hz_in as [Hz_x | Hz_tail].
+          - subst z. exact HPz.
+          - exfalso. apply Hno_tail.
+            exists z. split; [exact Hz_tail | exact HPz]. }
+        assert (Hnot_next: ~ P next).
+        { intro HPnext.
+          apply Hno_tail.
+          exists next. split; [simpl; left; reflexivity | exact HPnext]. }
+        exists x. exists next. exists path.
+        split; [exact HPx |].
+        split; [exact Hnot_next |].
+        split; [exact Hstep |].
+        split.
+        * apply Coq.Relations.Relation_Operators.rt_refl.
+        * split; [exact Hpath |].
+          intros z Hz_in Hz_P.
+          apply Hno_tail.
+          exists z. split; [exact Hz_in | exact Hz_P].
+  Qed.
+
+  Lemma dg_vertex_path_last_exit_from_pred_decomp:
+    forall g0 (P: V -> Prop) x y path,
+      P x ->
+      ~ P y ->
+      dg_vertex_path g0 x y path ->
+      exists a b prefix suffix,
+        P a /\
+        ~ P b /\
+        dg_step g0 a b /\
+        dg_vertex_path g0 x a prefix /\
+        dg_vertex_path g0 b y suffix /\
+        path = prefix ++ b :: suffix /\
+        (forall z, In z (b :: suffix) -> ~ P z).
+  Proof.
+    intros g0 P x y path HPx Hnot_y Hpath.
+    assert (Hexists: exists z, In z (x :: path) /\ P z).
+    { exists x. split; [simpl; left; reflexivity | exact HPx]. }
+    clear HPx.
+    revert Hnot_y Hexists.
+    induction Hpath as [x | x next y path Hstep Hpath IHpath].
+    - intros Hnot_y [z [Hz_in HPz]].
+      simpl in Hz_in. destruct Hz_in as [Hz_x | []].
+      subst z. exfalso. apply Hnot_y. exact HPz.
+    - intros Hnot_y Hexists.
+      destruct (classic (exists z, In z (next :: path) /\ P z))
+        as [Hexists_tail | Hno_tail].
+      + specialize (IHpath Hnot_y Hexists_tail) as
+          [a [b [prefix [suffix
+            [HPa [Hnot_b [Hstep_ab [Hnext_a
+             [Hb_y [Hpath_eq Hsuffix]]]]]]]]]].
+        exists a. exists b. exists (next :: prefix). exists suffix.
+        split; [exact HPa |].
+        split; [exact Hnot_b |].
+        split; [exact Hstep_ab |].
+        split.
+        * eapply dg_vp_step; eauto.
+        * split; [exact Hb_y |].
+          split.
+          -- simpl. rewrite Hpath_eq. reflexivity.
+          -- exact Hsuffix.
+      + assert (HPx: P x).
+        { destruct Hexists as [z [Hz_in HPz]].
+          simpl in Hz_in.
+          destruct Hz_in as [Hz_x | Hz_tail].
+          - subst z. exact HPz.
+          - exfalso. apply Hno_tail.
+            exists z. split; [exact Hz_tail | exact HPz]. }
+        assert (Hnot_next: ~ P next).
+        { intro HPnext.
+          apply Hno_tail.
+          exists next. split; [simpl; left; reflexivity | exact HPnext]. }
+        exists x. exists next. exists nil. exists path.
+        split; [exact HPx |].
+        split; [exact Hnot_next |].
+        split; [exact Hstep |].
+        split.
+        * apply dg_vp_0.
+        * split; [exact Hpath |].
+          split; [reflexivity |].
+          intros z Hz_in Hz_P.
+          apply Hno_tail.
+          exists z. split; [exact Hz_in | exact Hz_P].
+  Qed.
+
+  Lemma dg_vertex_path_exit_from_pred:
+    forall g0 (P: V -> Prop) x y path,
+      P x ->
+      ~ P y ->
+      dg_vertex_path g0 x y path ->
+      exists a b,
+        P a /\
+        ~ P b /\
+        dg_step g0 a b /\
+        dg_reachable g0 x a /\
+        dg_reachable g0 b y.
+  Proof.
+    intros g0 P x y path HPx Hnot_y Hpath.
+    induction Hpath as [x | x next y path Hstep Hpath IHpath].
+    - exfalso. apply Hnot_y. exact HPx.
+    - destruct (classic (P next)) as [HPnext | Hnot_next].
+      + specialize (IHpath HPnext Hnot_y) as
+          [a [b [HPa [Hnot_b [Hstep_ab [Hnext_a Hb_y]]]]]].
+        exists a. exists b.
+        split; [exact HPa |].
+        split; [exact Hnot_b |].
+        split; [exact Hstep_ab |].
+        split.
+        * eapply Coq.Relations.Relation_Operators.rt_trans.
+          -- apply Coq.Relations.Relation_Operators.rt_step.
+             exact Hstep.
+          -- exact Hnext_a.
+        * exact Hb_y.
+      + exists x. exists next.
+        split; [exact HPx |].
+        split; [exact Hnot_next |].
+        split; [exact Hstep |].
+        split.
+        * apply Coq.Relations.Relation_Operators.rt_refl.
+        * eapply dg_vertex_path_reachable. exact Hpath.
   Qed.
 
   Lemma dg_step_vvalid : forall x y,

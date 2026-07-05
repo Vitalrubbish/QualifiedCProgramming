@@ -1492,17 +1492,30 @@ Remaining segment work:
   summary, `ParentLowBelowChildCandidate`, and the non-older-anchor accounted
   predicate.
 - `PendingChildSegmentEscapeAccountedCandidate_from_child_summary_and_suspended_parent_proof`
-  is the closed preferred producer path for child-segment accounting: global
-  shape, child summary, `ParentLowBelowChildCandidate`, suspended parent
-  segment accounting, and parent-pending-child accounting imply
-  `PendingChildSegmentEscapeAccountedCandidate`.
-- The segment lane is now connected to the actual post-child cut:
+  is the closed preferred conditional producer path for child-segment
+  accounting: global shape, child summary, `ParentLowBelowChildCandidate`,
+  suspended parent segment accounting, and parent-pending-child accounting
+  imply `PendingChildSegmentEscapeAccountedCandidate`.  It does not produce
+  parent-pending-child accounting by itself.
+- The segment lane is conditionally connected to the actual post-child cut:
   `GetLowUpdateLowPreservesChildSegmentSummaryFromParentResumeCandidate_proof`,
   `GetLowUpdateLowProducesNonOlderAnchorAccountedByParentFromParentResumeCandidate_proof`,
   and
   `GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedCandidate_proof`
   show that after `get low child ;; update_low parent`, the exact facts
-  consumed by the preferred segment-close producer are available together.
+  consumed by the preferred segment-close producer are available together only
+  after `ParentPendingChildEscapeAccountedCandidate parent done child` has
+  been supplied.  Producing that parent-pending fact belongs to the Phase 9
+  tree-branch post-update accounting producer, not to the recursive child post.
+- Active-target block closure needs one additional refinement beyond ordinary
+  parent pending.  `ParentPendingChildEscapeAccountedCandidate parent done
+  child` excludes pending-root witnesses in `done_after done child`, while
+  `ActiveTargetBlockEscapeAccountedCandidate parent (done_after done child)
+  block` must exclude witnesses in `(done_after done child) ∪ block`.  The
+  route-2 implementation therefore needs a block-aware parent-pending subgoal
+  for sources in the current mixed block; the ordinary parent-pending
+  predicate remains the right segment-close input but is not by itself a
+  block-close input.
 
 Frame-pop boundary audit:
 

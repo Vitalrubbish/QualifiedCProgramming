@@ -862,17 +862,21 @@ Current Phase 8 status:
   records the preferred composition, and
   `PendingChildSegmentEscapeAccountedCandidate_from_child_summary_and_suspended_parent_proof`
   closes the preferred producer path.
-- The preferred producer path is now connected to the actual post-child
-  `get low child ;; update_low parent` cut.
+- The preferred producer path is conditionally connected to the actual
+  post-child `get low child ;; update_low parent` cut.
   `GetLowUpdateLowPreservesChildSegmentSummaryFromParentResumeCandidate_proof`
   preserves the child summary from the parent resume shape,
   `GetLowUpdateLowProducesNonOlderAnchorAccountedByParentFromParentResumeCandidate_proof`
   produces the non-older-anchor parent accounting from suspended parent
   accounting and parent-pending-child accounting, and
   `GetLowUpdateLowProducesPendingChildSegmentEscapeAccountedCandidate_proof`
-  composes the exact post-cut facts consumed by the segment close lemma.
-  The next Phase 8 audit is the frame-pop boundary predicate consumed by
-  `LoopInvLowCandidate` and `DoneClosednessCandidate`.
+  composes the exact post-cut facts consumed by the segment close lemma,
+  provided `ParentPendingChildEscapeAccountedCandidate parent done child` is
+  already available.  This parent-pending producer is not a child-post fact;
+  Phase 9 must construct it at the same post-update tree-branch cut before
+  using the segment close lemma.  The next Phase 8 audit is the frame-pop
+  boundary predicate consumed by `LoopInvLowCandidate` and
+  `DoneClosednessCandidate`.
 - Phase 8i starts that frame-pop boundary audit.  The boundary is intentionally
   narrow: `FramePopBoundaryCandidate F u s` says the suspended frame parent
   and every active frame-`done` vertex survive the `stack_split_at (stack s) u`
@@ -1188,6 +1192,24 @@ The parent accounting facts
 `ActiveTargetBlocksEscapeAccountedCandidate parent (done_after done child)`
 should be assembled where the parent continuation has `ParentLowBelowChild`
 and the existing pending-child segment accounting producers available.
+
+Implementation correction:
+
+- Do not revive readiness or the old child-post tail.  A bridge from
+  `ChildPostCandidate` to parent accounting is invalid because child post is
+  child-owned.
+- The stale Phase 8h wording "connected" means conditional on an existing
+  parent-pending-child proof.  The remaining implementation task is the
+  combined post-update producer that supplies parent pending, pending-child
+  segment accounting, full segment accounting, and active-target block
+  accounting together.
+- First route-2 implementation feedback: ordinary
+  `ParentPendingChildEscapeAccountedCandidate parent done child` is sufficient
+  for the segment close, but not for `ActiveTargetBlockEscapeAccountedCandidate`.
+  The block goal needs pending-root witnesses outside
+  `(done_after done child) ∪ block`; therefore the mixed-block part of the
+  combined producer must build a block-aware parent-pending variant for sources
+  in the current block at the same post-update cut.
 ```
 
 ## 15. General Stop Rules
