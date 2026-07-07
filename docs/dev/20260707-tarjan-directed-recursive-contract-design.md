@@ -140,6 +140,15 @@ Definition ParentFrameForChild
 
 `Edge parent child` 放在 frame 中是为了让后续 `ChildReturnPreMaybePop` 和 `ChildContributionContract` 的组合不再依赖外层散落字段。即使现有 `process_edge` theorem 的 postcondition 仍额外携带 `Edge parent child`，这个冗余是无害的，并且有利于局部证明。
 
+`ParentLowFrame` 的职责不是证明 parent 旧 candidate 集完全双向不变。它应表达两件足以服务 parent low 更新的事实：
+
+```text
+1. pre-state 中已有的 parent old candidates 在 post-state 中仍存在，且 dfn 不变；
+2. post-state 中任何 parent old candidate，其 dfn 不小于旧 low[parent]。
+```
+
+这样可以覆盖 `preloop child` 后 child 新入栈造成的新 active target：即使它是新的 candidate，只要它不会低于旧 `low[parent]`，就不会破坏 parent old part 的 `LowComplete`。
+
 这个 predicate 不能要求：
 
 ```coq
@@ -372,7 +381,7 @@ VisitContract
 
 ## 9. 风险与处理策略
 
-1. `ParentLowFrame` 在 `preloop child` 中不是纯字段保持；必须证明 child 新入栈不会改变 parent 旧 `done` 的 candidate 集合。
+1. `ParentLowFrame` 在 `preloop child` 中不是纯字段保持；child 新入栈可能产生新的 active target，因此第三个字段只要求 post-state 的 parent old candidates 满足旧 `low[parent]` 下界。
 2. `ParentLowFrame` 在 child edge loop 中需要 nested recursion frame preservation；这就是 `VisitFrameContract` 存在的理由。
 3. `ParentFrameForChild` 不能吸收 parent 的 `LowCorrect parent (done_after done child)`，否则会在 parent 执行 `update_low` 之前要求过强结论。
 4. `RootFinal` 不应携带 parent frame；否则当前调用主线和父调用返回线会被混在一起。
