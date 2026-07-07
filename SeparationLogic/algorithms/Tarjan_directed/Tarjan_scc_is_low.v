@@ -128,6 +128,17 @@ Section IS_LOW.
       RestStack u s b ->
       False.
 
+  Definition PoppedSegmentNoUnvisitedStep (u: V) (s: St): Prop :=
+    forall x y,
+      PoppedSegment u s x ->
+      Edge x y ->
+      ~ Visited y s ->
+      False.
+
+  Definition RootPopCuts (u: V) (s: St): Prop :=
+    PoppedSegmentClosed u s /\
+    PoppedSegmentNoActiveReach u s.
+
   Definition EntryPre (u: V) (s: St): Prop :=
     wf_scc_state_pre g root u s /\
     NoUnvisitedReach s /\
@@ -206,6 +217,15 @@ Section IS_LOW.
              (u: V) (done: V -> Prop) (s: St) (b: V): Prop :=
     b = u \/ PartialActiveTarget u done s b.
 
+  Definition PoppedSegmentRestTargetCut (u: V) (s: St): Prop :=
+    forall x b,
+      PoppedSegment u s x ->
+      Edge x b ->
+      RestStack u s b ->
+      exists target,
+        PartialLowCandidate u (edge_set u) s target /\
+        dfn s target <= dfn s b.
+
   Definition LowComplete (u: V) (done: V -> Prop) (s: St): Prop :=
     forall b, PartialLowCandidate u done s b -> low s u <= dfn s b.
 
@@ -241,6 +261,49 @@ Section IS_LOW.
   Definition RootPopBranchPre (u: V) (s: St): Prop :=
     RootPrePop u s /\ low s u = dfn s u.
 
+  Definition RootPopBranchWithCuts (u: V) (s: St): Prop :=
+    RootPopBranchPre u s /\ RootPopCuts u s.
+
+  (* Edge-loop completion facts consumed by the pop bridge.  They are
+     deliberately weaker than [PoppedSegmentClosed]: before the pop
+     branch, the current segment may reach unvisited vertices through
+     older stack frames.  The first field only rules out direct unvisited
+     exits from the completed current segment; the second field connects
+     every path from the current segment to the older stack with a
+     full-loop low candidate, so [low[u] = dfn[u]] can rule that path
+     out. *)
+  Definition RootTraversalComplete (u: V) (s: St): Prop :=
+    PoppedSegmentNoUnvisitedStep u s /\
+    PoppedSegmentRestTargetCut u s.
+
+  Definition LoopNoUnvisitedStep
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    forall x y,
+      PoppedSegment u s x ->
+      Edge x y ->
+      ~ Visited y s ->
+      x = u /\ ~ done y.
+
+  Definition LoopRestTargetCut
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    forall x b,
+      PoppedSegment u s x ->
+      Edge x b ->
+      RestStack u s b ->
+      (x = u /\ ~ done b) \/
+      exists target,
+        PartialLowCandidate u done s target /\
+        dfn s target <= dfn s b.
+
+  Definition LoopTraversalComplete
+             (u: V) (done: V -> Prop) (s: St): Prop :=
+    LoopNoUnvisitedStep u done s /\
+    LoopRestTargetCut u done s.
+
+  Definition RootPreMaybePop (u: V) (s: St): Prop :=
+    RootPrePop u s /\
+    RootTraversalComplete u s.
+
   Definition RootSkipBranchPre (u: V) (s: St): Prop :=
     RootPrePop u s /\ low s u <> dfn s u.
 
@@ -265,7 +328,10 @@ Section IS_LOW.
       False.
 
   Definition ChildLowContribution (u v: V) (s: St): Prop :=
-    (Active v s /\ LoopCoreShape v (edge_set v) s /\ RootLowCorrect v s) \/
+    (Active v s /\
+     LoopCoreShape v (edge_set v) s /\
+     RootLowCorrect v s /\
+     RootTraversalComplete v s) \/
     (~ Active v s /\ low s v = dfn s v /\
      dfn s u < dfn s v /\ ChildNoActiveTarget v s).
 
@@ -318,7 +384,7 @@ Section IS_LOW.
   Definition ChildReturnPreMaybePop
              (parent child: V) (done: V -> Prop)
              (s_before s: St): Prop :=
-    RootPrePop child s /\
+    RootPreMaybePop child s /\
     ParentFrameForChild parent child done s_before s.
 
   Definition NestedFrameDisjoint
@@ -362,6 +428,20 @@ Section IS_LOW.
              Edge parent child /\
              ChildContributionContract parent child done s_before s).
 
+  Definition VisitChildTraversalContract (W: RecProgram): Prop :=
+    forall (parent child: V) (done: V -> Prop),
+      Hoare
+        (fun s: St =>
+           ParentRecursivePre parent child done s /\
+           LoopTraversalComplete parent done s)
+        (W child)
+        (fun _ s =>
+           exists s_before,
+             LoopInv parent done s_before /\
+             Edge parent child /\
+             ChildContributionContract parent child done s_before s /\
+             LoopTraversalComplete parent (done_after done child) s).
+
   Definition VisitFrameContract (W: RecProgram): Prop :=
     forall (ancestor current loop_root next: V)
            (ancestor_done loop_done: V -> Prop)
@@ -377,6 +457,7 @@ Section IS_LOW.
   Definition VisitContract (W: RecProgram): Prop :=
     VisitMainContract W /\
     VisitChildContract W /\
+    VisitChildTraversalContract W /\
     VisitFrameContract W.
 
   Lemma done_after_intro_old (done: V -> Prop) (a b: V):
@@ -605,6 +686,55 @@ Section IS_LOW.
     intros Hdone [Haux Hcore].
     split; [exact Haux |].
     eapply loop_core_inv_done_equiv; eauto.
+  Qed.
+
+  Lemma loop_no_unvisited_step_done_equiv
+        (u: V) (done1 done2: V -> Prop) (s: St):
+    done1 == done2 ->
+    LoopNoUnvisitedStep u done1 s ->
+    LoopNoUnvisitedStep u done2 s.
+  Proof.
+    intros Hdone Hno x y Hpopped Hedge Hnotvis.
+    pose proof Hdone as Hdone_pointwise.
+    sets_unfold in Hdone_pointwise.
+    destruct (Hno x y Hpopped Hedge Hnotvis) as [Hx Hnot_done1].
+    split; [exact Hx |].
+    intros Hdone2.
+    apply Hnot_done1.
+    apply Hdone_pointwise.
+    exact Hdone2.
+  Qed.
+
+  Lemma loop_rest_target_cut_done_equiv
+        (u: V) (done1 done2: V -> Prop) (s: St):
+    done1 == done2 ->
+    LoopRestTargetCut u done1 s ->
+    LoopRestTargetCut u done2 s.
+  Proof.
+    intros Hdone Hcut x b Hpopped Hedge Hrest.
+    pose proof Hdone as Hdone_pointwise.
+    sets_unfold in Hdone_pointwise.
+    destruct (Hcut x b Hpopped Hedge Hrest) as
+      [[Hx Hnot_done1] | [target [Hcandidate Hdfn]]].
+    - left. split; [exact Hx |].
+      intros Hdone2.
+      apply Hnot_done1.
+      apply Hdone_pointwise.
+      exact Hdone2.
+    - right. exists target. split; [| exact Hdfn].
+      eapply partial_low_candidate_done_equiv; eauto.
+  Qed.
+
+  Lemma loop_traversal_complete_done_equiv
+        (u: V) (done1 done2: V -> Prop) (s: St):
+    done1 == done2 ->
+    LoopTraversalComplete u done1 s ->
+    LoopTraversalComplete u done2 s.
+  Proof.
+    intros Hdone [Hno Hcut].
+    split.
+    - eapply loop_no_unvisited_step_done_equiv; eauto.
+    - eapply loop_rest_target_cut_done_equiv; eauto.
   Qed.
 
   (** Preloop **)
@@ -1459,6 +1589,47 @@ Section IS_LOW.
     { eapply Hoare_conseq_pre.
       2: apply preloop_produces_low_correct_empty.
       intros s _. exact I. }
+  Qed.
+
+  Lemma preloop_initializes_loop_traversal_complete_empty (u: V):
+    Hoare (EntryPre u)
+          (preloop u)
+          (fun _ s => LoopTraversalComplete u ∅ s).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. simpl.
+    unfold LoopTraversalComplete, LoopNoUnvisitedStep, LoopRestTargetCut.
+    split.
+    - intros x y Hpopped _ _.
+      unfold PoppedSegment in Hpopped. simpl in Hpopped.
+      unfold equiv_decb in Hpopped.
+      destruct (equiv_dec u u) as [Hu_eq | Hu_neq].
+      + simpl in Hpopped. destruct Hpopped as [Hx_eq | []].
+        subst x. split; [reflexivity |].
+        sets_unfold. tauto.
+      + exfalso. apply Hu_neq. reflexivity.
+    - intros x target Hpopped _ _.
+      left.
+      unfold PoppedSegment in Hpopped. simpl in Hpopped.
+      unfold equiv_decb in Hpopped.
+      destruct (equiv_dec u u) as [Hu_eq | Hu_neq].
+      + simpl in Hpopped. destruct Hpopped as [Hx_eq | []].
+        subst x. split; [reflexivity |].
+        sets_unfold. tauto.
+      + exfalso. apply Hu_neq. reflexivity.
+  Qed.
+
+  Theorem preloop_initializes_edge_loop_pre (u: V):
+    Hoare (EntryPre u)
+          (preloop u)
+          (fun _ s =>
+             LoopInv u ∅ s /\
+             LoopTraversalComplete u ∅ s).
+  Proof.
+    apply Hoare_conj with
+      (Q1 := fun _ s => LoopInv u ∅ s).
+    - apply preloop_initializes_loop_inv.
+    - apply preloop_initializes_loop_traversal_complete_empty.
   Qed.
 
   Lemma preloop_parent_shape_done_after
@@ -3256,6 +3427,46 @@ Section IS_LOW.
       exact Htarget.
   Qed.
 
+  Lemma set_fa_pending_preserves_loop_traversal_complete
+        (center: V) (done: V -> Prop) (s: St) (v p: V):
+    ~ Visited v s ->
+    (forall a, done a -> Visited a s) ->
+    LoopTraversalComplete center done s ->
+    LoopTraversalComplete center done (set_fa_state s v p).
+  Proof.
+    intros Hnotvis Hdone_vis [Hno Hcut].
+    split.
+    - intros x y Hpopped Hedge Hnotvis_y.
+      simpl in Hpopped, Hnotvis_y.
+      exact (Hno x y Hpopped Hedge Hnotvis_y).
+    - intros x b Hpopped Hedge Hrest.
+      simpl in Hpopped, Hrest.
+      destruct (Hcut x b Hpopped Hedge Hrest) as
+        [[Hx Hnot_done] | [target [Hcandidate Hdfn]]].
+      + left. split; [exact Hx | exact Hnot_done].
+      + right. exists target. split; [| simpl; exact Hdfn].
+        apply (proj2 (set_fa_pending_partial_low_candidate_iff
+                        center done s v p target Hnotvis Hdone_vis)).
+        exact Hcandidate.
+  Qed.
+
+  Lemma set_fa_pending_preserves_loop_traversal_complete_cmd
+        (center: V) (done: V -> Prop) (v p: V):
+    Hoare
+      (fun s: St =>
+         ~ Visited v s /\
+         (forall a, done a -> Visited a s) /\
+         LoopTraversalComplete center done s)
+      (set_fa v p)
+      (fun _ s => LoopTraversalComplete center done s).
+  Proof.
+    unfold set_fa.
+    intro_state. hoare_auto_s.
+    subst s.
+    destruct H as [Hnotvis [Hdone_vis Htraversal]].
+    apply set_fa_pending_preserves_loop_traversal_complete; auto.
+  Qed.
+
   Lemma set_fa_pending_preserves_low_correct
         (center: V) (done: V -> Prop) (s: St) (v p: V):
     ~ Visited v s ->
@@ -4223,6 +4434,47 @@ Section IS_LOW.
         * apply low_correct_add_inactive_done; auto.
   Qed.
 
+  Lemma update_low_preserves_loop_traversal_complete
+        (center: V) (done: V -> Prop) (u: V) (n: nat):
+    Hoare
+      (LoopTraversalComplete center done)
+      (update_low u n)
+      (fun _ s => LoopTraversalComplete center done s).
+  Proof.
+    unfold update_low. unfold_op.
+    intro_state. hoare_auto_s.
+    - subst s. simpl. exact H.
+    - destruct H1 as [Heq _]. subst s. exact H.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_loop_traversal_complete
+        (center: V) (done: V -> Prop) (u v: V):
+    Hoare
+      (LoopTraversalComplete center done)
+      (dv <- get' (fun s => dfn s v);; update_low u dv)
+      (fun _ s => LoopTraversalComplete center done s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_loop_traversal_complete.
+    intros s1 [Hs1 _]. subst s1. exact H.
+  Qed.
+
+  Lemma get_low_update_low_preserves_loop_traversal_complete
+        (center: V) (done: V -> Prop) (u v: V):
+    Hoare
+      (LoopTraversalComplete center done)
+      (lv <- get' (fun s => low s v);; update_low u lv)
+      (fun _ s => LoopTraversalComplete center done s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_loop_traversal_complete.
+    intros s1 [Hs1 _]. subst s1. exact H.
+  Qed.
+
   Lemma tree_reachable_from_root_cases (s: St) (v x: V):
     TreeEdgesAreGraphEdges s ->
     dg_reachable (state_to_dfs_tree g s root) v x ->
@@ -4385,7 +4637,7 @@ Section IS_LOW.
         * apply partial_low_candidate_done_mono. exact Hcandidate_after.
         * subst n. rewrite Nat.min_l by exact Hold_le. lia.
       + destruct Hchild_contrib as
-          [[Hv_active [Hchild_shape [Hchild_sound _]]] |
+          [[Hv_active [Hchild_shape [[Hchild_sound _] _]]] |
            [Hv_inactive [Hlow_v_eq [Hdfn_lt Hno_target]]]].
         * destruct Hchild_sound as [witness [Hcandidate_child Hlow_v_witness]].
           destruct (child_candidate_lifts_to_parent
@@ -4415,7 +4667,7 @@ Section IS_LOW.
           as Hmin_le_old.
         lia.
       + destruct Hchild_contrib as
-          [[Hv_active [Hchild_shape [_ Hchild_complete]]] |
+          [[Hv_active [Hchild_shape [[_ Hchild_complete] _]]] |
            [Hv_inactive [Hlow_v_eq [Hdfn_lt Hno_target]]]].
         * assert (Hcandidate_child:
                     PartialLowCandidate v (edge_set v) s target).
@@ -5204,20 +5456,889 @@ Section IS_LOW.
       exact Hloop.
   Qed.
 
+  Lemma edge_loop_post_to_root_pre_maybe_pop (u: V) (s: St):
+    LoopInv u (edge_set u) s ->
+    RootTraversalComplete u s ->
+    RootPreMaybePop u s.
+  Proof.
+    intros Hloop Htraversal.
+    unfold RootPreMaybePop.
+    split.
+    - apply loop_inv_to_root_pre_pop. exact Hloop.
+    - exact Htraversal.
+  Qed.
+
+  Lemma edge_loop_preserves_root_pre_maybe_pop_from_visit_contract
+        (u: V) (W: RecProgram):
+    VisitChildContract W ->
+    Hoare
+      (fun s: St => LoopInv u ∅ s)
+      (forset (edge_set u) (process_edge u W))
+      (fun _ s => RootTraversalComplete u s) ->
+    Hoare
+      (fun s: St => LoopInv u ∅ s)
+      (forset (edge_set u) (process_edge u W))
+      (fun _ s => RootPreMaybePop u s).
+  Proof.
+    intros Hchild Htraversal.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj with
+        (Q1 := fun _ s => LoopInv u (edge_set u) s).
+      - apply edge_loop_preserves_loop_inv_from_visit_contract.
+        exact Hchild.
+      - exact Htraversal. }
+    intros _ s [Hloop Htrav].
+      eapply edge_loop_post_to_root_pre_maybe_pop; eauto.
+  Qed.
+
   Lemma edge_loop_post_to_child_return_pre_maybe_pop
         (parent child: V) (done: V -> Prop)
         (s_before s: St):
     LoopInv child (edge_set child) s ->
+    RootTraversalComplete child s ->
     ParentFrameForChild parent child done s_before s ->
     ChildReturnPreMaybePop parent child done s_before s.
   Proof.
-    intros Hloop Hframe.
+    intros Hloop Htraversal Hframe.
     unfold ChildReturnPreMaybePop.
     split.
-    - apply loop_inv_to_root_pre_pop. exact Hloop.
+    - eapply edge_loop_post_to_root_pre_maybe_pop; eauto.
     - exact Hframe.
   Qed.
 
   (* maybe pop *)
+
+  Lemma partial_low_candidate_to_scc_low_tree
+        (u b: V) (s: St):
+    LoopCoreShape u (edge_set u) s ->
+    PartialLowCandidate u (edge_set u) s b ->
+    scc_low_tree s u b.
+  Proof.
+    intros Hshape Hcandidate.
+    destruct Hshape as [_ [_ [_ [_ [Hdone_vis _]]]]].
+    unfold scc_low_tree, scc_low_reachable.
+    unfold PartialLowCandidate in Hcandidate.
+    destruct Hcandidate as [Hb_eq_u | Htarget].
+    - subst b. exists u. split.
+      + apply Coq.Relations.Relation_Operators.rt_refl.
+      + left. reflexivity.
+    - unfold PartialActiveTarget in Htarget.
+      destruct Htarget as [Hdirect | Hsubtree].
+      + destruct Hdirect as
+          [a [Hdone_a [Hb_eq_a [Hedge [Hactive Hnot_tree]]]]].
+        subst b. exists u. split.
+        * apply Coq.Relations.Relation_Operators.rt_refl.
+        * right. unfold scc_back_edge. repeat split; auto.
+      + destruct Hsubtree as
+          [child [x [Hdone_child [Hedge_child
+            [Hfa_child [Hfane_child
+              [Hreach_child_x [Hedge_x_b [Hactive_b Hnot_tree]]]]]]]]].
+        assert (Hchild_vis: Visited child s).
+        { apply Hdone_vis. exact Hdone_child. }
+        assert (Htree_u_child: tree_edge s u child).
+        { unfold tree_edge.
+          eapply tree_step_char_backward; eauto. }
+        assert (Hreach_u_x:
+                  dg_reachable (state_to_dfs_tree g s root) u x).
+        { eapply dg_step_reachable_reachable; eauto. }
+        exists x. split; [exact Hreach_u_x |].
+        right. unfold scc_back_edge. repeat split; auto.
+  Qed.
+
+  Lemma scc_low_tree_target_lower_bound
+        (u target: V) (s: St):
+    LoopCoreShape u (edge_set u) s ->
+    RootLowCorrect u s ->
+    scc_low_tree s u target ->
+    low s u <= dfn s target.
+  Proof.
+    intros Hshape Hlow Htarget.
+    destruct Hshape as [Hwf [Htree_sound Hshape_rest]].
+    destruct Hlow as [_ Hcomplete].
+    unfold scc_low_tree, scc_low_reachable in Htarget.
+    destruct Htarget as [x [Hreach [Hx_eq_target | Hback]]].
+    - subst target.
+      assert (Hroot_candidate:
+                PartialLowCandidate u (edge_set u) s u).
+      { apply partial_low_candidate_root. }
+      pose proof (Hcomplete u Hroot_candidate) as Hlow_le_u.
+      pose proof (tree_reachable_dfn_monotone s u x Hwf Hreach)
+        as Hu_le_x.
+      lia.
+    - destruct Hback as [Hedge [Hactive Hnot_tree]].
+      assert (Hcandidate:
+                PartialLowCandidate u (edge_set u) s target).
+      { eapply tree_escape_to_child_candidate; eauto. }
+      apply Hcomplete. exact Hcandidate.
+  Qed.
+
+  Lemma root_low_correct_to_scc_is_low_v (u: V) (s: St):
+    LoopCoreShape u (edge_set u) s ->
+    RootLowCorrect u s ->
+    scc_is_low_v s u.
+  Proof.
+    intros Hshape Hlow.
+    pose proof Hlow as Hlow_all.
+    destruct Hlow as [[witness [Hcandidate Hlow_eq]] Hcomplete].
+    unfold scc_is_low_v, scc_is_low_v_val.
+    unfold min_value_of_subset.
+    exists witness. split.
+    - unfold min_object_of_subset. split.
+      + eapply partial_low_candidate_to_scc_low_tree; eauto.
+      + intros target Htarget.
+        rewrite <- Hlow_eq.
+        eapply scc_low_tree_target_lower_bound; eauto.
+    - symmetry. exact Hlow_eq.
+  Qed.
+
+  Lemma maybe_pop_skip_produces_root_final (u: V) (s: St):
+    RootSkipBranchPre u s ->
+    RootFinal u s.
+  Proof.
+    intros Hpre.
+    destruct Hpre as [[Hloop _] _].
+    destruct Hloop as [Haux [Hshape [Hclosed Hlow]]].
+    destruct Haux as [Hsettled _].
+    unfold RootFinal, RootAfterMaybePop.
+    split.
+    - destruct Hshape as [Hwf _]. exact Hwf.
+    - split; [exact Hsettled |].
+      split; [exact Hclosed |].
+      eapply root_low_correct_to_scc_is_low_v; eauto.
+  Qed.
+
+  Lemma stack_split_at_in_cases
+        (stk: list V) (u x: V) (popped rest: list V):
+    stack_split_at stk u = (popped, rest) ->
+    In x stk ->
+    In x popped \/ In x rest.
+  Proof.
+    revert u x popped rest.
+    induction stk as [| a stk IH]; intros u x popped rest Hsplit Hin.
+    - simpl in Hin. destruct Hin.
+    - simpl in Hsplit.
+      destruct (equiv_decb a u) eqn:Ha_u.
+      + inversion Hsplit. subst popped rest. simpl in Hin |- *.
+        destruct Hin as [Hx | Hin].
+        * left. left. exact Hx.
+        * right. exact Hin.
+      + destruct (stack_split_at stk u) as [popped' rest'] eqn:Hinner.
+        inversion Hsplit. subst popped rest. simpl in Hin |- *.
+        destruct Hin as [Hx | Hin].
+        * left. left. exact Hx.
+        * destruct (IH u x popped' rest' Hinner Hin) as [Hp | Hr].
+          -- left. right. exact Hp.
+          -- right. exact Hr.
+  Qed.
+
+  Lemma stack_split_at_in_original
+        (stk: list V) (u x: V) (popped rest: list V):
+    stack_split_at stk u = (popped, rest) ->
+    In x popped \/ In x rest ->
+    In x stk.
+  Proof.
+    revert u x popped rest.
+    induction stk as [| a stk IH]; intros u x popped rest Hsplit Hin.
+    - simpl in Hsplit. inversion Hsplit. subst popped rest.
+      destruct Hin as [Hin | Hin]; exact Hin.
+    - simpl in Hsplit.
+      destruct (equiv_decb a u) eqn:Ha_u.
+      + inversion Hsplit. subst popped rest. simpl in Hin |- *.
+        destruct Hin as [[Hx | Hin_nil] | Hin_rest].
+        * left. exact Hx.
+        * destruct Hin_nil.
+        * right. exact Hin_rest.
+      + destruct (stack_split_at stk u) as [popped' rest'] eqn:Hinner.
+        inversion Hsplit. subst popped rest. simpl in Hin |- *.
+        destruct Hin as [[Hx | Hin_popped] | Hin_rest].
+        * left. exact Hx.
+        * right. apply (IH u x popped' rest' Hinner).
+          left. exact Hin_popped.
+        * right. apply (IH u x popped' rest' Hinner).
+          right. exact Hin_rest.
+  Qed.
+
+  Lemma stack_split_at_popped_rest_disjoint
+        (stk: list V) (u x: V) (popped rest: list V):
+    stack_split_at stk u = (popped, rest) ->
+    NoDup stk ->
+    In x popped ->
+    In x rest ->
+    False.
+  Proof.
+    revert u x popped rest.
+    induction stk as [| a stk IH]; intros u x popped rest Hsplit Hnodup Hp Hr.
+    - simpl in Hsplit. inversion Hsplit. subst popped rest.
+      exact Hp.
+    - simpl in Hsplit.
+      inversion Hnodup as [| ? ? Ha_notin Hnodup_tail]. subst.
+      destruct (equiv_decb a u) eqn:Ha_u.
+      + inversion Hsplit. subst popped rest.
+        simpl in Hp.
+        destruct Hp as [Hx | []].
+        subst x. exact (Ha_notin Hr).
+      + destruct (stack_split_at stk u) as [popped' rest'] eqn:Hinner.
+        inversion Hsplit. subst popped rest'.
+        simpl in Hp.
+        destruct Hp as [Hx | Hpopped'].
+        * subst x.
+          apply Ha_notin.
+          exact (stack_split_at_in_original
+                   stk u a popped' rest Hinner (or_intror Hr)).
+        * eapply IH; eauto.
+  Qed.
+
+  Lemma stack_split_at_popped_of_not_rest
+        (stk: list V) (u x: V) (popped rest: list V):
+    stack_split_at stk u = (popped, rest) ->
+    In x stk ->
+    ~ In x rest ->
+    In x popped.
+  Proof.
+    intros Hsplit Hin Hnot_rest.
+    destruct (stack_split_at_in_cases stk u x popped rest Hsplit Hin)
+      as [Hpopped | Hrest].
+    - exact Hpopped.
+    - exfalso. exact (Hnot_rest Hrest).
+  Qed.
+
+  Lemma popped_segment_in_stack
+        (u: V) (s: St):
+    forall x, PoppedSegment u s x -> In x (stack s).
+  Proof.
+    intros x Hpopped.
+    unfold PoppedSegment in Hpopped.
+    destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+    apply (stack_split_at_in_original (stack s) u x popped rest Hsplit).
+    left. exact Hpopped.
+  Qed.
+
+  Lemma rest_stack_active
+        (u: V) (s: St):
+    forall x, RestStack u s x -> Active x s.
+  Proof.
+    intros x Hrest.
+    unfold RestStack in Hrest.
+    unfold Active.
+    destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+    apply (stack_split_at_in_original (stack s) u x popped rest Hsplit).
+    right. exact Hrest.
+  Qed.
+
+  Lemma loop_traversal_add_active_edge
+        (u v: V) (done: V -> Prop) (s: St):
+    LoopInv u done s ->
+    LoopTraversalComplete u done s ->
+    Edge u v ->
+    ~ done v ->
+    Visited v s ->
+    Active v s ->
+    LoopTraversalComplete u (done_after done v) s.
+  Proof.
+    intros Hinv [Hno Hcut] Hedge Hnot_done Hvis Hactive.
+    split.
+    - intros x y Hpopped Hxy Hnotvis_y.
+      destruct (Hno x y Hpopped Hxy Hnotvis_y) as [Hx Hnot_done_y].
+      split; [exact Hx |].
+      intros Hdone_after_y.
+      destruct (done_after_elim done v y Hdone_after_y)
+        as [Hdone_y | Hy_eq_v].
+      + exact (Hnot_done_y Hdone_y).
+      + subst y. exact (Hnotvis_y Hvis).
+    - intros x b Hpopped Hxb Hrest.
+      destruct (Hcut x b Hpopped Hxb Hrest) as
+        [[Hx Hnot_done_b] | [target [Hcandidate Hdfn]]].
+      + destruct (classic (b = v)) as [Hb_eq_v | Hb_ne_v].
+        * subst b. right. exists v. split.
+          -- apply partial_low_candidate_direct_active; auto.
+             eapply current_active_edge_not_tree; eauto.
+          -- lia.
+        * left. split; [exact Hx |].
+          intros Hdone_after_b.
+          destruct (done_after_elim done v b Hdone_after_b)
+            as [Hdone_b | Hb_eq_v].
+          -- exact (Hnot_done_b Hdone_b).
+          -- exact (Hb_ne_v Hb_eq_v).
+      + right. exists target. split; [| exact Hdfn].
+        apply partial_low_candidate_done_mono. exact Hcandidate.
+  Qed.
+
+  Lemma loop_traversal_add_inactive_edge
+        (u v: V) (done: V -> Prop) (s: St):
+    LoopTraversalComplete u done s ->
+    ~ done v ->
+    Visited v s ->
+    ~ Active v s ->
+    LoopTraversalComplete u (done_after done v) s.
+  Proof.
+    intros [Hno Hcut] Hnot_done Hvis Hnot_active.
+    split.
+    - intros x y Hpopped Hxy Hnotvis_y.
+      destruct (Hno x y Hpopped Hxy Hnotvis_y) as [Hx Hnot_done_y].
+      split; [exact Hx |].
+      intros Hdone_after_y.
+      destruct (done_after_elim done v y Hdone_after_y)
+        as [Hdone_y | Hy_eq_v].
+      + exact (Hnot_done_y Hdone_y).
+      + subst y. exact (Hnotvis_y Hvis).
+    - intros x b Hpopped Hxb Hrest.
+      destruct (Hcut x b Hpopped Hxb Hrest) as
+        [[Hx Hnot_done_b] | [target [Hcandidate Hdfn]]].
+      + destruct (classic (b = v)) as [Hb_eq_v | Hb_ne_v].
+        * subst b. exfalso.
+          apply Hnot_active.
+          eapply rest_stack_active; eauto.
+        * left. split; [exact Hx |].
+          intros Hdone_after_b.
+          destruct (done_after_elim done v b Hdone_after_b)
+            as [Hdone_b | Hb_eq_v].
+          -- exact (Hnot_done_b Hdone_b).
+          -- exact (Hb_ne_v Hb_eq_v).
+      + right. exists target. split; [| exact Hdfn].
+        apply partial_low_candidate_done_mono. exact Hcandidate.
+  Qed.
+
+  Lemma loop_traversal_complete_to_root_traversal_complete
+        (u: V) (s: St):
+    LoopTraversalComplete u (edge_set u) s ->
+    RootTraversalComplete u s.
+  Proof.
+    intros [Hno Hcut].
+    split.
+    - intros x y Hpopped Hedge Hnotvis.
+      destruct (Hno x y Hpopped Hedge Hnotvis) as [Hx Hnot_done].
+      subst x. exact (Hnot_done Hedge).
+    - intros x b Hpopped Hedge Hrest.
+      destruct (Hcut x b Hpopped Hedge Hrest) as
+        [[Hx Hnot_done] | [target [Hcandidate Hdfn]]].
+      + subst x. exfalso. exact (Hnot_done Hedge).
+      + exists target. split; [exact Hcandidate | exact Hdfn].
+  Qed.
+
+  Lemma process_edge_preserves_loop_traversal_complete
+        (u v: V) (done: V -> Prop) (W: RecProgram):
+    VisitChildTraversalContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv u done s /\
+         LoopTraversalComplete u done s /\
+         Edge u v /\
+         ~ done v)
+      (process_edge u W v)
+      (fun _ s => LoopTraversalComplete u (done_after done v) s).
+  Proof.
+    intros Hchild_traversal.
+    unfold process_edge, if_else.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_bind with
+        (Q := fun (_: unit) s =>
+                ParentRecursivePre u v done s /\
+                LoopTraversalComplete u done s).
+      + apply Hoare_conj with
+          (Q1 := fun _ s => ParentRecursivePre u v done s).
+        * eapply Hoare_conseq_pre.
+          2: apply set_fa_pending_prepares_parent_recursive_pre.
+          intros s1 [Hnotvis Hs1]. subst s1.
+          destruct H as [Hloop [_ [Hedge _]]].
+          exact (conj Hloop (conj Hedge Hnotvis)).
+        * eapply Hoare_conseq_pre.
+          2: apply set_fa_pending_preserves_loop_traversal_complete_cmd.
+          intros s1 [Hnotvis Hs1]. subst s1.
+          destruct H as [Hloop [Htraversal _]].
+          destruct Hloop as [_ [Hshape _]].
+          destruct Hshape as [_ [_ [_ [_ [Hdone_vis _]]]]].
+          exact (conj Hnotvis (conj Hdone_vis Htraversal)).
+      + simpl. intros _.
+        eapply Hoare_bind with
+          (Q := fun (_: unit) s =>
+                  LoopTraversalComplete u (done_after done v) s).
+        * eapply Hoare_conseq_post.
+          2: { apply Hchild_traversal. }
+          intros _ s [s_before [_ [_ [_ Htraversal_after]]]].
+          exact Htraversal_after.
+        * simpl. intros _.
+          apply get_low_update_low_preserves_loop_traversal_complete.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hvisited_by_classic Hs1]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: apply get_dfn_update_low_preserves_loop_traversal_complete.
+        intros s1 [Hactive Hs1]. subst s1.
+        destruct H as [Hloop [Htraversal [Hedge Hnot_done]]].
+        assert (Hvis: Visited v s0).
+        { unfold Visited. apply NNPP. exact Hvisited_by_classic. }
+        assert (Hactive': Active v s0).
+        { unfold Active. exact Hactive. }
+        eapply loop_traversal_add_active_edge; eauto.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        simpl. intros _ s [Heq Hnotactive]. subst s.
+        destruct H as [_ [Htraversal [_ Hnot_done]]].
+        assert (Hvis: Visited v s0).
+        { unfold Visited. apply NNPP. exact Hvisited_by_classic. }
+        assert (Hnotactive': ~ Active v s0).
+        { unfold Active. exact Hnotactive. }
+        eapply loop_traversal_add_inactive_edge; eauto.
+  Qed.
+
+  Lemma edge_loop_preserves_loop_inv_and_root_traversal_complete
+        (u: V) (W: RecProgram):
+    VisitChildContract W ->
+    VisitChildTraversalContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv u ∅ s /\
+         LoopTraversalComplete u ∅ s)
+      (forset (edge_set u) (process_edge u W))
+      (fun _ s =>
+         LoopInv u (edge_set u) s /\
+         RootTraversalComplete u s).
+  Proof.
+    intros Hchild Hchild_traversal.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_forset with
+        (P := fun done s =>
+                LoopInv u done s /\
+                LoopTraversalComplete u done s)
+        (universe := edge_set u).
+      - intros done1 done2 Hdone s1 s2 Heq. subst s2.
+        split; intros [Hloop Htraversal]; split.
+        + eapply loop_inv_done_equiv; eauto.
+        + eapply loop_traversal_complete_done_equiv; eauto.
+        + eapply loop_inv_done_equiv.
+          * symmetry. exact Hdone.
+          * exact Hloop.
+        + eapply loop_traversal_complete_done_equiv.
+          * symmetry. exact Hdone.
+          * exact Htraversal.
+      - intros done a _ Hedge Hnot_done.
+        apply Hoare_conj with
+          (Q1 := fun _ s => LoopInv u (done_after done a) s).
+        + eapply Hoare_conseq_pre.
+          2: {
+            eapply process_edge_preserves_loop_inv.
+            eapply Hoare_conseq_pre.
+            2: apply Hchild.
+            intros s [Hloop [Hedge' [Hentry [Hfa Hfane]]]].
+            unfold ParentRecursivePre.
+            exact (conj Hloop
+                    (conj Hedge'
+                      (conj Hentry
+                        (conj Hfa Hfane)))). }
+          intros s [Hloop _].
+          exact (conj Hloop (conj Hedge Hnot_done)).
+        + eapply Hoare_conseq_pre.
+          2: {
+            eapply process_edge_preserves_loop_traversal_complete.
+            exact Hchild_traversal. }
+          intros s [Hloop Htraversal].
+          exact (conj Hloop
+                  (conj Htraversal
+                    (conj Hedge Hnot_done))). }
+    intros _ s [Hloop Htraversal].
+    split; [exact Hloop |].
+    apply loop_traversal_complete_to_root_traversal_complete.
+    exact Htraversal.
+  Qed.
+
+  Lemma edge_loop_produces_root_traversal_complete
+        (u: V) (W: RecProgram):
+    VisitChildContract W ->
+    VisitChildTraversalContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv u ∅ s /\
+         LoopTraversalComplete u ∅ s)
+      (forset (edge_set u) (process_edge u W))
+      (fun _ s => RootTraversalComplete u s).
+  Proof.
+    intros Hchild Hchild_traversal.
+    eapply Hoare_conseq_post.
+    2: {
+      apply edge_loop_preserves_loop_inv_and_root_traversal_complete;
+        auto. }
+    intros _ s [_ Htraversal]. exact Htraversal.
+  Qed.
+
+  Lemma edge_loop_preserves_root_pre_maybe_pop_from_traversal_contract
+        (u: V) (W: RecProgram):
+    VisitChildContract W ->
+    VisitChildTraversalContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv u ∅ s /\
+         LoopTraversalComplete u ∅ s)
+      (forset (edge_set u) (process_edge u W))
+      (fun _ s => RootPreMaybePop u s).
+  Proof.
+    intros Hchild Hchild_traversal.
+    eapply Hoare_conseq_post.
+    2: {
+      apply edge_loop_preserves_loop_inv_and_root_traversal_complete;
+        auto. }
+    intros _ s [Hloop Htraversal].
+    eapply edge_loop_post_to_root_pre_maybe_pop; eauto.
+  Qed.
+
+  Lemma root_pre_pop_low_eq_derives_no_active_reach_with_traversal
+        (u: V) (s: St):
+    RootPrePop u s ->
+    RootTraversalComplete u s ->
+    low s u = dfn s u ->
+    PoppedSegmentNoActiveReach u s.
+  Proof.
+    intros Hpre Htraversal Hlow_eq.
+    destruct Hpre as [Hloop [_ Hrest_older]].
+    destruct Hloop as [Haux [Hshape [Hclosed [_ Hcomplete]]]].
+    destruct Haux as [_ [_ [_ [_ Hnodup]]]].
+    destruct Htraversal as [Hno_unvisited_step Htarget_cut].
+    unfold PoppedSegmentNoActiveReach.
+    intros x b Hpopped Hreach Hb_rest.
+    destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+    assert (Hpopped_in: In x popped).
+    { unfold PoppedSegment in Hpopped. rewrite Hsplit in Hpopped.
+      exact Hpopped. }
+    assert (Hb_rest_in: In b rest).
+    { unfold RestStack in Hb_rest. rewrite Hsplit in Hb_rest.
+      exact Hb_rest. }
+    assert (Hnot_b_popped: ~ In b popped).
+    { intros Hb_popped.
+      unfold StackNoDup in Hnodup.
+      eapply stack_split_at_popped_rest_disjoint; eauto. }
+    assert (Hnot_b_popped_seg: ~ PoppedSegment u s b).
+    { unfold PoppedSegment. rewrite Hsplit. exact Hnot_b_popped. }
+    destruct (dg_reachable_vertex_path g x b Hreach) as [path Hpath].
+    destruct (dg_vertex_path_exit_from_pred
+                g (fun z => PoppedSegment u s z) x b path
+                Hpopped Hnot_b_popped_seg Hpath)
+      as [a [c [Ha_popped [Hc_not_popped [Hstep_ac [Hreach_x_a Hreach_c_b]]]]]].
+    destruct (classic (Visited c s)) as [Hvis_c | Hnotvis_c].
+    - destruct (classic (In c (stack s))) as [Hc_stack | Hc_not_stack].
+      + destruct (stack_split_at_in_cases
+                    (stack s) u c popped rest Hsplit Hc_stack)
+          as [Hc_popped | Hc_rest].
+        * exfalso. apply Hc_not_popped.
+          unfold PoppedSegment. rewrite Hsplit. exact Hc_popped.
+        * destruct (Htarget_cut a c Ha_popped Hstep_ac) as
+            [target [Hcandidate Htarget_le_c]].
+          { unfold RestStack. rewrite Hsplit. exact Hc_rest. }
+          assert (Hc_lt_u: dfn s c < dfn s u).
+          { apply Hrest_older.
+            unfold RestStack. rewrite Hsplit. exact Hc_rest. }
+          pose proof (Hcomplete target Hcandidate) as Hlow_le_target.
+          rewrite Hlow_eq in Hlow_le_target. lia.
+      + assert (Hb_active: Active b s).
+        { unfold Active.
+          apply (stack_split_at_in_original
+                   (stack s) u b popped rest Hsplit).
+          right. exact Hb_rest_in. }
+        exact (Hclosed c b Hvis_c Hc_not_stack Hreach_c_b Hb_active).
+    - eapply Hno_unvisited_step; eauto.
+  Qed.
+
+  Lemma root_pre_pop_low_eq_derives_popped_segment_closed_with_traversal
+        (u: V) (s: St):
+    RootPrePop u s ->
+    RootTraversalComplete u s ->
+    low s u = dfn s u ->
+    PoppedSegmentClosed u s.
+  Proof.
+    intros Hpre Htraversal Hlow_eq.
+    pose proof
+      (root_pre_pop_low_eq_derives_no_active_reach_with_traversal
+         u s Hpre Htraversal Hlow_eq) as Hno_active_reach.
+    destruct Hpre as [Hloop _].
+    destruct Hloop as [Haux [Hshape _]].
+    destruct Haux as [Hsettled _].
+    destruct Hshape as [Hwf _].
+    destruct Hwf as [Hstack_vis _].
+    destruct Htraversal as [Hno_unvisited_step _].
+    unfold PoppedSegmentClosed.
+    intros x y Hpopped Hreach.
+    destruct (classic (Visited y s)) as [Hvis_y | Hnotvis_y].
+    - exact Hvis_y.
+    - exfalso.
+      assert (Hx_stack: In x (stack s)).
+      { eapply popped_segment_in_stack; eauto. }
+      assert (Hx_vis: Visited x s).
+      { apply Hstack_vis. exact Hx_stack. }
+      destruct (dg_reachable_vertex_path g x y Hreach) as [path Hpath].
+      destruct (dg_vertex_path_last_exit_from_pred
+                  g (fun z => Visited z s) x y path
+                  Hx_vis Hnotvis_y Hpath)
+        as [a [b [suffix
+          [Hvis_a [Hnotvis_b [Hstep_ab [Hreach_x_a [_ _]]]]]]]].
+      destruct (classic (In a (stack s))) as [Ha_stack | Ha_not_stack].
+      + destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+        destruct (stack_split_at_in_cases
+                    (stack s) u a popped rest Hsplit Ha_stack)
+          as [Ha_popped | Ha_rest].
+        * apply (Hno_unvisited_step a b).
+          -- unfold PoppedSegment. rewrite Hsplit. exact Ha_popped.
+          -- exact Hstep_ab.
+          -- exact Hnotvis_b.
+        * eapply Hno_active_reach.
+          -- exact Hpopped.
+          -- exact Hreach_x_a.
+          -- unfold RestStack. rewrite Hsplit. exact Ha_rest.
+      + apply Hnotvis_b.
+        unfold NoUnvisitedReach, settled_closed in Hsettled.
+        apply (Hsettled a b).
+        * exact Hvis_a.
+        * exact Ha_not_stack.
+        * apply dg_reachable_step. exact Hstep_ab.
+  Qed.
+
+  Lemma root_pre_pop_low_eq_derives_pop_cuts_with_traversal
+        (u: V) (s: St):
+    RootPrePop u s ->
+    RootTraversalComplete u s ->
+    low s u = dfn s u ->
+    RootPopCuts u s.
+  Proof.
+    intros Hpre Htraversal Hlow_eq.
+    split.
+    - eapply root_pre_pop_low_eq_derives_popped_segment_closed_with_traversal;
+        eauto.
+    - eapply root_pre_pop_low_eq_derives_no_active_reach_with_traversal;
+        eauto.
+  Qed.
+
+  Lemma root_pre_maybe_pop_low_eq_derives_pop_cuts
+        (u: V) (s: St):
+    RootPreMaybePop u s ->
+    low s u = dfn s u ->
+    RootPopCuts u s.
+  Proof.
+    intros [Hroot Htraversal] Hlow_eq.
+    eapply root_pre_pop_low_eq_derives_pop_cuts_with_traversal; eauto.
+  Qed.
+
+  Lemma pop_scc_restores_no_unvisited_reach (u: V):
+    Hoare
+      (fun s: St => NoUnvisitedReach s /\ PoppedSegmentClosed u s)
+      (pop_scc u)
+      (fun _ s => NoUnvisitedReach s).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 [Hsettled Hpopped_closed] Hexec.
+    unfold pop_scc in Hexec.
+    unfold update', update in Hexec.
+    sets_unfold in Hexec.
+    simpl in Hexec.
+    subst s2.
+    unfold NoUnvisitedReach, settled_closed in *.
+    unfold pop_scc_state. simpl.
+    destruct (stack_split_at (stack s1) u) as [popped rest] eqn:Hsplit.
+    simpl.
+    intros v w Hvis Hnot_rest Hreach.
+    destruct (classic (In v (stack s1))) as [Hv_stack | Hv_not_stack].
+    - assert (Hv_popped: In v popped).
+      { eapply stack_split_at_popped_of_not_rest; eauto. }
+      assert (Hv_popped_seg: PoppedSegment u s1 v).
+      { unfold PoppedSegment. rewrite Hsplit. exact Hv_popped. }
+      exact (Hpopped_closed v w Hv_popped_seg Hreach).
+    - exact (Hsettled v w Hvis Hv_not_stack Hreach).
+  Qed.
+
+  Lemma pop_scc_restores_closed (u: V):
+    Hoare
+      (fun s: St =>
+         Closed s /\
+         PoppedSegmentNoActiveReach u s)
+      (pop_scc u)
+      (fun _ s => Closed s).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 [Hclosed Hno_active_reach] Hexec.
+    unfold pop_scc in Hexec.
+    unfold update', update in Hexec.
+    sets_unfold in Hexec.
+    simpl in Hexec.
+    subst s2.
+    unfold Closed, Active, Visited in *.
+    unfold pop_scc_state. simpl.
+    destruct (stack_split_at (stack s1) u) as [popped rest] eqn:Hsplit.
+    simpl.
+    intros v b Hvis Hnot_rest Hreach Hb_rest.
+    assert (Hb_stack: In b (stack s1)).
+    { apply (stack_split_at_in_original
+               (stack s1) u b popped rest Hsplit).
+      right. exact Hb_rest. }
+    destruct (classic (In v (stack s1))) as [Hv_stack | Hv_not_stack].
+    - assert (Hv_popped: In v popped).
+      { eapply stack_split_at_popped_of_not_rest; eauto. }
+      assert (Hv_popped_seg: PoppedSegment u s1 v).
+      { unfold PoppedSegment. rewrite Hsplit. exact Hv_popped. }
+      assert (Hb_rest_seg: RestStack u s1 b).
+      { unfold RestStack. rewrite Hsplit. exact Hb_rest. }
+      exact (Hno_active_reach v b Hv_popped_seg Hreach Hb_rest_seg).
+    - exact (Hclosed v b Hvis Hv_not_stack Hreach Hb_stack).
+  Qed.
+
+  Lemma root_pop_branch_pre_scc_is_low_after_pop_state
+        (u: V) (s: St):
+    RootPopBranchPre u s ->
+    scc_is_low_v (pop_scc_state s u) u.
+  Proof.
+    intros Hpre.
+    destruct Hpre as [[Hloop _] Hlow_eq].
+    destruct Hloop as [_ [Hshape [_ Hlow]]].
+    destruct Hshape as [Hwf [Htree_sound Hshape_rest]].
+    destruct Hlow as [_ Hcomplete].
+    unfold scc_is_low_v, scc_is_low_v_val.
+    unfold min_value_of_subset.
+    exists u. split.
+    - unfold min_object_of_subset. split.
+      + unfold scc_low_tree, scc_low_reachable.
+        unfold pop_scc_state.
+        destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+        simpl. exists u. split.
+        * apply Coq.Relations.Relation_Operators.rt_refl.
+        * left. reflexivity.
+      + intros target Htarget.
+        unfold pop_scc_state in Htarget |- *.
+        destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+        simpl in Htarget |- *.
+        unfold scc_low_tree, scc_low_reachable in Htarget.
+        destruct Htarget as [x [Hreach [Hx_eq_target | Hback]]].
+        * subst target.
+          eapply tree_reachable_dfn_monotone; eauto.
+        * destruct Hback as [Hedge [Hactive_post Hnot_tree_post]].
+          assert (Hactive_pre: Active target s).
+          { unfold Active.
+            apply (stack_split_at_in_original
+                     (stack s) u target popped rest Hsplit).
+            right. exact Hactive_post. }
+          assert (Hnot_tree_pre: ~ tree_edge s x target).
+          { intros Htree_pre. exact (Hnot_tree_post Htree_pre). }
+          assert (Hcandidate:
+                    PartialLowCandidate u (edge_set u) s target).
+          { eapply tree_escape_to_child_candidate; eauto. }
+          pose proof (Hcomplete target Hcandidate) as Hbound.
+          lia.
+    - unfold pop_scc_state.
+      destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+      simpl. symmetry. exact Hlow_eq.
+  Qed.
+
+  Lemma pop_scc_root_pop_branch_preserves_scc_is_low_v (u: V):
+    Hoare
+      (RootPopBranchPre u)
+      (pop_scc u)
+      (fun _ s => scc_is_low_v s u).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 Hpre Hexec.
+    unfold pop_scc in Hexec.
+    unfold update', update in Hexec.
+    sets_unfold in Hexec.
+    simpl in Hexec. subst s2.
+    apply root_pop_branch_pre_scc_is_low_after_pop_state.
+    exact Hpre.
+  Qed.
+
+  Lemma maybe_pop_pop_produces_root_final_from_pop_cuts (u: V):
+    Hoare
+      (RootPopBranchWithCuts u)
+      (pop_scc u)
+      (fun _ s => RootFinal u s).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 [Hroot [Hpopped_closed Hno_active]] Hexec.
+    destruct Hroot as [[Hloop Hstack_rest] Hlow_eq].
+    pose proof Hloop as Hloop_all.
+    destruct Hloop as [Haux [Hshape [Hclosed Hlow]]].
+    destruct Haux as [Hsettled _].
+    destruct Hshape as [Hwf _].
+    unfold RootFinal, RootAfterMaybePop.
+    split.
+    - pose proof (pop_scc_preserves_wf_scc_state g root u) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Hwf Hexec).
+    - split.
+      + pose proof (pop_scc_restores_no_unvisited_reach u) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s1 retv s2
+                      (conj Hsettled Hpopped_closed) Hexec).
+      + split.
+        * pose proof (pop_scc_restores_closed u) as Hhoare.
+          unfold Hoare in Hhoare.
+          exact (Hhoare s1 retv s2
+                        (conj Hclosed Hno_active) Hexec).
+        * pose proof (pop_scc_root_pop_branch_preserves_scc_is_low_v u)
+            as Hhoare.
+          unfold Hoare in Hhoare.
+          exact (Hhoare s1 retv s2
+                        (conj (conj Hloop_all Hstack_rest) Hlow_eq)
+                        Hexec).
+  Qed.
+
+  Lemma maybe_pop_produces_root_final (u: V):
+    Hoare
+      (RootPreMaybePop u)
+      (If (fun s => low s u = dfn s u) (pop_scc u))
+      (fun _ s => RootFinal u s).
+  Proof.
+    unfold If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_conseq_pre.
+      2: apply maybe_pop_pop_produces_root_final_from_pop_cuts.
+      intros s1 [Hcond Hs1]. subst s1.
+      destruct H as [Hroot Htraversal].
+      destruct (root_pre_maybe_pop_low_eq_derives_pop_cuts
+                  u _ (conj Hroot Htraversal) Hcond)
+        as [Hpopped_closed Hno_active].
+      exact (conj (conj Hroot Hcond)
+              (conj Hpopped_closed Hno_active)).
+    - eapply Hoare_conseq_post.
+      2: { apply Hoare_assume_s. }
+      simpl. intros _ s [Heq Hnot_cond]. subst s.
+      destruct H as [Hroot _].
+      apply maybe_pop_skip_produces_root_final.
+      unfold RootSkipBranchPre.
+      exact (conj Hroot Hnot_cond).
+  Qed.
+
+  Theorem tarjan_scc_f_produces_root_final_from_traversal_contract
+        (W: RecProgram) (u: V):
+    VisitChildContract W ->
+    VisitChildTraversalContract W ->
+    Hoare
+      (EntryPre u)
+      (tarjan_scc_f g W u)
+      (fun _ s => RootFinal u s).
+  Proof.
+    intros Hchild Hchild_traversal.
+    unfold tarjan_scc_f.
+    eapply Hoare_bind.
+    { apply preloop_initializes_edge_loop_pre. }
+    simpl. intros _.
+    eapply Hoare_bind.
+    { apply edge_loop_preserves_root_pre_maybe_pop_from_traversal_contract;
+        auto. }
+    simpl. intros _.
+    apply maybe_pop_produces_root_final.
+  Qed.
+
+  Theorem tarjan_scc_f_produces_root_final
+        (W: RecProgram) (u: V):
+    VisitContract W ->
+    Hoare
+      (EntryPre u)
+      (tarjan_scc_f g W u)
+      (fun _ s => RootFinal u s).
+  Proof.
+    intros [_ [Hchild [Hchild_traversal _]]].
+    apply tarjan_scc_f_produces_root_final_from_traversal_contract; auto.
+  Qed.
   
 End IS_LOW.

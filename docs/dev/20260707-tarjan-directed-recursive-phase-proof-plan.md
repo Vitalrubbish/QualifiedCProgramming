@@ -20,6 +20,7 @@ tarjan_scc_f_preserves_visit_contract:
 VisitContract W :=
   VisitMainContract W /\
   VisitChildContract W /\
+  VisitChildTraversalContract W /\
   VisitFrameContract W.
 ```
 
@@ -528,23 +529,67 @@ rest_stack_below_root:
 
 ## 10. 阶段 3b：构造 `ChildReturnPreMaybePop`
 
-状态：`[done]`，已实现 `edge_loop_post_to_child_return_pre_maybe_pop`，只复用阶段 3 的 `loop_inv_to_root_pre_pop` 并合并 `ParentFrameForChild`。
+状态：`[done]`，已实现 `edge_loop_post_to_child_return_pre_maybe_pop`，复用阶段 3/3c 的 `edge_loop_post_to_root_pre_maybe_pop` 并合并 `ParentFrameForChild`。
 
 目标：
 
 ```coq
 edge_loop_post_to_child_return_pre_maybe_pop:
   LoopInv child (edge_set child) s ->
+  RootTraversalComplete child s ->
   ParentFrameForChild parent child done s_before s ->
   ChildReturnPreMaybePop parent child done s_before s.
 ```
 
 证明：
 
-1. 用阶段 9 得到 `RootPrePop child s`。
+1. 用阶段 3/3c 得到 `RootPreMaybePop child s`。
 2. 合并 `ParentFrameForChild parent child done s_before s`。
 
 这个 theorem 应该只是组合，不应引入新的数学事实。
+
+## 10a. 阶段 3c：edge loop 后桥接到 `RootPreMaybePop`
+
+状态：`[done]`，已实现 `RootPreMaybePop`、`edge_loop_post_to_root_pre_maybe_pop`、旧接口版 `edge_loop_preserves_root_pre_maybe_pop_from_visit_contract`，以及真正使用 traversal loop invariant 的 `edge_loop_preserves_root_pre_maybe_pop_from_traversal_contract`。
+
+目标接口：
+
+```coq
+RootPreMaybePop u s :=
+  RootPrePop u s /\
+  RootTraversalComplete u s.
+
+edge_loop_preserves_root_pre_maybe_pop_from_visit_contract:
+  VisitChildContract W ->
+  Hoare
+    (fun s => LoopInv u ∅ s)
+    (forset (edge_set u) (process_edge u W))
+    (fun _ s => RootTraversalComplete u s) ->
+  Hoare
+    (fun s => LoopInv u ∅ s)
+    (forset (edge_set u) (process_edge u W))
+    (fun _ s => RootPreMaybePop u s).
+```
+
+其中 `RootTraversalComplete` 的 Hoare 证明是后续 edge-loop completion 子阶段；不能从 `RootPrePop` 反推。
+当前 `RootTraversalComplete` 不再包含无条件的
+`PoppedSegmentClosed`，而是拆为 `PoppedSegmentNoUnvisitedStep` 和
+`PoppedSegmentRestTargetCut`。完整 `RootPopCuts` 只在 maybe-pop 的
+`low[u] = dfn[u]` 分支中由这两个弱 cut 与 `RootPrePop` 推出。
+
+edge-loop completion 已采用单独的 proof-only traversal invariant：
+
+```coq
+LoopTraversalComplete u done s :=
+  LoopNoUnvisitedStep u done s /\
+  LoopRestTargetCut u done s.
+```
+
+其中 pending case 只允许来自尚未处理的 root outgoing edge；当
+`done = edge_set u` 时 pending case 被 `Edge u v` 消去，得到
+`RootTraversalComplete u s`。unvisited tree-child 分支不把 traversal
+塞进 `LoopInv`，而是通过单独的 `VisitChildTraversalContract W`
+接收递归调用已经合并好的 parent traversal。
 
 ## 11. 阶段 4：maybe_pop 产生当前调用 `RootFinal`
 
@@ -553,7 +598,7 @@ edge_loop_post_to_child_return_pre_maybe_pop:
 ```coq
 maybe_pop_produces_root_final:
   Hoare
-    (RootPrePop u)
+    (RootPreMaybePop u)
     (If (fun s => low s u = dfn s u) (pop_scc u))
     (fun _ s => RootFinal u s).
 ```
@@ -610,7 +655,7 @@ ChildNoActiveTarget child s_after.
 maybe_pop_preserves_nested_parent_frame:
   Hoare
     (fun s =>
-       RootPrePop next s /\
+       RootPreMaybePop next s /\
        ParentFrameForChild ancestor current ancestor_done s_before s /\
        NestedFrameDisjoint ancestor current loop_root ancestor_done s)
     (If (fun s => low s next = dfn s next) (pop_scc next))
@@ -631,6 +676,8 @@ maybe_pop_preserves_nested_parent_frame:
 
 ## 14. 阶段 5：组合当前调用主线
 
+状态：`[done]`，已实现 `preloop_initializes_loop_traversal_complete_empty`、合取入口 `preloop_initializes_edge_loop_pre`，并组合出当前调用主线 `tarjan_scc_f_produces_root_final`。
+
 目标：
 
 ```coq
@@ -644,12 +691,12 @@ tarjan_scc_f_produces_root_final:
 
 组合顺序：
 
-1. `preloop_initializes_loop_inv`
-2. `edge_loop_preserves_loop_inv_from_visit_contract`
-3. `loop_inv_derives_stack_rest_older_than_root`
+1. `preloop_initializes_edge_loop_pre`，同时产出 `LoopInv u ∅` 和 `LoopTraversalComplete u ∅`。
+2. `edge_loop_preserves_root_pre_maybe_pop_from_traversal_contract`
+3. `edge_loop` 内部由 `LoopTraversalComplete u done` 的 `Hoare_forset` 提升产出 `RootPreMaybePop`。
 4. `maybe_pop_produces_root_final`
 
-只使用 `VisitChildContract W`，不需要 parent frame。
+只使用 `VisitChildContract W` 与 `VisitChildTraversalContract W`；不需要 parent frame。
 
 ## 15. 阶段 5b：组合 immediate-child 返回线
 
@@ -672,8 +719,11 @@ tarjan_scc_f_produces_child_contribution:
 
 1. `preloop_establishes_parent_frame_for_child`
 2. `edge_loop_preserves_parent_frame_for_child`
-3. `edge_loop_post_to_child_return_pre_maybe_pop`
-4. `maybe_pop_produces_child_contribution`
+3. `RootTraversalComplete child` 的 edge-loop completion 子证明，即证明
+   `PoppedSegmentNoUnvisitedStep child` 与
+   `PoppedSegmentRestTargetCut child`
+4. `edge_loop_post_to_child_return_pre_maybe_pop`
+5. `maybe_pop_produces_child_contribution`
 5. 包装 existential postcondition。
 
 这里同时使用 `VisitChildContract W` 和 `VisitFrameContract W`。
@@ -739,12 +789,15 @@ tarjan_scc_satisfies_visit_contract:
 8. `[done]` 泛化并证明 `edge_loop_preserves_nested_parent_frame`。对应阶段 2c；强循环断言携带 `NestedFrameDisjoint ancestor current loop_root ancestor_done`，并已补 `preloop_preserves_nested_parent_context` 作为入口桥接。
 9. `[done]` 证明 `loop_inv_derives_stack_rest_older_than_root`，并补充 `edge_loop_post_to_root_pre_pop` / `loop_inv_to_root_pre_pop` 作为阶段 3 桥接。
 10. `[done]` 证明 `edge_loop_post_to_child_return_pre_maybe_pop`。
-11. 回到 maybe_pop 计划，证明 `maybe_pop_produces_root_final`。
-12. 证明 `maybe_pop_produces_child_contribution`。
-13. 证明 `maybe_pop_preserves_nested_parent_frame`。
-14. 组合三条 `tarjan_scc_f_*` pipeline。
-15. 组合 `tarjan_scc_f_preserves_visit_contract`。
-16. 最后关闭 `tarjan_scc_satisfies_visit_contract`。
+11. `[done]` 补充 `RootPreMaybePop` 和 `edge_loop_preserves_root_pre_maybe_pop_from_visit_contract`。
+12. `[done]` 回到 maybe_pop 计划，证明 `maybe_pop_produces_root_final`。
+13. `[done]` 证明 edge-loop completion 产出新的 `RootTraversalComplete` 两个弱字段。实现为 `LoopTraversalComplete u done` 的 `Hoare_forset` 提升，并由 `loop_traversal_complete_to_root_traversal_complete` 在 `done = edge_set u` 时消去 pending case。
+14. `[done]` 证明 preloop 初始化 `LoopTraversalComplete u ∅`，并组合当前调用主线 `tarjan_scc_f_produces_root_final`。
+15. 证明 `maybe_pop_produces_child_contribution`。
+16. 证明 `maybe_pop_preserves_nested_parent_frame`。
+17. 组合剩余 child contribution / nested frame 两条 `tarjan_scc_f_*` pipeline。
+18. 组合 `tarjan_scc_f_preserves_visit_contract`。
+19. 最后关闭 `tarjan_scc_satisfies_visit_contract`。
 
 ## 19. 阻塞条件
 
