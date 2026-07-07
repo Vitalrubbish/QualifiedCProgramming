@@ -5120,6 +5120,104 @@ Section IS_LOW.
                     (conj Hedge Hnot_done)))).
   Qed.
 
+  Lemma rest_stack_below_root (u b: V) (s: St):
+    Active u s ->
+    RestStack u s b ->
+    exists l1 l2,
+      stack s = l1 ++ u :: l2 /\ In b l2.
+  Proof.
+    unfold Active, RestStack.
+    intros Hu_active Hb_rest.
+    destruct (stack_split_at (stack s) u) as [popped rest] eqn:Hsplit.
+    simpl in Hb_rest.
+    destruct (stack_split_at_decomp
+                (stack s) u Hu_active popped rest Hsplit)
+      as [prefix Hstk].
+    exists prefix, rest.
+    exact (conj Hstk Hb_rest).
+  Qed.
+
+  Lemma stack_rest_member_ne_root
+        (u b: V) (s: St) (l1 l2: list V):
+    StackNoDup s ->
+    stack s = l1 ++ u :: l2 ->
+    In b l2 ->
+    u <> b.
+  Proof.
+    intros Hnodup Hstk Hb_in Hu_eq_b.
+    subst b.
+    unfold StackNoDup in Hnodup.
+    rewrite Hstk in Hnodup.
+    apply NoDup_remove_2 in Hnodup.
+    apply Hnodup.
+    rewrite List.in_app_iff.
+    right. exact Hb_in.
+  Qed.
+
+  Lemma loop_inv_derives_stack_rest_older_than_root
+        (u: V) (s: St):
+    LoopInv u (edge_set u) s ->
+    StackRestOlderThanRoot u s.
+  Proof.
+    intros Hinv.
+    destruct Hinv as [Haux [Hshape _]].
+    destruct Haux as [_ [Hu_active [Hstack_order [Hdfn_inj Hnodup]]]].
+    destruct Hshape as [Hwf _].
+    unfold wf_scc_state in Hwf.
+    destruct Hwf as [Hstack_vis [Hdfn_inv [Hdfn_valid Hfa_vis]]].
+    unfold StackRestOlderThanRoot.
+    split; [exact Hu_active |].
+    intros b Hb_rest.
+    destruct (rest_stack_below_root u b s Hu_active Hb_rest)
+      as [l1 [l2 [Hstk Hb_in_l2]]].
+    assert (Hb_active: Active b s).
+    { unfold Active. rewrite Hstk.
+      rewrite List.in_app_iff.
+      right. simpl. right. exact Hb_in_l2. }
+    assert (Habove:
+              exists l1' l2',
+                stack s = l1' ++ u :: l2' /\ In b l2').
+    { exists l1, l2. exact (conj Hstk Hb_in_l2). }
+    assert (Hu_ne_b: u <> b).
+    { eapply stack_rest_member_ne_root; eauto. }
+    eapply stack_dfn_order_strict; eauto.
+  Qed.
+
+  Lemma edge_loop_post_to_root_pre_pop (u: V) (s: St):
+    LoopInv u (edge_set u) s ->
+    StackRestOlderThanRoot u s ->
+    RootPrePop u s.
+  Proof.
+    intros Hloop Hstack_rest.
+    unfold RootPrePop.
+    exact (conj Hloop Hstack_rest).
+  Qed.
+
+  Lemma loop_inv_to_root_pre_pop (u: V) (s: St):
+    LoopInv u (edge_set u) s ->
+    RootPrePop u s.
+  Proof.
+    intros Hloop.
+    apply edge_loop_post_to_root_pre_pop.
+    - exact Hloop.
+    - apply loop_inv_derives_stack_rest_older_than_root.
+      exact Hloop.
+  Qed.
+
+  Lemma edge_loop_post_to_child_return_pre_maybe_pop
+        (parent child: V) (done: V -> Prop)
+        (s_before s: St):
+    LoopInv child (edge_set child) s ->
+    ParentFrameForChild parent child done s_before s ->
+    ChildReturnPreMaybePop parent child done s_before s.
+  Proof.
+    intros Hloop Hframe.
+    unfold ChildReturnPreMaybePop.
+    split.
+    - apply loop_inv_to_root_pre_pop. exact Hloop.
+    - exact Hframe.
+  Qed.
+
   (* maybe pop *)
   
 End IS_LOW.

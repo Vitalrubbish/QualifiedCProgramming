@@ -491,6 +491,8 @@ edge_loop_preserves_external_parent_frame:
 
 ## 9. 阶段 3：edge loop 后桥接到 `RootPrePop`
 
+状态：`[done]`，已实现 `rest_stack_below_root`、`loop_inv_derives_stack_rest_older_than_root`、`edge_loop_post_to_root_pre_pop` 和便于后续组合的 `loop_inv_to_root_pre_pop`。
+
 定义展开 theorem：
 
 ```coq
@@ -525,6 +527,8 @@ rest_stack_below_root:
 ```
 
 ## 10. 阶段 3b：构造 `ChildReturnPreMaybePop`
+
+状态：`[done]`，已实现 `edge_loop_post_to_child_return_pre_maybe_pop`，只复用阶段 3 的 `loop_inv_to_root_pre_pop` 并合并 `ParentFrameForChild`。
 
 目标：
 
@@ -733,8 +737,8 @@ tarjan_scc_satisfies_visit_contract:
 6. `[done]` 证明 `process_edge_preserves_parent_frame_for_child`。对应阶段 2b 的单边保持 theorem；已通过 `set_fa_pending_prepares_nested_frame_pre` 将 unvisited grandchild 分支桥接到 `VisitFrameContract`。
 7. `[done]` 证明 `edge_loop_preserves_parent_frame_for_child`。对应阶段 2b 的 `Hoare_forset` 提升；循环断言为 `LoopInv child current_done s /\ ParentFrameForChild parent child done s_before s`。
 8. `[done]` 泛化并证明 `edge_loop_preserves_nested_parent_frame`。对应阶段 2c；强循环断言携带 `NestedFrameDisjoint ancestor current loop_root ancestor_done`，并已补 `preloop_preserves_nested_parent_context` 作为入口桥接。
-9. 证明 `loop_inv_derives_stack_rest_older_than_root`。
-10. 证明 `edge_loop_post_to_child_return_pre_maybe_pop`。
+9. `[done]` 证明 `loop_inv_derives_stack_rest_older_than_root`，并补充 `edge_loop_post_to_root_pre_pop` / `loop_inv_to_root_pre_pop` 作为阶段 3 桥接。
+10. `[done]` 证明 `edge_loop_post_to_child_return_pre_maybe_pop`。
 11. 回到 maybe_pop 计划，证明 `maybe_pop_produces_root_final`。
 12. 证明 `maybe_pop_produces_child_contribution`。
 13. 证明 `maybe_pop_preserves_nested_parent_frame`。
