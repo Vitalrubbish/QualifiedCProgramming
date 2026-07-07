@@ -13,7 +13,7 @@ preloop u
 目标是从入口前提建立邻居循环的初始不变量：
 
 ```coq
-PreloopInitializesLoopInv:
+preloop_initializes_loop_inv:
   Hoare (EntryPre u)
         (preloop u)
         (fun _ s => LoopInv u ∅ s).
@@ -97,7 +97,7 @@ StackNoDup s
 目标形状：
 
 ```coq
-PreloopProducesLoopCoreShape:
+preloop_produces_loop_core_shape:
   Hoare (EntryPre u)
         (preloop u)
         (fun _ s => LoopCoreShape u ∅ s).
@@ -161,7 +161,7 @@ forall a, ∅ a -> Visited a s
 目标：
 
 ```coq
-PreloopPreservesClosed:
+preloop_preserves_closed:
   Hoare
     (fun s =>
        wf_scc_state_pre g root u s /\
@@ -196,7 +196,7 @@ False
 目标：
 
 ```coq
-PreloopProducesLowCorrectEmpty:
+preloop_produces_low_correct_empty:
   Hoare (fun s => True)
         (preloop u)
         (fun _ s => LowCorrect u ∅ s).
@@ -219,7 +219,7 @@ preloop_low_eq_dfn:
 然后复用当前已存在的纯 lemma：
 
 ```coq
-LowCorrect_empty:
+low_correct_empty:
   low s u = dfn s u ->
   LowCorrect u ∅ s.
 ```
@@ -243,7 +243,7 @@ PartialLowCandidate u ∅ s b
 目标：
 
 ```coq
-PreloopProducesLoopAuxFacts:
+preloop_produces_loop_aux_facts:
   Hoare (EntryPre u)
         (preloop u)
         (fun _ s => LoopAuxFacts u s).
@@ -309,7 +309,7 @@ preloop_preserves_stack_nodup:
 最终组合：
 
 ```coq
-PreloopInitializesLoopInv:
+preloop_initializes_loop_inv:
   Hoare (EntryPre u)
         (preloop u)
         (fun _ s => LoopInv u ∅ s).
@@ -320,13 +320,13 @@ PreloopInitializesLoopInv:
 ```coq
 unfold LoopInv.
 apply Hoare_conj.
-- apply PreloopProducesLoopAuxFacts.
+- apply preloop_produces_loop_aux_facts.
 - unfold LoopCoreInv.
   apply Hoare_conj.
-  + apply PreloopProducesLoopCoreShape.
+  + apply preloop_produces_loop_core_shape.
   + apply Hoare_conj.
-    * apply PreloopPreservesClosed.
-    * apply PreloopProducesLowCorrectEmpty.
+    * apply preloop_preserves_closed.
+    * apply preloop_produces_low_correct_empty.
 ```
 
 实际 Coq 中可能需要使用 `Hoare_conseq_pre` 从 `EntryPre` 投影各子 lemma 的前提。
@@ -336,10 +336,10 @@ apply Hoare_conj.
 1. 证明 `preloop_low_eq_dfn`。
 2. 证明 `preloop_preserves_stack_nodup`。
 3. 证明 `preloop_preserves_tree_edges_are_graph_edges`。
-4. 证明 `PreloopPreservesClosed`。
-5. 组合 `PreloopProducesLoopCoreShape`。
-6. 组合 `PreloopProducesLoopAuxFacts`。
-7. 最后证明 `PreloopInitializesLoopInv`。
+4. 证明 `preloop_preserves_closed`。
+5. 组合 `preloop_produces_loop_core_shape`。
+6. 组合 `preloop_produces_loop_aux_facts`。
+7. 最后证明 `preloop_initializes_loop_inv`。
 
 这个顺序能先解决纯状态计算和 frame facts，再进入 `Closed` 这种路径性质。
 
@@ -348,7 +348,7 @@ apply Hoare_conj.
 1. `TreeEdgesAreGraphEdges` 的证明必须认真区分旧 visited 点和新点 `u`。不要试图从 `wf_scc_state` 推出 tree edge 是原图边；`wf_scc_state` 没有这个信息。
 2. `Closed` 的初始化保持不能只用旧 `Closed`。当 active target 是新压栈的 `u` 时，必须用 `NoUnvisitedReach` 和 `~ Visited u old` 反驳。
 3. `StackNoDup` 是新加入 `OrderFacts` 的字段，现有库可能没有对应保持 lemma，需要先补。
-4. `LowCorrect u ∅` 不应展开成复杂 target 证明；应先证明 `low[u] = dfn[u]`，再调用 `LowCorrect_empty`。
+4. `LowCorrect u ∅` 不应展开成复杂 target 证明；应先证明 `low[u] = dfn[u]`，再调用 `low_correct_empty`。
 5. 初始化阶段不应引入任何 child / suspended frame predicate；`set_fa` 问题属于 tree-child 分支，不能污染 preloop 证明。
 
 ## 7. 完成标准
@@ -356,7 +356,7 @@ apply Hoare_conj.
 初始化阶段完成时应满足：
 
 ```coq
-PreloopInitializesLoopInv:
+preloop_initializes_loop_inv:
   Hoare (EntryPre u)
         (preloop u)
         (fun _ s => LoopInv u ∅ s).
