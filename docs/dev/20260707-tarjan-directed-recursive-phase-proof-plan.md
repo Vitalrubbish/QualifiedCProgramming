@@ -301,6 +301,8 @@ Visited child s           : preloop_self_visited
 fa child = parent         : preloop_preserves_any_fa
 fa child <> child         : preloop_preserves_any_fa
 dfn parent < dfn child    : preloop_after_visited_dfn_lt
+~ done child              : 由旧 LoopCoreShape parent done 的 done_visited
+                            与 EntryPre child 的未访问性推出
 ```
 
 #### D. 最终 Hoare 组合
@@ -353,10 +355,14 @@ preloop_preserves_nested_parent_frame:
 证明计划：
 
 1. `LoopInv next ∅` 由 `preloop_initializes_loop_inv`。
-2. `ParentFrameForChild ancestor current ...` 的字段保持类似阶段 4，但这里 `current` 是被保护 frame 中的 child，`loop_root` 是实际调用 `next` 的当前 edge-loop root。
-3. `ParentLowFrame ancestor ancestor_done s_before` 的 forward 部分应保持；同时需要证明 post-state 中任何 ancestor old candidate 的 `dfn` 不小于旧 `low[ancestor]`。
-4. `LoopAuxFacts ancestor`、`Closed`、`TreeEdgesAreGraphEdges` 用 preloop 保持 lemma。
-5. `dfn ancestor < dfn current` 不变；不需要证明 `dfn current < dfn next`，除非后续 frame predicate 显式需要。
+2. 从 `NestedFramePre` 构造 `ParentRecursivePre loop_root next loop_done`，用于复用 `preloop_tree_edge_post_cases`、`preloop_visited_post_cases`、`preloop_reachable_backward_not_child` 等阶段 1b 的 preloop 分解 lemma。
+3. `NestedFrameDisjoint` 提供两个关键排除条件：
+   - `current` 在 DFS tree 中到达 `loop_root`，因此 `loop_root` 不可能是 `ancestor`，否则与 `dfn ancestor < dfn current` 和 tree dfn 单调性矛盾。
+   - `ancestor_done` 的旧 child 子树不能到达 `loop_root`，因此 `preloop next` 新增的 tree edge `loop_root -> next` 不会让旧 child 子树产生新的 low candidate。
+4. `ParentLowFrame ancestor ancestor_done s_before` 的 forward 部分由旧 candidate 在 `preloop next` 下保持得到；backward 部分先把 post candidate 拉回 pre-state，再使用原 frame 的 low bound。
+5. `LoopCoreShape ancestor (done_after ancestor_done current)` 逐字段保持；`ProcessedTreeChild` 的新 visited case 只能是 `next`，但 `fa[next] = loop_root = ancestor` 已被第 3 点排除。
+6. `LoopAuxFacts ancestor`、`Closed`、`TreeEdgesAreGraphEdges` 用 preloop 保持 lemma。
+7. `dfn ancestor < dfn current` 不变；不需要证明 `dfn current < dfn next`，除非后续 frame predicate 显式需要。
 
 这个 theorem 是 `VisitFrameContract (tarjan_scc_f W)` 的 preloop 部分。
 
@@ -443,6 +449,8 @@ forset_process_edge_preserves_parent_frame_for_child
 
 ## 8. 阶段 2c：edge loop 保持 outer frame
 
+状态：`[done]`，对应实现为 `edge_loop_preserves_nested_parent_frame`，并补充了 `preloop_preserves_nested_parent_context` 作为入口桥接。
+
 目标：
 
 ```coq
@@ -452,14 +460,16 @@ edge_loop_preserves_nested_parent_frame:
   Hoare
     (fun s =>
        LoopInv next ∅ s /\
-       ParentFrameForChild ancestor current ancestor_done s_before s)
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current next ancestor_done s)
     (forset (edge_set next) (process_edge next W))
     (fun _ s =>
        LoopInv next (edge_set next) s /\
-       ParentFrameForChild ancestor current ancestor_done s_before s).
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current next ancestor_done s).
 ```
 
-证明结构与阶段 7 相同，只是 `current` 不是当前 edge loop root，而是更外层需要保护的 ancestor frame 的 child。建议复用更一般的 theorem：
+证明结构与阶段 7 相同，只是 `current` 不是当前 edge loop root，而是更外层需要保护的 ancestor frame 的 child。与阶段 7 不同的是，循环断言必须显式携带 `NestedFrameDisjoint`；否则第二个 unvisited grandchild 分支无法构造 `NestedFramePre`。建议复用更一般的 theorem：
 
 ```coq
 edge_loop_preserves_external_parent_frame:
@@ -468,11 +478,13 @@ edge_loop_preserves_external_parent_frame:
   Hoare
     (fun s =>
        LoopInv loop_root ∅ s /\
-       ParentFrameForChild ancestor current ancestor_done s_before s)
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current loop_root ancestor_done s)
     (forset (edge_set loop_root) (process_edge loop_root W))
     (fun _ s =>
        LoopInv loop_root (edge_set loop_root) s /\
-       ParentFrameForChild ancestor current ancestor_done s_before s).
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current loop_root ancestor_done s).
 ```
 
 然后阶段 7 取 `loop_root = child` 且 `current = child`，阶段 8 取 `loop_root = next`。
@@ -595,10 +607,12 @@ maybe_pop_preserves_nested_parent_frame:
   Hoare
     (fun s =>
        RootPrePop next s /\
-       ParentFrameForChild ancestor current ancestor_done s_before s)
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current loop_root ancestor_done s)
     (If (fun s => low s next = dfn s next) (pop_scc next))
     (fun _ s =>
-       ParentFrameForChild ancestor current ancestor_done s_before s).
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current loop_root ancestor_done s).
 ```
 
 证明计划：
@@ -672,12 +686,13 @@ tarjan_scc_f_preserves_nested_parent_frame:
        ancestor_done loop_done s_before)
     (tarjan_scc_f W next)
     (fun _ s =>
-       ParentFrameForChild ancestor current ancestor_done s_before s).
+       ParentFrameForChild ancestor current ancestor_done s_before s /\
+       NestedFrameDisjoint ancestor current loop_root ancestor_done s).
 ```
 
 组合顺序：
 
-1. `preloop_preserves_nested_parent_frame`
+1. `preloop_preserves_nested_parent_context`
 2. `edge_loop_preserves_nested_parent_frame`
 3. `loop_inv_derives_stack_rest_older_than_root`
 4. `maybe_pop_preserves_nested_parent_frame`
@@ -713,11 +728,11 @@ tarjan_scc_satisfies_visit_contract:
 1. `[done]` 在证明文件中加入 `ParentRecursivePre`、`ParentFrameForChild`、`ChildReturnPreMaybePop`、`NestedFramePre`、`VisitContract` 相关定义。
 2. `[done]` 证明 `set_fa_pending_prepares_parent_recursive_pre`。
 3. `[done]` 证明 `preloop_establishes_parent_frame_for_child`。
-4. 证明 `preloop_preserves_nested_parent_frame`。
+4. `[done]` 证明 `preloop_preserves_nested_parent_frame`。
 5. `[done]` 证明 `edge_loop_preserves_loop_inv_from_visit_contract`。
-6. 证明 `process_edge_preserves_parent_frame_for_child`。
-7. 证明 `edge_loop_preserves_parent_frame_for_child`。
-8. 泛化并证明 `edge_loop_preserves_nested_parent_frame`。
+6. `[done]` 证明 `process_edge_preserves_parent_frame_for_child`。对应阶段 2b 的单边保持 theorem；已通过 `set_fa_pending_prepares_nested_frame_pre` 将 unvisited grandchild 分支桥接到 `VisitFrameContract`。
+7. `[done]` 证明 `edge_loop_preserves_parent_frame_for_child`。对应阶段 2b 的 `Hoare_forset` 提升；循环断言为 `LoopInv child current_done s /\ ParentFrameForChild parent child done s_before s`。
+8. `[done]` 泛化并证明 `edge_loop_preserves_nested_parent_frame`。对应阶段 2c；强循环断言携带 `NestedFrameDisjoint ancestor current loop_root ancestor_done`，并已补 `preloop_preserves_nested_parent_context` 作为入口桥接。
 9. 证明 `loop_inv_derives_stack_rest_older_than_root`。
 10. 证明 `edge_loop_post_to_child_return_pre_maybe_pop`。
 11. 回到 maybe_pop 计划，证明 `maybe_pop_produces_root_final`。

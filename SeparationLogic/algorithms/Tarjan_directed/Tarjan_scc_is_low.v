@@ -312,7 +312,8 @@ Section IS_LOW.
     Visited child s /\
     fa s child = parent /\
     fa s child <> child /\
-    dfn s parent < dfn s child.
+    dfn s parent < dfn s child /\
+    ~ done child.
 
   Definition ChildReturnPreMaybePop
              (parent child: V) (done: V -> Prop)
@@ -320,12 +321,23 @@ Section IS_LOW.
     RootPrePop child s /\
     ParentFrameForChild parent child done s_before s.
 
+  Definition NestedFrameDisjoint
+             (ancestor current loop_root: V)
+             (ancestor_done: V -> Prop) (s: St): Prop :=
+    dg_reachable (state_to_dfs_tree g s root) current loop_root /\
+    forall old_child,
+      ancestor_done old_child ->
+      fa s old_child = ancestor ->
+      fa s old_child <> old_child ->
+      ~ dg_reachable (state_to_dfs_tree g s root) old_child loop_root.
+
   Definition NestedFramePre
              (ancestor current loop_root next: V)
              (ancestor_done loop_done: V -> Prop)
              (s_before s: St): Prop :=
     LoopInv loop_root loop_done s /\
     ParentFrameForChild ancestor current ancestor_done s_before s /\
+    NestedFrameDisjoint ancestor current loop_root ancestor_done s /\
     Edge loop_root next /\
     ~ loop_done next /\
     EntryPre next s /\
@@ -359,7 +371,8 @@ Section IS_LOW.
            ancestor_done loop_done s_before)
         (W next)
         (fun _ s =>
-           ParentFrameForChild ancestor current ancestor_done s_before s).
+           ParentFrameForChild ancestor current ancestor_done s_before s /\
+           NestedFrameDisjoint ancestor current loop_root ancestor_done s).
 
   Definition VisitContract (W: RecProgram): Prop :=
     VisitMainContract W /\
@@ -1642,7 +1655,7 @@ Section IS_LOW.
                          Hexec)
           as [_ [_ Hlow]].
         exact Hlow. }
-      unfold ParentLowFrame.
+      unfold ParentLowFrame. simpl.
       split; [exact Hlow_eq |].
       split.
       - intros b Hcandidate_before.
@@ -1688,22 +1701,786 @@ Section IS_LOW.
                     (conj Hparent_vis
                       (conj Hchild_notvis Hdfn_inv))
                     Hexec). }
+    assert (Hnot_done_child: ~ done child).
+    { intros Hdone_child.
+      destruct Hshape_parent_full as [_ [_ [_ [_ [Hdone_vis _]]]]].
+      destruct Hentry_child as [[_ Hchild_notvis] _].
+      exact (Hchild_notvis (Hdone_vis child Hdone_child)). }
     split; [exact Hchild_loop |].
     split; [exact Hparent_loop_before |].
     unfold ParentFrameForChild.
-    exact (conj Hlow_frame
-            (conj Hshape_after
-              (conj Haux_after
-                (conj Hclosed_after
-                  (conj Htree_after
-                    (conj Hedge
-                      (conj Hchild_vis_after
-                        (conj Hfa_child_after
-                          (conj Hfane_child_after
-                            Hparent_lt_child))))))))).
+    split; [exact Hlow_frame |].
+    split; [exact Hshape_after |].
+    split; [exact Haux_after |].
+    split; [exact Hclosed_after |].
+    split; [exact Htree_after |].
+    split; [exact Hedge |].
+    split; [exact Hchild_vis_after |].
+    split; [exact Hfa_child_after |].
+    split; [exact Hfane_child_after |].
+    split; [exact Hparent_lt_child |].
+    exact Hnot_done_child.
+  Qed.
+
+  Lemma nested_frame_pre_parent_recursive_pre
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s: St):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s ->
+    ParentRecursivePre loop_root next loop_done s.
+  Proof.
+    intros Hpre.
+    destruct Hpre as
+      [Hloop [_ [_ [Hedge [Hnot_done [Hentry [Hfa Hfane]]]]]]].
+    unfold ParentRecursivePre.
+    exact (conj Hloop
+            (conj Hedge
+              (conj Hentry
+                (conj Hfa Hfane)))).
+  Qed.
+
+  Lemma nested_frame_loop_root_not_ancestor
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s: St):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s ->
+    loop_root <> ancestor.
+  Proof.
+    intros Hpre Hloop_eq.
+    destruct Hpre as
+      [_ [Hframe [Hdisjoint _]]].
+    destruct Hdisjoint as [Hreach_current_loop _].
+    destruct Hframe as
+      [_ [Hshape [_ [_ [_ [_ [_ [_ [_ Hdfn_ancestor_current]]]]]]]]].
+    destruct Hshape as [Hwf _].
+    subst loop_root.
+    pose proof (tree_reachable_dfn_monotone
+                  s current ancestor Hwf Hreach_current_loop)
+      as Hdfn_current_ancestor.
+    lia.
+  Qed.
+
+  Lemma preloop_nested_done_child_not_reach_next
+        (ancestor current loop_root next old_child: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s_mid s_after: St) (retv: unit):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s_mid ->
+    (s_mid, retv, s_after) ∈ preloop next ->
+    ancestor_done old_child ->
+    fa s_after old_child = ancestor ->
+    fa s_after old_child <> old_child ->
+    ~ dg_reachable (state_to_dfs_tree g s_after root) old_child next.
+  Proof.
+    intros Hnested Hexec Hdone_old Hfa_old_after Hfane_old_after Hreach.
+    pose proof Hnested as Hnested_all.
+    pose proof (nested_frame_pre_parent_recursive_pre
+                  ancestor current loop_root next ancestor_done loop_done
+                  s_before s_mid Hnested_all) as Hrecursive_pre.
+    destruct Hnested as
+      [Hloop [Hframe [Hdisjoint [_ [_ [Hentry [Hfa_next Hfane_next]]]]]]].
+    destruct Hentry as [[_ Hnext_notvis] _].
+    destruct Hdisjoint as [_ Hold_disjoint].
+    destruct Hframe as
+      [_ [Hshape [_ [_ [_ [_ [_ [_ [_ _]]]]]]]]].
+    destruct Hshape as [_ [_ [_ [_ [Hdone_vis _]]]]].
+    assert (Hold_vis: Visited old_child s_mid).
+    { apply Hdone_vis. apply done_after_intro_old. exact Hdone_old. }
+    assert (Hold_ne_next: old_child <> next).
+    { intros Hold_eq_next. apply Hnext_notvis.
+      rewrite <- Hold_eq_next. exact Hold_vis. }
+    destruct (dg_reachable_vertex_path
+                (state_to_dfs_tree g s_after root)
+                old_child next Hreach)
+      as [path Hpath].
+    assert (Hnext_not_ne: ~ (next = next -> False)).
+    { intros Hneq. apply Hneq. reflexivity. }
+    destruct (dg_vertex_path_last_exit_from_pred
+                (state_to_dfs_tree g s_after root)
+                (fun z => z = next -> False)
+                old_child next path
+                Hold_ne_next Hnext_not_ne Hpath)
+      as [a [b [suffix
+        [Ha_ne_next [Hb_not_ne_next
+          [Hstep_ab [Hreach_old_a_post [_ _]]]]]]]].
+    assert (Hb_eq_next: b = next).
+    { apply NNPP. exact Hb_not_ne_next. }
+    subst b.
+    destruct (preloop_tree_edge_post_cases
+                loop_root next a next loop_done s_mid s_after retv
+                Hrecursive_pre Hexec Hstep_ab)
+      as [Hstep_old | [Ha_eq_loop _]].
+    - apply tree_step_char in Hstep_old as [_ [_ Hnext_vis_pre]].
+      exact (Hnext_notvis Hnext_vis_pre).
+    - subst a.
+      assert (Hloop_ne_next: loop_root <> next).
+      { intros Hloop_eq_next. apply Hfane_next.
+        rewrite Hfa_next. exact Hloop_eq_next. }
+      assert (Hreach_old_loop_pre:
+                dg_reachable (state_to_dfs_tree g s_mid root)
+                             old_child loop_root).
+      { eapply preloop_reachable_backward_not_child; eauto. }
+      assert (Hfa_old_pres:
+                fa s_after old_child = fa s_mid old_child).
+      { pose proof (preloop_preserves_any_fa
+                      next old_child (fa s_mid old_child)) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s_mid retv s_after eq_refl Hexec). }
+      assert (Hfa_old_before: fa s_mid old_child = ancestor).
+      { rewrite <- Hfa_old_pres. exact Hfa_old_after. }
+      assert (Hfane_old_before: fa s_mid old_child <> old_child).
+      { intros Hfa_eq_old.
+        apply Hfane_old_after.
+        rewrite Hfa_old_pres. exact Hfa_eq_old. }
+      exact (Hold_disjoint old_child Hdone_old Hfa_old_before
+                           Hfane_old_before Hreach_old_loop_pre).
+  Qed.
+
+  Lemma preloop_nested_old_candidate_forward
+        (ancestor current loop_root next b: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s_mid s_after: St) (retv: unit):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s_mid ->
+    (s_mid, retv, s_after) ∈ preloop next ->
+    PartialLowCandidate ancestor ancestor_done s_mid b ->
+    PartialLowCandidate ancestor ancestor_done s_after b /\
+    dfn s_after b = dfn s_mid b.
+  Proof.
+    intros Hnested Hexec Hcandidate.
+    pose proof Hnested as Hnested_all.
+    pose proof (nested_frame_pre_parent_recursive_pre
+                  ancestor current loop_root next ancestor_done loop_done
+                  s_before s_mid Hnested_all) as Hrecursive_pre.
+    destruct Hnested as
+      [Hloop [Hframe [_ [_ [_ [Hentry _]]]]]].
+    destruct Hentry as [[_ Hnext_notvis] _].
+    destruct Hframe as
+      [_ [Hshape [_ [_ [_ [_ [_ [_ [_ _]]]]]]]]].
+    destruct Hshape as [Hwf [_ [Hancestor_vis [_ [Hdone_vis _]]]]].
+    destruct Hwf as [Hstack_vis _].
+    unfold PartialLowCandidate in Hcandidate |- *.
+    destruct Hcandidate as [Hb_ancestor | Htarget].
+    - subst b. split.
+      + left. reflexivity.
+      + assert (Hnext_ne_ancestor: next <> ancestor).
+        { intros Hnext_eq_ancestor. apply Hnext_notvis.
+          rewrite Hnext_eq_ancestor. exact Hancestor_vis. }
+        eapply preloop_preserves_dfn_of_visited; eauto.
+    - unfold PartialActiveTarget in Htarget |- *.
+      destruct Htarget as [Hdirect | Hsubtree].
+      + destruct Hdirect as
+          [a [Hdone_a [Hb_eq_a [Hedge [Hactive Hnot_tree]]]]].
+        subst b.
+        assert (Ha_vis: Visited a s_mid).
+        { apply Hdone_vis. apply done_after_intro_old. exact Hdone_a. }
+        assert (Hnext_ne_a: next <> a).
+        { intros Hnext_eq_a. apply Hnext_notvis.
+          rewrite Hnext_eq_a. exact Ha_vis. }
+        split.
+        * right. left. exists a.
+          repeat split; auto.
+          -- eapply preloop_preserves_active; eauto.
+          -- intros Htree_post.
+             destruct (preloop_tree_edge_post_cases
+                         loop_root next ancestor a loop_done
+                         s_mid s_after retv
+                         Hrecursive_pre Hexec Htree_post)
+               as [Htree_old | [_ Ha_eq_next]].
+             ++ exact (Hnot_tree Htree_old).
+             ++ subst a. exact (Hnext_notvis Ha_vis).
+        * eapply preloop_preserves_dfn_of_visited; eauto.
+      + destruct Hsubtree as
+          [old_child [x
+            [Hdone_old [Hedge_old [Hfa_old [Hfane_old
+              [Hreach_old_x [Hedge_x_b [Hactive_b Hnot_tree]]]]]]]]].
+        assert (Hold_vis: Visited old_child s_mid).
+        { apply Hdone_vis. apply done_after_intro_old. exact Hdone_old. }
+        assert (Hb_vis: Visited b s_mid).
+        { apply Hstack_vis. exact Hactive_b. }
+        assert (Hnext_ne_b: next <> b).
+        { intros Hnext_eq_b. apply Hnext_notvis.
+          rewrite Hnext_eq_b. exact Hb_vis. }
+        assert (Hfa_old_pres:
+                  fa s_after old_child = fa s_mid old_child).
+        { pose proof (preloop_preserves_any_fa
+                        next old_child (fa s_mid old_child))
+            as Hhoare.
+          unfold Hoare in Hhoare.
+          exact (Hhoare s_mid retv s_after eq_refl Hexec). }
+        assert (Hreach_after:
+                  dg_reachable (state_to_dfs_tree g s_after root)
+                               old_child x).
+        { eapply preloop_tree_reachable_pre_lift; eauto. }
+        split.
+        * right. right. exists old_child, x.
+          repeat split; auto.
+          -- rewrite Hfa_old_pres. exact Hfa_old.
+          -- intros Hfa_eq_old. apply Hfane_old.
+             rewrite <- Hfa_old_pres. exact Hfa_eq_old.
+          -- eapply preloop_preserves_active; eauto.
+          -- intros Htree_post.
+             destruct (preloop_tree_edge_post_cases
+                         loop_root next x b loop_done
+                         s_mid s_after retv
+                         Hrecursive_pre Hexec Htree_post)
+               as [Htree_old | [_ Hb_eq_next]].
+             ++ exact (Hnot_tree Htree_old).
+             ++ subst b. exact (Hnext_notvis Hb_vis).
+        * eapply preloop_preserves_dfn_of_visited; eauto.
+  Qed.
+
+  Lemma preloop_nested_post_candidate_cases
+        (ancestor current loop_root next b: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s_mid s_after: St) (retv: unit):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s_mid ->
+    (s_mid, retv, s_after) ∈ preloop next ->
+    PartialLowCandidate ancestor ancestor_done s_after b ->
+    PartialLowCandidate ancestor ancestor_done s_mid b \/ b = next.
+  Proof.
+    intros Hnested Hexec Hcandidate.
+    pose proof Hnested as Hnested_all.
+    pose proof (nested_frame_pre_parent_recursive_pre
+                  ancestor current loop_root next ancestor_done loop_done
+                  s_before s_mid Hnested_all) as Hrecursive_pre.
+    destruct Hnested as
+      [Hloop [Hframe [_ [_ [_ [Hentry _]]]]]].
+    destruct Hentry as [[_ Hnext_notvis] _].
+    destruct Hframe as
+      [_ [Hshape [_ [_ [_ [_ [_ [_ [_ _]]]]]]]]].
+    destruct Hshape as [Hwf [_ [_ [_ [Hdone_vis _]]]]].
+    unfold PartialLowCandidate in Hcandidate |- *.
+    destruct Hcandidate as [Hb_ancestor | Htarget].
+    - left. left. exact Hb_ancestor.
+    - unfold PartialActiveTarget in Htarget |- *.
+      destruct Htarget as [Hdirect | Hsubtree].
+      + destruct Hdirect as
+          [a [Hdone_a [Hb_eq_a [Hedge [Hactive_after Hnot_tree_after]]]]].
+        subst b.
+        assert (Ha_vis: Visited a s_mid).
+        { apply Hdone_vis. apply done_after_intro_old. exact Hdone_a. }
+        destruct (preloop_active_post_cases
+                    next a s_mid s_after retv Hexec Hactive_after)
+          as [Hactive_before | Ha_eq_next].
+        * left. right. left. exists a.
+          repeat split; auto.
+          intros Htree_before.
+          apply Hnot_tree_after.
+          eapply preloop_tree_edge_pre_lift; eauto.
+        * subst a. exfalso. exact (Hnext_notvis Ha_vis).
+      + destruct Hsubtree as
+          [old_child [x
+            [Hdone_old [Hedge_old [Hfa_old_after [Hfane_old_after
+              [Hreach_after [Hedge_x_b [Hactive_b_after Hnot_tree_after]]]]]]]]].
+        destruct (classic (x = next)) as [Hx_eq_next | Hx_ne_next].
+        * subst x. exfalso.
+          eapply preloop_nested_done_child_not_reach_next; eauto.
+        * destruct (preloop_active_post_cases
+                      next b s_mid s_after retv Hexec Hactive_b_after)
+            as [Hactive_b_before | Hb_eq_next].
+          -- assert (Hreach_before:
+                       dg_reachable (state_to_dfs_tree g s_mid root)
+                                    old_child x).
+             { eapply preloop_reachable_backward_not_child; eauto. }
+             assert (Hfa_old_pres:
+                       fa s_after old_child = fa s_mid old_child).
+             { pose proof (preloop_preserves_any_fa
+                             next old_child (fa s_mid old_child))
+                 as Hhoare.
+               unfold Hoare in Hhoare.
+               exact (Hhoare s_mid retv s_after eq_refl Hexec). }
+             assert (Hfa_old_before: fa s_mid old_child = ancestor).
+             { rewrite <- Hfa_old_pres. exact Hfa_old_after. }
+             assert (Hfane_old_before: fa s_mid old_child <> old_child).
+             { intros Hfa_eq_old.
+               apply Hfane_old_after.
+               rewrite Hfa_old_pres. exact Hfa_eq_old. }
+             left. right. right.
+             exists old_child, x.
+             repeat split; auto.
+             intros Htree_before.
+             apply Hnot_tree_after.
+             eapply preloop_tree_edge_pre_lift; eauto.
+          -- right. exact Hb_eq_next.
+  Qed.
+
+  Lemma preloop_nested_old_candidates_low_bound
+        (ancestor current loop_root next b: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s_mid s_after: St) (retv: unit):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s_mid ->
+    (s_mid, retv, s_after) ∈ preloop next ->
+    PartialLowCandidate ancestor ancestor_done s_after b ->
+    low s_before ancestor <= dfn s_after b.
+  Proof.
+    intros Hnested Hexec Hcandidate_after.
+    pose proof Hnested as Hnested_all.
+    destruct Hnested as
+      [Hloop [Hframe [Hdisjoint [_ [_ [Hentry [Hfa_next Hfane_next]]]]]]].
+    destruct Hentry as [[Hwf_pre Hnext_notvis] _].
+    destruct Hwf_pre as [_ [Hdfn_inv _]].
+    destruct Hdisjoint as [Hreach_current_loop _].
+    destruct Hloop as [_ [Hshape_loop _]].
+    destruct Hshape_loop as [_ [_ [Hloop_vis _]]].
+    destruct Hframe as
+      [Hlow_frame [Hshape_ancestor [_ [_ [_ [_ [_ [_ [_ Hdfn_ancestor_current]]]]]]]]].
+    destruct Hlow_frame as [_ [Hframe_forward Hframe_bound]].
+    destruct Hshape_ancestor as [Hwf_ancestor _].
+    destruct (preloop_nested_post_candidate_cases
+                ancestor current loop_root next b ancestor_done loop_done
+                s_before s_mid s_after retv Hnested_all Hexec
+                Hcandidate_after)
+      as [Hcandidate_before | Hb_eq_next].
+    - destruct (preloop_nested_old_candidate_forward
+                  ancestor current loop_root next b ancestor_done loop_done
+                  s_before s_mid s_after retv Hnested_all Hexec
+                  Hcandidate_before)
+        as [_ Hdfn_eq].
+      pose proof (Hframe_bound b Hcandidate_before) as Hbound.
+      lia.
+    - subst b.
+      assert (Hroot_candidate:
+                PartialLowCandidate ancestor ancestor_done s_mid ancestor).
+      { apply partial_low_candidate_root. }
+      pose proof (Hframe_bound ancestor Hroot_candidate)
+        as Hlow_le_ancestor.
+      pose proof (tree_reachable_dfn_monotone
+                    s_mid current loop_root Hwf_ancestor
+                    Hreach_current_loop)
+        as Hdfn_current_loop.
+      assert (Hloop_ne_next: loop_root <> next).
+      { intros Hloop_eq_next. apply Hfane_next.
+        rewrite Hfa_next. exact Hloop_eq_next. }
+      assert (Hdfn_loop_eq:
+                dfn s_after loop_root = dfn s_mid loop_root).
+      { eapply preloop_preserves_dfn_of_visited; eauto. }
+      assert (Hloop_lt_next:
+                dfn s_after loop_root < dfn s_after next).
+      { pose proof (preloop_after_visited_dfn_lt loop_root next) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s_mid retv s_after
+                      (conj Hloop_vis
+                        (conj Hnext_notvis Hdfn_inv))
+                      Hexec). }
+      lia.
+  Qed.
+
+  Lemma preloop_preserves_nested_parent_low_frame
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s_mid s_after: St) (retv: unit):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s_mid ->
+    (s_mid, retv, s_after) ∈ preloop next ->
+    ParentLowFrame ancestor ancestor_done s_before s_after.
+  Proof.
+    intros Hnested Hexec.
+    pose proof Hnested as Hnested_all.
+    destruct Hnested as
+      [_ [Hframe [_ [_ [_ [Hentry _]]]]]].
+    destruct Hentry as [[_ Hnext_notvis] _].
+    destruct Hframe as
+      [Hlow_frame [Hshape [_ [_ [_ [_ [_ [_ [_ _]]]]]]]]].
+    destruct Hlow_frame as [Hlow_eq_mid [Hframe_forward _]].
+    destruct Hshape as [_ [_ [Hancestor_vis _]]].
+    assert (Hnext_ne_ancestor: next <> ancestor).
+    { intros Hnext_eq_ancestor. apply Hnext_notvis.
+      rewrite Hnext_eq_ancestor. exact Hancestor_vis. }
+    assert (Hlow_eq_after: low s_after ancestor = low s_before ancestor).
+    { pose proof (preloop_keep_low next ancestor (low s_mid ancestor))
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      destruct (Hhoare s_mid retv s_after
+                       (conj Hnext_ne_ancestor
+                         (conj Hancestor_vis eq_refl))
+                       Hexec)
+        as [_ [_ Hlow_pres]].
+      rewrite Hlow_pres. exact Hlow_eq_mid. }
+    unfold ParentLowFrame.
+    split; [exact Hlow_eq_after |].
+    split.
+    - intros b Hcandidate_before.
+      destruct (Hframe_forward b Hcandidate_before)
+        as [Hcandidate_mid Hdfn_mid_eq].
+      destruct (preloop_nested_old_candidate_forward
+                  ancestor current loop_root next b ancestor_done loop_done
+                  s_before s_mid s_after retv Hnested_all Hexec
+                  Hcandidate_mid)
+        as [Hcandidate_after Hdfn_after_eq].
+      split; [exact Hcandidate_after | lia].
+    - intros b Hcandidate_after.
+      eapply preloop_nested_old_candidates_low_bound; eauto.
+  Qed.
+
+  Lemma preloop_preserves_nested_parent_shape
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before s_mid s_after: St) (retv: unit):
+    NestedFramePre ancestor current loop_root next
+      ancestor_done loop_done s_before s_mid ->
+    (s_mid, retv, s_after) ∈ preloop next ->
+    LoopCoreShape ancestor (done_after ancestor_done current) s_after.
+  Proof.
+    intros Hnested Hexec.
+    pose proof Hnested as Hnested_all.
+    pose proof (nested_frame_pre_parent_recursive_pre
+                  ancestor current loop_root next ancestor_done loop_done
+                  s_before s_mid Hnested_all) as Hrecursive_pre.
+    destruct Hnested as
+      [_ [Hframe [Hdisjoint [_ [_ [Hentry_full [Hfa_next Hfane_next]]]]]]].
+    pose proof Hentry_full as Hentry_for_tree.
+    destruct Hentry_full as [Hwf_pre _].
+    destruct Hdisjoint as [Hreach_current_loop _].
+    destruct Hframe as
+      [_ [Hshape [_ [_ [_ [_ [_ [_ [_ Hdfn_ancestor_current]]]]]]]]].
+    destruct Hshape as
+      [Hwf [Htree_sound [Hancestor_vis
+        [Hdone_edge [Hdone_vis Hprocessed]]]]].
+    assert (Hwf_after: wf_scc_state g root s_after).
+    { assert (Hhoare:
+                Hoare
+                  (fun s: St => wf_scc_state_pre g root next s)
+                  (preloop next)
+                  (fun _ s => wf_scc_state g root s)).
+      { apply preloop_preserves_wf_scc_state. }
+      unfold Hoare in Hhoare.
+      exact (Hhoare s_mid retv s_after Hwf_pre Hexec). }
+    assert (Htree_after: TreeEdgesAreGraphEdges s_after).
+    { pose proof (preloop_preserves_tree_edges_are_graph_edges next)
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      destruct Hentry_for_tree as
+        [Hwf_pre' [_ [_ [Htree_pre [_ Hincoming]]]]].
+      exact (Hhoare s_mid retv s_after
+                    (conj Hwf_pre' (conj Htree_pre Hincoming))
+                    Hexec). }
+    assert (Hancestor_vis_after: Visited ancestor s_after).
+    { pose proof (preloop_keep_visited next ancestor) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s_mid retv s_after Hancestor_vis Hexec). }
+    assert (Hdone_vis_after:
+              forall a,
+                done_after ancestor_done current a -> Visited a s_after).
+    { intros a Hdone_a.
+      pose proof (preloop_keep_visited next a) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s_mid retv s_after
+                    (Hdone_vis a Hdone_a) Hexec). }
+    assert (Hloop_root_ne_ancestor: loop_root <> ancestor).
+    { eapply nested_frame_loop_root_not_ancestor; eauto. }
+    assert (Hprocessed_after:
+              ProcessedTreeChild ancestor
+                (done_after ancestor_done current) s_after).
+    { unfold ProcessedTreeChild.
+      intros v Hvis_after Hfa_after Hfane_after.
+      destruct (preloop_visited_post_cases
+                  next v s_mid s_after retv Hexec Hvis_after)
+        as [Hvis_before | Hv_eq_next].
+      - assert (Hfa_pres: fa s_after v = fa s_mid v).
+        { pose proof (preloop_preserves_any_fa
+                        next v (fa s_mid v)) as Hhoare.
+          unfold Hoare in Hhoare.
+          exact (Hhoare s_mid retv s_after eq_refl Hexec). }
+        assert (Hfa_before: fa s_mid v = ancestor).
+        { rewrite <- Hfa_pres. exact Hfa_after. }
+        assert (Hfane_before: fa s_mid v <> v).
+        { intros Hfa_eq_v.
+          apply Hfane_after.
+          rewrite Hfa_pres. exact Hfa_eq_v. }
+        exact (Hprocessed v Hvis_before Hfa_before Hfane_before).
+      - subst v.
+        assert (Hfa_next_after: fa s_after next = loop_root).
+        { pose proof (preloop_preserves_any_fa
+                        next next (fa s_mid next)) as Hhoare.
+          unfold Hoare in Hhoare.
+          assert (Hfa_pres:
+                    fa s_after next = fa s_mid next).
+          { exact (Hhoare s_mid retv s_after eq_refl Hexec). }
+          rewrite Hfa_pres. exact Hfa_next. }
+        exfalso. apply Hloop_root_ne_ancestor.
+        rewrite <- Hfa_next_after. exact Hfa_after. }
+    exact (conj Hwf_after
+            (conj Htree_after
+              (conj Hancestor_vis_after
+                (conj Hdone_edge
+                  (conj Hdone_vis_after Hprocessed_after))))).
+  Qed.
+
+  Lemma preloop_preserves_nested_parent_frame
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before: St):
+    Hoare
+      (NestedFramePre ancestor current loop_root next
+         ancestor_done loop_done s_before)
+      (preloop next)
+      (fun _ s =>
+         LoopInv next ∅ s /\
+         ParentFrameForChild ancestor current ancestor_done s_before s).
+  Proof.
+    unfold Hoare.
+    intros s_mid retv s_after Hnested Hexec.
+    pose proof Hnested as Hnested_all.
+    destruct Hnested as
+      [_ [Hframe [_ [_ [_ [Hentry _]]]]]].
+    pose proof Hentry as Hentry_for_loop.
+    pose proof Hentry as Hentry_for_aux.
+    pose proof Hentry as Hentry_for_closed.
+    destruct Hframe as
+      [Hlow_frame_mid
+        [Hshape_mid
+          [Haux_mid
+            [Hclosed_mid
+              [Htree_mid
+                [Hedge_ancestor_current
+                  [Hcurrent_vis_mid
+                    [Hfa_current_mid
+                      [Hfane_current_mid Hdfn_ancestor_current_mid]]]]]]]]].
+    destruct Hdfn_ancestor_current_mid as
+      [Hdfn_ancestor_current_mid Hnot_done_current].
+    destruct Hshape_mid as [_ [_ [Hancestor_vis_mid _]]].
+    destruct Hentry as [[_ Hnext_notvis] _].
+    assert (Hloop_next: LoopInv next ∅ s_after).
+    { pose proof (preloop_initializes_loop_inv next) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s_mid retv s_after Hentry_for_loop Hexec). }
+    assert (Hlow_frame_after:
+              ParentLowFrame ancestor ancestor_done s_before s_after).
+    { eapply preloop_preserves_nested_parent_low_frame; eauto. }
+    assert (Hshape_after:
+              LoopCoreShape ancestor
+                (done_after ancestor_done current) s_after).
+    { eapply preloop_preserves_nested_parent_shape; eauto. }
+    assert (Haux_after: LoopAuxFacts ancestor s_after).
+    { eapply preloop_preserves_loop_aux_facts_for_entry; eauto. }
+    assert (Hclosed_after: Closed s_after).
+    { pose proof (preloop_preserves_closed next) as Hhoare.
+      unfold Hoare in Hhoare.
+      destruct Hentry_for_closed as [Hwf_pre [Hsettled [Hclosed [_]]]].
+      exact (Hhoare s_mid retv s_after
+                    (conj Hwf_pre (conj Hsettled Hclosed))
+                    Hexec). }
+    assert (Htree_after: TreeEdgesAreGraphEdges s_after).
+    { destruct Hshape_after as [_ [Htree_after _]].
+      exact Htree_after. }
+    assert (Hcurrent_vis_after: Visited current s_after).
+    { pose proof (preloop_keep_visited next current) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s_mid retv s_after Hcurrent_vis_mid Hexec). }
+    assert (Hfa_current_pres:
+              fa s_after current = fa s_mid current).
+    { pose proof (preloop_preserves_any_fa
+                    next current (fa s_mid current)) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s_mid retv s_after eq_refl Hexec). }
+    assert (Hfa_current_after: fa s_after current = ancestor).
+    { rewrite Hfa_current_pres. exact Hfa_current_mid. }
+    assert (Hfane_current_after: fa s_after current <> current).
+    { intros Hfa_eq_current.
+      apply Hfane_current_mid.
+      rewrite <- Hfa_current_pres. exact Hfa_eq_current. }
+    assert (Hnext_ne_ancestor: next <> ancestor).
+    { intros Hnext_eq_ancestor. apply Hnext_notvis.
+      rewrite Hnext_eq_ancestor. exact Hancestor_vis_mid. }
+    assert (Hnext_ne_current: next <> current).
+    { intros Hnext_eq_current. apply Hnext_notvis.
+      rewrite Hnext_eq_current. exact Hcurrent_vis_mid. }
+    assert (Hdfn_ancestor_eq:
+              dfn s_after ancestor = dfn s_mid ancestor).
+    { eapply preloop_preserves_dfn_of_visited; eauto. }
+    assert (Hdfn_current_eq:
+              dfn s_after current = dfn s_mid current).
+    { eapply preloop_preserves_dfn_of_visited; eauto. }
+    assert (Hdfn_ancestor_current_after:
+              dfn s_after ancestor < dfn s_after current).
+    { lia. }
+    split; [exact Hloop_next |].
+    unfold ParentFrameForChild.
+    split; [exact Hlow_frame_after |].
+    split; [exact Hshape_after |].
+    split; [exact Haux_after |].
+    split; [exact Hclosed_after |].
+    split; [exact Htree_after |].
+    split; [exact Hedge_ancestor_current |].
+    split; [exact Hcurrent_vis_after |].
+    split; [exact Hfa_current_after |].
+    split; [exact Hfane_current_after |].
+    split; [exact Hdfn_ancestor_current_after |].
+    exact Hnot_done_current.
+  Qed.
+
+  Lemma preloop_preserves_nested_frame_disjoint
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before: St):
+    Hoare
+      (NestedFramePre ancestor current loop_root next
+         ancestor_done loop_done s_before)
+      (preloop next)
+      (fun _ s =>
+         NestedFrameDisjoint ancestor current next ancestor_done s).
+  Proof.
+    unfold Hoare.
+    intros s_mid retv s_after Hnested Hexec.
+    pose proof Hnested as Hnested_all.
+    pose proof (nested_frame_pre_parent_recursive_pre
+                  ancestor current loop_root next ancestor_done loop_done
+                  s_before s_mid Hnested_all) as Hrecursive_pre.
+    destruct Hnested as
+      [Hloop [Hframe [Hdisjoint [Hedge [Hnot_done [Hentry [Hfa_next Hfane_next]]]]]]].
+    destruct Hdisjoint as [Hreach_current_loop Hno_old].
+    destruct Hentry as [[_ Hnext_notvis] _].
+    destruct Hloop as [_ [Hshape_loop _]].
+    destruct Hshape_loop as [_ [_ [Hloop_vis _]]].
+    destruct Hframe as
+      [_ [Hshape_ancestor [_ [_ [_ [_ [_ [_ [_ _]]]]]]]]].
+    destruct Hshape_ancestor as [_ [_ [_ [_ [Hdone_vis _]]]]].
+    split.
+    - assert (Hreach_current_loop_after:
+                dg_reachable (state_to_dfs_tree g s_after root)
+                             current loop_root).
+      { eapply preloop_tree_reachable_pre_lift; eauto. }
+      assert (Hfa_next_after: fa s_after next = loop_root).
+      { pose proof (preloop_preserves_any_fa
+                      next next (fa s_mid next)) as Hhoare.
+        unfold Hoare in Hhoare.
+        rewrite (Hhoare s_mid retv s_after eq_refl Hexec).
+        exact Hfa_next. }
+      assert (Hnext_vis_after: Visited next s_after).
+      { pose proof (preloop_self_visited next) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s_mid retv s_after I Hexec). }
+      assert (Hstep_loop_next:
+                tree_edge s_after loop_root next).
+      { assert (Hfane_next_after: fa s_after next <> next).
+        { rewrite Hfa_next_after. rewrite Hfa_next in Hfane_next.
+          exact Hfane_next. }
+        eapply tree_step_char_backward; eauto. }
+      eapply dg_reachable_trans.
+      + exact Hreach_current_loop_after.
+      + apply dg_reachable_step. exact Hstep_loop_next.
+    - intros old_child Hdone_old Hfa_old_after Hfane_old_after Hreach_old_next.
+      eapply preloop_nested_done_child_not_reach_next; eauto.
+  Qed.
+
+  Lemma preloop_preserves_nested_parent_context
+        (ancestor current loop_root next: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before: St):
+    Hoare
+      (NestedFramePre ancestor current loop_root next
+         ancestor_done loop_done s_before)
+      (preloop next)
+      (fun _ s =>
+         LoopInv next ∅ s /\
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current next ancestor_done s).
+  Proof.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj with
+        (Q1 := fun _ s =>
+                 LoopInv next ∅ s /\
+                 ParentFrameForChild ancestor current ancestor_done s_before s).
+      - apply preloop_preserves_nested_parent_frame.
+      - apply preloop_preserves_nested_frame_disjoint. }
+    intros _ s [[Hloop Hframe] Hdisjoint].
+    exact (conj Hloop (conj Hframe Hdisjoint)).
   Qed.
 
   (* edge loop *)
+
+  Lemma parent_frame_nested_disjoint_self
+        (parent child: V) (done: V -> Prop)
+        (s_before s: St):
+    ParentFrameForChild parent child done s_before s ->
+    NestedFrameDisjoint parent child child done s.
+  Proof.
+    intros Hframe.
+    destruct Hframe as [_ Hframe].
+    destruct Hframe as [Hshape Hframe].
+    destruct Hframe as [_ Hframe].
+    destruct Hframe as [_ Hframe].
+    destruct Hframe as [_ Hframe].
+    destruct Hframe as [_ Hframe].
+    destruct Hframe as [Hchild_vis Hframe].
+    destruct Hframe as [Hfa_child Hframe].
+    destruct Hframe as [Hfane_child Hframe].
+    destruct Hframe as [Hdfn_parent_child Hnot_done_child].
+    destruct Hshape as
+      [Hwf [_ [_ [Hdone_edge [Hdone_vis _]]]]].
+    split.
+    - unfold dg_reachable.
+      apply Coq.Relations.Relation_Operators.rt_refl.
+    - intros old_child Hdone_old Hfa_old Hfane_old Hreach.
+      assert (Hold_vis: Visited old_child s).
+      { apply Hdone_vis. apply done_after_intro_old. exact Hdone_old. }
+      assert (Hold_ne_child: old_child <> child).
+      { intros Hold_eq_child. apply Hnot_done_child.
+        rewrite <- Hold_eq_child. exact Hdone_old. }
+      destruct (dg_reachable_vertex_path
+                  (state_to_dfs_tree g s root)
+                  old_child child Hreach)
+        as [path Hpath].
+      assert (Hchild_not_ne: ~ (child = child -> False)).
+      { intros Hneq. apply Hneq. reflexivity. }
+      destruct (dg_vertex_path_last_exit_from_pred
+                  (state_to_dfs_tree g s root)
+                  (fun z => z = child -> False)
+                  old_child child path
+                  Hold_ne_child Hchild_not_ne Hpath)
+        as [a [b [suffix
+          [Ha_ne_child [Hb_not_ne_child
+            [Hstep_ab [Hreach_old_a [_ _]]]]]]]].
+      assert (Hb_eq_child: b = child).
+      { apply NNPP. exact Hb_not_ne_child. }
+      subst b.
+      apply tree_step_char in Hstep_ab as [Hfa_child_from_a [_ _]].
+      assert (Ha_eq_parent: a = parent).
+      { rewrite Hfa_child in Hfa_child_from_a. symmetry. exact Hfa_child_from_a. }
+      subst a.
+      assert (Hparent_lt_old:
+                dfn s parent < dfn s old_child).
+      { destruct Hwf as [_ [_ [Hdfn_valid _]]].
+        eapply fa_parent_dfn_lt.
+        - exact Hfa_old.
+        - exact Hfane_old.
+        - apply Hdone_edge. apply done_after_intro_old. exact Hdone_old.
+        - exact Hold_vis.
+        - exact Hdfn_valid. }
+      assert (Hreach_old_parent:
+                dg_reachable (state_to_dfs_tree g s root)
+                             old_child parent).
+      { rewrite <- Hfa_child. exact Hreach_old_a. }
+      pose proof (tree_reachable_dfn_monotone
+                    s old_child parent Hwf Hreach_old_parent)
+        as Hold_le_parent.
+      lia.
+  Qed.
+
+  Lemma nested_frame_disjoint_loop_root_not_ancestor
+        (ancestor current loop_root: V)
+        (ancestor_done: V -> Prop) (s_before s: St):
+    ParentFrameForChild ancestor current ancestor_done s_before s ->
+    NestedFrameDisjoint ancestor current loop_root ancestor_done s ->
+    loop_root <> ancestor.
+  Proof.
+    intros Hframe [Hreach_current_loop _] Hloop_eq.
+    destruct Hframe as
+      [_ [Hshape [_ [_ [_ [_ [_ [_ [_ Hdfn_ancestor_current]]]]]]]]].
+    destruct Hdfn_ancestor_current as [Hdfn_ancestor_current _].
+    destruct Hshape as [Hwf _].
+    subst loop_root.
+    pose proof (tree_reachable_dfn_monotone
+                  s current ancestor Hwf Hreach_current_loop)
+      as Hdfn_current_ancestor.
+    lia.
+  Qed.
 
   (* 1. state preservation lemmas *)
 
@@ -1820,6 +2597,33 @@ Section IS_LOW.
       exact (proj1 H).
   Qed.
 
+  Lemma update_low_preserves_loop_core_shape_any
+        (center: V) (done: V -> Prop) (u: V) (n: nat):
+    Hoare
+      (LoopCoreShape center done)
+      (update_low u n)
+      (fun _ s => LoopCoreShape center done s).
+  Proof.
+    unfold LoopCoreShape.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst s. simpl. exact H.
+    - destruct H1 as [Heq _]. subst s. exact H.
+  Qed.
+
+  Lemma update_low_preserves_nested_frame_disjoint
+        (ancestor current loop_root: V)
+        (ancestor_done: V -> Prop) (u: V) (n: nat):
+    Hoare
+      (NestedFrameDisjoint ancestor current loop_root ancestor_done)
+      (update_low u n)
+      (fun _ s =>
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s).
+  Proof.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst s. simpl. exact H.
+    - destruct H1 as [Heq _]. subst s. exact H.
+  Qed.
+
   Lemma update_low_preserves_loop_aux_facts (center u: V) (n: nat):
     Hoare (LoopAuxFacts center)
           (update_low u n)
@@ -1874,6 +2678,317 @@ Section IS_LOW.
     { eapply Hoare_conseq_pre.
       2: apply update_low_preserves_closed.
       intros s [[_ [_ [Hclosed _]]] _]. exact Hclosed. }
+  Qed.
+
+  Lemma update_low_preserves_parent_low_frame
+        (parent child: V) (done: V -> Prop) (s_before: St) (n: nat):
+    Hoare
+      (fun s: St =>
+         ParentLowFrame parent done s_before s /\
+         parent <> child)
+      (update_low child n)
+      (fun _ s => ParentLowFrame parent done s_before s).
+  Proof.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst s. simpl.
+      destruct H as [[Hlow_eq [Hframe_fwd Hframe_bound]] Hparent_ne_child].
+      unfold ParentLowFrame.
+      split.
+      + change ((if equiv_decb parent child then n else low s0 parent) =
+                low s_before parent).
+        unfold equiv_decb.
+        destruct (equiv_dec parent child) as [Hparent_eq_child | _].
+        * exfalso. apply Hparent_ne_child. exact Hparent_eq_child.
+        * exact Hlow_eq.
+      + split.
+        * intros target Hcandidate_before.
+          destruct (Hframe_fwd target Hcandidate_before)
+            as [Hcandidate_after Hdfn_eq].
+          split.
+          -- unfold PartialLowCandidate, PartialActiveTarget in *.
+             simpl in *. exact Hcandidate_after.
+          -- exact Hdfn_eq.
+        * intros target Hcandidate_after.
+          apply Hframe_bound.
+          unfold PartialLowCandidate, PartialActiveTarget in *.
+          simpl in *. exact Hcandidate_after.
+    - destruct H1 as [Heq _]. subst s.
+      exact (proj1 H).
+  Qed.
+
+  Lemma update_low_preserves_parent_frame_for_child
+        (parent child: V) (done: V -> Prop) (s_before: St) (n: nat):
+    Hoare
+      (ParentFrameForChild parent child done s_before)
+      (update_low child n)
+      (fun _ s => ParentFrameForChild parent child done s_before s).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 Hframe Hexec.
+    destruct Hframe as [Hlow_frame Hframe].
+    destruct Hframe as [Hshape Hframe].
+    destruct Hframe as [Haux Hframe].
+    destruct Hframe as [Hclosed Hframe].
+    destruct Hframe as [Htree Hframe].
+    destruct Hframe as [Hedge Hframe].
+    destruct Hframe as [Hchild_vis Hframe].
+    destruct Hframe as [Hfa_child Hframe].
+    destruct Hframe as [Hfane_child Hframe].
+    destruct Hframe as [Hdfn_parent_child Hnot_done_child].
+    assert (Hparent_ne_child: parent <> child).
+    { intros Hparent_eq_child. subst child. lia. }
+    assert (Hlow_frame_after:
+              ParentLowFrame parent done s_before s2).
+    { pose proof (update_low_preserves_parent_low_frame
+                    parent child done s_before n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2
+                    (conj Hlow_frame Hparent_ne_child) Hexec). }
+    assert (Hshape_after:
+              LoopCoreShape parent (done_after done child) s2).
+    { pose proof (update_low_preserves_loop_core_shape
+                    parent (done_after done child) child n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 (conj Hshape Hchild_vis) Hexec). }
+    assert (Haux_after: LoopAuxFacts parent s2).
+    { pose proof (update_low_preserves_loop_aux_facts parent child n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Haux Hexec). }
+    assert (Hclosed_after: Closed s2).
+    { pose proof (update_low_preserves_closed child n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Hclosed Hexec). }
+    assert (Htree_after: TreeEdgesAreGraphEdges s2).
+    { pose proof (update_low_preserves_tree_edges_are_graph_edges child n)
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Htree Hexec). }
+    assert (Hchild_vis_after: Visited child s2).
+    { pose proof (update_low_keep_visited child child n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Hchild_vis Hexec). }
+    assert (Hfa_child_pres:
+              fa s2 child = fa s1 child).
+    { pose proof (update_low_keep_fa child child n (fa s1 child)) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 eq_refl Hexec). }
+    assert (Hfa_child_after: fa s2 child = parent).
+    { rewrite Hfa_child_pres. exact Hfa_child. }
+    assert (Hfane_child_after: fa s2 child <> child).
+    { intros Hfa_eq_child.
+      apply Hfane_child.
+      rewrite <- Hfa_child_pres. exact Hfa_eq_child. }
+    assert (Hdfn_parent_pres:
+              dfn s2 parent = dfn s1 parent).
+    { pose proof (update_low_keep_dfn child parent n (dfn s1 parent))
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 eq_refl Hexec). }
+    assert (Hdfn_child_pres:
+              dfn s2 child = dfn s1 child).
+    { pose proof (update_low_keep_dfn child child n (dfn s1 child))
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 eq_refl Hexec). }
+    assert (Hdfn_parent_child_after:
+              dfn s2 parent < dfn s2 child).
+    { lia. }
+    unfold ParentFrameForChild.
+    split; [exact Hlow_frame_after |].
+    split; [exact Hshape_after |].
+    split; [exact Haux_after |].
+    split; [exact Hclosed_after |].
+    split; [exact Htree_after |].
+    split; [exact Hedge |].
+    split; [exact Hchild_vis_after |].
+    split; [exact Hfa_child_after |].
+    split; [exact Hfane_child_after |].
+    split; [exact Hdfn_parent_child_after |].
+    exact Hnot_done_child.
+  Qed.
+
+  Lemma update_low_preserves_parent_frame_for_child_at
+        (parent child target: V) (done: V -> Prop)
+        (s_before: St) (n: nat):
+    Hoare
+      (fun s: St =>
+         ParentFrameForChild parent child done s_before s /\
+         target <> parent)
+      (update_low target n)
+      (fun _ s => ParentFrameForChild parent child done s_before s).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 [Hframe Htarget_ne_parent] Hexec.
+    destruct Hframe as [Hlow_frame Hframe].
+    destruct Hframe as [Hshape Hframe].
+    destruct Hframe as [Haux Hframe].
+    destruct Hframe as [Hclosed Hframe].
+    destruct Hframe as [Htree Hframe].
+    destruct Hframe as [Hedge Hframe].
+    destruct Hframe as [Hchild_vis Hframe].
+    destruct Hframe as [Hfa_child Hframe].
+    destruct Hframe as [Hfane_child Hframe].
+    destruct Hframe as [Hdfn_parent_child Hnot_done_child].
+    assert (Hparent_ne_target: parent <> target).
+    { intros Hparent_eq_target. apply Htarget_ne_parent.
+      symmetry. exact Hparent_eq_target. }
+    assert (Hlow_frame_after:
+              ParentLowFrame parent done s_before s2).
+    { pose proof (update_low_preserves_parent_low_frame
+                    parent target done s_before n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2
+                    (conj Hlow_frame Hparent_ne_target) Hexec). }
+    assert (Hshape_after:
+              LoopCoreShape parent (done_after done child) s2).
+    { pose proof (update_low_preserves_loop_core_shape_any
+                    parent (done_after done child) target n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Hshape Hexec). }
+    assert (Haux_after: LoopAuxFacts parent s2).
+    { pose proof (update_low_preserves_loop_aux_facts parent target n)
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Haux Hexec). }
+    assert (Hclosed_after: Closed s2).
+    { pose proof (update_low_preserves_closed target n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Hclosed Hexec). }
+    assert (Htree_after: TreeEdgesAreGraphEdges s2).
+    { pose proof (update_low_preserves_tree_edges_are_graph_edges target n)
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Htree Hexec). }
+    assert (Hchild_vis_after: Visited child s2).
+    { pose proof (update_low_keep_visited target child n) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 Hchild_vis Hexec). }
+    assert (Hfa_child_pres:
+              fa s2 child = fa s1 child).
+    { pose proof (update_low_keep_fa target child n (fa s1 child)) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 eq_refl Hexec). }
+    assert (Hfa_child_after: fa s2 child = parent).
+    { rewrite Hfa_child_pres. exact Hfa_child. }
+    assert (Hfane_child_after: fa s2 child <> child).
+    { intros Hfa_eq_child.
+      apply Hfane_child.
+      rewrite <- Hfa_child_pres. exact Hfa_eq_child. }
+    assert (Hdfn_parent_pres:
+              dfn s2 parent = dfn s1 parent).
+    { pose proof (update_low_keep_dfn target parent n (dfn s1 parent))
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 eq_refl Hexec). }
+    assert (Hdfn_child_pres:
+              dfn s2 child = dfn s1 child).
+    { pose proof (update_low_keep_dfn target child n (dfn s1 child))
+        as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2 eq_refl Hexec). }
+    assert (Hdfn_parent_child_after:
+              dfn s2 parent < dfn s2 child).
+    { lia. }
+    unfold ParentFrameForChild.
+    split; [exact Hlow_frame_after |].
+    split; [exact Hshape_after |].
+    split; [exact Haux_after |].
+    split; [exact Hclosed_after |].
+    split; [exact Htree_after |].
+    split; [exact Hedge |].
+    split; [exact Hchild_vis_after |].
+    split; [exact Hfa_child_after |].
+    split; [exact Hfane_child_after |].
+    split; [exact Hdfn_parent_child_after |].
+    exact Hnot_done_child.
+  Qed.
+
+  Lemma get_low_update_low_preserves_nested_parent_context
+        (ancestor current loop_root target: V)
+        (ancestor_done: V -> Prop) (s_before: St):
+    Hoare
+      (fun s: St =>
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s)
+      (lv <- get' (fun s => low s target);; update_low loop_root lv)
+      (fun _ s =>
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+    eapply Hoare_conj with
+      (Q1 := fun _ s =>
+               ParentFrameForChild ancestor current ancestor_done s_before s).
+    - eapply Hoare_conseq_pre.
+      2: apply update_low_preserves_parent_frame_for_child_at.
+      intros s1 [Hs1 _]. subst s1.
+      destruct H as [Hframe Hdisjoint].
+      assert (Hloop_ne_ancestor: loop_root <> ancestor).
+      { eapply nested_frame_disjoint_loop_root_not_ancestor; eauto. }
+      exact (conj Hframe Hloop_ne_ancestor).
+    - eapply Hoare_conseq_pre.
+      2: apply update_low_preserves_nested_frame_disjoint.
+      intros s1 [Hs1 _]. subst s1.
+      destruct H as [_ Hdisjoint]. exact Hdisjoint.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_nested_parent_context
+        (ancestor current loop_root target: V)
+        (ancestor_done: V -> Prop) (s_before: St):
+    Hoare
+      (fun s: St =>
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s)
+      (dv <- get' (fun s => dfn s target);; update_low loop_root dv)
+      (fun _ s =>
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+    eapply Hoare_conj with
+      (Q1 := fun _ s =>
+               ParentFrameForChild ancestor current ancestor_done s_before s).
+    - eapply Hoare_conseq_pre.
+      2: apply update_low_preserves_parent_frame_for_child_at.
+      intros s1 [Hs1 _]. subst s1.
+      destruct H as [Hframe Hdisjoint].
+      assert (Hloop_ne_ancestor: loop_root <> ancestor).
+      { eapply nested_frame_disjoint_loop_root_not_ancestor; eauto. }
+      exact (conj Hframe Hloop_ne_ancestor).
+    - eapply Hoare_conseq_pre.
+      2: apply update_low_preserves_nested_frame_disjoint.
+      intros s1 [Hs1 _]. subst s1.
+      destruct H as [_ Hdisjoint]. exact Hdisjoint.
+  Qed.
+
+  Lemma get_low_update_low_preserves_parent_frame_for_child
+        (parent child target: V) (done: V -> Prop) (s_before: St):
+    Hoare
+      (ParentFrameForChild parent child done s_before)
+      (lv <- get' (fun s => low s target);; update_low child lv)
+      (fun _ s => ParentFrameForChild parent child done s_before s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_parent_frame_for_child.
+    intros s1 Hs1. destruct Hs1 as [Hs1 _]. subst s1. exact H.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_parent_frame_for_child
+        (parent child target: V) (done: V -> Prop) (s_before: St):
+    Hoare
+      (ParentFrameForChild parent child done s_before)
+      (dv <- get' (fun s => dfn s target);; update_low child dv)
+      (fun _ s => ParentFrameForChild parent child done s_before s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { eapply Hoare_get'. } simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_parent_frame_for_child.
+    intros s1 Hs1. destruct Hs1 as [Hs1 _]. subst s1. exact H.
   Qed.
 
   Lemma set_fa_state_keep_other_fa (s: St) (v p w: V):
@@ -1947,6 +3062,34 @@ Section IS_LOW.
         apply (proj2 (set_fa_pending_tree_step_iff s v p a b Hnotvis)).
         exact Hstep.
       + exact Hreach.
+  Qed.
+
+  Lemma set_fa_state_pending_preserves_nested_frame_disjoint
+        (ancestor current loop_root a p: V)
+        (ancestor_done: V -> Prop) (s: St):
+    (forall old_child, ancestor_done old_child -> Visited old_child s) ->
+    ~ Visited a s ->
+    NestedFrameDisjoint ancestor current loop_root ancestor_done s ->
+    NestedFrameDisjoint ancestor current loop_root ancestor_done
+      (set_fa_state s a p).
+  Proof.
+    intros Hdone_vis Hnotvis [Hreach_current_loop Hno_old].
+    split.
+    - apply (proj2 (set_fa_pending_tree_reachable_iff
+                      s a p current loop_root Hnotvis)).
+      exact Hreach_current_loop.
+    - intros old_child Hdone_old Hfa_old_post Hfane_old_post Hreach_post.
+      assert (Hold_vis: Visited old_child s).
+      { apply Hdone_vis. exact Hdone_old. }
+      assert (Hold_ne_a: old_child <> a).
+      { intros Hold_eq_a. apply Hnotvis.
+        rewrite <- Hold_eq_a. exact Hold_vis. }
+      apply (Hno_old old_child Hdone_old).
+      + rewrite set_fa_state_keep_other_fa in Hfa_old_post; auto.
+      + rewrite set_fa_state_keep_other_fa in Hfane_old_post; auto.
+      + apply (proj1 (set_fa_pending_tree_reachable_iff
+                        s a p old_child loop_root Hnotvis)).
+        exact Hreach_post.
   Qed.
 
   Lemma set_fa_pending_preserves_tree_edges_are_graph_edges
@@ -2223,6 +3366,395 @@ Section IS_LOW.
     { unfold set_fa. intro_state. hoare_auto_s.
       subst s. simpl.
       destruct H as [_ [_ [_ [_ Hnodup]]]]. exact Hnodup. }
+  Qed.
+
+  Lemma set_fa_state_pending_preserves_parent_low_frame
+        (parent child a p: V) (done: V -> Prop)
+        (s_before s: St):
+    ParentLowFrame parent done s_before s ->
+    LoopCoreShape parent (done_after done child) s ->
+    ~ Visited a s ->
+    ParentLowFrame parent done s_before (set_fa_state s a p).
+  Proof.
+    intros [Hlow_eq [Hframe_fwd Hframe_bound]]
+           [_ [_ [_ [_ [Hdone_after_vis _]]]]] Hnotvis.
+    assert (Hdone_vis: forall x, done x -> Visited x s).
+    { intros x Hdone. apply Hdone_after_vis.
+      apply done_after_intro_old. exact Hdone. }
+    unfold ParentLowFrame.
+    split.
+    - simpl. exact Hlow_eq.
+    - split.
+      + intros b Hcandidate_before.
+        destruct (Hframe_fwd b Hcandidate_before)
+          as [Hcandidate_s Hdfn_eq].
+        split.
+        * apply (proj2 (set_fa_pending_partial_low_candidate_iff
+                          parent done s a p b Hnotvis Hdone_vis)).
+          exact Hcandidate_s.
+        * simpl. exact Hdfn_eq.
+      + intros b Hcandidate_after.
+        apply Hframe_bound.
+        apply (proj1 (set_fa_pending_partial_low_candidate_iff
+                        parent done s a p b Hnotvis Hdone_vis)).
+        exact Hcandidate_after.
+  Qed.
+
+  Lemma set_fa_pending_preserves_parent_low_frame
+        (parent child a p: V) (done: V -> Prop) (s_before: St):
+    Hoare
+      (fun s: St =>
+         ParentLowFrame parent done s_before s /\
+         LoopCoreShape parent (done_after done child) s /\
+         ~ Visited a s)
+      (set_fa a p)
+      (fun _ s => ParentLowFrame parent done s_before s).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s.
+    destruct H as [Hlow_frame [Hshape Hnotvis]].
+    exact (set_fa_state_pending_preserves_parent_low_frame
+             parent child a p done s_before s0
+             Hlow_frame Hshape Hnotvis).
+  Qed.
+
+  Lemma set_fa_state_pending_preserves_parent_frame_for_child
+        (parent child a: V) (done: V -> Prop)
+        (s_before s: St):
+    ParentFrameForChild parent child done s_before s ->
+    ~ Visited a s ->
+    ParentFrameForChild parent child done s_before (set_fa_state s a child).
+  Proof.
+    intros Hframe Hnotvis.
+    destruct Hframe as [Hlow_frame Hframe].
+    destruct Hframe as [Hshape Hframe].
+    destruct Hframe as [Haux Hframe].
+    destruct Hframe as [Hclosed Hframe].
+    destruct Hframe as [Htree Hframe].
+    destruct Hframe as [Hedge Hframe].
+    destruct Hframe as [Hchild_vis Hframe].
+    destruct Hframe as [Hfa_child Hframe].
+    destruct Hframe as [Hfane_child Hframe].
+    destruct Hframe as [Hdfn_parent_child Hnot_done_child].
+    assert (Hchild_ne_a: child <> a).
+    { intros Hchild_eq_a. apply Hnotvis.
+      rewrite <- Hchild_eq_a. exact Hchild_vis. }
+    assert (Hlow_frame_after:
+              ParentLowFrame parent done s_before (set_fa_state s a child)).
+    { exact (set_fa_state_pending_preserves_parent_low_frame
+               parent child a child done s_before s
+               Hlow_frame Hshape Hnotvis). }
+    assert (Hshape_after:
+              LoopCoreShape parent (done_after done child)
+                (set_fa_state s a child)).
+    { exact (set_fa_pending_preserves_loop_core_shape
+               parent (done_after done child) s a child
+               Hchild_vis Hnotvis Hshape). }
+    assert (Haux_after:
+              LoopAuxFacts parent (set_fa_state s a child)).
+    { unfold LoopAuxFacts, OrderFacts in *. simpl. exact Haux. }
+    assert (Hclosed_after: Closed (set_fa_state s a child)).
+    { apply set_fa_pending_preserves_closed. exact Hclosed. }
+    assert (Htree_after: TreeEdgesAreGraphEdges (set_fa_state s a child)).
+    { exact (set_fa_pending_preserves_tree_edges_are_graph_edges
+               s a child Hnotvis Htree). }
+    assert (Hchild_vis_after: Visited child (set_fa_state s a child)).
+    { simpl. exact Hchild_vis. }
+    assert (Hfa_child_after: fa (set_fa_state s a child) child = parent).
+    { rewrite set_fa_state_keep_other_fa; auto. }
+    assert (Hfane_child_after: fa (set_fa_state s a child) child <> child).
+    { rewrite set_fa_state_keep_other_fa; auto. }
+    assert (Hdfn_parent_child_after:
+              dfn (set_fa_state s a child) parent <
+              dfn (set_fa_state s a child) child).
+    { simpl. exact Hdfn_parent_child. }
+    unfold ParentFrameForChild.
+    split; [exact Hlow_frame_after |].
+    split; [exact Hshape_after |].
+    split; [exact Haux_after |].
+    split; [exact Hclosed_after |].
+    split; [exact Htree_after |].
+    split; [exact Hedge |].
+    split; [exact Hchild_vis_after |].
+    split; [exact Hfa_child_after |].
+    split; [exact Hfane_child_after |].
+    split; [exact Hdfn_parent_child_after |].
+    exact Hnot_done_child.
+  Qed.
+
+  Lemma set_fa_pending_preserves_parent_frame_for_child
+        (parent child a: V) (done: V -> Prop) (s_before: St):
+    Hoare
+      (fun s: St =>
+         ParentFrameForChild parent child done s_before s /\
+         ~ Visited a s)
+      (set_fa a child)
+      (fun _ s => ParentFrameForChild parent child done s_before s).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s.
+    destruct H as [Hframe Hnotvis].
+    exact (set_fa_state_pending_preserves_parent_frame_for_child
+             parent child a done s_before s0 Hframe Hnotvis).
+  Qed.
+
+  Lemma set_fa_state_pending_preserves_parent_frame_for_child_at
+        (parent child a p: V) (done: V -> Prop)
+        (s_before s: St):
+    Visited p s ->
+    ParentFrameForChild parent child done s_before s ->
+    ~ Visited a s ->
+    ParentFrameForChild parent child done s_before (set_fa_state s a p).
+  Proof.
+    intros Hpvis Hframe Hnotvis.
+    destruct Hframe as [Hlow_frame Hframe].
+    destruct Hframe as [Hshape Hframe].
+    destruct Hframe as [Haux Hframe].
+    destruct Hframe as [Hclosed Hframe].
+    destruct Hframe as [Htree Hframe].
+    destruct Hframe as [Hedge Hframe].
+    destruct Hframe as [Hchild_vis Hframe].
+    destruct Hframe as [Hfa_child Hframe].
+    destruct Hframe as [Hfane_child Hframe].
+    destruct Hframe as [Hdfn_parent_child Hnot_done_child].
+    assert (Hchild_ne_a: child <> a).
+    { intros Hchild_eq_a. apply Hnotvis.
+      rewrite <- Hchild_eq_a. exact Hchild_vis. }
+    assert (Hlow_frame_after:
+              ParentLowFrame parent done s_before (set_fa_state s a p)).
+    { exact (set_fa_state_pending_preserves_parent_low_frame
+               parent child a p done s_before s
+               Hlow_frame Hshape Hnotvis). }
+    assert (Hshape_after:
+              LoopCoreShape parent (done_after done child)
+                (set_fa_state s a p)).
+    { exact (set_fa_pending_preserves_loop_core_shape
+               parent (done_after done child) s a p
+               Hpvis Hnotvis Hshape). }
+    assert (Haux_after:
+              LoopAuxFacts parent (set_fa_state s a p)).
+    { unfold LoopAuxFacts, OrderFacts in *. simpl. exact Haux. }
+    assert (Hclosed_after: Closed (set_fa_state s a p)).
+    { apply set_fa_pending_preserves_closed. exact Hclosed. }
+    assert (Htree_after: TreeEdgesAreGraphEdges (set_fa_state s a p)).
+    { exact (set_fa_pending_preserves_tree_edges_are_graph_edges
+               s a p Hnotvis Htree). }
+    assert (Hchild_vis_after: Visited child (set_fa_state s a p)).
+    { simpl. exact Hchild_vis. }
+    assert (Hfa_child_after: fa (set_fa_state s a p) child = parent).
+    { rewrite set_fa_state_keep_other_fa; auto. }
+    assert (Hfane_child_after: fa (set_fa_state s a p) child <> child).
+    { rewrite set_fa_state_keep_other_fa; auto. }
+    assert (Hdfn_parent_child_after:
+              dfn (set_fa_state s a p) parent <
+              dfn (set_fa_state s a p) child).
+    { simpl. exact Hdfn_parent_child. }
+    unfold ParentFrameForChild.
+    split; [exact Hlow_frame_after |].
+    split; [exact Hshape_after |].
+    split; [exact Haux_after |].
+    split; [exact Hclosed_after |].
+    split; [exact Htree_after |].
+    split; [exact Hedge |].
+    split; [exact Hchild_vis_after |].
+    split; [exact Hfa_child_after |].
+    split; [exact Hfane_child_after |].
+    split; [exact Hdfn_parent_child_after |].
+    exact Hnot_done_child.
+  Qed.
+
+  Lemma set_fa_pending_prepares_nested_frame_pre
+        (parent child a: V) (done current_done: V -> Prop)
+        (s_before: St):
+    Hoare
+      (fun s: St =>
+         LoopInv child current_done s /\
+         ParentFrameForChild parent child done s_before s /\
+         Edge child a /\
+         ~ current_done a /\
+         ~ Visited a s)
+      (set_fa a child)
+      (fun _ s =>
+         NestedFramePre parent child child a done current_done s_before s).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. change
+      (NestedFramePre parent child child a done current_done
+         s_before (set_fa_state s0 a child)).
+    destruct H as [Hloop [Hframe [Hedge [Hnot_done Hnotvis]]]].
+    destruct Hloop as [Haux Hcore].
+    pose proof Hcore as Hcore_full.
+    destruct Hcore as [Hshape_child [Hclosed Hlow]].
+    destruct Hshape_child as
+      [Hwf [Htree_sound [Hchild_vis_loop
+        [Hdone_edge [Hdone_vis Hprocessed]]]]].
+    destruct Haux as [Hsettled [Hactive Horder]].
+    assert (Haux_after:
+              LoopAuxFacts child (set_fa_state s0 a child)).
+    { unfold LoopAuxFacts, OrderFacts. simpl.
+      exact (conj Hsettled (conj Hactive Horder)). }
+    assert (Hcore_after:
+              LoopCoreInv child current_done (set_fa_state s0 a child)).
+    { exact (set_fa_pending_preserves_loop_core_inv
+               child current_done s0 a child
+               Hchild_vis_loop Hnotvis Hcore_full). }
+    assert (Hloop_after:
+              LoopInv child current_done (set_fa_state s0 a child)).
+    { exact (conj Haux_after Hcore_after). }
+    assert (Hframe_after:
+              ParentFrameForChild parent child done s_before
+                (set_fa_state s0 a child)).
+    { exact (set_fa_state_pending_preserves_parent_frame_for_child
+               parent child a done s_before s0 Hframe Hnotvis). }
+    assert (Hdisjoint_after:
+              NestedFrameDisjoint parent child child done
+                (set_fa_state s0 a child)).
+    { exact (parent_frame_nested_disjoint_self
+               parent child done s_before (set_fa_state s0 a child)
+               Hframe_after). }
+    assert (Hfa_new: fa (set_fa_state s0 a child) a = child).
+    { unfold set_fa_state. simpl. unfold equiv_decb.
+      destruct (equiv_dec a a) as [_ | Hneq].
+      - reflexivity.
+      - exfalso. apply Hneq. reflexivity. }
+    assert (Hchild_ne_a: child <> a).
+    { intros Hchild_eq_a. apply Hnotvis.
+      rewrite <- Hchild_eq_a. exact Hchild_vis_loop. }
+    assert (Hfa_ne: fa (set_fa_state s0 a child) a <> a).
+    { rewrite Hfa_new. exact Hchild_ne_a. }
+    assert (Hentry: EntryPre a (set_fa_state s0 a child)).
+    { assert (Hwf_pre: wf_scc_state_pre g root a (set_fa_state s0 a child)).
+      { exact (conj
+                 (set_fa_pending_preserves_wf_scc_state
+                    s0 child a Hwf Hchild_vis_loop Hnotvis)
+                 Hnotvis). }
+      assert (Hclosed_post: Closed (set_fa_state s0 a child)).
+      { apply set_fa_pending_preserves_closed. exact Hclosed. }
+      assert (Htree_post: TreeEdgesAreGraphEdges (set_fa_state s0 a child)).
+      { exact (set_fa_pending_preserves_tree_edges_are_graph_edges
+                 s0 a child Hnotvis Htree_sound). }
+      assert (Hincoming:
+                fa (set_fa_state s0 a child) a <> a ->
+                Edge (fa (set_fa_state s0 a child) a) a).
+      { intros _. rewrite Hfa_new. exact Hedge. }
+      exact (conj Hwf_pre
+              (conj Hsettled
+                (conj Hclosed_post
+                  (conj Htree_post
+                    (conj Horder Hincoming))))). }
+    unfold NestedFramePre.
+    exact (conj Hloop_after
+            (conj Hframe_after
+              (conj Hdisjoint_after
+                (conj Hedge
+                  (conj Hnot_done
+                    (conj Hentry
+                      (conj Hfa_new Hfa_ne))))))).
+  Qed.
+
+  Lemma set_fa_pending_prepares_external_nested_frame_pre
+        (ancestor current loop_root a: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before: St):
+    Hoare
+      (fun s: St =>
+         LoopInv loop_root loop_done s /\
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s /\
+         Edge loop_root a /\
+         ~ loop_done a /\
+         ~ Visited a s)
+      (set_fa a loop_root)
+      (fun _ s =>
+         NestedFramePre ancestor current loop_root a
+           ancestor_done loop_done s_before s).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. change
+      (NestedFramePre ancestor current loop_root a ancestor_done loop_done
+         s_before (set_fa_state s0 a loop_root)).
+    destruct H as
+      [Hloop [Hframe [Hdisjoint [Hedge [Hnot_done Hnotvis]]]]].
+    destruct Hloop as [Haux Hcore].
+    pose proof Hcore as Hcore_full.
+    destruct Hcore as [Hshape_loop [Hclosed Hlow]].
+    destruct Hshape_loop as
+      [Hwf [Htree_sound [Hloop_vis [Hdone_edge [Hdone_vis Hprocessed]]]]].
+    destruct Haux as [Hsettled [Hactive Horder]].
+    destruct Hframe as [Hframe_low Hframe_rest].
+    pose proof (conj Hframe_low Hframe_rest) as Hframe_full.
+    destruct Hframe_rest as [Hshape_ancestor _].
+    destruct Hshape_ancestor as [_ [_ [_ [_ [Hancestor_done_vis _]]]]].
+    assert (Haux_after:
+              LoopAuxFacts loop_root (set_fa_state s0 a loop_root)).
+    { unfold LoopAuxFacts, OrderFacts. simpl.
+      exact (conj Hsettled (conj Hactive Horder)). }
+    assert (Hcore_after:
+              LoopCoreInv loop_root loop_done
+                (set_fa_state s0 a loop_root)).
+    { exact (set_fa_pending_preserves_loop_core_inv
+               loop_root loop_done s0 a loop_root
+               Hloop_vis Hnotvis Hcore_full). }
+    assert (Hloop_after:
+              LoopInv loop_root loop_done
+                (set_fa_state s0 a loop_root)).
+    { exact (conj Haux_after Hcore_after). }
+    assert (Hframe_after:
+              ParentFrameForChild ancestor current ancestor_done s_before
+                (set_fa_state s0 a loop_root)).
+    { exact (set_fa_state_pending_preserves_parent_frame_for_child_at
+               ancestor current a loop_root ancestor_done s_before s0
+               Hloop_vis Hframe_full Hnotvis). }
+    assert (Hdisjoint_after:
+              NestedFrameDisjoint ancestor current loop_root ancestor_done
+                (set_fa_state s0 a loop_root)).
+    { apply set_fa_state_pending_preserves_nested_frame_disjoint.
+      - intros old_child Hdone_old.
+        apply Hancestor_done_vis.
+        apply done_after_intro_old. exact Hdone_old.
+      - exact Hnotvis.
+      - exact Hdisjoint. }
+    assert (Hfa_new: fa (set_fa_state s0 a loop_root) a = loop_root).
+    { unfold set_fa_state. simpl. unfold equiv_decb.
+      destruct (equiv_dec a a) as [_ | Hneq].
+      - reflexivity.
+      - exfalso. apply Hneq. reflexivity. }
+    assert (Hloop_ne_a: loop_root <> a).
+    { intros Hloop_eq_a. apply Hnotvis.
+      rewrite <- Hloop_eq_a. exact Hloop_vis. }
+    assert (Hfa_ne: fa (set_fa_state s0 a loop_root) a <> a).
+    { rewrite Hfa_new. exact Hloop_ne_a. }
+    assert (Hentry: EntryPre a (set_fa_state s0 a loop_root)).
+    { assert (Hwf_pre:
+                wf_scc_state_pre g root a
+                  (set_fa_state s0 a loop_root)).
+      { exact (conj
+                 (set_fa_pending_preserves_wf_scc_state
+                    s0 loop_root a Hwf Hloop_vis Hnotvis)
+                 Hnotvis). }
+      assert (Hclosed_post: Closed (set_fa_state s0 a loop_root)).
+      { apply set_fa_pending_preserves_closed. exact Hclosed. }
+      assert (Htree_post:
+                TreeEdgesAreGraphEdges (set_fa_state s0 a loop_root)).
+      { exact (set_fa_pending_preserves_tree_edges_are_graph_edges
+                 s0 a loop_root Hnotvis Htree_sound). }
+      assert (Hincoming:
+                fa (set_fa_state s0 a loop_root) a <> a ->
+                Edge (fa (set_fa_state s0 a loop_root) a) a).
+      { intros _. rewrite Hfa_new. exact Hedge. }
+      exact (conj Hwf_pre
+              (conj Hsettled
+                (conj Hclosed_post
+                  (conj Htree_post
+                    (conj Horder Hincoming))))). }
+    unfold NestedFramePre.
+    exact (conj Hloop_after
+            (conj Hframe_after
+              (conj Hdisjoint_after
+                (conj Hedge
+                  (conj Hnot_done
+                    (conj Hentry
+                      (conj Hfa_new Hfa_ne))))))).
   Qed.
 
   Lemma set_fa_pending_preserves_parent_loop
@@ -3175,6 +4707,135 @@ Section IS_LOW.
           apply low_correct_add_inactive_done; auto.
   Qed.
 
+  Lemma process_edge_preserves_parent_frame_for_child
+        (parent child a: V) (done current_done: V -> Prop)
+        (s_before: St) (W: RecProgram):
+    VisitFrameContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv child current_done s /\
+         ParentFrameForChild parent child done s_before s /\
+         Edge child a /\
+         ~ current_done a)
+      (process_edge child W a)
+      (fun _ s =>
+         ParentFrameForChild parent child done s_before s).
+  Proof.
+    intros Hframe_contract.
+    unfold process_edge, if_else.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_conseq_pre.
+      2: {
+        eapply Hoare_bind with
+          (Q := fun (_: unit) s =>
+                  NestedFramePre parent child child a
+                    done current_done s_before s).
+        - apply set_fa_pending_prepares_nested_frame_pre.
+        - simpl. intros _.
+          eapply Hoare_bind with
+            (Q := fun (_: unit) s =>
+                    ParentFrameForChild parent child done s_before s).
+          + eapply Hoare_conseq_post.
+            2: {
+              apply (Hframe_contract parent child child a
+                       done current_done s_before). }
+            intros _ s [Hparent_frame _].
+            exact Hparent_frame.
+          + simpl. intros _.
+            apply (get_low_update_low_preserves_parent_frame_for_child
+                     parent child a done s_before). }
+      intros s1 [Hnotvis Hs1]. subst s1.
+      destruct H as [Hloop [Hframe [Hedge Hnot_done]]].
+      exact (conj Hloop
+              (conj Hframe
+                (conj Hedge
+                  (conj Hnot_done Hnotvis)))).
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hvisited_by_classic Hs1]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: apply (get_dfn_update_low_preserves_parent_frame_for_child
+                    parent child a done s_before).
+        intros s1 [_ Hs1]. subst s1.
+        destruct H as [_ [Hframe _]].
+        exact Hframe.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        simpl. intros _ s [Heq _]. subst s.
+        destruct H as [_ [Hframe _]].
+        exact Hframe.
+  Qed.
+
+  Lemma process_edge_preserves_nested_parent_frame
+        (ancestor current loop_root a: V)
+        (ancestor_done loop_done: V -> Prop)
+        (s_before: St) (W: RecProgram):
+    VisitFrameContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv loop_root loop_done s /\
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s /\
+         Edge loop_root a /\
+         ~ loop_done a)
+      (process_edge loop_root W a)
+      (fun _ s =>
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s).
+  Proof.
+    intros Hframe_contract.
+    unfold process_edge, if_else.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_conseq_pre.
+      2: {
+        eapply Hoare_bind with
+          (Q := fun (_: unit) s =>
+                  NestedFramePre ancestor current loop_root a
+                    ancestor_done loop_done s_before s).
+        - apply set_fa_pending_prepares_external_nested_frame_pre.
+        - simpl. intros _.
+          eapply Hoare_bind with
+            (Q := fun (_: unit) s =>
+                    ParentFrameForChild ancestor current ancestor_done
+                      s_before s /\
+                    NestedFrameDisjoint ancestor current loop_root
+                      ancestor_done s).
+          + apply (Hframe_contract ancestor current loop_root a
+                     ancestor_done loop_done s_before).
+          + simpl. intros _.
+            apply (get_low_update_low_preserves_nested_parent_context
+                     ancestor current loop_root a ancestor_done s_before). }
+      intros s1 [Hnotvis Hs1]. subst s1.
+      destruct H as [Hloop [Hframe [Hdisjoint [Hedge Hnot_done]]]].
+      exact (conj Hloop
+              (conj Hframe
+                (conj Hdisjoint
+                  (conj Hedge
+                    (conj Hnot_done Hnotvis))))).
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [Hvisited_by_classic Hs1]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: apply (get_dfn_update_low_preserves_nested_parent_context
+                    ancestor current loop_root a ancestor_done s_before).
+        intros s1 [_ Hs1]. subst s1.
+        destruct H as [_ [Hframe [Hdisjoint _]]].
+        exact (conj Hframe Hdisjoint).
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        simpl. intros _ s [Heq _]. subst s.
+        destruct H as [_ [Hframe [Hdisjoint _]]].
+        exact (conj Hframe Hdisjoint).
+  Qed.
+
   Lemma process_edge_preserves_stack_nodup
         (u v: V) (W: RecProgram):
     (forall x, Hoare StackNoDup (W x) (fun _ s => StackNoDup s)) ->
@@ -3338,6 +4999,125 @@ Section IS_LOW.
             (conj Hedge'
               (conj Hentry
                 (conj Hfa Hfane)))).
+  Qed.
+
+  Lemma edge_loop_preserves_parent_frame_for_child
+        (parent child: V) (done: V -> Prop) (s_before: St)
+        (W: RecProgram):
+    VisitChildContract W ->
+    VisitFrameContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv child ∅ s /\
+         ParentFrameForChild parent child done s_before s)
+      (forset (edge_set child) (process_edge child W))
+      (fun _ s =>
+         LoopInv child (edge_set child) s /\
+         ParentFrameForChild parent child done s_before s).
+  Proof.
+    intros Hchild Hframe.
+    apply Hoare_forset with
+      (P := fun current_done s =>
+              LoopInv child current_done s /\
+              ParentFrameForChild parent child done s_before s)
+      (universe := edge_set child).
+    - intros done1 done2 Hdone s1 s2 Heq. subst s2.
+      split; intros [Hloop Hparent_frame].
+      + split.
+        * eapply loop_inv_done_equiv; eauto.
+        * exact Hparent_frame.
+      + split.
+        * eapply loop_inv_done_equiv.
+          -- symmetry. exact Hdone.
+          -- exact Hloop.
+        * exact Hparent_frame.
+    - intros current_done a Hdone_sub Hedge Hnot_done.
+      apply Hoare_conj with
+        (Q1 := fun _ s => LoopInv child (done_after current_done a) s).
+      + eapply Hoare_conseq_pre.
+        2: {
+          eapply process_edge_preserves_loop_inv.
+          eapply Hoare_conseq_pre.
+          2: apply Hchild.
+          intros s [Hloop [Hedge' [Hentry [Hfa Hfane]]]].
+          unfold ParentRecursivePre.
+          exact (conj Hloop
+                  (conj Hedge'
+                    (conj Hentry
+                      (conj Hfa Hfane)))). }
+        intros s [Hloop _].
+        exact (conj Hloop (conj Hedge Hnot_done)).
+      + eapply Hoare_conseq_pre.
+        2: {
+          apply (process_edge_preserves_parent_frame_for_child
+                   parent child a done current_done s_before W Hframe). }
+        intros s [Hloop Hparent_frame].
+        exact (conj Hloop
+                (conj Hparent_frame
+                  (conj Hedge Hnot_done))).
+  Qed.
+
+  Lemma edge_loop_preserves_nested_parent_frame
+        (ancestor current loop_root: V)
+        (ancestor_done: V -> Prop) (s_before: St)
+        (W: RecProgram):
+    VisitChildContract W ->
+    VisitFrameContract W ->
+    Hoare
+      (fun s: St =>
+         LoopInv loop_root ∅ s /\
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s)
+      (forset (edge_set loop_root) (process_edge loop_root W))
+      (fun _ s =>
+         LoopInv loop_root (edge_set loop_root) s /\
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s).
+  Proof.
+    intros Hchild Hframe.
+    apply Hoare_forset with
+      (P := fun loop_done s =>
+              LoopInv loop_root loop_done s /\
+              ParentFrameForChild ancestor current ancestor_done s_before s /\
+              NestedFrameDisjoint ancestor current loop_root ancestor_done s)
+      (universe := edge_set loop_root).
+    - intros done1 done2 Hdone s1 s2 Heq. subst s2.
+      split; intros [Hloop [Hparent_frame Hdisjoint]].
+      + split.
+        * eapply loop_inv_done_equiv; eauto.
+        * exact (conj Hparent_frame Hdisjoint).
+      + split.
+        * eapply loop_inv_done_equiv.
+          -- symmetry. exact Hdone.
+          -- exact Hloop.
+        * exact (conj Hparent_frame Hdisjoint).
+    - intros loop_done a Hdone_sub Hedge Hnot_done.
+      apply Hoare_conj with
+        (Q1 := fun _ s =>
+                 LoopInv loop_root (done_after loop_done a) s).
+      + eapply Hoare_conseq_pre.
+        2: {
+          eapply process_edge_preserves_loop_inv.
+          eapply Hoare_conseq_pre.
+          2: apply Hchild.
+          intros s [Hloop [Hedge' [Hentry [Hfa Hfane]]]].
+          unfold ParentRecursivePre.
+          exact (conj Hloop
+                  (conj Hedge'
+                    (conj Hentry
+                      (conj Hfa Hfane)))). }
+        intros s [Hloop _].
+        exact (conj Hloop (conj Hedge Hnot_done)).
+      + eapply Hoare_conseq_pre.
+        2: {
+          apply (process_edge_preserves_nested_parent_frame
+                   ancestor current loop_root a ancestor_done loop_done
+                   s_before W Hframe). }
+        intros s [Hloop [Hparent_frame Hdisjoint]].
+        exact (conj Hloop
+                (conj Hparent_frame
+                  (conj Hdisjoint
+                    (conj Hedge Hnot_done)))).
   Qed.
 
   (* maybe pop *)

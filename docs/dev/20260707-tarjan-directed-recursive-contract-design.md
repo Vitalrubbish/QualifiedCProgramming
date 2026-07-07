@@ -135,10 +135,13 @@ Definition ParentFrameForChild
   Visited child s /\
   fa s child = parent /\
   fa s child <> child /\
-  dfn s parent < dfn s child.
+  dfn s parent < dfn s child /\
+  ~ done child.
 ```
 
 `Edge parent child` 放在 frame 中是为了让后续 `ChildReturnPreMaybePop` 和 `ChildContributionContract` 的组合不再依赖外层散落字段。即使现有 `process_edge` theorem 的 postcondition 仍额外携带 `Edge parent child`，这个冗余是无害的，并且有利于局部证明。
+
+`~ done child` 是 frame 的 freshness 字段：`done` 表示 parent 在调用当前 child 之前已经处理过的 outgoing edge 集合，当前 child 尚未被计入这部分。它用于构造 immediate nested call 的 `NestedFrameDisjoint parent child child done s`，避免旧 sibling 子树和当前 child 子树在 frame-preservation 证明中被混淆。
 
 `ParentLowFrame` 的职责不是证明 parent 旧 candidate 集完全双向不变。它应表达两件足以服务 parent low 更新的事实：
 
@@ -188,6 +191,7 @@ Definition NestedFramePre
   (s_before s: St): Prop :=
   LoopInv loop_root loop_done s /\
   ParentFrameForChild ancestor current ancestor_done s_before s /\
+  NestedFrameDisjoint ancestor current loop_root ancestor_done s /\
   Edge loop_root next /\
   ~ loop_done next /\
   EntryPre next s /\
@@ -203,6 +207,19 @@ current  = frame 中需要保护的 ancestor 的 child
 loop_root = 当前正在跑 edge loop 的 vertex
 next     = loop_root 的 unvisited child, 即 nested recursive call 的 root
 ```
+
+其中 `NestedFrameDisjoint ancestor current loop_root ancestor_done s` 是 proof-only 的外层 frame 分离条件：
+
+```coq
+dg_reachable (state_to_dfs_tree g s root) current loop_root /\
+forall old_child,
+  ancestor_done old_child ->
+  fa s old_child = ancestor ->
+  fa s old_child <> old_child ->
+  ~ dg_reachable (state_to_dfs_tree g s root) old_child loop_root
+```
+
+第一部分说明当前递归调用发生在被保护的 `current` 子树内部；第二部分说明 `ancestor_done` 的旧 child 子树没有与这条 nested 调用路径合并。它不属于 `LoopInv`，只服务于递归 frame-preservation 线。没有这个条件，若 `loop_root = ancestor` 或旧 sibling 子树能经新 `preloop` 边到达 `next`，`preloop next` 后外层 `ParentFrameForChild ancestor current ...` 的 `ProcessedTreeChild` / `ParentLowFrame` 都可能变假。
 
 `NestedFramePre` 不产生 child contribution。它只声明：在递归访问 `next` 的过程中，外层 `ParentFrameForChild ancestor current ...` 应被保留。
 
@@ -253,8 +270,11 @@ Definition VisitFrameContract (W: RecProgram): Prop :=
          ancestor_done loop_done s_before)
       (W next)
       (fun _ s =>
-         ParentFrameForChild ancestor current ancestor_done s_before s).
+         ParentFrameForChild ancestor current ancestor_done s_before s /\
+         NestedFrameDisjoint ancestor current loop_root ancestor_done s).
 ```
+
+后条件同时保留 `NestedFrameDisjoint`，因为 caller 的 `edge_loop loop_root` 还要继续处理后续 outgoing edge；下一次 unvisited 分支构造新的 `NestedFramePre ancestor current loop_root next2 ...` 仍需要这个 disjoint context。它仍然不属于 `LoopInv`，只属于递归 frame-preservation 线。
 
 合并：
 
@@ -306,12 +326,17 @@ NestedFramePre ancestor current loop_root next ancestor_done loop_done s_before
   -- preloop next -->
 LoopInv next ∅
 ParentFrameForChild ancestor current ancestor_done s_before
+NestedFrameDisjoint ancestor current next ancestor_done
   -- edge_loop next, using VisitChildContract W and VisitFrameContract W -->
 LoopInv next (edge_set next)
 ParentFrameForChild ancestor current ancestor_done s_before
+NestedFrameDisjoint ancestor current next ancestor_done
   -- maybe_pop next -->
 ParentFrameForChild ancestor current ancestor_done s_before
+NestedFrameDisjoint ancestor current loop_root ancestor_done
 ```
+
+这里 `NestedFrameDisjoint ... next ...` 是 callee 自己的 edge-loop local context；`VisitFrameContract` 的最终 post 仍要求保留 caller 提供的 `NestedFrameDisjoint ... loop_root ...`。因此后续组合阶段需要并行处理这两个 disjoint：一个服务 callee 的 grandchild 递归调用，一个服务返回 caller 后继续 edge loop。
 
 第三条线是第二条线能够穿过 nested recursive call 的关键。没有它，`edge_loop_preserves_parent_frame_for_child` 在 unvisited grandchild 分支只能假设 `W grandchild` 正确返回给 `current`，却无法说明它保持了外层 `ancestor-current` frame。
 
