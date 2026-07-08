@@ -852,8 +852,8 @@ tarjan_scc_satisfies_visit_contract:
 15. `[done]` 证明 `maybe_pop_produces_child_contribution`。
 16. `[done]` 证明 `maybe_pop_preserves_nested_parent_frame`；statement 显式携带 `RestStack loop_root s current` 作为 maybe-pop 局部 cut。
 17. `[done]` 组合剩余 `tarjan_scc_f_*` pipeline；child contribution pipeline 与 nested frame pipeline 均已完成。
-18. 组合 `tarjan_scc_f_preserves_visit_contract`。
-19. 最后关闭 `tarjan_scc_satisfies_visit_contract`。
+18. `[done]` 组合 `tarjan_scc_f_preserves_visit_contract`。
+19. `[done]` 最后关闭 `tarjan_scc_satisfies_visit_contract`。实现上先证明空递归程序 vacuously 满足 `VisitContract`，再对 `Nat.iter n (tarjan_scc_f g) ∅` 做有限展开归纳，最后按 `Lfix` 语义从某个 finite approximation 中取出四个 Hoare 字段。
 
 ## 19. 阻塞条件
 

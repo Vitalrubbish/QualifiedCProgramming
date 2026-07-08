@@ -9146,5 +9146,107 @@ Section IS_LOW.
     { eapply nested_frame_disjoint_parent_from_child; eauto. }
     exact (conj Houter_after Horiginal_disjoint).
   Qed.
+
+  Theorem tarjan_scc_f_preserves_visit_contract
+        (W: RecProgram):
+    VisitContract W ->
+    VisitContract (tarjan_scc_f g W).
+  Proof.
+    intros Hcontract.
+    unfold VisitContract.
+    split.
+    - intro u0.
+      apply tarjan_scc_f_produces_root_final.
+      exact Hcontract.
+    - split.
+      + intros parent child done.
+        apply tarjan_scc_f_produces_child_contribution.
+        exact Hcontract.
+      + split.
+        * intros parent child done.
+          apply tarjan_scc_f_produces_child_traversal.
+          exact Hcontract.
+        * intros ancestor current loop_root next
+                 ancestor_done loop_done s_before.
+          apply tarjan_scc_f_preserves_nested_parent_frame.
+          exact Hcontract.
+  Qed.
+
+  Lemma empty_rec_program_satisfies_visit_contract:
+    VisitContract (∅ : RecProgram).
+  Proof.
+    unfold VisitContract, VisitMainContract, VisitChildContract,
+      VisitChildTraversalContract, VisitFrameContract, Hoare.
+    repeat split; intros; sets_unfold in H0; tauto.
+  Qed.
+
+  Lemma tarjan_scc_iter_satisfies_visit_contract (n: nat):
+    VisitContract (Nat.iter n (tarjan_scc_f g) (∅ : RecProgram)).
+  Proof.
+    induction n as [| n IH].
+    - simpl. apply empty_rec_program_satisfies_visit_contract.
+    - simpl. apply tarjan_scc_f_preserves_visit_contract. exact IH.
+  Qed.
+
+  Theorem tarjan_scc_satisfies_visit_contract:
+    VisitContract (tarjan_scc g).
+  Proof.
+    unfold VisitContract.
+    split.
+    - unfold VisitMainContract, Hoare.
+      intros u s1 retv s2 Hpre Hexec.
+      unfold tarjan_scc in Hexec.
+      change (exists n,
+                (s1, retv, s2) ∈
+                  Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) u)
+        in Hexec.
+      destruct Hexec as [n Hexec].
+      pose proof (tarjan_scc_iter_satisfies_visit_contract n)
+        as [Hmain _].
+      unfold VisitMainContract, Hoare in Hmain.
+      exact (Hmain u s1 retv s2 Hpre Hexec).
+    - split.
+      + unfold VisitChildContract, Hoare.
+        intros parent child done s1 retv s2 Hpre Hexec.
+        unfold tarjan_scc in Hexec.
+        change (exists n,
+                  (s1, retv, s2) ∈
+                    Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) child)
+          in Hexec.
+        destruct Hexec as [n Hexec].
+        pose proof (tarjan_scc_iter_satisfies_visit_contract n)
+          as [_ [Hchild _]].
+        unfold VisitChildContract, Hoare in Hchild.
+        exact (Hchild parent child done s1 retv s2 Hpre Hexec).
+      + split.
+        * unfold VisitChildTraversalContract, Hoare.
+          intros parent child done s1 retv s2 Hpre Hexec.
+          unfold tarjan_scc in Hexec.
+          change (exists n,
+                    (s1, retv, s2) ∈
+                      Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) child)
+            in Hexec.
+          destruct Hexec as [n Hexec].
+          pose proof (tarjan_scc_iter_satisfies_visit_contract n)
+            as [_ [_ [Hchild_traversal _]]].
+          unfold VisitChildTraversalContract, Hoare in Hchild_traversal.
+          exact (Hchild_traversal parent child done
+                                  s1 retv s2 Hpre Hexec).
+        * unfold VisitFrameContract, Hoare.
+          intros ancestor current loop_root next ancestor_done loop_done
+                 s_before s1 retv s2 Hpre Hexec.
+          unfold tarjan_scc in Hexec.
+          change (exists n,
+                    (s1, retv, s2) ∈
+                      Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) next)
+            in Hexec.
+          destruct Hexec as [n Hexec].
+          pose proof (tarjan_scc_iter_satisfies_visit_contract n)
+            as [_ [_ [_ Hframe]]].
+          unfold VisitFrameContract, Hoare in Hframe.
+          exact (Hframe ancestor current loop_root next
+                        ancestor_done loop_done s_before
+                        s1 retv s2 Hpre Hexec).
+  Qed.
   
 End IS_LOW.
