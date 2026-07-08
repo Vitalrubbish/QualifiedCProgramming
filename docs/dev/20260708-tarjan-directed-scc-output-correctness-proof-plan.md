@@ -477,8 +477,10 @@ output_inv_to_scc_partition:
 9. `[done under cuts]` 组合 `popped_segment_is_scc`。实现为 `popped_segment_is_scc_from_reachability_cuts`，前提为 `VisitedValid`、`RootPopBranchPre`、`PoppedSegmentReachableFromRoot`、`PoppedSegmentReachesRoot`、`PoppedSegmentMaximal`。
 10. `[done under cuts]` 证明 `pop_scc_preserves_sccs_sound`。实现包括 `pop_scc_preserves_sccs_sound_from_new_scc`、`pop_scc_preserves_sccs_sound_from_reachability_cuts`、`pop_scc_preserves_sccs_sound_from_tree_reachability_cuts`、`pop_scc_preserves_sccs_sound_from_core_cuts`，以及面向后续递归输出层字段的 `pop_scc_preserves_sccs_sound_from_tree_and_pending_low`。
 11. `[done]` 证明 `pop_scc_preserves_cover_settled`。该证明只依赖 `pop_scc_state` 的栈分段效果：popped 段内顶点由新 cons 的集合覆盖，popped 段外且 pop 后 inactive 的顶点在 pop 前已 inactive，由旧 `SCCsCoverSettled` 覆盖。
-12. 组合 `maybe_pop_preserves_output_inv`。
-13. 证明 `tarjan_scc_f_preserves_output_contract`。
+12. `[done as consumer]` 组合 `maybe_pop_preserves_output_inv`。实现为 `maybe_pop_preserves_output_inv_from_tree_and_pending_low`：pop 分支用 `root_pre_maybe_pop_low_eq_derives_pop_cuts` 产生 `RootPopCuts`，再消费 `PoppedSegmentTreeReachableFromRoot` 与 `PoppedSegmentPendingLow`；skip 分支状态不变。后续递归 / edge-loop 层仍需生产这两个输出层字段。
+13. `[done]` 证明 `tarjan_scc_f_preserves_output_contract`。当前已在实现中补出输出层 producer 字段：
+    `LoopOutputReady`、`RootOutputReady`、`RootActiveOutputReady`、`VisitOutputContract`、`VisitChildOutputContract`、`VisitOutputFrameContract`；
+    已证明 preloop 初始化 `LoopOutputReady u ∅`，`process_edge` 在加强后的 `VisitChildOutputContract` 假设下保持输出字段，edge-loop 产出 `RootOutputReady`，并组合出 `tarjan_scc_f_produces_root_output_post`。实现中新增并加强 `ParentOutputFrameForChild`，加入“旧 parent segment 不含递归 child”的保护字段，以及“child 仍 active 时旧 parent partial-tree 成员位于 child 下方”的 rest 保护字段；同时新增 `NestedOutputFramePre` 中“旧 ancestor segment 不含当前 loop_root”的保护字段。已证明 `set_fa` / `update_low` / `process_edge` / `edge_loop` 对 direct 与 external output-frame 的保持；同时补出 `pop_scc_state_preserves_scc_is_low_v_for_rest_low`，证明 pop root 时 rest 中 pending-low 顶点的 low witness 仍留在 rest 中，并据此完成 direct 与 external `maybe_pop` 对 `ParentOutputFrameForChild` 的保持。本轮已补出 direct preloop output-frame 建立、external/nested preloop output-frame 保持、`tarjan_scc_f_produces_child_output_contract` / `tarjan_scc_f_preserves_child_output_contract`、`tarjan_scc_f_preserves_output_frame_contract`，以及 root+child+frame aggregate theorem `tarjan_scc_f_preserves_output_contracts`。
 14. 用 finite approximation induction 证明 `tarjan_scc_satisfies_output_contract`。
 15. 证明 outer root empty-stack lemma。
 16. 证明 `tarjan_scc_all` 保持 `SCCsOutputInv /\ stack = nil`。
