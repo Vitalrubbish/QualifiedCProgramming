@@ -614,6 +614,12 @@ maybe_pop_produces_root_final:
 
 ## 12. 阶段 4b：maybe_pop 产生 child contribution
 
+状态：`[done]`，已实现 `maybe_pop_skip_produces_child_contribution`、
+`maybe_pop_pop_produces_child_contribution_from_pop_cuts` 和
+`maybe_pop_produces_child_contribution`。pop 分支中 parent old candidates 的
+frame 保持由 `ParentOldCandidatesBelowChild` 与
+`pop_scc_preserves_parent_low_frame_from_below` 完成，未污染 `LoopInv`。
+
 目标：
 
 ```coq
@@ -649,16 +655,27 @@ ChildNoActiveTarget child s_after.
 
 ## 13. 阶段 4c：maybe_pop 保持 outer frame
 
-目标：
+状态：`[done]`，已实现 `maybe_pop_preserves_nested_parent_frame`。
+
+最终实现比原始草案多携带一个阶段局部 cut：
+
+```coq
+RestStack loop_root s current
+```
+
+这个 cut 表达当前 outer frame 的 `current` 位于本轮 maybe-pop root 的下方，因此 `pop_scc loop_root` 只会删除 `current` 上方的 segment。它不属于 `LoopInv` 或 `ParentFrameForChild`，只服务于 maybe-pop 证明；后续阶段 5c 组合时必须由 preloop / edge-loop bridge 供给并保持。
+
+已实现 theorem：
 
 ```coq
 maybe_pop_preserves_nested_parent_frame:
   Hoare
     (fun s =>
-       RootPreMaybePop next s /\
+       RootPreMaybePop loop_root s /\
        ParentFrameForChild ancestor current ancestor_done s_before s /\
-       NestedFrameDisjoint ancestor current loop_root ancestor_done s)
-    (If (fun s => low s next = dfn s next) (pop_scc next))
+       NestedFrameDisjoint ancestor current loop_root ancestor_done s /\
+       RestStack loop_root s current)
+    (If (fun s => low s loop_root = dfn s loop_root) (pop_scc loop_root))
     (fun _ s =>
        ParentFrameForChild ancestor current ancestor_done s_before s /\
        NestedFrameDisjoint ancestor current loop_root ancestor_done s).
@@ -672,7 +689,21 @@ maybe_pop_preserves_nested_parent_frame:
 4. `LoopAuxFacts ancestor` 中 `Active ancestor` 由 stack-below preservation 保持。
 5. `Closed` 与 `NoUnvisitedReach` 由 maybe_pop 的 pop-local cuts 恢复。
 
-这条 theorem 是 `VisitFrameContract (tarjan_scc_f W)` 的 maybe_pop 部分。
+辅助证明已经落地为：
+
+```coq
+stack_split_at_rest_trans
+stack_split_at_suffix_rest_preserves
+rest_stack_trans
+rest_stack_after_pop_preserves_nested
+parent_old_candidates_below_trans
+pop_scc_preserves_parent_old_candidates_below_child_from_rest
+pop_scc_preserves_nested_frame_disjoint_any
+pop_scc_preserves_parent_frame_for_child_from_nested_root
+maybe_pop_pop_preserves_nested_parent_frame_from_pop_cuts
+```
+
+这条 theorem 是 `VisitFrameContract (tarjan_scc_f W)` 的 maybe_pop 部分，但组合阶段仍需要补一个桥接：`preloop next` 建立 `RestStack next current`，edge loop 保持该 cut，才能把阶段 4c 接入完整 pipeline。
 
 ## 14. 阶段 5：组合当前调用主线
 
@@ -700,6 +731,11 @@ tarjan_scc_f_produces_root_final:
 
 ## 15. 阶段 5b：组合 immediate-child 返回线
 
+状态：`[done]`，已实现 `tarjan_scc_f_produces_child_contribution`。
+该 theorem 组合了 preloop parent frame、edge-loop parent frame/traversal completion、
+`edge_loop_post_to_child_return_pre_maybe_pop` 和
+`maybe_pop_produces_child_contribution`，并完成 existential postcondition 包装。
+
 目标：
 
 ```coq
@@ -723,12 +759,14 @@ tarjan_scc_f_produces_child_contribution:
    `PoppedSegmentNoUnvisitedStep child` 与
    `PoppedSegmentRestTargetCut child`
 4. `edge_loop_post_to_child_return_pre_maybe_pop`
-5. `maybe_pop_produces_child_contribution`
-5. 包装 existential postcondition。
+5. `[done]` `maybe_pop_produces_child_contribution`
+6. 包装 existential postcondition。
 
 这里同时使用 `VisitChildContract W` 和 `VisitFrameContract W`。
 
 ## 16. 阶段 5c：组合 outer frame preservation 线
+
+状态：`[done]`，已实现 `tarjan_scc_f_preserves_nested_parent_frame`。
 
 目标：
 
@@ -746,10 +784,28 @@ tarjan_scc_f_preserves_nested_parent_frame:
 
 组合顺序：
 
-1. `preloop_preserves_nested_parent_context`
-2. `edge_loop_preserves_nested_parent_frame`
-3. `loop_inv_derives_stack_rest_older_than_root`
-4. `maybe_pop_preserves_nested_parent_frame`
+1. `preloop_preserves_nested_parent_context_with_rest`
+   产出 `LoopInv next ∅`、`LoopTraversalComplete next ∅`、outer `ParentFrameForChild`、inner `NestedFrameDisjoint ... next` 和 `RestStack next current`。
+2. 同一个 preloop 阶段还复用 `preloop_establishes_parent_frame_for_child`，建立 immediate frame：
+   `ParentFrameForChild loop_root next loop_done child_before s`。
+3. `edge_loop_preserves_nested_parent_context_with_rest`
+   将 inner context 提升到 edge-loop 后，并重新由 `LoopInv + ParentFrame + NestedFrameDisjoint + current <> next` 推出 `RestStack next current`。
+4. 同一个 edge-loop 阶段复用 `edge_loop_preserves_parent_frame_for_child`，保持 immediate frame。
+5. maybe-pop 阶段同时使用两条线：
+   `maybe_pop_preserves_nested_parent_frame` 保持 outer frame 和 inner disjoint；
+   `maybe_pop_produces_child_contribution` 产出 immediate child contribution。
+6. 最后用 `child_contribution_tree_edge` 得到最终状态中的 `tree_edge loop_root next`，并用 `nested_frame_disjoint_parent_from_child` 从 inner disjoint 恢复原始 postcondition：
+   `NestedFrameDisjoint ancestor current loop_root ancestor_done`。
+
+关键辅助 theorem：
+
+```coq
+nested_context_derives_rest_stack
+edge_loop_preserves_nested_parent_context_with_rest
+child_contribution_tree_edge
+tree_reachable_parent_of_target
+nested_frame_disjoint_parent_from_child
+```
 
 这条线是为了在阶段 7 的 unvisited grandchild 分支中提供递归 IH。
 
@@ -793,9 +849,9 @@ tarjan_scc_satisfies_visit_contract:
 12. `[done]` 回到 maybe_pop 计划，证明 `maybe_pop_produces_root_final`。
 13. `[done]` 证明 edge-loop completion 产出新的 `RootTraversalComplete` 两个弱字段。实现为 `LoopTraversalComplete u done` 的 `Hoare_forset` 提升，并由 `loop_traversal_complete_to_root_traversal_complete` 在 `done = edge_set u` 时消去 pending case。
 14. `[done]` 证明 preloop 初始化 `LoopTraversalComplete u ∅`，并组合当前调用主线 `tarjan_scc_f_produces_root_final`。
-15. 证明 `maybe_pop_produces_child_contribution`。
-16. 证明 `maybe_pop_preserves_nested_parent_frame`。
-17. 组合剩余 child contribution / nested frame 两条 `tarjan_scc_f_*` pipeline。
+15. `[done]` 证明 `maybe_pop_produces_child_contribution`。
+16. `[done]` 证明 `maybe_pop_preserves_nested_parent_frame`；statement 显式携带 `RestStack loop_root s current` 作为 maybe-pop 局部 cut。
+17. `[done]` 组合剩余 `tarjan_scc_f_*` pipeline；child contribution pipeline 与 nested frame pipeline 均已完成。
 18. 组合 `tarjan_scc_f_preserves_visit_contract`。
 19. 最后关闭 `tarjan_scc_satisfies_visit_contract`。
 

@@ -177,8 +177,8 @@ rest_stack_below_root:
 状态：`[partial done]`，当前调用主线已完成：
 `root_low_correct_to_scc_is_low_v` 和
 `maybe_pop_skip_produces_root_final` 已在证明文件中实现并通过编译。
-父调用递归接口的 skip 分支属于后续
-`maybe_pop_produces_child_contribution`，尚未处理。
+父调用递归接口的 skip 分支也已完成：
+`maybe_pop_skip_produces_child_contribution` 已在证明文件中实现并通过编译。
 
 程序分支：
 
@@ -354,6 +354,8 @@ pop_scc_restores_closed:
 `pop_scc_root_pop_branch_preserves_scc_is_low_v` 和
 `maybe_pop_pop_produces_root_final_from_pop_cuts`。当前调用主线的
 pop 分支在给定两个 pop-local cuts 后已经完成。
+父调用递归接口的 pop 分支也已完成：
+`maybe_pop_pop_produces_child_contribution_from_pop_cuts` 已在证明文件中实现并通过编译。
 
 当前调用主线：
 
@@ -481,13 +483,13 @@ maybe_pop_produces_child_contribution:
 1. 证明 `stack_split_at` / `RestStack` 的列表结构 lemma。
 2. 证明 `derive_stack_rest_older_than_root`，把 edge loop 结果桥接为 `RootPrePop`。
 3. `[done]` 证明 `RootLowCorrect -> scc_is_low_v` 的 full-tree bridge。
-4. `[partial done]` 证明 skip-pop 分支的 `RootFinal`；active `ChildContributionContract` 属于后续递归返回接口证明。
+4. `[done]` 证明 skip-pop 分支的 `RootFinal`；active `ChildContributionContract` 的纯构造 lemma `maybe_pop_skip_produces_child_contribution` 已实现并已被 Hoare 组合使用。
 5. `[done]` 证明 strengthened cut 到 pop-local cuts 的桥接；edge-loop completion 已产出新的 `RootTraversalComplete` 两个字段。
-6. `[partial done]` 证明 `pop_scc` 对当前调用主线所需的 `wf_scc_state`、`scc_is_low_v` 保持 / 重建；parent frame 保持属于后续 child contribution / outer frame 阶段。
+6. `[done]` 证明 `pop_scc` 对当前调用主线所需的 `wf_scc_state`、`scc_is_low_v` 保持 / 重建；parent frame 中 old candidates 的 pop 保持已由 `ParentOldCandidatesBelowChild` 和 `pop_scc_preserves_parent_low_frame_from_below` 完成。
 7. `[done under cuts]` 证明 `pop_scc_restores_no_unvisited_reach` 和 `pop_scc_restores_closed`。
-8. `[partial done]` 证明 pop 分支的 `RootFinal` under cuts；inactive `ChildContributionContract` 属于后续递归返回接口证明。
+8. `[done]` 证明 pop 分支的 `RootFinal` under cuts；inactive `ChildContributionContract` under cuts 已由 `maybe_pop_pop_produces_child_contribution_from_pop_cuts` 完成。
 9. `[done]` 组合 `maybe_pop_produces_root_final`，入口为 `RootPreMaybePop`。
-10. 组合 `maybe_pop_produces_child_contribution`。
+10. `[done]` 组合 `maybe_pop_produces_child_contribution`。parent-old-candidate stack/frame cut 已落在 `ParentFrameForChild` 的 `ParentOldCandidatesBelowChild` 字段中；`LoopInv` 未新增 pop-local 字段。
 
 ## 11. 风险点
 
