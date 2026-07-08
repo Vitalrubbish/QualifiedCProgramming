@@ -6,8 +6,6 @@ Module VC_Correctness : VC_Correct.
   Include uint_array_strategy_proof.
   Include undef_uint_array_strategy_proof.
   Include array_shape_strategy_proof.
-  Include sll_ptr_array_strategy_proof.
-  Include sll_strategy_proof.
   Include kosaraju_rel_proof_auto.
   Include kosaraju_rel_proof_manual.
 End VC_Correctness.

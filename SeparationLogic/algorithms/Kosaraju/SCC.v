@@ -5,6 +5,9 @@ Require Import GraphLib.Syntax.
 Require Import SetsClass.SetsClass.
 Require Import Coq.Lists.List.
 Require Import Coq.Logic.Classical.
+Require Import Coq.Logic.ClassicalChoice.
+Require Import Coq.Logic.ClassicalEpsilon.
+Require Import Arith.
 Require Import Lia.
 
 Local Open Scope sets.
@@ -42,9 +45,7 @@ Lemma mutually_reachable_trans : forall u v w,
   mutually_reachable u v -> mutually_reachable v w -> mutually_reachable u w.
 Proof.
   intros u v w [Huv Hvu] [Hvw Hwv].
-  unfold mutually_reachable.
-  split; unfold reachable in *;
-  etransitivity; eauto.
+  split; eapply reachable_trans; eauto.
 Qed.
 
 (* ================================================================= *)
@@ -146,35 +147,41 @@ Lemma build_scc_partition_aux : forall (vertices: list V),
   exists sccs,
     (forall v, vvalid g v -> In v vertices -> exists s, In s sccs /\ s v) /\
     (forall s, In s sccs -> is_SCC s) /\
-    (forall s1 s2 v, In s1 sccs -> In s2 sccs -> s1 v -> s2 v -> s1 = s2).
+    (forall s1 s2 v, In s1 sccs -> In s2 sccs -> s1 v -> s2 v -> s1 = s2) /\
+    NoDup sccs.
 Proof.
   induction vertices as [|a rest IH].
-  - exists nil; simpl; split; [|split].
-    + intros v Hv Hin. inversion Hin.
-    + intros s Hin. inversion Hin.
-    + intros s1 s2 v Hin1 Hin2. inversion Hin1.
-  - destruct IH as [sccs_rest [Hcover_rest [Hsccs_rest Hdisjoint_rest]]].
+  - exists nil.
+    refine (conj _ (conj _ (conj _ _))).
+    + intros v Hv Hin; inversion Hin.
+    + intros t Hin; inversion Hin.
+    + intros t1 t2 v Hin1 Hin2; inversion Hin1.
+    + exact (NoDup_nil _).
+  - destruct IH as [sccs_rest [Hcover_rest [Hsccs_rest [Hdisjoint_rest Hnodup_rest]]]].
     destruct (classic (exists s, In s sccs_rest /\ s a)).
-    + exists sccs_rest; split; [|split]; auto.
-      intros v Hv Hin.
-      destruct Hin as [Hva|Hrest'].
-      * subst v. destruct H as [s [Hin_s Hsa]].
-        exists s; split; auto.
-      * apply Hcover_rest; auto.
-    + destruct (classic (vvalid g a)).
+    + exists sccs_rest.
+      refine (conj _ (conj _ (conj _ _))).
+      * intros v Hv Hin.
+        destruct Hin as [Heqa|Hrest'].
+        -- subst v; destruct H as [s [Hin_s Hsa]]; exists s; split; auto.
+        -- apply Hcover_rest; auto.
+      * exact Hsccs_rest.
+      * exact Hdisjoint_rest.
+      * exact Hnodup_rest.
+    +     destruct (classic (vvalid g a)) as [Hva | Hnva].
       * exists (equiv_class a :: sccs_rest).
-        split; [|split].
-        -- intros v Hv Hin.
-           destruct Hin as [Hva|Hrest'].
-           ++ subst v.
+        refine (conj _ (conj _ (conj _ _))).
+         -- intros v Hv Hin.
+            destruct Hin as [Heqa|Hrest'].
+            ++ subst v.
               exists (equiv_class a); split; [left; reflexivity|].
               unfold equiv_class; split; auto.
               apply mutually_reachable_refl; auto.
            ++ destruct (Hcover_rest v Hv Hrest') as [s [Hin_s Hsv]].
-              exists s; split; auto. right; auto.
+              exists s; split; auto; right; auto.
         -- intros s Hin.
            destruct Hin as [Hin|Hin].
-           ++ subst s. apply equiv_class_is_SCC; auto.
+           ++ subst s; apply equiv_class_is_SCC; auto.
            ++ apply Hsccs_rest; auto.
         -- intros s1 s2 v Hind Hind' Hv1 Hv2.
            apply in_inv in Hind; apply in_inv in Hind'.
@@ -197,11 +204,18 @@ Proof.
                   apply mutually_reachable_sym; auto. }
                 exists s1; split; auto. }
            ++ eapply Hdisjoint_rest; eauto.
-      * exists sccs_rest; split; [|split]; auto.
-        intros v Hv Hin.
-        destruct Hin as [Hva|Hrest'].
-        -- subst v. exfalso; auto.
-        -- apply Hcover_rest; auto.
+        -- apply NoDup_cons; [| exact Hnodup_rest].
+           intro Hin; apply H; exists (equiv_class a); split; auto.
+           unfold equiv_class; split; [apply Hva | apply mutually_reachable_refl; auto].
+      * exists sccs_rest.
+        refine (conj _ (conj _ (conj _ _))).
+         -- intros v Hv Hin.
+            destruct Hin as [Heqa|Hrest'].
+            ++ subst v; exfalso; exact (Hnva Hv).
+            ++ apply Hcover_rest; auto.
+        -- exact Hsccs_rest.
+        -- exact Hdisjoint_rest.
+        -- exact Hnodup_rest.
 Qed.
 
 Lemma listV_contains_valid (v : V) : vvalid g v -> In v (listV g).
@@ -210,14 +224,15 @@ Proof.
   apply (finite_vertices g Hgvalid v); auto.
 Qed.
 
-Theorem scc_partition_exists : exists sccs, scc_partition sccs.
+Theorem scc_partition_exists : exists sccs, scc_partition sccs /\ NoDup sccs.
 Proof.
-  destruct (build_scc_partition_aux (listV g)) as [sccs [Hcover [Hsccs Hdisjoint]]].
-  exists sccs.
-  split; [|split].
-  - intros v Hv. apply (Hcover v Hv). apply listV_contains_valid; auto.
-  - apply Hsccs.
-  - apply Hdisjoint.
+  destruct (build_scc_partition_aux (listV g)) as [sccs [Hcover [Hsccs [Hdisjoint Hnodup]]]].
+  exists sccs; split.
+  - split; [|split].
+    + intros v Hv. apply (Hcover v Hv). apply listV_contains_valid; auto.
+    + apply Hsccs.
+    + apply Hdisjoint.
+  - apply Hnodup.
 Qed.
 
 (* ================================================================= *)
@@ -271,13 +286,11 @@ Proof.
         apply condensation_reachable_In in Hcr1 as [_ Hin2].
         apply Hsccs in Hin2; destruct Hin2 as [_ [Hinternal2 _]].
         assert (Hmr2 : mutually_reachable v2 u2) by (apply Hinternal2; auto).
+        destruct Hmr2 as [Hv2u2 _].
         exists u1, v3.
         split; [|split]; auto.
-        unfold reachable in *.
-        etransitivity; [apply Hreach12|].
-        destruct Hmr2 as [Hv2u2 _].
-        etransitivity; [apply Hv2u2|].
-        apply Hreach23.
+        eapply reachable_trans; [exact Hreach12|].
+        eapply reachable_trans; [exact Hv2u2 | exact Hreach23].
 Qed.
 
 Theorem no_cycle_between_different_SCCs : forall sccs,
@@ -304,12 +317,9 @@ Proof.
   assert (Hmr_s1 : mutually_reachable v2 u1) by (apply Hinternal1; auto).
 
   assert (Hmr_u1u2 : mutually_reachable u1 u2).
-  { unfold mutually_reachable.
-    split; unfold reachable in *.
-    - etransitivity; [apply Hreach_fwd|].
-      destruct Hmr_s2. exact H.
-    - etransitivity; [apply Hreach_bwd|].
-      destruct Hmr_s1. exact H. }
+  { split.
+    - eapply reachable_trans; [exact Hreach_fwd | exact (proj1 Hmr_s2)].
+    - eapply reachable_trans; [exact Hreach_bwd | exact (proj1 Hmr_s1)]. }
 
   assert (Hs1u2 : s1 u2).
   { apply (is_SCC_closed_under_mr s1 u1 u2 (Hsccs _ Hin1)); auto. }
@@ -338,12 +348,9 @@ Proof.
   destruct Hscc1_full as [_ [Hinternal1 _]].
   assert (Hmr1 : mutually_reachable v' u) by (apply Hinternal1; auto).
   assert (Hcycle : mutually_reachable u u').
-  { unfold mutually_reachable.
-    split; unfold reachable in *.
-    - etransitivity; [apply Hfwd|].
-      destruct Hmr2 as [Hvu' _]. exact Hvu'.
-    - etransitivity; [apply Hback_reach|].
-      destruct Hmr1 as [Hv'u _]. exact Hv'u. }
+  { split.
+    - eapply reachable_trans; [exact Hfwd | exact (proj1 Hmr2)].
+    - eapply reachable_trans; [exact Hback_reach | exact (proj1 Hmr1)]. }
   assert (Hu'_in_s1 : s1 u').
   { exact (is_SCC_closed_under_mr s1 u u' (Hsccs _ Hin1) Hu Hcycle). }
   apply Hneq.
@@ -360,26 +367,23 @@ Proof.
   intros sccs s1 s2 u v Hpart Hin1 Hin2 Hsu Hsv Hreach.
   destruct Hpart as [Hcover [Hsccs Hdisjoint]].
   unfold reachable in Hreach.
-  destruct Hreach as [n Hreach].
-  revert u v Hreach s1 Hin1 Hsu s2 Hin2 Hsv.
-  induction n as [|n IH]; intros u v Hreach s1 Hin1 Hsu s2 Hin2 Hsv.
-  - simpl in Hreach; compute in Hreach.
-    destruct Hreach; subst.
-    left; eapply Hdisjoint; eauto.
-  - simpl in Hreach; compute in Hreach.
-    sets_unfold in Hreach.
-    destruct Hreach as [w [Hstep Hrest]].
-    assert (Hvw : vvalid g w) by (apply step_vvalid in Hstep; destruct Hstep; auto).
-    destruct (Hcover w Hvw) as [sw [Hin_sw Hsw]].
+  generalize dependent s1.
+  induction_1n Hreach.
+  - left; eapply Hdisjoint; eauto.
+  - destruct (step_vvalid _ _ H) as [_ Hvu0].
+    destruct (Hcover u0 Hvu0) as [sw [Hin_sw Hsw]].
+    assert (IH : forall s0, In s0 sccs -> s0 u0 ->
+                 s0 = s2 \/ condensation_reachable sccs s0 s2).
+    { intros s0 Hin0 Hs0. apply IHrt; assumption. }
     destruct (classic (sw = s1)) as [Heq_same|Hneq].
-    + subst sw; apply IH with (u := w) (v := v) (s1 := s1); auto.
+    + subst sw; apply (IH s1 Hin1 Hsw).
     + assert (Hedge : condensation_edge sccs s1 sw).
       { unfold condensation_edge.
         split; [exact Hin1|].
         split; [exact Hin_sw|].
-        split; [intro H; apply Hneq; symmetry; exact H|].
-        exists u, w; split; [exact Hsu|]; split; [exact Hsw|]; exact Hstep. }
-      destruct (IH w v Hrest sw Hin_sw Hsw s2 Hin2 Hsv) as [Heq | Hcr].
+        split; [intro Heq; apply Hneq; symmetry; exact Heq|].
+        exists u, u0; split; [exact Hsu|]; split; [exact Hsw|]; exact H. }
+      destruct (IH sw Hin_sw Hsw) as [Heq | Hcr].
       * subst sw; right; apply cr_edge; exact Hedge.
       * right; apply cr_trans with (s2 := sw); [apply cr_edge; exact Hedge| exact Hcr].
 Qed.
@@ -404,47 +408,53 @@ Qed.
 Definition step_rev (x y: V) : Prop :=
   step g y x.
 
-Inductive reachable_rev (u : V) : V -> Prop :=
-| rr_refl : reachable_rev u u
-| rr_step v w : step_rev u v -> reachable_rev v w -> reachable_rev u w.
+Definition reachable_rev (x y: V) : Prop := reachable g y x.
+
+Lemma rr_refl : forall u, reachable_rev u u.
+Proof.
+  intros u; unfold reachable_rev, reachable; reflexivity.
+Qed.
+
+Lemma rr_step : forall u v w,
+  step_rev u v -> reachable_rev v w -> reachable_rev u w.
+Proof.
+  intros u v w Hs Hr; unfold reachable_rev, step_rev in *.
+  eapply reachable_step_reachable; [exact Hr | exact Hs].
+Qed.
+
+Lemma reachable_rev_ind : forall (P : V -> V -> Prop),
+  (forall u, P u u) ->
+  (forall u v w, step_rev u v -> reachable_rev v w -> P v w -> P u w) ->
+  forall u v, reachable_rev u v -> P u v.
+Proof.
+  intros P Hrefl Hstep u v Hrev.
+  unfold reachable_rev, reachable in Hrev.
+  clear Hgvalid stepvalid finitegraph gv gv0.
+  induction_n1 Hrev.
+  - apply Hrefl.
+  - eapply Hstep.
+    + unfold step_rev; exact H.
+    + unfold reachable_rev, reachable; exact Hrev.
+    + apply IHrt; assumption.
+Qed.
 
 Lemma reachable_rev_intro : forall x y,
   reachable g y x -> reachable_rev x y.
 Proof.
-  intros x y H.
-  unfold reachable in H.
-  pose proof (nsteps_nsteps'_indexed_union (step g) : (clos_refl_trans (step g) == ⋃ (nsteps' (step g)))%sets) as Hconv.
-  apply Hconv in H.
-  destruct H as [n H].
-  revert x y H; induction n as [|n IH]; intros x y H.
-  - simpl in H; destruct H; subst; constructor.
-  - simpl in H; sets_unfold in H; destruct H as [w [Hrest Hstep]].
-    econstructor 2 with (v := w).
-    + unfold step_rev; exact Hstep.
-    + apply IH with (x := w); exact Hrest.
+  intros x y H; exact H.
 Qed.
 
 Lemma reachable_rev_step_reachable_rev : forall x y z,
   reachable_rev x y -> step_rev y z -> reachable_rev x z.
 Proof.
-  intros x y z H.
-  revert z.
-  induction H using reachable_rev_ind; intros z Hstep.
-  - econstructor 2 with (v := z); [exact Hstep | constructor].
-  - econstructor 2 with (v := v); [exact H | apply IHreachable_rev; exact Hstep].
+  intros x y z Hr Hs; unfold reachable_rev, step_rev in *.
+  eapply step_reachable_reachable; [exact Hs | exact Hr].
 Qed.
 
 Lemma reachable_iff_reachable_rev : forall x y,
   reachable g x y <-> reachable_rev y x.
 Proof.
-  split.
-  - intros H; apply reachable_rev_intro; auto.
-  - intros H; induction H using reachable_rev_ind.
-    + unfold reachable; reflexivity.
-    + match goal with
-      | Hstep : step_rev _ _ |- _ => rename Hstep into Hstep_edge
-      end.
-      eapply reachable_step_reachable; [exact IHreachable_rev | unfold step_rev; exact Hstep_edge].
+  intros x y; unfold reachable_rev; reflexivity.
 Qed.
 
 Definition mutually_reachable_rev (u v: V) : Prop :=
@@ -497,15 +507,10 @@ Lemma tail_SCC_closed_under_reachable : forall sccs s u v,
 Proof.
   intros sccs s u v Hpart Htail Hsu Hreach.
   unfold reachable in Hreach.
-  destruct Hreach as [n Hreach].
-  revert u v Hreach Hsu.
-  induction n as [|n IH]; intros u v Hreach Hsu.
-  - simpl in Hreach.
-    destruct Hreach; subst; auto.
-  - simpl in Hreach.
-    sets_unfold in Hreach.
-    destruct Hreach as [w [Hstep Hrest]].
-    apply IH with (u := w); auto.
+  revert Hsu.
+  induction_1n Hreach.
+  - auto.
+  - apply IHrt; auto.
     eapply tail_SCC_no_outgoing; eauto.
 Qed.
 
@@ -533,18 +538,10 @@ Lemma head_SCC_closed_under_reachable : forall sccs s u v,
 Proof.
   intros sccs s u v Hpart Hhead Hsv Hreach.
   unfold reachable in Hreach.
-  pose proof (nsteps_nsteps'_indexed_union (step g) u v) as Hconv.
-  apply Hconv in Hreach.
-  destruct Hreach as [n' Hreach].
-  clear Hconv.
-  revert u v Hreach Hsv.
-  induction n' as [|n' IH]; intros u v Hreach Hsv.
-  - simpl in Hreach.
-    destruct Hreach; subst; auto.
-  - simpl in Hreach.
-    sets_unfold in Hreach.
-    destruct Hreach as [w [Hreach_w Hstep]].
-    apply (IH u w Hreach_w).
+  revert Hsv.
+  induction_n1 Hreach.
+  - auto.
+  - apply IHrt; auto.
     eapply head_SCC_no_incoming; eauto.
 Qed.
 
@@ -669,6 +666,471 @@ Proof.
     intros s' Hedge.
     apply Hno with (s' := s').
     apply condensation_edge_rev_iff; auto.
+Qed.
+
+(* ================================================================= *)
+(* 7. Topological Ordering of the Condensation DAG                    *)
+(* ================================================================= *)
+
+Definition is_SCC_list (l : list (V -> Prop)) : Prop :=
+  forall s, In s l -> is_SCC s.
+
+Lemma scc_partition_is_SCC_list : forall sccs,
+  scc_partition sccs -> is_SCC_list sccs.
+Proof.
+  intros sccs [_ [Hsccs _]]; exact Hsccs.
+Qed.
+
+Definition condensation_acyclic_on (l : list (V -> Prop)) : Prop :=
+  ~ exists s1 s2, condensation_edge l s1 s2 /\ condensation_reachable l s2 s1.
+
+Lemma condensation_acyclic_on_scc_partition : forall sccs,
+  scc_partition sccs -> condensation_acyclic_on sccs.
+Proof.
+  unfold condensation_acyclic_on; intros sccs Hpart [s1 [s2 [Hedge Hreach]]].
+  eapply condensation_is_acyclic; eauto.
+Qed.
+
+Lemma length_app_cons : forall {A} (l1 l2 : list A) (x : A),
+  length (l1 ++ x :: l2) = S (length (l1 ++ l2)).
+Proof.
+  induction l1; intros l2 x; simpl; [| rewrite IHl1]; auto.
+Qed.
+
+Lemma NoDup_incl_length : forall {A} (l1 l2 : list A),
+  NoDup l1 -> (forall x, In x l1 -> In x l2) -> length l1 <= length l2.
+Proof.
+  intros A l1 l2 Hnodup Hincl.
+  revert l2 Hincl.
+  induction Hnodup as [|a l1' Ha Hnodup' IH]; intros l2 Hincl; simpl.
+  - lia.
+  - assert (Hin_a : In a l2) by (apply Hincl; left; auto).
+    apply In_split in Hin_a.
+    destruct Hin_a as [l2a [l2b Hl2]].
+    subst l2. rewrite length_app_cons.
+    apply le_n_S. apply IH; intros x Hx.
+    assert (Hx_in : In x (a :: l1')) by (right; auto).
+    apply Hincl in Hx_in.
+    apply in_app_or in Hx_in.
+    destruct Hx_in as [Hx_l2a | [Hx_a | Hx_l2b]].
+    + apply in_or_app; left; auto.
+    + subst x; exfalso; apply Ha; exact Hx.
+    + apply in_or_app; right; auto.
+Qed.
+
+Lemma iter_stays_in_sccs : forall (sccs : list (V -> Prop)) f (s : V -> Prop) (k : nat),
+  (forall x, In x sccs -> In (f x) sccs) ->
+  In s sccs ->
+  In (Nat.iter k f s) sccs.
+Proof.
+  intros sccs f s k Hf_in Hs_in.
+  induction k as [|k IH]; auto.
+  apply Hf_in; auto.
+Qed.
+
+Lemma iter_condensation_path : forall (sccs : list (V -> Prop)) f (s : V -> Prop) (k : nat),
+  (forall x, In x sccs -> condensation_edge sccs x (f x)) ->
+  In s sccs ->
+  k >= 1 ->
+  condensation_reachable sccs s (Nat.iter k f s).
+Proof.
+  intros sccs f s k Hf_edge Hs_in Hk1.
+  assert (Hf_in : forall x, In x sccs -> In (f x) sccs).
+  { intros x Hx; destruct (Hf_edge x Hx) as [_ [Hin _]]; exact Hin. }
+  induction k as [|k IH]; [lia |].
+  destruct k as [|k'].
+  - simpl; apply cr_edge; apply Hf_edge; auto.
+  - simpl; eapply cr_trans.
+    + apply IH; lia.
+    + apply cr_edge; apply Hf_edge.
+      apply iter_stays_in_sccs with (s := s) (k := S k'); auto.
+Qed.
+
+Lemma exists_tail_SCC : forall sccs,
+  scc_partition sccs -> sccs <> nil ->
+  exists t, is_tail_SCC sccs t.
+Proof.
+  intros sccs Hpart Hnonempty.
+  destruct Hpart as [Hcover [Hsccs Hdisjoint]].
+  destruct (classic (exists t, is_tail_SCC sccs t)) as [Htail | Hnotail]; [exact Htail |].
+
+  assert (Hall_out : forall s, In s sccs -> exists s', condensation_edge sccs s s').
+  { intros s Hs.
+    assert (Hnot_tail : ~ is_tail_SCC sccs s).
+    { intro Htail; apply Hnotail; exists s; exact Htail. }
+    unfold is_tail_SCC in Hnot_tail.
+    assert (Hno_forall : ~ (forall s', ~ condensation_edge sccs s s')).
+    { intro Hforall; apply Hnot_tail; split; auto. }
+    apply not_all_ex_not in Hno_forall.
+    destruct Hno_forall as [s' Hnn].
+    apply NNPP in Hnn.
+    exists s'; exact Hnn. }
+
+  destruct sccs as [|s0 sccs']; [exfalso; apply Hnonempty; auto |].
+  assert (Hs0_in : In s0 (s0 :: sccs')) by (left; auto).
+
+  assert (Hchoice : exists f : (V -> Prop) -> (V -> Prop),
+    forall s, In s (s0 :: sccs') -> condensation_edge (s0 :: sccs') s (f s)).
+  { apply (choice (fun s s' => In s (s0 :: sccs') -> condensation_edge (s0 :: sccs') s s')).
+    intros s; destruct (classic (In s (s0 :: sccs'))) as [Hs_in | Hs_notin].
+    - destruct (Hall_out s Hs_in) as [s' Hedge]; exists s'; auto.
+    - exists s0; intro Hfalse; exfalso; apply Hs_notin; auto. }
+  destruct Hchoice as [f Hf].
+
+  assert (Hf_in : forall x, In x (s0 :: sccs') -> In (f x) (s0 :: sccs')).
+  { intros x Hx; destruct (Hf x Hx) as [_ [Hin _]]; exact Hin. }
+
+  assert (Hiter_in : forall m, In (Nat.iter m f s0) (s0 :: sccs')).
+  { intro m; induction m as [|m IH]; [exact Hs0_in | apply Hf_in; auto]. }
+
+  set (n := length (s0 :: sccs')) in *.
+
+  destruct (classic (exists i j, i < j <= n /\ Nat.iter i f s0 = Nat.iter j f s0))
+    as [Hrep | Hnodup].
+  - (* Repeat → cycle contradicts condensation_is_acyclic *)
+    destruct Hrep as [i [j [Hlt Heq]]].
+    set (s := Nat.iter i f s0).
+    set (k := j - i).
+    assert (Hkpos : k >= 1) by lia.
+    assert (Hs_in : In s (s0 :: sccs')) by (apply Hiter_in).
+    assert (Hfs_in : In (f s) (s0 :: sccs')) by (apply Hf_in; auto).
+    assert (Hedge_succ : condensation_edge (s0 :: sccs') s (f s)) by (apply Hf; auto).
+    assert (H_neq : s <> f s)
+      by (destruct Hedge_succ as [_ [_ [Hneq _]]]; exact Hneq).
+    assert (Hk_ge2 : k >= 2).
+    { destruct (Nat.eq_dec (j - i) 1) as [Hdiff1 | Hdiff_not1].
+      - exfalso; apply H_neq. destruct Hlt as [Hij Hjn].
+        assert (Hj : j = i + 1) by lia. subst j.
+        unfold s; rewrite (Nat.add_1_r i) in Heq; simpl in Heq; exact Heq.
+      - unfold k; lia. }
+    assert (Heq_iter : Nat.iter k f s = s).
+    { unfold s, k; rewrite <- Nat.iter_add; rewrite (Nat.sub_add i j) by lia;
+      rewrite Heq; reflexivity. }
+    assert (Hcalc : Nat.iter (k-1) f (f s) = s).
+    { assert (Heq' : Nat.iter (k-1) f (f s) = Nat.iter ((k-1)+1) f s).
+      { rewrite (Nat.iter_add (k-1) 1 (V -> Prop) f s). simpl. reflexivity. }
+      rewrite Heq'. rewrite (Nat.sub_add 1 k) by lia. exact Heq_iter. }
+    assert (Hkminus1 : k-1 >= 1) by lia.
+    assert (Hreach : condensation_reachable (s0 :: sccs') (f s) s).
+    { pose proof (iter_condensation_path (s0 :: sccs') f (f s) (k-1) Hf Hfs_in Hkminus1) as Hp.
+      rewrite Hcalc in Hp; exact Hp. }
+    exfalso; exact (condensation_is_acyclic (s0 :: sccs') s (f s)
+      (conj Hcover (conj Hsccs Hdisjoint)) Hedge_succ Hreach).
+
+  - (* No repeat → NoDup_incl_length contradiction *)
+    set (iterates := map (fun i => Nat.iter i f s0) (seq 0 (n+1))).
+    assert (Hiter_len : length iterates = n+1)
+      by (unfold iterates; rewrite map_length, seq_length; auto).
+    assert (Hiter_in_all : forall x, In x iterates -> In x (s0 :: sccs')).
+    { intros x Hx; unfold iterates in Hx; apply in_map_iff in Hx.
+      destruct Hx as [i [Heq' Hi]]; subst x.
+      apply in_seq in Hi; destruct Hi as [Hil Hih].
+      apply Hiter_in. }
+    assert (Hnodup_iter : NoDup iterates).
+    { apply NoDup_map_NoDup_ForallPairs; [| apply seq_NoDup].
+      intros i j Hi Hj Heq_iter.
+      apply in_seq in Hi; apply in_seq in Hj.
+      destruct Hi as [Hil Hih]; destruct Hj as [Hjl Hjh].
+      destruct (lt_eq_lt_dec i j) as [[Hlt' | Heqij] | Hgt'].
+      - exfalso; apply Hnodup; exists i, j; split;
+          [split; [exact Hlt' | lia] | exact Heq_iter].
+      - exact Heqij.
+      - exfalso; apply Hnodup; exists j, i; split;
+          [split; [exact Hgt' | lia] | symmetry; exact Heq_iter]. }
+    assert (Hlen_contra : length iterates <= n).
+    { apply (NoDup_incl_length iterates (s0 :: sccs') Hnodup_iter Hiter_in_all). }
+    unfold iterates in *; rewrite Hiter_len in Hlen_contra; lia.
+Qed.
+
+Fixpoint remove_one (sccs : list (V -> Prop)) (t : V -> Prop) : list (V -> Prop) :=
+  match sccs with
+  | nil => nil
+  | s :: sccs' =>
+      if excluded_middle_informative (s = t) then sccs'
+      else s :: remove_one sccs' t
+  end.
+
+Lemma in_remove_one_forward : forall (sccs : list (V -> Prop)) (s t : V -> Prop),
+  In s (remove_one sccs t) -> In s sccs.
+Proof.
+  intros sccs s t Hin; induction sccs as [|a sccs' IH]; [contradiction |].
+  simpl in Hin; destruct (excluded_middle_informative (a = t)) as [Heq | Hneq].
+  - subst a; right; exact Hin.
+  - simpl in Hin; destruct Hin as [Heq' | Hin']; [subst; left; auto | right; apply IH; auto].
+Qed.
+
+Lemma in_remove_one_backward : forall (sccs : list (V -> Prop)) (s t : V -> Prop),
+  In s sccs -> s <> t -> In s (remove_one sccs t).
+Proof.
+  intros sccs s t Hin Hneq; induction sccs as [|a sccs' IH]; [contradiction |].
+  simpl; destruct (excluded_middle_informative (a = t)) as [Heq | Hneq_a_t].
+  - subst a; destruct Hin as [Heq' | Hin']; [exfalso; apply Hneq; auto | exact Hin'].
+  - destruct Hin as [Heq' | Hin']; [left; auto | right; apply IH; auto].
+Qed.
+
+Lemma NoDup_remove_one : forall (sccs : list (V -> Prop)) (t : V -> Prop),
+  NoDup sccs -> NoDup (remove_one sccs t).
+Proof.
+  intros sccs t Hnodup; induction sccs as [|a sccs' IH]; [exact (NoDup_nil (V -> Prop)) |].
+  simpl; destruct (excluded_middle_informative (a = t)) as [Heq | Hneq].
+  - subst a; inversion Hnodup; exact H2.
+  - inversion Hnodup; apply NoDup_cons.
+    + intro Hin; apply H1; apply (in_remove_one_forward _ _ _ Hin).
+    + apply IH; exact H2.
+Qed.
+
+Lemma in_remove_one_forward_neq : forall (sccs : list (V -> Prop)) (x y : V -> Prop),
+  NoDup sccs -> In x (remove_one sccs y) -> x <> y.
+Proof.
+  intros sccs x y Hndp Hin; induction sccs as [|a sccs' IH]; [contradiction |].
+  simpl in Hin; destruct (excluded_middle_informative (a = y)) as [Heq | Hneq].
+  - subst a; pose proof (NoDup_cons_iff y sccs') as [Hfw _].
+    destruct (Hfw Hndp) as [Ha Hnodup'].
+    intro Heq_x_y; subst x; exact (Ha Hin).
+  - pose proof (NoDup_cons_iff a sccs') as [Hfw _].
+    destruct (Hfw Hndp) as [Ha Hnodup'].
+    simpl in Hin; destruct Hin as [Heq' | Hin']; [subst; auto | apply IH; auto].
+Qed.
+
+Lemma in_remove_one : forall (sccs : list (V -> Prop)) (s t : V -> Prop),
+  NoDup sccs -> (In s (remove_one sccs t) <-> In s sccs /\ s <> t).
+Proof.
+  intros sccs s t Hnodup; split.
+  - intros Hin; split; [apply (in_remove_one_forward _ _ t); exact Hin |
+                       exact (in_remove_one_forward_neq sccs s t Hnodup Hin)].
+  - intros [Hin Hneq]; apply in_remove_one_backward; auto.
+Qed.
+
+Lemma remove_one_length_lt : forall (sccs : list (V -> Prop)) (t : V -> Prop),
+  In t sccs -> length (remove_one sccs t) < length sccs.
+Proof.
+  intros sccs t Hin; induction sccs as [|s sccs' IH]; [contradiction |]; simpl.
+  destruct (excluded_middle_informative (s = t)) as [Heq | Hneq].
+  - subst s; simpl; lia.
+  - destruct (in_inv Hin) as [Heq' | Hin']; [exfalso; apply Hneq; auto |].
+    simpl; auto with arith; apply IH; auto.
+Qed.
+
+Lemma is_SCC_list_remove_one : forall (sccs : list (V -> Prop)) (t : V -> Prop),
+  is_SCC_list sccs -> is_SCC_list (remove_one sccs t).
+Proof.
+  intros sccs t Hisccs.
+  induction sccs as [|a sccs' IH].
+  - intros s Hsin; simpl in Hsin; contradiction.
+  - intros s Hsin; simpl in Hsin.
+    destruct (excluded_middle_informative (a = t)) as [Heq | Hneq].
+    + subst a; apply Hisccs; right; exact Hsin.
+    + destruct Hsin as [Heq' | Hsin'].
+      * subst s; apply Hisccs; left; auto.
+      * apply (IH (fun s' Hs' => Hisccs s' (or_intror Hs')) s Hsin').
+Qed.
+
+Lemma in_remove_one_condensation_edge : forall (sccs : list (V -> Prop)) (t s1 s2 : V -> Prop),
+  condensation_edge (remove_one sccs t) s1 s2 -> condensation_edge sccs s1 s2.
+Proof.
+  intros sccs t s1 s2 [Hin1 [Hin2 [Hneq [u [v [Hu [Hv Hstep]]]]]]].
+  apply in_remove_one_forward in Hin1; apply in_remove_one_forward in Hin2.
+  repeat split; try assumption; exists u, v; split; [exact Hu | split; [exact Hv | exact Hstep]].
+Qed.
+
+Lemma in_remove_one_condensation_reachable : forall (sccs : list (V -> Prop)) (t s1 s2 : V -> Prop),
+  condensation_reachable (remove_one sccs t) s1 s2 -> condensation_reachable sccs s1 s2.
+Proof.
+  intros sccs t s1 s2 Hreach.
+  induction Hreach as [s1' s2' Hedge | s1' s2' s3' Hr1 IH1 Hr2 IH2].
+  - apply cr_edge; apply in_remove_one_condensation_edge with (t := t); exact Hedge.
+  - eapply cr_trans; [apply IH1 | apply IH2].
+Qed.
+
+Lemma condensation_acyclic_on_remove_one : forall (sccs : list (V -> Prop)) (t : V -> Prop),
+  condensation_acyclic_on sccs -> condensation_acyclic_on (remove_one sccs t).
+Proof.
+  unfold condensation_acyclic_on; intros sccs t Hac [s1 [s2 [Hedge Hreach]]].
+  apply Hac; exists s1, s2; split.
+  - apply in_remove_one_condensation_edge with (t := t); exact Hedge.
+  - apply in_remove_one_condensation_reachable with (t := t); exact Hreach.
+Qed.
+
+Lemma exists_tail_SCC_on : forall (sccs : list (V -> Prop)),
+  is_SCC_list sccs -> condensation_acyclic_on sccs -> sccs <> nil ->
+  exists t, is_tail_SCC sccs t.
+Proof.
+  intros sccs Hisccs Hac Hnonempty.
+  destruct (classic (exists t, is_tail_SCC sccs t)) as [Htail | Hnotail]; [exact Htail |].
+
+  assert (Hall_out : forall s, In s sccs -> exists s', condensation_edge sccs s s').
+  { intros s Hs.
+    assert (Hnot_tail : ~ is_tail_SCC sccs s).
+    { intro Htail; apply Hnotail; exists s; exact Htail. }
+    unfold is_tail_SCC in Hnot_tail.
+    assert (Hno_forall : ~ (forall s', ~ condensation_edge sccs s s')).
+    { intro Hforall; apply Hnot_tail; split; auto. }
+    apply not_all_ex_not in Hno_forall.
+    destruct Hno_forall as [s' Hnn].
+    apply NNPP in Hnn.
+    exists s'; exact Hnn. }
+
+  destruct sccs as [|s0 sccs']; [exfalso; apply Hnonempty; auto |].
+  assert (Hs0_in : In s0 (s0 :: sccs')) by (left; auto).
+
+  assert (Hchoice : exists f : (V -> Prop) -> (V -> Prop),
+    forall s, In s (s0 :: sccs') -> condensation_edge (s0 :: sccs') s (f s)).
+  { apply (choice (fun s s' => In s (s0 :: sccs') -> condensation_edge (s0 :: sccs') s s')).
+    intros s; destruct (classic (In s (s0 :: sccs'))) as [Hs_in | Hs_notin].
+    - destruct (Hall_out s Hs_in) as [s' Hedge]; exists s'; auto.
+    - exists s0; intro Hfalse; exfalso; apply Hs_notin; auto. }
+  destruct Hchoice as [f Hf].
+
+  assert (Hf_in : forall x, In x (s0 :: sccs') -> In (f x) (s0 :: sccs')).
+  { intros x Hx; destruct (Hf x Hx) as [_ [Hin _]]; exact Hin. }
+
+  assert (Hiter_in : forall m, In (Nat.iter m f s0) (s0 :: sccs')).
+  { intro m; induction m as [|m IH]; [exact Hs0_in | apply Hf_in; auto]. }
+
+  set (n := length (s0 :: sccs')) in *.
+
+  destruct (classic (exists i j, i < j <= n /\ Nat.iter i f s0 = Nat.iter j f s0))
+    as [Hrep | Hnodup].
+  - destruct Hrep as [i [j [Hlt Heq]]].
+    set (s := Nat.iter i f s0).
+    set (k := j - i).
+    assert (Hkpos : k >= 1) by lia.
+    assert (Hs_in : In s (s0 :: sccs')) by (apply Hiter_in).
+    assert (Hfs_in : In (f s) (s0 :: sccs')) by (apply Hf_in; auto).
+    assert (Hedge_succ : condensation_edge (s0 :: sccs') s (f s)) by (apply Hf; auto).
+    assert (H_neq : s <> f s)
+      by (destruct Hedge_succ as [_ [_ [Hneq _]]]; exact Hneq).
+    assert (Hk_ge2 : k >= 2).
+    { destruct (Nat.eq_dec (j - i) 1) as [Hdiff1 | Hdiff_not1].
+      - exfalso; apply H_neq. destruct Hlt as [Hij Hjn].
+        assert (Hj : j = i + 1) by lia. subst j.
+        unfold s; rewrite (Nat.add_1_r i) in Heq; simpl in Heq; exact Heq.
+      - unfold k; lia. }
+    assert (Heq_iter : Nat.iter k f s = s).
+    { unfold s, k; rewrite <- Nat.iter_add; rewrite (Nat.sub_add i j) by lia;
+      rewrite Heq; reflexivity. }
+    assert (Hcalc : Nat.iter (k-1) f (f s) = s).
+    { assert (Heq' : Nat.iter (k-1) f (f s) = Nat.iter ((k-1)+1) f s).
+      { rewrite (Nat.iter_add (k-1) 1 (V -> Prop) f s). simpl. reflexivity. }
+      rewrite Heq'. rewrite (Nat.sub_add 1 k) by lia. exact Heq_iter. }
+    assert (Hkminus1 : k-1 >= 1) by lia.
+    assert (Hreach : condensation_reachable (s0 :: sccs') (f s) s).
+    { pose proof (iter_condensation_path (s0 :: sccs') f (f s) (k-1) Hf Hfs_in Hkminus1) as Hp.
+      rewrite Hcalc in Hp; exact Hp. }
+    exfalso; apply Hac; exists s, (f s); split; auto.
+
+  - set (iterates := map (fun i => Nat.iter i f s0) (seq 0 (n+1))).
+    assert (Hiter_len : length iterates = n+1)
+      by (unfold iterates; rewrite map_length, seq_length; auto).
+    assert (Hiter_in_all : forall x, In x iterates -> In x (s0 :: sccs')).
+    { intros x Hx; unfold iterates in Hx; apply in_map_iff in Hx.
+      destruct Hx as [i [Heq' Hi]]; subst x.
+      apply in_seq in Hi; destruct Hi as [Hil Hih].
+      apply Hiter_in. }
+    assert (Hnodup_iter : NoDup iterates).
+    { apply NoDup_map_NoDup_ForallPairs; [| apply seq_NoDup].
+      intros i j Hi Hj Heq_iter.
+      apply in_seq in Hi; apply in_seq in Hj.
+      destruct Hi as [Hil Hih]; destruct Hj as [Hjl Hjh].
+      destruct (lt_eq_lt_dec i j) as [[Hlt' | Heqij] | Hgt'].
+      - exfalso; apply Hnodup; exists i, j; split;
+          [split; [exact Hlt' | lia] | exact Heq_iter].
+      - exact Heqij.
+      - exfalso; apply Hnodup; exists j, i; split;
+          [split; [exact Hgt' | lia] | symmetry; exact Heq_iter]. }
+    assert (Hlen_contra : length iterates <= n).
+    { apply (NoDup_incl_length iterates (s0 :: sccs') Hnodup_iter Hiter_in_all). }
+    unfold iterates in *; rewrite Hiter_len in Hlen_contra; lia.
+Qed.
+
+Lemma exists_topological_order_aux : forall (sccs : list (V -> Prop)),
+  is_SCC_list sccs -> condensation_acyclic_on sccs -> NoDup sccs ->
+  exists prec : (V -> Prop) -> (V -> Prop) -> Prop,
+    (forall s1 s2, condensation_edge sccs s1 s2 -> prec s1 s2) /\
+    (forall s1 s2, In s1 sccs -> In s2 sccs -> s1 <> s2 -> prec s1 s2 \/ prec s2 s1) /\
+    (forall s1 s2, prec s1 s2 -> ~ prec s2 s1) /\
+    (forall s1 s2 s3, prec s1 s2 -> prec s2 s3 -> prec s1 s3).
+Proof.
+  intro sccs; revert sccs.
+  refine (well_founded_induction_type (well_founded_ltof _ (@length _)) _ _).
+  intros sccs IH Hisccs Hac Hnodup.
+  destruct (classic (sccs = nil)) as [Hnil | Hnonnil].
+  - subst sccs; exists (fun _ _ => False).
+    split; [| split; [| split]].
+    + intros s1 s2 H; destruct H as [? _]; inversion H.
+    + intros s1 s2 H1 ? ?; inversion H1.
+    + intros ? ? H ?; exact H.
+    + intros ? ? ? H1 ?; exact H1.
+  - destruct (exists_tail_SCC_on sccs Hisccs Hac Hnonnil) as [t [Hin_t Hno_out]].
+    set (sccs' := remove_one sccs t).
+    assert (Hnodup_sccs' : NoDup sccs') by (apply NoDup_remove_one; exact Hnodup).
+    assert (Hlen' : length sccs' < length sccs) by (apply remove_one_length_lt; auto).
+    assert (Hisccs' : is_SCC_list sccs') by (apply is_SCC_list_remove_one; auto).
+    assert (Hac' : condensation_acyclic_on sccs') by (apply condensation_acyclic_on_remove_one; auto).
+    destruct (IH sccs' Hlen' Hisccs' Hac' Hnodup_sccs') as [prec' Hprec'].
+    destruct Hprec' as [Hedge' [Htotal' [Hasym' Htrans']]].
+    exists (fun a b => (In a sccs' /\ In b sccs' /\ prec' a b) \/
+                       (In a sccs' /\ a <> t /\ b = t)).
+    split; [| split; [| split]]; intros.
+    { (* subgoal 1: condensation_edge s1 s2 → prec s1 s2 *)
+      destruct (classic (s1 = t)) as [Heq | Hneq_s1_t].
+      { subst s1; exfalso; apply Hno_out with (s' := s2).
+        destruct H as [Hin1 [Hin2 [Hneq [u [v [Hu [Hv Hstep]]]]]]].
+        repeat split; try assumption; exists u, v; split; [exact Hu | split; [exact Hv | exact Hstep]]. }
+      { destruct (classic (s2 = t)) as [Heq_t | Hneq_s2_t].
+        { subst s2; right; split.
+          - destruct H as [Hin1 _]; apply in_remove_one_backward; [exact Hin1 | exact Hneq_s1_t].
+          - split; [exact Hneq_s1_t | reflexivity]. }
+        { left; destruct H as [Hin1 [Hin2 [Hneq [u [v [Hu [Hv Hstep]]]]]]]; split.
+          - apply in_remove_one_backward; [exact Hin1 | exact Hneq_s1_t].
+          - split; [apply in_remove_one_backward; [exact Hin2 | exact Hneq_s2_t] |].
+            apply Hedge'; repeat split; try assumption.
+            + apply in_remove_one_backward; [exact Hin1 | exact Hneq_s1_t].
+            + apply in_remove_one_backward; [exact Hin2 | exact Hneq_s2_t].
+            + exists u, v; split; [exact Hu | split; [exact Hv | exact Hstep]]. } }
+    }
+    { (* subgoal 2: totality: s1 <> s2, both in sccs *)
+      destruct (classic (s1 = t)) as [Heq1 | Hneq1];
+        [destruct (classic (s2 = t)) as [Heq2 | Hneq2] |
+         destruct (classic (s2 = t)) as [Heq2 | Hneq2]].
+      - subst s1 s2; exfalso; apply H1; auto.
+      - subst s1; cbv beta iota; right; right; split; [exact (in_remove_one_backward sccs s2 t H0 Hneq2) | split; [exact Hneq2 | reflexivity]].
+      - subst s2; cbv beta iota; left; right; split; [exact (in_remove_one_backward sccs s1 t H Hneq1) | split; [exact Hneq1 | reflexivity]].
+      - assert (Hin1' : In s1 sccs') by (exact (in_remove_one_backward sccs s1 t H Hneq1)).
+        assert (Hin2' : In s2 sccs') by (exact (in_remove_one_backward sccs s2 t H0 Hneq2)).
+        destruct (Htotal' s1 s2 Hin1' Hin2' H1) as [Hp | Hp].
+        + left; left; split; [| split]; auto.
+        + right; left; split; [| split]; auto. }
+    { (* subgoal 3: antisymmetry *)
+      intro H0.
+      destruct H as [[Hina1 [Hinb1 Hprec_a]] | [Hina1 [Hneq_a Heq_a]]];
+        destruct H0 as [[Hina2 [Hinb2 Hprec_b]] | [Hina2 [Hneq_b Heq_b]]].
+      * apply (Hasym' s1 s2 Hprec_a Hprec_b).
+      * subst s1; exfalso;
+          apply (in_remove_one_forward_neq sccs t t Hnodup Hina1); reflexivity.
+      * subst s2; exfalso;
+          apply (in_remove_one_forward_neq sccs t t Hnodup Hina2); reflexivity.
+      * subst s1 s2; exfalso; apply Hneq_a; reflexivity. }
+    { (* subgoal 4: transitivity *)
+      destruct H as [[Hina1 [Hinb1 Hprec_a]] | [Hina1 [Hneq_a Heq_a]]];
+        destruct H0 as [[Hina2 [Hinb2 Hprec_b]] | [Hina2 [Hneq_b Heq_b]]].
+      * left; split; [exact Hina1 | split; [exact Hinb2 | eapply Htrans'; [exact Hprec_a | exact Hprec_b]]].
+      * subst s3; right; split; [exact Hina1 | split; [apply (in_remove_one_forward_neq sccs s1 t Hnodup Hina1) | reflexivity]].
+      * subst s2; exfalso;
+          apply (in_remove_one_forward_neq sccs t t Hnodup Hina2); reflexivity.
+      * subst s2 s3; exfalso; apply Hneq_b; reflexivity. }
+  Qed.
+
+Lemma exists_topological_order : forall sccs,
+  scc_partition sccs -> NoDup sccs ->
+  exists prec : (V -> Prop) -> (V -> Prop) -> Prop,
+    (forall s1 s2, condensation_edge sccs s1 s2 -> prec s1 s2) /\
+    (forall s1 s2, In s1 sccs -> In s2 sccs -> s1 <> s2 -> prec s1 s2 \/ prec s2 s1) /\
+    (forall s1 s2, prec s1 s2 -> ~ prec s2 s1) /\
+    (forall s1 s2 s3, prec s1 s2 -> prec s2 s3 -> prec s1 s3).
+Proof.
+  intros sccs Hpart Hnodup.
+  apply exists_topological_order_aux; [apply scc_partition_is_SCC_list | apply condensation_acyclic_on_scc_partition | exact Hnodup]; auto.
 Qed.
 
 End SCC.
