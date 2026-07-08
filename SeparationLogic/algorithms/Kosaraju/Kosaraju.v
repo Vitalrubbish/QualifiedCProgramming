@@ -3257,4 +3257,87 @@ Proof.
       * exact HAT'.
 Qed.
 
+(* ================================================================= *)
+(* mono_cont + Lfix unfold lemmas for DFS_finish_f / DFS_scc_f.       *)
+(* These let the cursor continuations in the refinement lib relate    *)
+(* dfs_finish_from/dfs_scc_from to the abstract DFS step behaviour.   *)
+(* Mirrors DFS.DFS_mono_cont / DFS_unfold in algorithms/DFS/DFS.v.    *)
+(* ================================================================= *)
+
+(** [mono_cont_at]: if [f] is mono_cont as a function producing a
+    pointwise-included value (codomain [C -> program Σ B]), then for any
+    fixed [a : C] the specialisation [fun W => f W a] is also mono_cont.
+    This bridges the gap left by [mono_cont_auto], which does not descend
+    through applications of an [Lfix]-producing function to a concrete
+    argument (the [repeat_break (...) ∅] shape in DFS_finish_f). *)
+
+Lemma mono_cont_at {Σ A B C: Type}
+      (f: (A -> program Σ B) -> C -> program Σ B) (a: C) :
+  mono_cont f -> mono_cont (fun W => f W a).
+Proof.
+  intro Hf. unfold mono_cont in Hf. destruct Hf as [Hmono Hcont]. split.
+  - (* mono part *)
+    unfold mono, Proper, respectful.
+    intros W1 W2 HW.
+    assert (Hinc : Sets.included (f W1) (f W2)) by (apply Hmono; assumption).
+    sets_unfold. sets_unfold in Hinc. apply Hinc.
+  - (* continuous part *)
+    unfold continuous, sseq_continuous.
+    intros T HT.
+    cbv beta.
+    assert (Heq : Sets.equiv (f (⋃ T)) (⋃ (fun n => f (T n)))) by (apply Hcont; assumption).
+    sets_unfold. sets_unfold in Heq. apply Heq.
+Qed.
+
+Lemma mono_cont_pointwise {Σ A B C: Type}
+      (f: (A -> program Σ B) -> C -> program Σ B) :
+  (forall c, mono_cont (fun W => f W c)) -> mono_cont f.
+Proof.
+  intro Hf. unfold mono_cont. split.
+  - unfold mono, Proper, respectful. intros W1 W2 HW.
+    assert (Hinc : forall c, Sets.included (f W1 c) (f W2 c)).
+    { intros c. destruct (Hf c) as [Hmono _]. apply Hmono; assumption. }
+    sets_unfold. sets_unfold in Hinc. intros c. apply (Hinc c).
+  - unfold continuous, sseq_continuous. intros T HT. cbv beta.
+    assert (Heq : forall c, Sets.equiv (f (⋃ T) c) (⋃ (fun n => f (T n) c))).
+    { intros c. destruct (Hf c) as [_ Hcont]. apply Hcont; assumption. }
+    sets_unfold. sets_unfold in Heq. intros c. apply (Heq c).
+Qed.
+
+Lemma DFS_finish_f_mono_cont : mono_cont DFS_finish_f.
+Proof.
+  unfold DFS_finish_f. mono_cont_auto. unfold repeat_break.
+  match goal with
+  | |- mono_cont (fun (W : V -> program St unit) => ?F ?X) =>
+      apply (mono_cont_at (fun (W : V -> program St unit) => F) X)
+  end.
+  apply mono_cont_Lfix; intros; unfold repeat_break_f.
+  all: (apply mono_cont_pointwise; intro; mono_cont_auto).
+Qed.
+
+Lemma DFS_scc_f_mono_cont : forall root, mono_cont (DFS_scc_f root).
+Proof.
+  intro root. unfold DFS_scc_f. mono_cont_auto. unfold repeat_break.
+  match goal with
+  | |- mono_cont (fun (W : V -> program St unit) => ?F ?X) =>
+      apply (mono_cont_at (fun (W : V -> program St unit) => F) X)
+  end.
+  apply mono_cont_Lfix; intros; unfold repeat_break_f.
+  all: (apply mono_cont_pointwise; intro; mono_cont_auto).
+Qed.
+
+Lemma DFS_finish_unfold (u : V) :
+  DFS_finish u == DFS_finish_f DFS_finish u.
+Proof.
+  unfold DFS_finish. revert u. change (DFS_finish == DFS_finish_f DFS_finish).
+  apply Lfix_fixpoint'. exact DFS_finish_f_mono_cont.
+Qed.
+
+Lemma DFS_scc_unfold (root u : V) :
+  DFS_scc root u == DFS_scc_f root (DFS_scc root) u.
+Proof.
+  unfold DFS_scc. revert u. change (DFS_scc root == DFS_scc_f root (DFS_scc root)).
+  apply Lfix_fixpoint'. apply DFS_scc_f_mono_cont.
+Qed.
+
 End Kosaraju.
