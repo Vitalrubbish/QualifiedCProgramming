@@ -4449,4 +4449,1233 @@ Section SCC_OUTPUT_CORRECTNESS.
       + apply tarjan_scc_f_preserves_output_frame_contract; auto.
   Qed.
 
+  Lemma empty_rec_program_satisfies_output_contracts:
+    VisitOutputContract (∅ : RecProgram) /\
+    VisitChildOutputContract (∅ : RecProgram) /\
+    VisitOutputFrameContract (∅ : RecProgram).
+  Proof.
+    unfold VisitOutputContract, VisitChildOutputContract,
+      VisitOutputFrameContract, Hoare.
+    repeat split; intros;
+      match goal with
+      | Hexec : (_, _, _) ∈ _ |- _ =>
+          sets_unfold in Hexec; tauto
+      end.
+  Qed.
+
+  Lemma tarjan_scc_iter_satisfies_output_contracts (n: nat):
+    VisitOutputContract (Nat.iter n (tarjan_scc_f g) (∅ : RecProgram)) /\
+    VisitChildOutputContract
+      (Nat.iter n (tarjan_scc_f g) (∅ : RecProgram)) /\
+    VisitOutputFrameContract
+      (Nat.iter n (tarjan_scc_f g) (∅ : RecProgram)).
+  Proof.
+    induction n as [| n IH].
+    - simpl. apply empty_rec_program_satisfies_output_contracts.
+    - simpl.
+      pose proof (tarjan_scc_iter_satisfies_visit_contract
+                    g root n) as Hvisit.
+      destruct Hvisit as [_ [Hchild [Hchild_traversal Hframe_contract]]].
+      destruct IH as [Hroot_output [Hchild_output Houtput_frame_contract]].
+      apply tarjan_scc_f_preserves_output_contracts; auto.
+  Qed.
+
+  Theorem tarjan_scc_satisfies_output_contracts:
+    VisitOutputContract (tarjan_scc g) /\
+    VisitChildOutputContract (tarjan_scc g) /\
+    VisitOutputFrameContract (tarjan_scc g).
+  Proof.
+    split.
+    - unfold VisitOutputContract, Hoare.
+      intros u s1 retv s2 Hpre Hexec.
+      unfold tarjan_scc in Hexec.
+      change (exists n,
+                (s1, retv, s2) ∈
+                  Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) u)
+        in Hexec.
+      destruct Hexec as [n Hexec].
+      pose proof (tarjan_scc_iter_satisfies_output_contracts n)
+        as [Hmain _].
+      unfold VisitOutputContract, Hoare in Hmain.
+      exact (Hmain u s1 retv s2 Hpre Hexec).
+    - split.
+      + unfold VisitChildOutputContract, Hoare.
+        intros parent child done s1 retv s2 Hpre Hexec.
+        unfold tarjan_scc in Hexec.
+        change (exists n,
+                  (s1, retv, s2) ∈
+                    Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) child)
+          in Hexec.
+        destruct Hexec as [n Hexec].
+        pose proof (tarjan_scc_iter_satisfies_output_contracts n)
+          as [_ [Hchild_output _]].
+        unfold VisitChildOutputContract, Hoare in Hchild_output.
+        exact (Hchild_output parent child done
+                              s1 retv s2 Hpre Hexec).
+      + unfold VisitOutputFrameContract, Hoare.
+        intros ancestor current loop_root next ancestor_done loop_done
+               s_before s1 retv s2 Hpre Hexec.
+        unfold tarjan_scc in Hexec.
+        change (exists n,
+                  (s1, retv, s2) ∈
+                    Nat.iter n (tarjan_scc_f g) (∅ : RecProgram) next)
+          in Hexec.
+        destruct Hexec as [n Hexec].
+        pose proof (tarjan_scc_iter_satisfies_output_contracts n)
+          as [_ [_ Houtput_frame]].
+        unfold VisitOutputFrameContract, Hoare in Houtput_frame.
+        exact (Houtput_frame ancestor current loop_root next
+                             ancestor_done loop_done s_before
+                             s1 retv s2 Hpre Hexec).
+  Qed.
+
 End SCC_OUTPUT_CORRECTNESS.
+
+Section SCC_OUTPUT_ALL_CORRECTNESS.
+
+  Context {V E: Type}
+          `{EqDec V eq}
+          (g: OriginalGraphType V E)
+          `{OriginalGraph_gvalid g}.
+
+  Local Definition AllSt : Type := @SCCSt V.
+  Local Definition AllRecProgram : Type := V -> program AllSt unit.
+
+  Definition RootBottom (u: V) (s: AllSt): Prop :=
+    Active u s /\
+    forall b, RestStack u s b -> False.
+
+  Definition FaEdges (s: AllSt): Prop :=
+    forall v, fa s v <> v -> Edge g (fa s v) v.
+
+  Definition OuterShape (s: AllSt): Prop :=
+    (forall root, wf_scc_state g root s) /\
+    NoUnvisitedReach g s /\
+    Closed g s /\
+    FaEdges s /\
+    dfn_injective s /\
+    SCCsOutputInv g s /\
+    VisitedValid g s /\
+    stack s = nil.
+
+  Definition VisitChildRootBottomContract (root: V) (W: AllRecProgram): Prop :=
+    forall (parent child: V) (done: V -> Prop),
+      Hoare
+        (fun s: AllSt =>
+           ParentRecursivePre g root parent child done s /\
+           RootBottom parent s)
+        (W child)
+        (fun _ s => RootBottom parent s).
+
+  Definition VisitFaEdgesContract (W: AllRecProgram): Prop :=
+    forall u: V,
+      Hoare
+        (FaEdges)
+        (W u)
+        (fun _ s => FaEdges s).
+
+  Lemma preloop_preserves_fa_edges
+        (u: V):
+    Hoare
+      (FaEdges)
+      (preloop u)
+      (fun _ s => FaEdges s).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. unfold FaEdges in *. simpl. exact H.
+  Qed.
+
+  Lemma set_fa_preserves_fa_edges
+        (v p: V):
+    Edge g p v ->
+    Hoare
+      (FaEdges)
+      (set_fa v p)
+      (fun _ s => FaEdges s).
+  Proof.
+    intros Hedge.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. unfold FaEdges in *. simpl.
+    intros x Hfane.
+    unfold equiv_decb in *.
+    destruct (equiv_dec x v) as [Hxv | Hxv].
+    - rewrite Hxv. exact Hedge.
+    - apply H. exact Hfane.
+  Qed.
+
+  Lemma update_low_preserves_fa_edges
+        (u: V) (n: nat):
+    Hoare
+      (FaEdges)
+      (update_low u n)
+      (fun _ s => FaEdges s).
+  Proof.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst s. unfold FaEdges in *. simpl. exact H.
+    - destruct H1 as [Heq _]. subst s.
+      unfold FaEdges in *. simpl. exact H.
+  Qed.
+
+  Lemma get_low_update_low_preserves_fa_edges
+        (u v: V):
+    Hoare
+      (FaEdges)
+      (lv <- get' (fun s => low s v);; update_low u lv)
+      (fun _ s => FaEdges s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_fa_edges.
+    intros s1 [Hs1 _]. subst s1. exact H.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_fa_edges
+        (u v: V):
+    Hoare
+      (FaEdges)
+      (dv <- get' (fun s => dfn s v);; update_low u dv)
+      (fun _ s => FaEdges s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_fa_edges.
+    intros s1 [Hs1 _]. subst s1. exact H.
+  Qed.
+
+  Lemma pop_scc_preserves_fa_edges
+        (u: V):
+    Hoare
+      (FaEdges)
+      (pop_scc u)
+      (fun _ s => FaEdges s).
+  Proof.
+    unfold pop_scc. intro_state. hoare_auto_s.
+    subst s. unfold pop_scc_state, FaEdges in *.
+    destruct (stack_split_at (stack s0) u) as [popped rest].
+    simpl. exact H.
+  Qed.
+
+  Lemma process_edge_preserves_fa_edges
+        (u v: V) (W: AllRecProgram):
+    VisitFaEdgesContract W ->
+    Hoare
+      (fun s: AllSt =>
+         FaEdges s /\
+         Edge g u v)
+      (process_edge u W v)
+      (fun _ s => FaEdges s).
+  Proof.
+    intros Hfa_contract.
+    unfold process_edge, if_else.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_bind.
+      + eapply Hoare_conseq_pre.
+        2: apply set_fa_preserves_fa_edges.
+        * intros s1 [_ Hs1]. subst s1.
+          exact (proj1 H).
+        * exact (proj2 H).
+      + simpl. intros _.
+        eapply Hoare_bind.
+        * apply Hfa_contract.
+        * simpl. intros _.
+          apply get_low_update_low_preserves_fa_edges.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Hs1]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: apply get_dfn_update_low_preserves_fa_edges.
+        intros s1 [_ Hs1]. subst s1.
+        exact (proj1 H).
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        simpl. intros _ s [Heq _]. subst s.
+        exact (proj1 H).
+  Qed.
+
+  Lemma edge_loop_preserves_fa_edges
+        (u: V) (W: AllRecProgram):
+    VisitFaEdgesContract W ->
+    Hoare
+      (FaEdges)
+      (forset (edge_set g u) (process_edge u W))
+      (fun _ s => FaEdges s).
+  Proof.
+    intros Hfa_contract.
+    apply Hoare_forset with
+      (P := fun (_: V -> Prop) (s: AllSt) => FaEdges s)
+      (universe := edge_set g u).
+    - intros done1 done2 Hdone s1 s2 Heq. subst s2. reflexivity.
+    - intros done a _ Hedge _.
+      eapply Hoare_conseq_pre.
+      2: {
+        eapply process_edge_preserves_fa_edges.
+        exact Hfa_contract. }
+      intros s Hfa. exact (conj Hfa Hedge).
+  Qed.
+
+  Lemma tarjan_scc_f_preserves_fa_edges_contract
+        (W: AllRecProgram):
+    VisitFaEdgesContract W ->
+    VisitFaEdgesContract (tarjan_scc_f g W).
+  Proof.
+    intros Hfa_contract u.
+    unfold tarjan_scc_f.
+    eapply Hoare_bind.
+    { apply preloop_preserves_fa_edges. }
+    simpl. intros _.
+    eapply Hoare_bind.
+    { apply edge_loop_preserves_fa_edges. exact Hfa_contract. }
+    simpl. intros _.
+    unfold If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_conseq_pre.
+      2: apply pop_scc_preserves_fa_edges.
+      intros s1 [_ Hs1]. subst s1. exact H.
+    - eapply Hoare_conseq_post.
+      2: { apply Hoare_assume_s. }
+      simpl. intros _ s [Heq _]. subst s. exact H.
+  Qed.
+
+  Lemma empty_rec_program_satisfies_fa_edges_contract:
+    VisitFaEdgesContract (∅ : AllRecProgram).
+  Proof.
+    unfold VisitFaEdgesContract, Hoare.
+    intros u s1 retv s2 _ Hexec.
+    sets_unfold in Hexec. tauto.
+  Qed.
+
+  Lemma tarjan_scc_iter_satisfies_fa_edges_contract
+        (n: nat):
+    VisitFaEdgesContract
+      (Nat.iter n (tarjan_scc_f g) (∅ : AllRecProgram)).
+  Proof.
+    induction n as [| n IH].
+    - simpl. apply empty_rec_program_satisfies_fa_edges_contract.
+    - simpl. apply tarjan_scc_f_preserves_fa_edges_contract. exact IH.
+  Qed.
+
+  Lemma tarjan_scc_preserves_fa_edges:
+    VisitFaEdgesContract (tarjan_scc g).
+  Proof.
+    unfold VisitFaEdgesContract, Hoare.
+    intros u s1 retv s2 Hfa Hexec.
+    unfold tarjan_scc in Hexec.
+    change (exists n,
+              (s1, retv, s2) ∈
+                Nat.iter n (tarjan_scc_f g) (∅ : AllRecProgram) u)
+      in Hexec.
+    destruct Hexec as [n Hexec].
+    pose proof (tarjan_scc_iter_satisfies_fa_edges_contract n)
+      as Hcontract.
+    unfold VisitFaEdgesContract, Hoare in Hcontract.
+    exact (Hcontract u s1 retv s2 Hfa Hexec).
+  Qed.
+
+  Lemma parent_frame_preserves_root_bottom
+        (root parent child: V) (done: V -> Prop)
+        (s_before s: AllSt):
+    ParentFrameForChild g root parent child done s_before s ->
+    RootBottom parent s_before ->
+    RootBottom parent s.
+  Proof.
+    intros Hframe [_ Hno_rest_before].
+    destruct Hframe as [_ [_ [Haux [_ [_ [_ [_ [_ [_ [_ [_ [_ Hstack_frame]]]]]]]]]]]].
+    destruct Haux as [_ [Hparent_active _]].
+    destruct Hstack_frame as [_ [Hrest_frame _]].
+    split; [exact Hparent_active |].
+    intros b Hrest_after.
+    exact (Hno_rest_before b (Hrest_frame b Hrest_after)).
+  Qed.
+
+  Lemma set_fa_preserves_root_bottom
+        (u v p: V):
+    Hoare
+      (RootBottom u)
+      (set_fa v p)
+      (fun _ s => RootBottom u s).
+  Proof.
+    unfold set_fa. intro_state. hoare_auto_s.
+    subst s. unfold RootBottom, Active, RestStack in *.
+    simpl. exact H.
+  Qed.
+
+  Lemma update_low_preserves_root_bottom
+        (u v: V) (n: nat):
+    Hoare
+      (RootBottom u)
+      (update_low v n)
+      (fun _ s => RootBottom u s).
+  Proof.
+    unfold update_low. unfold_op. intro_state. hoare_auto_s.
+    - subst s. unfold RootBottom, Active, RestStack in *. simpl. exact H.
+    - destruct H1 as [Heq _]. subst s.
+      unfold RootBottom, Active, RestStack in *. simpl. exact H.
+  Qed.
+
+  Lemma get_low_update_low_preserves_root_bottom
+        (u v p: V):
+    Hoare
+      (RootBottom u)
+      (lv <- get' (fun s => low s v);; update_low p lv)
+      (fun _ s => RootBottom u s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros lv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_root_bottom.
+    intros s1 [Hs1 _]. subst s1. exact H.
+  Qed.
+
+  Lemma get_dfn_update_low_preserves_root_bottom
+        (u v p: V):
+    Hoare
+      (RootBottom u)
+      (dv <- get' (fun s => dfn s v);; update_low p dv)
+      (fun _ s => RootBottom u s).
+  Proof.
+    intro_state.
+    eapply Hoare_bind. { apply Hoare_get'. }
+    simpl. intros dv.
+    eapply Hoare_conseq_pre.
+    2: apply update_low_preserves_root_bottom.
+    intros s1 [Hs1 _]. subst s1. exact H.
+  Qed.
+
+  Lemma root_pre_maybe_pop_root_bottom_low_eq
+        (root u: V) (s: AllSt):
+    RootPreMaybePop g root u s ->
+    RootBottom u s ->
+    low s u = dfn s u.
+  Proof.
+    intros Hroot [Hu_active Hno_rest].
+    destruct Hroot as [[Hloop _] _].
+    destruct Hloop as [Haux [_ [_ Hlow]]].
+    destruct Haux as [_ [_ Horder]].
+    destruct Hlow as [[witness [Hcandidate Hlow_eq]] Hcomplete].
+    pose proof (Hcomplete u
+                  (partial_low_candidate_root g root u
+                                              (edge_set g u) s))
+      as Hlow_le_root.
+    assert (Hroot_le_witness: dfn s u <= dfn s witness).
+    { destruct (classic (dfn s u <= dfn s witness)) as [Hle | Hnle].
+      - exact Hle.
+      - assert (Hlt: dfn s witness < dfn s u) by lia.
+        assert (Hw_active: Active witness s).
+        { eapply partial_low_candidate_active; eauto. }
+        exfalso.
+        apply (Hno_rest witness).
+        eapply active_dfn_lt_root_rest_stack; eauto. }
+    rewrite Hlow_eq in Hlow_le_root.
+    lia.
+  Qed.
+
+  Lemma preloop_establishes_root_bottom
+        (u: V):
+    Hoare
+      (fun s: AllSt => stack s = nil)
+      (preloop u)
+      (fun _ s => RootBottom u s).
+  Proof.
+    unfold preloop. unfold_op. intro_state. hoare_auto_s.
+    subst s. unfold RootBottom, Active, RestStack. simpl.
+    split.
+    - left. reflexivity.
+    - intros b0 Hrest.
+      unfold equiv_decb in Hrest.
+      destruct (equiv_dec u u) as [_ | Hneq].
+      + simpl in Hrest. rewrite H in Hrest. exact Hrest.
+      + exfalso. apply Hneq. reflexivity.
+  Qed.
+
+  Lemma pop_scc_root_bottom_returns_empty_stack
+        (u: V):
+    Hoare
+      (RootBottom u)
+      (pop_scc u)
+      (fun _ s => stack s = nil).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 [Hu_active Hno_rest] Hexec.
+    unfold pop_scc in Hexec.
+    unfold update', update in Hexec.
+    sets_unfold in Hexec.
+    simpl in Hexec. subst s2.
+    unfold pop_scc_state.
+    destruct (stack_split_at (stack s1) u) as [popped rest] eqn:Hsplit.
+    simpl.
+    destruct rest as [| b rest'].
+    - reflexivity.
+    - exfalso.
+      apply (Hno_rest b).
+      unfold RestStack. rewrite Hsplit. simpl. left. reflexivity.
+  Qed.
+
+  Lemma maybe_pop_root_bottom_outputs_empty_stack
+        (root u: V):
+    Hoare
+      (fun s: AllSt =>
+         SCCsOutputInv g s /\
+         VisitedValid g s /\
+         RootPreMaybePop g root u s /\
+         RootOutputReady g root u s /\
+         RootBottom u s)
+      (If (fun s => low s u = dfn s u) (pop_scc u))
+      (fun _ s => RootOutputPost g root u s /\ stack s = nil).
+  Proof.
+    unfold If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold Hoare.
+      intros s1 retv s2 [Hcond Hs1] Hexec. subst s1.
+      destruct H as [Hout [Hvalid [Hroot [[Htree Hpending] Hbottom]]]].
+      destruct Hroot as [Hpre Htraversal].
+      assert (Hcuts: RootPopCuts g u s0).
+      { exact (root_pre_maybe_pop_low_eq_derives_pop_cuts
+                 g root u s0 (conj Hpre Htraversal) Hcond). }
+      assert (Hfinal: RootFinal g root u s2).
+      { pose proof (maybe_pop_pop_produces_root_final_from_pop_cuts
+                      g root u) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s0 retv s2
+                      (conj (conj Hpre Hcond) Hcuts) Hexec). }
+      assert (Hout_after: SCCsOutputInv g s2).
+      { pose proof (pop_scc_preserves_output_inv_from_tree_and_pending_low
+                      g root u) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s0 retv s2
+                      (conj Hout
+                        (conj Hvalid
+                          (conj (conj Hpre Hcond)
+                            (conj Hcuts
+                              (conj Htree Hpending)))))
+                      Hexec). }
+      assert (Hvalid_after: VisitedValid g s2).
+      { pose proof (pop_scc_preserves_visited_valid g u) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s0 retv s2 Hvalid Hexec). }
+      assert (Hnot_active_after: ~ Active u s2).
+      { pose proof (pop_scc_removes_root u) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s0 retv s2
+                      (root_pre_maybe_pop_active_nodup
+                         g root u s0 (conj Hpre Htraversal))
+                      Hexec). }
+      assert (Hstack_empty: stack s2 = nil).
+      { pose proof (pop_scc_root_bottom_returns_empty_stack u) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s0 retv s2 Hbottom Hexec). }
+      split.
+      + unfold RootOutputPost.
+        split; [exact Hfinal |].
+        split; [exact Hout_after |].
+        split; [exact Hvalid_after |].
+        unfold RootActiveOutputReady.
+        intros Hactive_after.
+        exfalso. exact (Hnot_active_after Hactive_after).
+      + exact Hstack_empty.
+    - eapply Hoare_conseq_post.
+      2: { apply Hoare_assume_s. }
+      simpl. intros _ s [Heq Hnot_cond]. subst s.
+      destruct H as [_ [_ [Hroot [_ Hbottom]]]].
+      exfalso.
+      apply Hnot_cond.
+      eapply root_pre_maybe_pop_root_bottom_low_eq; eauto.
+  Qed.
+
+  Lemma maybe_pop_preserves_parent_root_bottom
+        (root parent child: V) (done: V -> Prop) (s_before: AllSt):
+    Hoare
+      (fun s: AllSt =>
+         ChildReturnPreMaybePop g root parent child done s_before s /\
+         RootBottom parent s_before)
+      (If (fun s => low s child = dfn s child) (pop_scc child))
+      (fun _ s => RootBottom parent s).
+  Proof.
+    unfold If.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      unfold Hoare.
+      intros s1 retv s2 [Hcond Hs1] Hexec. subst s1.
+      destruct H as [[Hroot Hframe] Hbottom_before].
+      assert (Hcuts: RootPopCuts g child s0).
+      { eapply root_pre_maybe_pop_low_eq_derives_pop_cuts; eauto. }
+      assert (Hcontrib:
+                ChildContributionContract g root parent child done
+                  s_before s2).
+      { pose proof
+          (maybe_pop_pop_produces_child_contribution_from_pop_cuts
+             g root parent child done s_before) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s0 retv s2
+                      (conj (conj Hroot Hframe)
+                        (conj Hcond Hcuts))
+                      Hexec). }
+      destruct Hroot as [Hpre _].
+      destruct Hpre as [Hloop_child _].
+      destruct Hloop_child as [Haux_child _].
+      destruct Haux_child as [_ [Hchild_active [_ [_ Hnodup_child]]]].
+      destruct Hframe as
+        [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [_ [Hbelow_child Hstack_frame]]]]]]]]]]]].
+      assert (Hchild_rest_parent: RestStack child s0 parent).
+      { apply Hbelow_child.
+        apply partial_low_candidate_root. }
+      destruct Hcontrib as [_ [_ [Haux_after _]]].
+      destruct Haux_after as [_ [Hparent_active_after _]].
+      unfold pop_scc in Hexec.
+      unfold update', update in Hexec.
+      sets_unfold in Hexec.
+      simpl in Hexec. subst s2.
+      split; [exact Hparent_active_after |].
+      intros b Hrest_after.
+      destruct Hstack_frame as [_ [Hrest_frame _]].
+      apply (proj2 Hbottom_before b).
+      apply Hrest_frame.
+      eapply rest_stack_after_pop_lift_original; eauto.
+    - eapply Hoare_conseq_post.
+      2: { apply Hoare_assume_s. }
+      simpl. intros _ s [Heq _]. subst s.
+      destruct H as [[_ Hframe] Hbottom_before].
+      eapply parent_frame_preserves_root_bottom; eauto.
+  Qed.
+
+  Lemma tarjan_scc_f_preserves_child_root_bottom_contract
+        (root: V) (W: AllRecProgram):
+    VisitContract g root W ->
+    VisitChildRootBottomContract root (tarjan_scc_f g W).
+  Proof.
+    intros Hvisit parent child done.
+    destruct Hvisit as [_ [Hchild [Hchild_traversal Hframe_contract]]].
+    unfold tarjan_scc_f.
+    eapply Hoare_bind with
+      (Q := fun (_: unit) s =>
+              exists s_before,
+                LoopInv g root child ∅ s /\
+                LoopTraversalComplete g root child ∅ s /\
+                ParentFrameForChild g root parent child done s_before s /\
+                RootBottom parent s_before).
+    { unfold Hoare.
+      intros s0 retv s1 [Hpre Hbottom] Hexec.
+      pose proof Hpre as Hpre_all.
+      destruct Hpre as [_ [_ [Hentry _]]].
+      pose proof
+        (preloop_establishes_parent_frame_for_child_exact
+           g root parent child done s0) as Hframe_hoare.
+      unfold Hoare in Hframe_hoare.
+      destruct (Hframe_hoare s0 retv s1
+                             (conj eq_refl Hpre_all) Hexec)
+        as [Hloop_child [_ Hparent_frame]].
+      assert (Htraversal_empty:
+                LoopTraversalComplete g root child ∅ s1).
+      { pose proof
+          (preloop_initializes_loop_traversal_complete_empty
+             g root child) as Htraversal_hoare.
+        unfold Hoare in Htraversal_hoare.
+        exact (Htraversal_hoare s0 retv s1 Hentry Hexec). }
+      exists s0.
+      exact (conj Hloop_child
+              (conj Htraversal_empty
+                (conj Hparent_frame Hbottom))). }
+    simpl. intros _.
+    eapply Hoare_bind with
+      (Q := fun (_: unit) s =>
+              exists s_before,
+                LoopInv g root child (edge_set g child) s /\
+                RootTraversalComplete g root child s /\
+                ParentFrameForChild g root parent child done s_before s /\
+                RootBottom parent s_before).
+    { unfold Hoare.
+      intros s1 retv s2
+        [s_before
+          [Hloop_child [Htraversal_empty
+            [Hparent_frame Hbottom_before]]]] Hexec.
+      assert (Hloop_and_frame:
+                LoopInv g root child (edge_set g child) s2 /\
+                ParentFrameForChild g root parent child done s_before s2).
+      { pose proof
+          (edge_loop_preserves_parent_frame_for_child
+             g root parent child done s_before W
+             Hchild Hframe_contract) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s1 retv s2
+                      (conj Hloop_child Hparent_frame) Hexec). }
+      assert (Htraversal_root:
+                RootTraversalComplete g root child s2).
+      { pose proof
+          (edge_loop_produces_root_traversal_complete
+             g root child W Hchild Hchild_traversal) as Hhoare.
+        unfold Hoare in Hhoare.
+        exact (Hhoare s1 retv s2
+                      (conj Hloop_child Htraversal_empty) Hexec). }
+      destruct Hloop_and_frame as [Hloop_child_done Hparent_frame_after].
+      exists s_before.
+      exact (conj Hloop_child_done
+              (conj Htraversal_root
+                (conj Hparent_frame_after Hbottom_before))). }
+    simpl. intros _.
+    unfold Hoare.
+    intros s2 retv s3
+      [s_before
+        [Hloop_child_done [Htraversal_root
+          [Hparent_frame Hbottom_before]]]] Hexec.
+    assert (Hreturn:
+              ChildReturnPreMaybePop g root parent child done s_before s2).
+    { eapply edge_loop_post_to_child_return_pre_maybe_pop; eauto. }
+    pose proof
+      (maybe_pop_preserves_parent_root_bottom
+         root parent child done s_before) as Hhoare.
+    unfold Hoare in Hhoare.
+    exact (Hhoare s2 retv s3
+                  (conj Hreturn Hbottom_before) Hexec).
+  Qed.
+
+  Lemma process_edge_preserves_root_bottom
+        (root u v: V) (done: V -> Prop) (W: AllRecProgram):
+    VisitChildRootBottomContract root W ->
+    Hoare
+      (fun s: AllSt =>
+         LoopInv g root u done s /\
+         Edge g u v /\
+         ~ done v /\
+         RootBottom u s)
+      (process_edge u W v)
+      (fun _ s => RootBottom u s).
+  Proof.
+    intros Hchild_bottom.
+    unfold process_edge, if_else.
+    intro_state.
+    apply Hoare_choice.
+    - apply Hoare_assume_bind. simpl.
+      eapply Hoare_bind with
+        (Q := fun (_: unit) s =>
+                ParentRecursivePre g root u v done s /\
+                RootBottom u s).
+      + apply Hoare_conj with
+          (Q1 := fun _ s => ParentRecursivePre g root u v done s).
+        * eapply Hoare_conseq_pre.
+          2: apply set_fa_pending_prepares_parent_recursive_pre.
+          intros s1 [Hnotvis Hs1]. subst s1.
+          destruct H as [Hloop [Hedge [Hnot_done _]]].
+          exact (conj Hloop (conj Hedge Hnotvis)).
+        * eapply Hoare_conseq_pre.
+          2: apply set_fa_preserves_root_bottom.
+          intros s1 [_ Hs1]. subst s1.
+          destruct H as [_ [_ [_ Hbottom]]].
+          exact Hbottom.
+      + simpl. intros _.
+        eapply Hoare_bind.
+        * apply Hchild_bottom.
+        * simpl. intros _.
+          apply get_low_update_low_preserves_root_bottom.
+    - apply Hoare_assume_bind. simpl.
+      intro_state.
+      destruct H1 as [_ Hs1]. subst s1.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: apply get_dfn_update_low_preserves_root_bottom.
+        intros s1 [_ Hs1]. subst s1.
+        destruct H as [_ [_ [_ Hbottom]]].
+        exact Hbottom.
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        simpl. intros _ s [Heq _]. subst s.
+        destruct H as [_ [_ [_ Hbottom]]].
+        exact Hbottom.
+  Qed.
+
+  Lemma edge_loop_preserves_root_bottom
+        (root u: V) (W: AllRecProgram):
+    VisitChildContract g root W ->
+    VisitChildRootBottomContract root W ->
+    Hoare
+      (fun s: AllSt =>
+         LoopInv g root u ∅ s /\
+         RootBottom u s)
+      (forset (edge_set g u) (process_edge u W))
+      (fun _ s => RootBottom u s).
+  Proof.
+    intros Hchild Hchild_bottom.
+    apply Hoare_conseq_post with
+      (Q2 := fun _ s => LoopInv g root u (edge_set g u) s /\
+                        RootBottom u s).
+    - intros _ s [_ Hbottom]. exact Hbottom.
+    - apply Hoare_forset with
+        (P := fun done s =>
+                LoopInv g root u done s /\
+                RootBottom u s)
+        (universe := edge_set g u).
+      + intros done1 done2 Hdone s1 s2 Heq. subst s2.
+        split; intros [Hloop Hbottom].
+        * split.
+          -- eapply loop_inv_done_equiv; eauto.
+          -- exact Hbottom.
+        * split.
+          -- eapply loop_inv_done_equiv.
+             ++ symmetry. exact Hdone.
+             ++ exact Hloop.
+          -- exact Hbottom.
+      + intros done a _ Hedge Hnot_done.
+        apply Hoare_conj with
+          (Q1 := fun _ s => LoopInv g root u (done_after done a) s).
+        * eapply Hoare_conseq_pre.
+          2: {
+            eapply process_edge_preserves_loop_inv.
+            eapply Hoare_conseq_pre.
+            2: apply (Hchild u a done).
+            intros s [Hloop [Hedge' [Hentry [Hfa Hfane]]]].
+            unfold ParentRecursivePre.
+            exact (conj Hloop
+                    (conj Hedge'
+                      (conj Hentry
+                        (conj Hfa Hfane)))). }
+          intros s [Hloop _].
+          exact (conj Hloop (conj Hedge Hnot_done)).
+        * eapply Hoare_conseq_pre.
+          2: {
+            eapply process_edge_preserves_root_bottom.
+            exact Hchild_bottom. }
+          intros s [Hloop Hbottom].
+          exact (conj Hloop (conj Hedge (conj Hnot_done Hbottom))).
+  Qed.
+
+  Lemma empty_rec_program_satisfies_child_root_bottom_contract
+        (root: V):
+    VisitChildRootBottomContract root (∅ : AllRecProgram).
+  Proof.
+    unfold VisitChildRootBottomContract, Hoare.
+    intros parent child done s1 retv s2 _ Hexec.
+    sets_unfold in Hexec. tauto.
+  Qed.
+
+  Lemma tarjan_scc_iter_satisfies_child_root_bottom_contract
+        (root: V) (n: nat):
+    VisitChildRootBottomContract root
+      (Nat.iter n (tarjan_scc_f g) (∅ : AllRecProgram)).
+  Proof.
+    induction n as [| n IH].
+    - simpl. apply empty_rec_program_satisfies_child_root_bottom_contract.
+    - simpl.
+      pose proof (tarjan_scc_iter_satisfies_visit_contract
+                    g root n) as Hvisit.
+      apply tarjan_scc_f_preserves_child_root_bottom_contract.
+      exact Hvisit.
+  Qed.
+
+  Lemma tarjan_scc_f_outer_root_empty_stack
+        (root u: V) (W: AllRecProgram):
+    VisitChildContract g root W ->
+    VisitChildTraversalContract g root W ->
+    VisitChildOutputContract g root W ->
+    VisitChildRootBottomContract root W ->
+    Hoare
+      (fun s: AllSt =>
+         EntryPre g root u s /\
+         original_vvalid g u /\
+         SCCsOutputInv g s /\
+         VisitedValid g s /\
+         stack s = nil)
+      (tarjan_scc_f g W u)
+      (fun _ s => RootOutputPost g root u s /\ stack s = nil).
+  Proof.
+    intros Hchild Hchild_traversal Hchild_output Hchild_bottom.
+    unfold tarjan_scc_f.
+    eapply Hoare_bind with
+      (Q := fun (_: unit) s =>
+              LoopInv g root u ∅ s /\
+              LoopTraversalComplete g root u ∅ s /\
+              LoopOutputReady g root u ∅ s /\
+              SCCsOutputInv g s /\
+              VisitedValid g s /\
+              RootBottom u s).
+    { eapply Hoare_conseq_post.
+      2: {
+        apply Hoare_conj with
+          (Q1 := fun _ s =>
+                   LoopInv g root u ∅ s /\
+                   LoopTraversalComplete g root u ∅ s /\
+                   LoopOutputReady g root u ∅ s /\
+                   SCCsOutputInv g s /\
+                   VisitedValid g s).
+        - eapply Hoare_conseq_pre.
+          2: apply preloop_initializes_output_edge_loop_pre.
+          intros s [Hentry [Hu_valid [Hout [Hvalid _]]]].
+          exact (conj Hentry (conj Hu_valid (conj Hout Hvalid))).
+        - eapply Hoare_conseq_pre.
+          2: apply preloop_establishes_root_bottom.
+          intros s [_ [_ [_ [_ Hstack_empty]]]].
+          exact Hstack_empty. }
+      intros _ s [[Hloop [Htraversal [Hready [Hout Hvalid]]]] Hbottom].
+      exact (conj Hloop
+              (conj Htraversal
+                (conj Hready
+                  (conj Hout
+                    (conj Hvalid Hbottom))))). }
+    simpl. intros _.
+    eapply Hoare_bind with
+      (Q := fun (_: unit) s =>
+              RootPreMaybePop g root u s /\
+              RootOutputReady g root u s /\
+              SCCsOutputInv g s /\
+              VisitedValid g s /\
+              RootBottom u s).
+    { eapply Hoare_conseq_post.
+      2: {
+        apply Hoare_conj with
+          (Q1 := fun _ s =>
+                   RootPreMaybePop g root u s /\
+                   RootOutputReady g root u s /\
+                   SCCsOutputInv g s /\
+                   VisitedValid g s).
+        - eapply Hoare_conseq_pre.
+          2: {
+            apply edge_loop_produces_root_output_pre; auto. }
+          intros s [Hloop [Htraversal [Hready [Hout [Hvalid _]]]]].
+          exact (conj Hloop
+                  (conj Htraversal
+                    (conj Hready (conj Hout Hvalid)))).
+        - eapply Hoare_conseq_pre.
+          2: { apply edge_loop_preserves_root_bottom; auto. }
+          intros s [Hloop [_ [_ [_ [_ Hbottom]]]]].
+          exact (conj Hloop Hbottom). }
+      intros _ s [[Hroot [Hready [Hout Hvalid]]] Hbottom].
+      exact (conj Hroot
+              (conj Hready
+                (conj Hout
+                  (conj Hvalid Hbottom)))). }
+    simpl. intros _.
+    eapply Hoare_conseq_pre.
+    2: apply maybe_pop_root_bottom_outputs_empty_stack.
+    intros s [Hroot [Hready [Hout [Hvalid Hbottom]]]].
+    exact (conj Hout
+            (conj Hvalid
+              (conj Hroot
+                (conj Hready Hbottom)))).
+  Qed.
+
+  Lemma tarjan_scc_iter_outer_root_empty_stack
+        (root u: V) (n: nat):
+    Hoare
+      (fun s: AllSt =>
+         EntryPre g root u s /\
+         original_vvalid g u /\
+         SCCsOutputInv g s /\
+         VisitedValid g s /\
+         stack s = nil)
+      (Nat.iter n (tarjan_scc_f g) (∅ : AllRecProgram) u)
+      (fun _ s => RootOutputPost g root u s /\ stack s = nil).
+  Proof.
+    induction n as [| n IH].
+    - simpl. unfold Hoare.
+      intros s1 retv s2 _ Hexec.
+      sets_unfold in Hexec. tauto.
+    - simpl.
+      pose proof (tarjan_scc_iter_satisfies_visit_contract
+                    g root n) as Hvisit.
+      destruct Hvisit as [_ [Hchild [Hchild_traversal _]]].
+      pose proof
+        (@tarjan_scc_iter_satisfies_output_contracts
+           V E equiv0 H0 g OriginalGraph_gvalid0 root n)
+        as [_ [Hchild_output _]].
+      pose proof
+        (tarjan_scc_iter_satisfies_child_root_bottom_contract
+           root n) as Hchild_bottom.
+      apply tarjan_scc_f_outer_root_empty_stack; auto.
+  Qed.
+
+  Lemma outer_root_visit_returns_empty_stack
+        (root u: V):
+    Hoare
+      (fun s: AllSt =>
+         EntryPre g root u s /\
+         original_vvalid g u /\
+         SCCsOutputInv g s /\
+         VisitedValid g s /\
+         stack s = nil)
+      (tarjan_scc g u)
+      (fun _ s => RootOutputPost g root u s /\ stack s = nil).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 Hpre Hexec.
+    unfold tarjan_scc in Hexec.
+    change (exists n,
+              (s1, retv, s2) ∈
+                Nat.iter n (tarjan_scc_f g) (∅ : AllRecProgram) u)
+      in Hexec.
+    destruct Hexec as [n Hexec].
+    pose proof (tarjan_scc_iter_outer_root_empty_stack root u n)
+      as Hhoare.
+    unfold Hoare in Hhoare.
+    exact (Hhoare s1 retv s2 Hpre Hexec).
+  Qed.
+
+  Lemma wf_scc_state_change_root
+        (root1 root2: V) (s: AllSt):
+    wf_scc_state g root1 s ->
+    wf_scc_state g root2 s.
+  Proof.
+    intros [Hstack [Hinv [Hdfn Hfa]]].
+    split; [exact Hstack |].
+    split; [exact Hinv |].
+    split; [| exact Hfa].
+    unfold dfn_valid in *.
+    intros x y Hstep.
+    apply Hdfn.
+    unfold state_to_dfs_tree in Hstep |- *.
+    simpl in Hstep |- *.
+    exact Hstep.
+  Qed.
+
+  Lemma fa_edges_to_tree_edges
+        (root: V) (s: AllSt):
+    FaEdges s ->
+    TreeEdgesAreGraphEdges g root s.
+  Proof.
+    intros Hfa_edges x y Htree.
+    destruct (tree_step_char g s root x y Htree)
+      as [Hfa [Hfane _]].
+    unfold FaEdges in Hfa_edges.
+    rewrite <- Hfa.
+    apply Hfa_edges. exact Hfane.
+  Qed.
+
+  Lemma nil_order_facts
+        (s: AllSt):
+    dfn_injective s ->
+    stack s = nil ->
+    OrderFacts s.
+  Proof.
+    intros Hinj Hstack.
+    unfold OrderFacts, StackNoDup, stack_dfn_order.
+    split.
+    - intros x y Hx _ _. rewrite Hstack in Hx. destruct Hx.
+    - split; [exact Hinj |].
+      rewrite Hstack. constructor.
+  Qed.
+
+  Lemma outer_shape_to_entry_pre
+        (root u: V) (s: AllSt):
+    OuterShape s ->
+    ~ Visited u s ->
+    EntryPre g root u s.
+  Proof.
+    intros [Hwf_all [Hsettled [Hclosed [Hfa_edges
+      [Hinj [Hout [Hvalid Hstack]]]]]]] Hunvis.
+    unfold EntryPre.
+    split.
+    - unfold wf_scc_state_pre.
+      exact (conj (Hwf_all root) Hunvis).
+    - split; [exact Hsettled |].
+      split; [exact Hclosed |].
+      split.
+      + apply fa_edges_to_tree_edges. exact Hfa_edges.
+      + split.
+        * apply nil_order_facts; auto.
+        * intros Hfane. apply Hfa_edges. exact Hfane.
+  Qed.
+
+  Lemma outer_shape_init:
+    OuterShape initSt.
+  Proof.
+    unfold OuterShape.
+    split.
+    - intros root.
+      unfold wf_scc_state.
+      split.
+      + apply stack_in_visited_init.
+      + split.
+        * apply dfn_inv_init.
+        * split.
+          -- unfold dfn_valid, state_to_dfs_tree, dg_step.
+             simpl. intros x y [e [[z [Hvis _]] _]].
+             sets_unfold in Hvis. destruct Hvis.
+          -- apply fa_visited_init.
+    - split.
+      + apply settled_closed_init.
+      + split.
+        * unfold Closed, Visited, Active, initSt.
+          simpl. intros v b Hvis _ _ _. sets_unfold in Hvis. destruct Hvis.
+        * split.
+          -- unfold FaEdges, Edge, initSt. simpl.
+             intros v Hneq. exfalso. apply Hneq. reflexivity.
+          -- split.
+             ++ unfold dfn_injective, initSt.
+                simpl. intros x y _ Hvis _.
+                sets_unfold in Hvis. destruct Hvis.
+             ++ split.
+                ** unfold SCCsOutputInv, SCCsSound, SCCsCoverSettled,
+                     initSt, Visited.
+                   simpl. split.
+                   --- intros C Hin. destruct Hin.
+                   --- intros v Hvis _.
+                       sets_unfold in Hvis. destruct Hvis.
+                ** split.
+                   --- unfold VisitedValid, Visited, initSt.
+                       simpl. intros v Hvis.
+                       sets_unfold in Hvis. destruct Hvis.
+                   --- reflexivity.
+  Qed.
+
+  Lemma outer_root_visit_preserves_outer_shape
+        (root u: V):
+    Hoare
+      (fun s: AllSt =>
+         OuterShape s /\
+         ~ Visited u s /\
+         original_vvalid g u)
+      (tarjan_scc g u)
+      (fun _ s => OuterShape s).
+  Proof.
+    unfold Hoare.
+    intros s1 retv s2 [Hshape [Hunvis Hu_valid]] Hexec.
+    pose proof Hshape as [Hwf_all [Hsettled [Hclosed [Hfa_edges
+      [Hinj [Hout [Hvalid Hstack]]]]]]].
+    assert (Hentry: EntryPre g root u s1).
+    { apply outer_shape_to_entry_pre; auto. }
+    assert (Hroot_post:
+              RootOutputPost g root u s2 /\ stack s2 = nil).
+    { pose proof (outer_root_visit_returns_empty_stack root u) as Hhoare.
+      unfold Hoare in Hhoare.
+      exact (Hhoare s1 retv s2
+                    (conj Hentry
+                      (conj Hu_valid
+                        (conj Hout
+                          (conj Hvalid Hstack))))
+                    Hexec). }
+    assert (Hfa_after: FaEdges s2).
+    { pose proof tarjan_scc_preserves_fa_edges as Hcontract.
+      unfold VisitFaEdgesContract, Hoare in Hcontract.
+      exact (Hcontract u s1 retv s2 Hfa_edges Hexec). }
+    assert (Hinj_after: dfn_injective s2).
+    { pose proof (tarjan_scc_keep_dfn_injective
+                    g u) as Hhoare.
+      unfold Hoare in Hhoare.
+      destruct (Hwf_all root) as [_ [Hdfn_inv _]].
+      exact (Hhoare s1 retv s2
+                    (conj Hinj (conj Hdfn_inv Hunvis)) Hexec). }
+    destruct Hroot_post as [Hroot_post Hstack_after].
+    unfold RootOutputPost in Hroot_post.
+    destruct Hroot_post as [Hfinal [Hout_after [Hvalid_after _]]].
+    unfold RootFinal, RootAfterMaybePop in Hfinal.
+    destruct Hfinal as [Hwf_root_after [Hsettled_after
+      [Hclosed_after _]]].
+    unfold OuterShape.
+    split.
+    - intros root'. eapply wf_scc_state_change_root; eauto.
+    - split; [exact Hsettled_after |].
+      split; [exact Hclosed_after |].
+      split; [exact Hfa_after |].
+      split; [exact Hinj_after |].
+      split; [exact Hout_after |].
+      split; [exact Hvalid_after | exact Hstack_after].
+  Qed.
+
+  Theorem tarjan_scc_all_preserves_outer_shape:
+    Hoare
+      (OuterShape)
+      (tarjan_scc_all g)
+      (fun _ s => OuterShape s).
+  Proof.
+    unfold tarjan_scc_all.
+    apply Hoare_forset with
+      (P := fun (_: V -> Prop) (s: AllSt) => OuterShape s)
+      (universe := original_vvalid g).
+    - intros done1 done2 Hdone s1 s2 Heq. subst s2. reflexivity.
+    - intros done a _ Ha_valid _.
+      unfold If.
+      intro_state.
+      apply Hoare_choice.
+      + apply Hoare_assume_bind. simpl.
+        eapply Hoare_conseq_pre.
+        2: apply (outer_root_visit_preserves_outer_shape a a).
+        intros s1 [Hnotvis Hs1]. subst s1.
+        exact (conj H (conj Hnotvis Ha_valid)).
+      + eapply Hoare_conseq_post.
+        2: { apply Hoare_assume_s. }
+        simpl. intros _ s [Heq _]. subst s. exact H.
+  Qed.
+
+  Theorem tarjan_scc_all_preserves_output_inv_and_empty_stack:
+    Hoare
+      (fun s: AllSt => s = initSt)
+      (tarjan_scc_all g)
+      (fun _ s => SCCsOutputInv g s /\ stack s = nil).
+  Proof.
+    eapply Hoare_conseq_post.
+    2: {
+      eapply Hoare_conseq_pre.
+      2: apply tarjan_scc_all_preserves_outer_shape.
+      intros s Hs. subst s. apply outer_shape_init. }
+    intros b s Hshape.
+    destruct Hshape as [_ [_ [_ [_ [_ [Hout [_ Hstack]]]]]]].
+    exact (conj Hout Hstack).
+  Qed.
+
+  Lemma output_inv_to_scc_partition
+        (s: AllSt):
+    AllVerticesVisited g s ->
+    stack s = nil ->
+    SCCsOutputInv g s ->
+    scc_partition g (sccs s).
+  Proof.
+    intros Hall Hstack_empty [Hsound Hcover].
+    unfold scc_partition.
+    split.
+    - intros v Hv_valid.
+      apply Hcover.
+      + exact (Hall v Hv_valid).
+      + unfold Active. rewrite Hstack_empty. intros [].
+    - split.
+      + exact Hsound.
+      + intros C1 C2 v HC1 HC2 HC1v HC2v.
+        pose proof (Hsound C1 HC1) as Hiscc1.
+        pose proof (Hsound C2 HC2) as Hiscc2.
+        apply (is_SCC_extensional g); auto.
+        intros w. split; intros HCw.
+        * pose proof Hiscc1 as [_ [Hmr1 _]].
+          pose proof (Hmr1 w v HCw HC1v) as Hwv.
+          eapply (@is_SCC_closed_under_mr V E g OriginalGraph_gvalid0).
+          -- exact Hiscc2.
+          -- exact HC2v.
+          -- apply (mutually_reachable_sym g). exact Hwv.
+        * pose proof Hiscc2 as [_ [Hmr2 _]].
+          pose proof (Hmr2 w v HCw HC2v) as Hwv.
+          eapply (@is_SCC_closed_under_mr V E g OriginalGraph_gvalid0).
+          -- exact Hiscc1.
+          -- exact HC1v.
+          -- apply (mutually_reachable_sym g). exact Hwv.
+  Qed.
+
+  Theorem tarjan_scc_all_outputs_scc_partition:
+    Hoare
+      (fun s: AllSt => s = initSt)
+      (tarjan_scc_all g)
+      (fun _ s => scc_partition g (sccs s)).
+  Proof.
+    eapply Hoare_conseq_post.
+    2: {
+      apply Hoare_conj with
+        (Q1 := fun _ s => AllVerticesVisited g s)
+        (Q2 := fun _ s => SCCsOutputInv g s /\ stack s = nil).
+      - eapply Hoare_conseq_pre.
+        2: apply tarjan_scc_all_visited_all.
+        intros s _. exact I.
+        exact OriginalGraph_gvalid0.
+      - apply tarjan_scc_all_preserves_output_inv_and_empty_stack. }
+    intros _ s [Hall [Hout Hstack]].
+    eapply output_inv_to_scc_partition; eauto.
+  Qed.
+
+End SCC_OUTPUT_ALL_CORRECTNESS.

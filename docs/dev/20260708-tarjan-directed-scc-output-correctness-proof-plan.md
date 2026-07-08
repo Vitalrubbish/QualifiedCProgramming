@@ -481,11 +481,11 @@ output_inv_to_scc_partition:
 13. `[done]` 证明 `tarjan_scc_f_preserves_output_contract`。当前已在实现中补出输出层 producer 字段：
     `LoopOutputReady`、`RootOutputReady`、`RootActiveOutputReady`、`VisitOutputContract`、`VisitChildOutputContract`、`VisitOutputFrameContract`；
     已证明 preloop 初始化 `LoopOutputReady u ∅`，`process_edge` 在加强后的 `VisitChildOutputContract` 假设下保持输出字段，edge-loop 产出 `RootOutputReady`，并组合出 `tarjan_scc_f_produces_root_output_post`。实现中新增并加强 `ParentOutputFrameForChild`，加入“旧 parent segment 不含递归 child”的保护字段，以及“child 仍 active 时旧 parent partial-tree 成员位于 child 下方”的 rest 保护字段；同时新增 `NestedOutputFramePre` 中“旧 ancestor segment 不含当前 loop_root”的保护字段。已证明 `set_fa` / `update_low` / `process_edge` / `edge_loop` 对 direct 与 external output-frame 的保持；同时补出 `pop_scc_state_preserves_scc_is_low_v_for_rest_low`，证明 pop root 时 rest 中 pending-low 顶点的 low witness 仍留在 rest 中，并据此完成 direct 与 external `maybe_pop` 对 `ParentOutputFrameForChild` 的保持。本轮已补出 direct preloop output-frame 建立、external/nested preloop output-frame 保持、`tarjan_scc_f_produces_child_output_contract` / `tarjan_scc_f_preserves_child_output_contract`、`tarjan_scc_f_preserves_output_frame_contract`，以及 root+child+frame aggregate theorem `tarjan_scc_f_preserves_output_contracts`。
-14. 用 finite approximation induction 证明 `tarjan_scc_satisfies_output_contract`。
-15. 证明 outer root empty-stack lemma。
-16. 证明 `tarjan_scc_all` 保持 `SCCsOutputInv /\ stack = nil`。
-17. 证明 `output_inv_to_scc_partition`。
-18. 组合 `tarjan_scc_all_outputs_scc_partition`。
+14. `[done]` 用 finite approximation induction 证明 `tarjan_scc_satisfies_output_contract`。实现中新增 `empty_rec_program_satisfies_output_contracts`、`tarjan_scc_iter_satisfies_output_contracts` 与 `tarjan_scc_satisfies_output_contracts`，结构镜像 low 层 `tarjan_scc_iter_satisfies_visit_contract`。
+15. `[done]` 证明 outer root empty-stack lemma。实现中新增 `RootBottom` proof-only cut、`VisitChildRootBottomContract`，并证明 `outer_root_visit_returns_empty_stack`。
+16. `[done]` 证明 `tarjan_scc_all` 保持 `SCCsOutputInv /\ stack = nil`。实现中新增 `FaEdges`、`OuterShape`，并证明 `tarjan_scc_all_preserves_output_inv_and_empty_stack`。
+17. `[done]` 证明 `output_inv_to_scc_partition`。
+18. `[done]` 组合 `tarjan_scc_all_outputs_scc_partition`。
 
 ## 11. 风险与边界
 
