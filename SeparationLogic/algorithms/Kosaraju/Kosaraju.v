@@ -3340,4 +3340,82 @@ Proof.
   apply Lfix_fixpoint'. apply DFS_scc_f_mono_cont.
 Qed.
 
+(* ================================================================= *)
+(* Absorbability: under a reach-closed + self-visited + scc-id-stable *)
+(* state, DFS_scc root u performs the no-op transition (tt, st).      *)
+(* This is the shared foundation for the dfs2 refinement gaps A/B:    *)
+(* at loop exit / visited-skip the abstract DFS_scc on an already-    *)
+(* visited vertex whose out-neighbours are all visited reduces to     *)
+(* just the break branch of its repeat_break (no recursion), hence    *)
+(* `safe (dfs_scc root u) X` forces `X tt st` via wp_spec.            *)
+(* ================================================================= *)
+
+(* Generic mono_cont of repeat_break_f: holds for any body since the  *)
+(* recursive variable W occurs only applied (W a') in the continue    *)
+(* branch; the break branch and body a are W-free.                    *)
+Lemma repeat_break_f_mono_cont : forall (A B: Type)
+  (body: A -> program St (CntOrBrk A B)),
+  mono_cont (repeat_break_f body).
+Proof.
+  intros A B body. unfold repeat_break_f.
+  apply mono_cont_pointwise; intro; mono_cont_auto.
+Qed.
+
+(* If body a can directly produce (by_break b) at state s without     *)
+(* changing the state, then repeat_break body a produces b at s: take *)
+(* the break branch at the first Lfix iteration.                      *)
+Lemma repeat_break_break_step : forall (A B: Type)
+  (body: A -> program St (CntOrBrk A B)) (a: A) (s: St) (b: B),
+  body a s (by_break b) s ->
+  (repeat_break body a) s b s.
+Proof.
+  intros A B body a s b Hbrk.
+  unfold repeat_break, Lfix.
+  sets_unfold.
+  exists 1.
+  cbv [Nat.iter].
+  unfold repeat_break_f, bind.
+  exists (by_break b), s. split; [exact Hbrk|].
+  cbv beta iota. unfold ret. split; reflexivity.
+Qed.
+
+(* DFS_scc root u from a state where u is visited2, u's forward       *)
+(* out-neighbours are all visited2, and scc_id u = scc_id root, can    *)
+(* only take the no-op transition (tt, st): visit2 u and set_scc_id    *)
+(* are absorbed (idempotent / already-set), and the repeat_break       *)
+(* immediately breaks.                                                *)
+Lemma DFS_scc_absorb : forall root u (st: St),
+  (forall v, step g u v -> visited2 st v) ->
+  visited2 st u ->
+  scc_id st u = scc_id st root ->
+  DFS_scc root u st tt st.
+Proof.
+  intros root u st Hneigh Hvisu Hsid.
+  assert (Hv : visit2 u st tt st).
+  { unfold visit2. split.
+    - apply (proj2 (Sets_equiv_Sets_included (visited2 st) (visited2 st ∪ Sets.singleton u))).
+      split.
+      + intros x Hx. left. exact Hx.
+      + intros x Hx. sets_unfold in Hx. destruct Hx as [Hx | Hx].
+        * exact Hx.
+        * sets_unfold in Hx. subst x. exact Hvisu.
+    - repeat split; reflexivity. }
+  assert (Hs : set_scc_id u root st tt st).
+  { unfold set_scc_id. split.
+    - exact Hsid.
+    - repeat split; intros v _; reflexivity. }
+  assert (Hbody : DFS_scc_f root (DFS_scc root) u st tt st).
+  { unfold DFS_scc_f, bind.
+    eexists (tt), st. split; [exact Hv |].
+    eexists (tt), st. split; [exact Hs |].
+    apply repeat_break_break_step.
+    cbv beta. sets_unfold. right.
+    unfold bind. eexists (tt), st. split.
+    - unfold test. split; [| reflexivity].
+      intros e0 v0 Hsa. right. apply Hneigh. exists e0. exact Hsa.
+    - unfold break, ret. split; reflexivity. }
+  destruct (proj1 (Sets_equiv_Sets_included (DFS_scc root u) (DFS_scc_f root (DFS_scc root) u)) (DFS_scc_unfold root u)) as [_ Hinc].
+  apply Hinc. exact Hbody.
+Qed.
+
 End Kosaraju.

@@ -1,0 +1,92 @@
+# Manual proofs archive for kosaraju_rel.
+#
+# Each proven VC is recorded here so that `replay_manual.py` can restore its
+# Qed proof after symexec regenerates kosaraju_rel_proof_manual.v.
+#
+# Format:
+#   === proof_of_<VC name> ===
+#   <tactic lines, WITHOUT the surrounding `Proof.` and `Qed.`>
+# The tactic continues until the next `===` header or EOF.  Newlines are
+# collapsed to spaces on replay, so multi-tactic proofs are written one
+# tactic per line for readability (Coq accepts `t1. t2. t3.` on one line).
+#
+# A line starting with `#` is a comment.
+
+=== proof_of_dfs1_safety_wit_11_split_goal_1 ===
+pre_process.
+match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H end.
+pose proof (count_nonzero_le_Zlength vis1_m) as Hc.
+assert (count_nonzero vis1_m <= n_pre) by lia.
+entailer!.
+cbv [Znth nth Z.to_nat].
+lia.
+
+=== proof_of_dfs1_safety_wit_11_split_goal_2 ===
+pre_process; entailer!; cbv [Znth nth Z.to_nat]; lia
+
+=== proof_of_dfs1_entail_wit_3_1 ===
+pre_process; cbv [applyf dfs_finish_fromK] in *; Exists timer_v_. Exists vis1_l_. Exists fin_l_; entailer!; lia
+
+=== proof_of_dfs1_entail_wit_2_split_goal_1 ===
+intros; pre_process; entailer!
+
+=== proof_of_dfs1_entail_wit_2_split_goal_2 ===
+intros; pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 C9]]]]]]]] end; assert (Hb : (0 <= i < m_of radj_row_l_low_level_spec)%Z) by lia; pose proof (C8 i Hb) as Hc; destruct Hc as [Hc1 Hc2]; entailer!; try exact Hc1; try lia
+
+=== proof_of_dfs1_entail_wit_2_split_goal_3 ===
+intros; pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 C9]]]]]]]] end; assert (Hb : (0 <= i < m_of radj_row_l_low_level_spec)%Z) by lia; pose proof (C8 i Hb) as Hc; destruct Hc as [Hc1 Hc2]; entailer!; try exact Hc1; try lia
+
+=== proof_of_dfs1_partial_solve_wit_6_pure_split_goal_1 ===
+intros; pre_process; cbv [applyf dfs_finish_fromK] in *; entailer!; assert (Hi : (i < csr_hi u_pre radj_row_l_low_level_spec)%Z) by (rewrite <- PreH18; exact PreH21); pose proof (dfs_finish_from_step g_low_level_spec radj_col_l_low_level_spec radj_row_l_low_level_spec u_pre i Hi) as Heq; apply safeExec_proequiv with (c1 := dfs_finish_from g_low_level_spec radj_col_l_low_level_spec radj_row_l_low_level_spec u_pre i); [rewrite PreH30; exact Heq | exact PreH16]
+
+=== proof_of_dfs2_entail_wit_2_split_goal_1 ===
+intros; pre_process; entailer!
+
+=== proof_of_dfs2_entail_wit_2_split_goal_2 ===
+intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 C9]]]]]]]] end; assert (Hb : (0 <= i < m_of fadj_row_l_low_level_spec)%Z) by lia; pose proof (C8 i Hb) as Hc; destruct Hc as [Hc1 Hc2]; entailer!; try exact Hc1; try lia
+
+=== proof_of_dfs2_entail_wit_2_split_goal_3 ===
+intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hb : (0 <= i < m_of fadj_row_l_low_level_spec)%Z) by lia; pose proof (C8 i Hb) as Hc; destruct Hc as [Hc1 Hc2]; entailer!; try exact Hc1; try lia
+
+=== proof_of_dfs2_partial_solve_wit_8_pure_split_goal_1 ===
+intros; pre_process; entailer!; rewrite PreH36; apply (dfs2_recurse_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i vis2_m sid_m root_v_low_level_spec X_low_level_spec); [ rewrite <- PreH21; exact PreH24 | rewrite <- PreH36; lia | rewrite <- PreH36; exact PreH15 | exact PreH19 ]
+
+=== proof_of_dfs2_entail_wit_1_split_goal_3 ===
+pre_process.
+match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end.
+assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia.
+pose proof (C6 u_pre Hb) as Hlo.
+pose proof (C7 u_pre Hb) as Hhi.
+pose proof (C9 u_pre Hb) as Hmon.
+cbv [csr_lo csr_hi] in *.
+entailer!; lia
+
+=== proof_of_dfs2_entail_wit_1_split_goal_7 ===
+intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; unfold csr_wf2 in *; repeat (rewrite Zlength_replace_Znth in * |- *); repeat (split; try assumption; try lia; try congruence)
+
+=== proof_of_dfs2_entail_wit_1_split_goal_1 ===
+intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (HLu : (0 <= u_pre < Zlength sid_l_low_level_spec)%Z) by lia; assert (HLr : (0 <= root_pre < Zlength sid_l_low_level_spec)%Z) by lia; rewrite (Znth_replace_eq sid_l_low_level_spec u_pre (Znth root_pre sid_l_low_level_spec 0) 0 HLu); destruct (Z.eqb root_pre u_pre) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite (Znth_replace_eq sid_l_low_level_spec u_pre (Znth u_pre sid_l_low_level_spec 0) 0 HLu); reflexivity | apply Z.eqb_neq in E; rewrite (Znth_replace_neq sid_l_low_level_spec root_pre u_pre (Znth root_pre sid_l_low_level_spec 0) 0 HLr PreH5 E); reflexivity ]
+
+=== proof_of_dfs2_entail_wit_1_split_goal_2 ===
+intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (HLu : (0 <= u_pre < Zlength vis2_l_low_level_spec)%Z) by lia; rewrite (Znth_replace_eq vis2_l_low_level_spec u_pre 1 0 HLu); lia
+
+=== proof_of_dfs2_entail_wit_1_split_goal_4 ===
+intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia; pose proof (C9 u_pre Hb); cbv [csr_lo csr_hi] in *; entailer!; lia
+
+=== proof_of_dfs2_entail_wit_1_split_goal_5 ===
+intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia; pose proof (C6 u_pre Hb); cbv [csr_lo csr_hi] in *; entailer!; lia
+
+=== proof_of_dfs2_entail_wit_1_split_goal_9 ===
+intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; unfold csr_wf2 in *; repeat (rewrite Zlength_replace_Znth in * |- *); repeat (split; try assumption; try lia; try congruence)
+
+=== proof_of_dfs2_return_wit_1_split_goal_3 ===
+intros n_pre u_pre root_pre X root_v fadj_row_l fadj_col_l g hi lo i vis2_m sid_m Hgehi Hcwf Hfaith Hadj Hsccfrom Hlo Hhi Hlopos Hloi Hih Hmof Hupos Hult Hrootpos Hrootlt Hnmax Huvis HUsid Hscanned; pre_process; entailer!; apply (dfs2_return_close g root_pre u_pre i lo hi vis2_m sid_m fadj_col_l fadj_row_l root_v X); [ exact Hcwf | exact Hfaith | exact Hscanned | exact Huvis | exact HUsid | exact Hlo | exact Hhi | exact Hgehi | exact Hih | lia | lia | exact Hsccfrom ]
+
+=== proof_of_dfs2_entail_wit_3_1_split_goal_1 ===
+intros; pre_process; entailer!; [ destruct (Z.eqb lo i) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite <- PreH28; exact PreH4 | apply Z.eqb_neq in E; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hlli : (lo <= lo < i)%Z) by lia; assert (Hblo : (0 <= lo < m_of fadj_row_l_low_level_spec)%Z) by lia; destruct (C8 lo Hblo) as [Hlo' Hhi']; assert (Hw : (0 <= Znth lo fadj_col_l_low_level_spec 0 < n_pre)%Z) by lia; exact (PreH6 (Znth lo fadj_col_l_low_level_spec 0) Hw (PreH25 lo Hlli)) ] | replace (i + 1 - 1)%Z with i by lia; rewrite <- PreH28; exact PreH4 ]
+
+=== proof_of_dfs2_entail_wit_3_2_split_goal_2 ===
+intros; pre_process; entailer!; apply (dfs2_skip_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i vis2_m_2 sid_m_2 root_v_low_level_spec X_low_level_spec); [ rewrite <- PreH7; exact PreH10 | rewrite <- PreH22; lia | rewrite <- PreH22; exact PreH1 | exact PreH5 ]
+
+=== proof_of_dfs2_entail_wit_3_2_split_goal_1 ===
+intros; pre_process; entailer!; [ destruct (Z.eqb lo i) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite <- PreH22; exact PreH1 | apply Z.eqb_neq in E; assert (Hlli : (lo <= lo < i)%Z) by lia; exact (PreH19 lo Hlli) ] | replace (i + 1 - 1)%Z with i by lia; rewrite <- PreH22; exact PreH1 ]

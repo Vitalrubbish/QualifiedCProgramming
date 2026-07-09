@@ -70,24 +70,30 @@ Lemma proof_of_dfs1_partial_solve_wit_6_pure : dfs1_partial_solve_wit_6_pure.
 Proof. Admitted. 
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_1 : dfs2_entail_wit_1_split_goal_1.
-Proof. pre_process. match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end. assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia. pose proof (C6 u_pre Hb) as Hlo. pose proof (C7 u_pre Hb) as Hhi. pose proof (C9 u_pre Hb) as Hmon. cbv [csr_lo csr_hi] in *. entailer!; lia. Qed.
+Proof. intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (HLu : (0 <= u_pre < Zlength sid_l_low_level_spec)%Z) by lia; assert (HLr : (0 <= root_pre < Zlength sid_l_low_level_spec)%Z) by lia; rewrite (Znth_replace_eq sid_l_low_level_spec u_pre (Znth root_pre sid_l_low_level_spec 0) 0 HLu); destruct (Z.eqb root_pre u_pre) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite (Znth_replace_eq sid_l_low_level_spec u_pre (Znth u_pre sid_l_low_level_spec 0) 0 HLu); reflexivity | apply Z.eqb_neq in E; rewrite (Znth_replace_neq sid_l_low_level_spec root_pre u_pre (Znth root_pre sid_l_low_level_spec 0) 0 HLr PreH5 E); reflexivity ]. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_2 : dfs2_entail_wit_1_split_goal_2.
-Proof. pre_process. match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end. assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia. pose proof (C6 u_pre Hb) as Hlo. pose proof (C7 u_pre Hb) as Hhi. pose proof (C9 u_pre Hb) as Hmon. cbv [csr_lo csr_hi] in *. entailer!; lia. Qed.
+Proof. intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (HLu : (0 <= u_pre < Zlength vis2_l_low_level_spec)%Z) by lia; rewrite (Znth_replace_eq vis2_l_low_level_spec u_pre 1 0 HLu); lia. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_3 : dfs2_entail_wit_1_split_goal_3.
 Proof. pre_process. match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end. assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia. pose proof (C6 u_pre Hb) as Hlo. pose proof (C7 u_pre Hb) as Hhi. pose proof (C9 u_pre Hb) as Hmon. cbv [csr_lo csr_hi] in *. entailer!; lia. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_4 : dfs2_entail_wit_1_split_goal_4.
-Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
+Proof. intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia; pose proof (C9 u_pre Hb); cbv [csr_lo csr_hi] in *; entailer!; lia. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_5 : dfs2_entail_wit_1_split_goal_5.
-Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
+Proof. intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hb : (0 <= u_pre < adj_verts g_low_level_spec)%Z) by lia; pose proof (C6 u_pre Hb); cbv [csr_lo csr_hi] in *; entailer!; lia. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_6 : dfs2_entail_wit_1_split_goal_6.
-Proof. Abort.
+Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_7 : dfs2_entail_wit_1_split_goal_7.
+Proof. intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; unfold csr_wf2 in *; repeat (rewrite Zlength_replace_Znth in * |- *); repeat (split; try assumption; try lia; try congruence). Qed.
+
+Lemma proof_of_dfs2_entail_wit_1_split_goal_8 : dfs2_entail_wit_1_split_goal_8.
+Proof. Abort.
+
+Lemma proof_of_dfs2_entail_wit_1_split_goal_9 : dfs2_entail_wit_1_split_goal_9.
 Proof. intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; unfold csr_wf2 in *; repeat (rewrite Zlength_replace_Znth in * |- *); repeat (split; try assumption; try lia; try congruence). Qed.
 
 Lemma proof_of_dfs2_entail_wit_1 : dfs2_entail_wit_1.
@@ -106,13 +112,25 @@ Lemma proof_of_dfs2_entail_wit_2 : dfs2_entail_wit_2.
 Proof. Admitted. 
 
 Lemma proof_of_dfs2_entail_wit_3_1_split_goal_1 : dfs2_entail_wit_3_1_split_goal_1.
+Proof. intros; pre_process; entailer!; [ destruct (Z.eqb lo i) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite <- PreH28; exact PreH4 | apply Z.eqb_neq in E; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hlli : (lo <= lo < i)%Z) by lia; assert (Hblo : (0 <= lo < m_of fadj_row_l_low_level_spec)%Z) by lia; destruct (C8 lo Hblo) as [Hlo' Hhi']; assert (Hw : (0 <= Znth lo fadj_col_l_low_level_spec 0 < n_pre)%Z) by lia; exact (PreH6 (Znth lo fadj_col_l_low_level_spec 0) Hw (PreH25 lo Hlli)) ] | replace (i + 1 - 1)%Z with i by lia; rewrite <- PreH28; exact PreH4 ]. Qed.
+
+Lemma proof_of_dfs2_entail_wit_3_1_split_goal_2 : dfs2_entail_wit_3_1_split_goal_2.
+Proof. Abort.
+
+Lemma proof_of_dfs2_entail_wit_3_1_split_goal_3 : dfs2_entail_wit_3_1_split_goal_3.
+Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
+
+Lemma proof_of_dfs2_entail_wit_3_1_split_goal_4 : dfs2_entail_wit_3_1_split_goal_4.
 Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
 
 Lemma proof_of_dfs2_entail_wit_3_1 : dfs2_entail_wit_3_1.
-Proof. pre_process; cbv [applyf dfs_scc_fromK] in *; Exists vis2_l_. Exists sid_l_; entailer!; lia. Qed.
+Proof. Admitted. 
 
 Lemma proof_of_dfs2_entail_wit_3_2_split_goal_1 : dfs2_entail_wit_3_2_split_goal_1.
-Proof. Abort.
+Proof. intros; pre_process; entailer!; [ destruct (Z.eqb lo i) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite <- PreH22; exact PreH1 | apply Z.eqb_neq in E; assert (Hlli : (lo <= lo < i)%Z) by lia; exact (PreH19 lo Hlli) ] | replace (i + 1 - 1)%Z with i by lia; rewrite <- PreH22; exact PreH1 ]. Qed.
+
+Lemma proof_of_dfs2_entail_wit_3_2_split_goal_2 : dfs2_entail_wit_3_2_split_goal_2.
+Proof. intros; pre_process; entailer!; apply (dfs2_skip_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i vis2_m_2 sid_m_2 root_v_low_level_spec X_low_level_spec); [ rewrite <- PreH7; exact PreH10 | rewrite <- PreH22; lia | rewrite <- PreH22; exact PreH1 | exact PreH5 ]. Qed.
 
 Lemma proof_of_dfs2_entail_wit_3_2 : dfs2_entail_wit_3_2.
 Proof. Admitted. 
@@ -120,11 +138,17 @@ Proof. Admitted.
 Lemma proof_of_dfs2_return_wit_1_split_goal_1 : dfs2_return_wit_1_split_goal_1.
 Proof. Abort.
 
+Lemma proof_of_dfs2_return_wit_1_split_goal_2 : dfs2_return_wit_1_split_goal_2.
+Proof. Abort.
+
+Lemma proof_of_dfs2_return_wit_1_split_goal_3 : dfs2_return_wit_1_split_goal_3.
+Proof. intros n_pre u_pre root_pre X root_v fadj_row_l fadj_col_l g hi lo i vis2_m sid_m Hgehi Hcwf Hfaith Hadj Hsccfrom Hlo Hhi Hlopos Hloi Hih Hmof Hupos Hult Hrootpos Hrootlt Hnmax Huvis HUsid Hscanned; pre_process; entailer!; apply (dfs2_return_close g root_pre u_pre i lo hi vis2_m sid_m fadj_col_l fadj_row_l root_v X); [ exact Hcwf | exact Hfaith | exact Hscanned | exact Huvis | exact HUsid | exact Hlo | exact Hhi | exact Hgehi | exact Hih | lia | lia | exact Hsccfrom ]. Qed.
+
 Lemma proof_of_dfs2_return_wit_1 : dfs2_return_wit_1.
 Proof. Admitted. 
 
 Lemma proof_of_dfs2_partial_solve_wit_8_pure_split_goal_1 : dfs2_partial_solve_wit_8_pure_split_goal_1.
-Proof. intros; pre_process; cbv [applyf dfs_scc_fromK] in *; entailer!; assert (Hi : (i < csr_hi u_pre fadj_row_l_low_level_spec)%Z) by (rewrite <- PreH20; exact PreH23); pose proof (dfs_scc_from_step g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i Hi) as Heq; apply safeExec_proequiv with (c1 := dfs_scc_from g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i); [rewrite PreH32; exact Heq | exact PreH18]. Qed.
+Proof. intros; pre_process; entailer!; rewrite PreH36; apply (dfs2_recurse_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i vis2_m sid_m root_v_low_level_spec X_low_level_spec); [ rewrite <- PreH21; exact PreH24 | rewrite <- PreH36; lia | rewrite <- PreH36; exact PreH15 | exact PreH19 ]. Qed.
 
 Lemma proof_of_dfs2_partial_solve_wit_8_pure : dfs2_partial_solve_wit_8_pure.
 Proof. Admitted. 

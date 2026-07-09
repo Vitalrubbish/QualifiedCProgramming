@@ -17,6 +17,8 @@
                (csr_wf1: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Prop)
                (csr_wf2: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Prop)
                (radj_col_particular: AdjGraph -> list Z -> Prop)
+               (csr1_faithful: AdjGraph -> list Z -> list Z -> Prop)
+               (csr2_faithful: AdjGraph -> list Z -> list Z -> Prop)
                (adj_verts: AdjGraph -> Z)
                (m_of: list Z -> Z)
                (csr_lo: Z -> list Z -> Z)
@@ -188,6 +190,7 @@ void dfs2(int root, int u, int n,
     With {B} g fadj_col_l fadj_row_l vis2_l sid_l root_v X (f: unit -> program KSt B)
     Require
       csr_wf2(g, fadj_col_l, fadj_row_l, vis2_l, sid_l) &&
+      csr2_faithful(g, fadj_col_l, fadj_row_l) &&
       adj_verts(g) == n &&
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l, sid_l, root_v),
                bind(dfs_scc(g, root, u), f), X) &&
@@ -202,6 +205,12 @@ void dfs2(int root, int u, int n,
       adj_verts(g) == n &&
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l_, sid_l_, root_v),
                applyf(f, tt), X) &&
+      Znth(u, vis2_l_, 0) != 0 &&
+      Znth(u, sid_l_, 0) == Znth(root, sid_l_, 0) &&
+      (forall (w: Z), (0 <= w && w < n) =>
+                  (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_l_, 0) != 0)) &&
+      (forall (w: Z), (0 <= w && w < n) =>
+                  (Znth(w, vis2_l, 0) != 0 => Znth(w, sid_l, 0) == Znth(w, sid_l_, 0))) &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
       IntArray::full(fadj_row, n + 1, fadj_row_l) *
       IntArray::full(vis2, n, vis2_l_) *
@@ -214,6 +223,7 @@ void dfs2(int root, int u, int n,
     With g fadj_col_l fadj_row_l vis2_l sid_l root_v X
     Require
       csr_wf2(g, fadj_col_l, fadj_row_l, vis2_l, sid_l) &&
+      csr2_faithful(g, fadj_col_l, fadj_row_l) &&
       adj_verts(g) == n &&
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l, sid_l, root_v),
                dfs_scc(g, root, u), X) &&
@@ -228,6 +238,12 @@ void dfs2(int root, int u, int n,
       adj_verts(g) == n &&
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l_, sid_l_, root_v),
                return(tt), X) &&
+      Znth(u, vis2_l_, 0) != 0 &&
+      Znth(u, sid_l_, 0) == Znth(root, sid_l_, 0) &&
+      (forall (w: Z), (0 <= w && w < n) =>
+                  (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_l_, 0) != 0)) &&
+      (forall (w: Z), (0 <= w && w < n) =>
+                  (Znth(w, vis2_l, 0) != 0 => Znth(w, sid_l, 0) == Znth(w, sid_l_, 0))) &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
       IntArray::full(fadj_row, n + 1, fadj_row_l) *
       IntArray::full(vis2, n, vis2_l_) *
@@ -243,6 +259,7 @@ void dfs2(int root, int u, int n,
   /*@ Inv Assert
       exists vis2_m sid_m,
         csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
         adj_verts(g) == n &&
         safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m, root_v),
                  dfs_scc_from(g, fadj_col_l, fadj_row_l, root, u, i), X) &&
@@ -252,6 +269,10 @@ void dfs2(int root, int u, int n,
         lo == csr_lo(u, fadj_row_l) && hi == csr_hi(u, fadj_row_l) &&
         0 <= lo && lo <= i && i <= hi && hi <= m_of(fadj_row_l) &&
         0 <= u && u < n && 0 <= root && root < n && n <= 2147483647 &&
+        Znth(u, vis2_m, 0) != 0 &&
+        Znth(u, sid_m, 0) == Znth(root, sid_m, 0) &&
+        (forall (j: Z), (lo <= j && j < i) =>
+                    (Znth(Znth(j, fadj_col_l, 0), vis2_m, 0) != 0)) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(vis2, n, vis2_m) *
@@ -264,6 +285,7 @@ void dfs2(int root, int u, int n,
 
     /*@ Assert
         csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
         adj_verts(g) == n &&
         safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m, root_v),
                  dfs_scc_from(g, fadj_col_l, fadj_row_l, root, u, i), X) &&
@@ -273,6 +295,10 @@ void dfs2(int root, int u, int n,
         lo == csr_lo(u, fadj_row_l) && hi == csr_hi(u, fadj_row_l) &&
         0 <= lo && lo <= i && i < hi && hi <= m_of(fadj_row_l) &&
         0 <= u && u < n && 0 <= root && root < n && n <= 2147483647 &&
+        Znth(u, vis2_m, 0) != 0 &&
+        Znth(u, sid_m, 0) == Znth(root, sid_m, 0) &&
+        (forall (j: Z), (lo <= j && j < i) =>
+                    (Znth(Znth(j, fadj_col_l, 0), vis2_m, 0) != 0)) &&
         0 <= v && v < n && v == Znth(i, fadj_col_l, 0) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
