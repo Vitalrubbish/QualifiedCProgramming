@@ -1,11 +1,16 @@
 Require Import Coq.Lists.List.
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.Logic.Classical_Prop.
+Require Import Coq.Logic.Classical.
+Require Import Coq.Logic.ClassicalDescription.
+Require Import Coq.Logic.IndefiniteDescription.
 Require Import Coq.micromega.Psatz.
 Require Import SetsClass.SetsClass.
-From MonadLib.StateRelMonad Require Import StateRelBasic StateRelHoare FixpointLib.
+(* From MonadLib.MonadErr Require Import StateRelBasic StateRelHoare FixpointLib. *)
+From MonadLib.MonadErr Require Import MonadErrBasic MonadErrHoare MonadErrLoop MonadErrHoarePartial MonadErrLoop.
 From GraphLib Require Import graph_basic reachable_basic.
 From Algorithms Require Import Kosaraju.SCC.
+Require Import BourbakiWitt.
 Import SetsNotation.
 Import MonadNotation.
 Local Open Scope sets.
@@ -26,6 +31,11 @@ Context {G V E: Type}
         (g: G)
         (g_valid: gvalid g).
 
+(* VListBijective (NoDup vertex list = exact |V|) derived from FiniteGraph. *)
+#[local] Instance kos_vlist : VListBijective G V E :=
+  finite_graph_vlist_bijective G V E.
+
+
 (* ================================================================= *)
 (* Program State — non-primitive inductive record (avoids Coq 8.20   *)
 (* primitive record restrictions on intros/subst/destruct/rewrite)   *)
@@ -43,53 +53,198 @@ Inductive St : Type := MkSt {
 Definition init_st : St :=
   MkSt 0 (fun _ => 0) (fun _ => False) (fun _ => False) (fun _ => 0) 0.
 
-Definition visit1 (u: V): StateRelMonad.M St unit :=
-  fun st1 _ st2 =>
+(* ================================================================= *)
+(* cardV: cardinality of a vertex predicate, counted over the NoDup   *)
+(* vertex list bijective_listV g (= exact number of vertices |V|).    *)
+(* Underpins the timer bound: timer <= cardV(visited1) <= |V|.         *)
+(* ================================================================= *)
+
+Fixpoint count_pred {A: Type} (P: A -> Prop) (l: list A) : nat :=
+  match l with
+  | nil => 0
+  | x :: xs => match excluded_middle_informative (P x) with left _ => S (count_pred P xs) | right _ => count_pred P xs end
+  end.
+
+Definition cardV (P: V -> Prop) : nat := count_pred P (bijective_listV g).
+
+Definition count_step {A: Type} (P: A -> Prop) (x: A) (n: nat) : nat :=
+  match excluded_middle_informative (P x) with left _ => S n | right _ => n end.
+
+Lemma count_pred_le : forall {A: Type} (P: A -> Prop) (l: list A),
+  count_pred P l <= length l.
+Proof.
+  intros A P l. induction l as [| a l IH]; simpl; [lia | destruct (excluded_middle_informative (P a)); lia].
+Qed.
+
+Lemma cardV_le : forall P, (cardV P <= length (bijective_listV g))%nat.
+Proof. intros P. apply count_pred_le. Qed.
+
+Lemma count_pred_cong : forall {A: Type} (P Q: A -> Prop) (l: list A),
+  (forall x, In x l -> (P x <-> Q x)) -> count_pred P l = count_pred Q l.
+Proof.
+  intros A P Q l Hcg. induction l as [| a l IH]; simpl.
+  - reflexivity.
+  - assert (HPQ : P a <-> Q a) by (apply Hcg; left; reflexivity).
+    destruct HPQ as [HP HQ].
+    destruct (excluded_middle_informative (P a)) as [Hp | Hnp].
+    + destruct (excluded_middle_informative (Q a)) as [Hq | Hnq].
+      * f_equal. apply IH. intros y Hy. apply Hcg. right; exact Hy.
+      * exfalso. apply Hnq. apply HP. exact Hp.
+    + destruct (excluded_middle_informative (Q a)) as [Hq | Hnq].
+      * exfalso. apply Hnp. apply HQ. exact Hq.
+      * apply IH. intros y Hy. apply Hcg. right; exact Hy.
+Qed.
+
+(* If u does not occur in l, the predicates P and (P \/ =u) agree on l. *)
+Lemma count_pred_or_notin : forall {A: Type} (P: A -> Prop) (u: A) (l: list A),
+  ~ In u l -> count_pred (fun x => P x \/ u = x) l = count_pred P l.
+Proof.
+  intros A P u l Hni.
+  apply count_pred_cong. intros x Hx.
+  split.
+  - intros [Hp | Heq]; [exact Hp | subst x; exfalso; apply Hni; exact Hx].
+  - intros Hp. left; exact Hp.
+Qed.
+
+(* If u occurs (once, by NoDup) in l and ~ P u, adding "u=x" raises the count by 1. *)
+Lemma count_pred_or_eq : forall {A: Type} (P: A -> Prop) (u: A) (l: list A),
+  NoDup l -> In u l -> ~ P u ->
+  count_pred (fun x => P x \/ u = x) l = S (count_pred P l).
+Proof.
+  intros A P u l. induction l as [| a l IH]; intros HND Hin HnPu.
+  - simpl. destruct Hin.
+  - simpl.
+    destruct (excluded_middle_informative (u = a)) as [Hua | Hnua].
+    + (* head a = u *)
+      subst a. inversion HND; subst.
+      destruct (excluded_middle_informative (P u)) as [Hpu | Hnpu]; [exfalso; apply HnPu; exact Hpu | clear Hnpu].
+      destruct (excluded_middle_informative (P u \/ u = u)) as [_ | Hnd]; [ | exfalso; apply Hnd; right; reflexivity].
+      rewrite count_pred_or_notin by assumption. reflexivity.
+    + (* head a <> u, u in tail *)
+      assert (Hinl : In u l) by (destruct Hin as [H | Hinl]; [exfalso; apply Hnua; symmetry; exact H | exact Hinl]).
+      assert (HNDl : NoDup l) by (inversion HND; assumption).
+      assert (HIH : count_pred (fun x => P x \/ u = x) l = S (count_pred P l)) by (apply IH; assumption).
+      destruct (excluded_middle_informative (P a)) as [Hpa | Hnpa].
+      * destruct (excluded_middle_informative (P a \/ u = a)) as [_ | Hnd]; [ | exfalso; apply Hnd; left; exact Hpa].
+        rewrite HIH. reflexivity.
+      * destruct (excluded_middle_informative (P a \/ u = a)) as [Hd | Hnd].
+        -- exfalso. destruct Hd as [Hp | Heq]; [apply Hnpa; exact Hp | apply Hnua; exact Heq].
+        -- rewrite HIH. reflexivity.
+Qed.
+
+(* visit1 u (u valid & not yet visited1) increases cardV(visited1) by exactly 1. *)
+Lemma cardV_visit1 : forall s1 s2 u,
+  visited1 s2 == visited1 s1 ∪ Sets.singleton u ->
+  vvalid g u -> ~ visited1 s1 u ->
+  cardV (visited1 s2) = S (cardV (visited1 s1)).
+Proof.
+  intros s1 s2 u Heq Hvu Hnv. unfold cardV.
+  transitivity (count_pred (fun v => visited1 s1 v \/ u = v) (bijective_listV g)).
+  - apply count_pred_cong. intros x _. sets_unfold in Heq. apply Heq.
+  - apply count_pred_or_eq;
+      [ apply bijective_listV_NoDup; exact g_valid
+      | exact (proj2 (bijective_vertices g g_valid u) Hvu)
+      | exact Hnv ].
+Qed.
+
+(* count_pred is monotone under pointwise implication (subset on the list's elements). *)
+Lemma count_pred_mono : forall {A: Type} (P Q: A -> Prop) (l: list A),
+  (forall x, In x l -> P x -> Q x) ->
+  count_pred Q l >= count_pred P l.
+Proof.
+  intros A P Q l. induction l as [| a l' IH]; intros Hle; simpl.
+  - lia.
+  - assert (Hle_a : P a -> Q a) by (intro HPa; exact (Hle a (or_introl eq_refl) HPa)).
+    assert (Hle_l' : forall x, In x l' -> P x -> Q x)
+      by (intros x Hx HPx; exact (Hle x (or_intror Hx) HPx)).
+    specialize (IH Hle_l').
+    destruct (excluded_middle_informative (P a)) as [Hpa | Hnpa];
+      destruct (excluded_middle_informative (Q a)) as [Hqa | Hnqa].
+    + lia.
+    + exfalso. apply Hnqa. apply Hle_a. exact Hpa.
+    + lia.
+    + lia.
+Qed.
+
+(* cardV is monotone: P ⊆ Q (pointwise on V) implies cardV P <= cardV Q. *)
+Lemma cardV_mono : forall (P Q: V -> Prop),
+  (forall x, P x -> Q x) -> (cardV P <= cardV Q)%nat.
+Proof.
+  intros P Q Hle. unfold cardV.
+  assert (Hge := count_pred_mono P Q (bijective_listV g) (fun x _ => Hle x)).
+  lia.
+Qed.
+
+(* visit1 u preserves the non-strict bound cardV(visited1) >= timer, with no
+   precondition on whether u was already visited. Used to thread the assertS
+   timer-bound through DFS_finish_f's loop without needing ~visited1/vvalid. *)
+Lemma cardV_visit1_nosteps : forall s1 s2 u,
+  visited1 s2 == visited1 s1 ∪ Sets.singleton u ->
+  timer s2 = timer s1 ->
+  cardV (visited1 s1) >= timer s1 ->
+  cardV (visited1 s2) >= timer s2.
+Proof.
+  intros s1 s2 u Heq Htimer Hle.
+  rewrite Htimer.
+  assert (Hsub : forall x, visited1 s1 x -> visited1 s2 x).
+  { intros x Hx. sets_unfold in Heq. apply Heq. left. exact Hx. }
+  assert (Hmono := cardV_mono (visited1 s1) (visited1 s2) Hsub).
+  lia.
+Qed.
+
+Definition custom {Σ A: Type} (nrm: Σ -> A -> Σ -> Prop): MonadErr.M Σ A := {|
+  MonadErr.nrm := nrm;
+  MonadErr.err := ∅
+|}.
+
+Definition visit1 (u: V): MonadErr.M St unit :=
+  custom (fun st1 _ st2 =>
     visited1 st2 == visited1 st1 ∪ Sets.singleton u /\
     timer st2 = timer st1 /\
     finish st2 = finish st1 /\
     visited2 st2 = visited2 st1 /\
     scc_id st2 = scc_id st1 /\
-    scc_next st2 = scc_next st1.
+    scc_next st2 = scc_next st1).
+    
 
-Definition visit2 (u: V): StateRelMonad.M St unit :=
-  fun st1 _ st2 =>
+Definition visit2 (u: V): MonadErr.M St unit :=
+  custom (fun st1 _ st2 =>
     visited2 st2 == visited2 st1 ∪ Sets.singleton u /\
     timer st2 = timer st1 /\
     finish st2 = finish st1 /\
     visited1 st2 = visited1 st1 /\
     scc_id st2 = scc_id st1 /\
-    scc_next st2 = scc_next st1.
+    scc_next st2 = scc_next st1).
 
-Definition set_finish (u: V) (t: nat): StateRelMonad.M St unit :=
-  fun st1 _ st2 =>
+Definition set_finish (u: V) (t: nat): MonadErr.M St unit :=
+  custom (fun st1 _ st2 =>
     timer st2 = S (timer st1) /\
     finish st2 u = t /\
     (forall v, v <> u -> finish st2 v = finish st1 v) /\
     visited1 st2 = visited1 st1 /\
     visited2 st2 = visited2 st1 /\
     scc_id st2 = scc_id st1 /\
-    scc_next st2 = scc_next st1.
+    scc_next st2 = scc_next st1).
 
-Definition set_scc_id (u root: V): StateRelMonad.M St unit :=
-  fun st1 _ st2 =>
+Definition set_scc_id (u root: V): MonadErr.M St unit :=
+  custom (fun st1 _ st2 =>
     scc_id st2 u = scc_id st1 root /\
     (forall v, v <> u -> scc_id st2 v = scc_id st1 v) /\
     timer st2 = timer st1 /\
     finish st2 = finish st1 /\
     visited1 st2 = visited1 st1 /\
     visited2 st2 = visited2 st1 /\
-    scc_next st2 = scc_next st1.
+    scc_next st2 = scc_next st1).
 
-Definition set_scc_root_id (u: V): StateRelMonad.M St unit :=
-  fun st1 _ st2 =>
+Definition set_scc_root_id (u: V): MonadErr.M St unit :=
+  custom (fun st1 _ st2 =>
     scc_id st2 u = scc_next st1 /\
     scc_next st2 = S (scc_next st1) /\
     (forall v, v <> u -> scc_id st2 v = scc_id st1 v) /\
     timer st2 = timer st1 /\
     finish st2 = finish st1 /\
     visited1 st2 = visited1 st1 /\
-    visited2 st2 = visited2 st1.
+    visited2 st2 = visited2 st1).
 
 (* ================================================================= *)
 (* Inner DFS — Phase 1 (reversed graph)                              *)
@@ -137,30 +292,31 @@ Proof.
 Qed.
 
 Definition DFS_finish_f
-           (W: V -> StateRelMonad.M St unit)
-           (u: V): StateRelMonad.M St unit :=
+           (W: V -> MonadErr.M St unit)
+           (u: V): MonadErr.M St unit :=
   visit1 u;;
   repeat_break
     (fun e_set =>
        choice
-         (e <- any E;;
+        (e <- any E;;
           v <- any V;;
           assume (fun _ => ~ e ∈ e_set);;
           assume (fun st => ~ visited1 st v);;
            assume (fun _ => step_aux g e v u);;
            W v;;
            continue (e_set ∪ Sets.singleton e))
-          (assume (fun st =>
+        (assume (fun st =>
                      forall (e:E) (v:V),
                        step_aux g e v u ->
                        e ∈ e_set \/ visited1 st v);;
+          assertS (fun st => timer st <= length (bijective_listV g));;
           t <- get (fun st t => t = timer st);;
           set_finish u t;;
           break tt))
     ∅.
 
-Definition DFS_finish (u: V): StateRelMonad.M St unit :=
-  Lfix (DFS_finish_f) u.
+Definition DFS_finish (u: V): MonadErr.M St unit :=
+  BW_fix (DFS_finish_f) u.
 
 (* ================================================================= *)
 (* Inner DFS — Phase 2 (original graph, assign SCC root)             *)
@@ -168,8 +324,8 @@ Definition DFS_finish (u: V): StateRelMonad.M St unit :=
 
 Definition DFS_scc_f
            (root: V)
-           (W: V -> StateRelMonad.M St unit)
-           (u: V): StateRelMonad.M St unit :=
+           (W: V -> MonadErr.M St unit)
+           (u: V): MonadErr.M St unit :=
   visit2 u;;
   set_scc_id u root;;
   repeat_break
@@ -189,18 +345,19 @@ Definition DFS_scc_f
           break tt))
     ∅.
 
-Definition DFS_scc (root u: V): StateRelMonad.M St unit :=
-  Lfix (DFS_scc_f root) u.
+Definition DFS_scc (root u: V): MonadErr.M St unit :=
+  BW_fix (DFS_scc_f root) u.
 
 (* ================================================================= *)
 (* Pick an unvisited vertex with maximal finish number               *)
 (* ================================================================= *)
 
-Definition pick_unvisited1 : StateRelMonad.M St V :=
-  get (fun st v => ~ visited1 st v).
+Definition pick_unvisited1 : MonadErr.M St V :=
+  get (fun st v => vvalid g v /\ ~ visited1 st v).
 
-Definition pick_unvisited2 : StateRelMonad.M St V :=
+Definition pick_unvisited2 : MonadErr.M St V :=
   get (fun st v =>
+    vvalid g v /\
     ~ visited2 st v /\
     forall w, ~ visited2 st w -> finish st v >= finish st w).
 
@@ -209,8 +366,8 @@ Definition pick_unvisited2 : StateRelMonad.M St V :=
 (* ================================================================= *)
 
 Definition kosaraju_finish_f
-           (W: unit -> StateRelMonad.M St unit)
-           (u: unit): StateRelMonad.M St unit :=
+           (W: unit -> MonadErr.M St unit)
+           (u: unit): MonadErr.M St unit :=
   choice
     (u <- pick_unvisited1;;
      DFS_finish u;;
@@ -218,12 +375,12 @@ Definition kosaraju_finish_f
     (assume (fun st => forall v, visited1 st v);;
      skip).
 
-Definition kosaraju_finish : StateRelMonad.M St unit :=
-  Lfix kosaraju_finish_f tt.
+Definition kosaraju_finish : MonadErr.M St unit :=
+  BW_fix kosaraju_finish_f tt.
 
 Definition kosaraju_scc_f
-           (W: unit -> StateRelMonad.M St unit)
-           (u: unit): StateRelMonad.M St unit :=
+           (W: unit -> MonadErr.M St unit)
+           (u: unit): MonadErr.M St unit :=
   choice
     (u <- pick_unvisited2;;
      set_scc_root_id u;;
@@ -232,10 +389,10 @@ Definition kosaraju_scc_f
     (assume (fun st => forall v, visited2 st v);;
      skip).
 
-Definition kosaraju_scc : StateRelMonad.M St unit :=
-  Lfix kosaraju_scc_f tt.
+Definition kosaraju_scc : MonadErr.M St unit :=
+  BW_fix kosaraju_scc_f tt.
 
-Definition kosaraju : StateRelMonad.M St unit :=
+Definition kosaraju : MonadErr.M St unit :=
   kosaraju_finish;; kosaraju_scc.
 
 (* ================================================================= *)
@@ -248,9 +405,7 @@ Theorem Hoare_normalize {Σ A: Type}:
     (forall s0, P s0 -> Hoare (fun s => s = s0) f Q) ->
     Hoare P f Q.
 Proof.
-  unfold Hoare. intros.
-  revert H1.
-  apply (H s1); tauto.
+  firstorder.
 Qed.
 
 (** If P holds at s0, then assume P;; f has the Hoare triple for
@@ -260,60 +415,63 @@ Theorem Hoare_normal_assume_bind {Σ A: Type}:
     (P s0 -> Hoare (fun s => s = s0) f Q) ->
     (Hoare (fun s => s = s0) (assume P;; f) Q).
 Proof.
-  intros.
-  apply Hoare_assume_bind.
+  intros P f Q s0 H.
+  apply Hoare_assumeS_bind.
   apply Hoare_normalize.
-  intros.
-  destruct H0.
-  subst; tauto.
+  intros s1 [Hs HP]. subst. apply H. exact HP.
 Qed.
 
-(** Lfix induction principle: if f W a satisfies Q a s0 under the
-    hypothesis that W a does, then Lfix f a also satisfies Q a s0. *)
+(** BW_fix induction principle: if f W a satisfies Q a s0 under the
+    hypothesis that W a does, then BW_fix f a also satisfies Q a s0. *)
 Theorem Hoare_normal_LFix {Σ A B: Type}:
   forall (Q: A -> Σ -> B -> Σ -> Prop)
-         (f: (A -> StateRelMonad.M Σ B) -> (A -> StateRelMonad.M Σ B)),
-    (forall (W: A -> StateRelMonad.M Σ B),
+         (f: (A -> MonadErr.M Σ B) -> (A -> MonadErr.M Σ B)),
+    (forall (W: A -> MonadErr.M Σ B),
        (forall s0 a, Hoare (fun s => s = s0) (W a) (Q a s0)) ->
        (forall s0 a, Hoare (fun s => s = s0) (f W a) (Q a s0))) ->
-    (forall s0 a, Hoare (fun s => s = s0) (Lfix f a) (Q a s0)).
+    (forall s0 a, Hoare (fun s => s = s0) (BW_fix f a) (Q a s0)).
 Proof.
-  intros.
+  intros Q f H s0 a.
+  assert (Hiter : forall n s0 a, Hoare (fun s => s = s0) (Nat.iter n f bot a) (Q a s0)).
+  { intro n. induction n; intros s0' a'.
+    - unfold Hoare; split; simpl; sets_unfold; intros; tauto.
+    - simpl. apply H. exact IHn. }
   unfold Hoare.
-  intros s1 b s2 ? ?.
-  change (exists n, (s1, b, s2) ∈ Nat.iter n f ∅ a) in H1.
-  destruct H1 as [n ?].
-  revert s1 b s2 H0 H1.
-  change (Hoare (fun s => s = s0) (Nat.iter n f ∅ a) (Q a s0)).
-  revert s0 a.
-  induction n.
-  + unfold Hoare; simpl; sets_unfold; tauto.
-  + simpl.
-    apply H.
-    apply IHn.
+  unfold BW_fix, omega_lub, oLub_lift, LiftConstructors.lift_binder,
+    omega_lub, oLub_program, ProgramPO.indexed_union; simpl.
+  sets_unfold.
+  split.
+  - intros b s1 s2 Hs1 Hnrm. destruct Hnrm as [n Hnrm].
+    destruct (Hiter n s0 a) as [Hn _]. eapply Hn; eauto.
+  - intros s1 Hs1 Herr. destruct Herr as [n Herr].
+    destruct (Hiter n s0 a) as [_ He]. eapply He; eauto.
 Qed.
 
-(** Lfix induction with an invariant R closed under the recursive step.
+(** BW_fix induction with an invariant R closed under the recursive step.
     Variant of Hoare_normal_LFix carrying an extra hypothesis R s0. *)
 Theorem Hoare_normal_LFix_closed {Σ A B: Type}:
   forall (R: Σ -> Prop)
          (Q: A -> Σ -> B -> Σ -> Prop)
-         (f: (A -> StateRelMonad.M Σ B) -> (A -> StateRelMonad.M Σ B)),
-    (forall (W: A -> StateRelMonad.M Σ B),
+         (f: (A -> MonadErr.M Σ B) -> (A -> MonadErr.M Σ B)),
+    (forall (W: A -> MonadErr.M Σ B),
        (forall s0 a, R s0 -> Hoare (fun s => s = s0) (W a) (Q a s0)) ->
        (forall s0 a, R s0 -> Hoare (fun s => s = s0) (f W a) (Q a s0))) ->
-    (forall s0 a, R s0 -> Hoare (fun s => s = s0) (Lfix f a) (Q a s0)).
+    (forall s0 a, R s0 -> Hoare (fun s => s = s0) (BW_fix f a) (Q a s0)).
 Proof.
   intros R Q f H s0 a HR.
-  unfold Hoare. intros s1 b s2 H0 H1.
-  change (exists n, (s1, b, s2) ∈ Nat.iter n f ∅ a) in H1.
-  destruct H1 as [n ?].
-  revert s1 b s2 H0 H1.
-  change (Hoare (fun s => s = s0) (Nat.iter n f ∅ a) (Q a s0)).
-  revert s0 a HR.
-  induction n.
-  + unfold Hoare; simpl; sets_unfold; tauto.
-  + simpl. apply H. apply IHn.
+  assert (Hiter : forall n s0 a, R s0 -> Hoare (fun s => s = s0) (Nat.iter n f bot a) (Q a s0)).
+  { intro n. induction n; intros s0' a' HR'.
+    - unfold Hoare; split; simpl; sets_unfold; intros; tauto.
+    - simpl. apply H. exact IHn. exact HR'. }
+  unfold Hoare.
+  unfold BW_fix, omega_lub, oLub_lift, LiftConstructors.lift_binder,
+    omega_lub, oLub_program, ProgramPO.indexed_union; simpl.
+  sets_unfold.
+  split.
+  - intros b s1 s2 Hs1 Hnrm. destruct Hnrm as [n Hnrm].
+    destruct (Hiter n s0 a HR) as [Hn _]. eapply Hn; eauto.
+  - intros s1 Hs1 Herr. destruct Herr as [n Herr].
+    destruct (Hiter n s0 a HR) as [_ He]. eapply He; eauto.
 Qed.
 
 (* ================================================================= *)
@@ -326,11 +484,14 @@ Lemma Hoare_visit1 : forall s0 u P,
   (forall s1, visited1 s1 == visited1 s0 ∪ Sets.singleton u -> P s1) ->
   Hoare (fun st => st = s0) (visit1 u) (fun _ => P).
 Proof.
-  intros s0 u P H; unfold Hoare, visit1.
-  intros s1 a s2 Hs1 Hprog.
-  rewrite Hs1 in *.
-  destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
-  apply H; assumption.
+  intros s0 u P H.
+  unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [visit1 custom] in Hprog.
+    destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+    apply H; assumption.
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 (** visit2 u adds u to visited2; all other fields unchanged.
@@ -339,11 +500,14 @@ Lemma Hoare_visit2 : forall s0 u P,
   (forall s1, visited2 s1 == visited2 s0 ∪ Sets.singleton u -> P s1) ->
   Hoare (fun st => st = s0) (visit2 u) (fun _ => P).
 Proof.
-  intros s0 u P H; unfold Hoare, visit2.
-  intros s1 a s2 Hs1 Hprog.
-  rewrite Hs1 in *.
-  destruct Hprog as [Hv [Htimer [Hfin [Hv1 [Hsid _]]]]].
-  apply H; assumption.
+  intros s0 u P H.
+  unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [visit2 custom] in Hprog.
+    destruct Hprog as [Hv [Htimer [Hfin [Hv1 [Hsid _]]]]].
+    apply H; assumption.
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 (** get timer then set_finish u t captures the current timer as finish[u],
@@ -359,47 +523,256 @@ Lemma Hoare_set_finish : forall s0 u,
        visited2 s' = visited2 s0 /\
        scc_id s' = scc_id s0).
 Proof.
-  intros s0 u; unfold Hoare, bind, get, set_finish.
-  intros s1 a s2 Hs1 Hprog.
-  rewrite Hs1 in *.
-  destruct Hprog as [t [s' [[Ht Hs'] Hset]]].
-  rewrite Hs' in *.
-  destruct Hset as [Htimer [Hfinish [Hfinish_other [Hv1 [Hv2 [Hsid _]]]]]].
-  split; [exact Htimer|].
-  split; [rewrite <- Ht; exact Hfinish|].
-  split; [exact Hfinish_other|].
-  split; [exact Hv1|].
-  split; [exact Hv2|].
-  exact Hsid.
+  intros s0 u.
+  unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom] in Hprog.
+    destruct Hprog as [t [s' [[Ht Hs'] Hset]]].
+    rewrite <- Hs' in Hset.
+    destruct Hset as [Htimer [Hfinish [Hfinish_other [Hv1 [Hv2 [Hsid _]]]]]].
+    split; [exact Htimer|].
+    split; [rewrite <- Ht; exact Hfinish|].
+    split; [exact Hfinish_other|].
+    split; [exact Hv1|].
+    split; [exact Hv2|].
+    exact Hsid.
+  - intros s1 Hs1 Herr. exfalso.
+    cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom] in Herr.
+    sets_unfold in Herr. firstorder.
 Qed.
 
 (* ================================================================= *)
 (* 2. Inner DFS Phase 1 — Core Properties                            *)
 (* ================================================================= *)
 
+(** [DFS_finish_card_timer]: DFS_finish u preserves the excess
+    cardV(visited1) - timer. Stated as: for all k, entry cardV >= timer + k
+    implies exit cardV >= timer + k (given ~visited1 s0 u, vvalid g u).
+    visit1 (+1 cardV) and set_finish (+1 timer) balance; recursive W v
+    preserves the excess by IH. This yields cardV >= timer (k=0) at the
+    postcondition and the strict cardV >= timer+1 inside the loop, which
+    discharges the assertS timer <= |V|. *)
+Lemma DFS_finish_card_timer : forall s0 u k,
+  ~ visited1 s0 u -> vvalid g u ->
+  cardV (visited1 s0) >= timer s0 + k ->
+  Hoare (fun st => st = s0) (DFS_finish u)
+    (fun _ s' => cardV (visited1 s') >= timer s' + k).
+Proof.
+  intros s0 u k Hnvu Hvu Hentry.
+  apply Hoare_cons_pre with
+    (P := fun s => ~ visited1 s u /\ vvalid g u /\ cardV (visited1 s) >= timer s + k).
+  - intros σ Hσ. subst σ. repeat split; assumption.
+  - unfold DFS_finish.
+    apply Hoare_BW_fix_logicv with
+      (P := fun (u' : V) (k' : nat) (s : St) =>
+              ~ visited1 s u' /\ vvalid g u' /\ cardV (visited1 s) >= timer s + k')
+      (Q := fun (u' : V) (k' : nat) (_ : unit) (s' : St) =>
+              cardV (visited1 s') >= timer s' + k')
+      (a := u) (c := k).
+    intros W IH u' k'.
+    apply Hoare_normalize. intros s0' [Hnv'u' [Hvu' Hentry']].
+  unfold DFS_finish_f.
+  eapply Hoare_bind with
+    (Q := fun (_ : unit) (s1 : St) => cardV (visited1 s1) >= timer s1 + S k').
+  { (* visit1 u' : establishes strict excess S k' *)
+    unfold Hoare. split.
+    - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit1 custom] in Hprog.
+      destruct Hprog as [Hv [Htimer _]].
+      assert (Hcv : cardV (visited1 s2) = S (cardV (visited1 s0')))
+        by (apply (cardV_visit1 s0' s2 u' Hv Hvu' Hnv'u')).
+      rewrite Hcv, Htimer. lia.
+    - intros s1 Hs1 Herr. exfalso. exact Herr. }
+  { (* repeat_break *)
+    intro; apply Hoare_repeat_break with
+      (P := fun (_ : E -> Prop) (st : St) => cardV (visited1 st) >= timer st + S k')
+      (Q := fun (_ : unit) (s' : St) => cardV (visited1 s') >= timer s' + k').
+    intros e_set. apply Hoare_normalize. intros s1 Hloop.
+    apply Hoare_choice.
+    - (* continue branch: W v preserves the strict excess *)
+      apply Hoare_any_bind; intros e.
+      apply Hoare_any_bind; intros v.
+      apply Hoare_normal_assume_bind; intros H_not_e.
+      apply Hoare_normal_assume_bind; intros H_not_vis.
+      apply Hoare_normal_assume_bind; intros H_step.
+      assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+      eapply Hoare_bind with
+        (Q := fun (_ : unit) (s2 : St) => cardV (visited1 s2) >= timer s2 + S k').
+      { eapply Hoare_cons_pre with
+          (P := fun s => ~ visited1 s v /\ vvalid g v /\ cardV (visited1 s) >= timer s + S k').
+        - intros σ Hσ. subst σ. repeat split; assumption.
+        - apply (IH v (S k')). }
+      { intros _; apply Hoare_ret. intros s2 Hib. exact Hib. }
+    - (* break branch: assume Hall ;; assertS ;; get timer ;; set_finish ;; break *)
+      apply Hoare_normal_assume_bind; intros Hall.
+      assert (Htb_all : forall s, s = s1 ->
+                          timer s <= length (bijective_listV g)).
+      { intros s Hs. subst s. assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le.
+        lia. }
+      apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+      unfold Hoare. split.
+      + intros s1' a_brk s2 Hs1' Hprog. rewrite Hs1' in *.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+        destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+        destruct Hset as [Htime [_ [_ [Hvis1 [_ [_ _]]]]]].
+        rewrite Hbrk_eq; simpl; rewrite Hstate_eq, Hvis1, Htime, <- Hs'. lia.
+      + intros s1' Hs1' Herr. exfalso.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+        sets_unfold in Herr. firstorder. }
+Qed.
+
+(** [DFS_finish_f_preserves_excess]: the single-unroll step underlying
+    [DFS_finish_card_timer]. For any recursive body W that itself preserves
+    the excess cardV(visited1) - timer (parameterised by k), DFS_finish_f W
+    preserves it too. Factored out so that other Phase-1 fixpoint lemmas can
+    reuse it as the "side" step in Hoare_BW_fix_logicv_conj'. *)
+Lemma DFS_finish_f_preserves_excess :
+  forall (W : V -> MonadErr.M St unit),
+    (forall (s0 : St) (u : V) (k : nat),
+       ~ visited1 s0 u -> vvalid g u ->
+       cardV (visited1 s0) >= timer s0 + k ->
+       Hoare (fun st => st = s0) (W u) (fun (_ : unit) (s' : St) => cardV (visited1 s') >= timer s' + k)) ->
+    forall (s0 : St) (u : V) (k : nat),
+       ~ visited1 s0 u -> vvalid g u ->
+       cardV (visited1 s0) >= timer s0 + k ->
+       Hoare (fun st => st = s0) (DFS_finish_f W u) (fun (_ : unit) (s' : St) => cardV (visited1 s') >= timer s' + k).
+Proof.
+  intros W IH s0 u k Hnvu Hvu Hentry.
+  unfold DFS_finish_f.
+  eapply Hoare_bind with
+    (Q := fun (_ : unit) (s1 : St) => cardV (visited1 s1) >= timer s1 + S k).
+  { (* visit1 : establishes strict excess S k *)
+    unfold Hoare. split.
+    - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit1 custom] in Hprog.
+      destruct Hprog as [Hv [Htimer _]].
+      assert (Hcv : cardV (visited1 s2) = S (cardV (visited1 s0)))
+        by (apply (cardV_visit1 s0 s2 u Hv Hvu Hnvu)).
+      rewrite Hcv, Htimer. lia.
+    - intros s1 Hs1 Herr. exfalso. exact Herr. }
+  { (* repeat_break *)
+    intro; apply Hoare_repeat_break with
+      (P := fun (_ : E -> Prop) (st : St) => cardV (visited1 st) >= timer st + S k)
+      (Q := fun (_ : unit) (s' : St) => cardV (visited1 s') >= timer s' + k).
+    intros e_set. apply Hoare_normalize. intros s1 Hloop.
+    apply Hoare_choice.
+    - (* continue branch *)
+      apply Hoare_any_bind; intros e.
+      apply Hoare_any_bind; intros v.
+      apply Hoare_normal_assume_bind; intros H_not_e.
+      apply Hoare_normal_assume_bind; intros H_not_vis.
+      apply Hoare_normal_assume_bind; intros H_step.
+      assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u H_step).
+      eapply Hoare_bind with
+        (Q := fun (_ : unit) (s2 : St) => cardV (visited1 s2) >= timer s2 + S k).
+      { apply (IH s1 v (S k) H_not_vis Hvv Hloop). }
+      { intros _; apply Hoare_ret. intros s2 Hib. exact Hib. }
+    - (* break branch *)
+      apply Hoare_normal_assume_bind; intros Hall.
+      assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g)).
+      { intros s Hs. subst s. assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le.
+        lia. }
+      apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+      unfold Hoare. split.
+      + intros s1' a_brk s2 Hs1' Hprog. rewrite Hs1' in *.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+        destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+        destruct Hset as [Htime [_ [_ [Hvis1 [_ [_ _]]]]]].
+        rewrite Hbrk_eq; simpl; rewrite Hstate_eq, Hvis1, Htime, <- Hs'. lia.
+      + intros s1' Hs1' Herr. exfalso.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+        sets_unfold in Herr. firstorder. }
+Qed.
+
+(** [DFS_finish_fixpoint_ind]: a tailored fixpoint induction principle for
+    Phase-1 property lemmas about [DFS_finish]. The step gets TWO induction
+    hypotheses for the recursive body W: one for the (entry-state-indexed)
+    property Q, and one for the k-parameterised excess (cardV - timer).
+    The excess IH is what lets the step discharge the assertS timer-bound
+    inside DFS_finish_f's break branch, while Q is free to mention the entry
+    state s0 (so subset-style invariants carry). *)
+Lemma DFS_finish_fixpoint_ind :
+  forall (Q : V -> St -> unit -> St -> Prop),
+    (forall (W : V -> MonadErr.M St unit),
+       (forall (s0 : St) (u : V),
+          cardV (visited1 s0) >= timer s0 ->
+          Hoare (fun st => st = s0) (W u) (Q u s0)) ->
+       (forall (s0 : St) (u : V) (k : nat),
+          ~ visited1 s0 u -> vvalid g u -> cardV (visited1 s0) >= timer s0 + k ->
+          Hoare (fun st => st = s0) (W u) (fun (_ : unit) (s' : St) => cardV (visited1 s') >= timer s' + k)) ->
+       forall (s0 : St) (u : V),
+          cardV (visited1 s0) >= timer s0 ->
+          Hoare (fun st => st = s0) (DFS_finish_f W u) (Q u s0)) ->
+    forall (s0 : St) (u : V),
+       cardV (visited1 s0) >= timer s0 ->
+       Hoare (fun st => st = s0) (DFS_finish u) (Q u s0).
+Proof.
+  intros Q Hstep s0 u Hentry.
+  unfold DFS_finish.
+  assert (HiterCard : forall n s0 u k,
+                    ~ visited1 s0 u -> vvalid g u -> cardV (visited1 s0) >= timer s0 + k ->
+                    Hoare (fun st => st = s0) (Nat.iter n DFS_finish_f (fun _ => bot) u)
+                          (fun (_ : unit) (s' : St) => cardV (visited1 s') >= timer s' + k)).
+  { intro n. induction n as [| n IHc]; intros s0' u' k Hnv'u' Hvu' Hentry'.
+    - unfold Hoare. split; intros; simpl in *.
+      + exfalso. exact H0.
+      + exfalso. exact H0.
+    - simpl.
+      apply (DFS_finish_f_preserves_excess (Nat.iter n DFS_finish_f (fun _ => bot)) IHc s0' u' k Hnv'u' Hvu' Hentry'). }
+  assert (Hiter : forall n s0 u,
+                    cardV (visited1 s0) >= timer s0 ->
+                    Hoare (fun st => st = s0) (Nat.iter n DFS_finish_f (fun _ => bot) u) (Q u s0)).
+  { intro n. induction n as [| n IH]; intros s0' u' Hentry'.
+    - unfold Hoare. split; intros; simpl in *.
+      + exfalso. exact H0.
+      + exfalso. exact H0.
+    - simpl.
+      apply (Hstep (Nat.iter n DFS_finish_f (fun _ => bot)) IH (HiterCard n) s0' u' Hentry'). }
+  unfold Hoare.
+  unfold DFS_finish, BW_fix, omega_lub, oLub_lift, LiftConstructors.lift_binder,
+    omega_lub, oLub_program, ProgramPO.indexed_union; simpl.
+  sets_unfold.
+  split.
+  - intros b s1 s2 Hs1 Hnrm. destruct Hnrm as [n Hnrm].
+    destruct (Hiter n s0 u Hentry) as [Hn _]. eapply Hn; eauto.
+  - intros s1 Hs1 Herr. destruct Herr as [n Herr].
+    destruct (Hiter n s0 u Hentry) as [_ He]. eapply He; eauto.
+Qed.
+
 (** [DFS_finish_visited_incr]
     Monotonicity of visited1: if the recursive body W preserves the
     subset relation visited1 s0 ⊆ visited1 s', then so does DFS_finish_f W.
     Proved property: visited1 s0 ⊆ visited1 s' *)
 Lemma DFS_finish_visited_incr : forall W,
-  (forall s0 u,
-     Hoare (fun st => st = s0) (W u) (fun _ s' => visited1 s0 ⊆ visited1 s')) ->
-  (forall s0 u,
+  (forall s0 u, ~ visited1 s0 u -> vvalid g u ->
+     cardV (visited1 s0) >= timer s0 ->
+     Hoare (fun st => st = s0) (W u)
+       (fun _ s' => visited1 s0 ⊆ visited1 s' /\ cardV (visited1 s') >= timer s')) ->
+  (forall s0 u, ~ visited1 s0 u -> vvalid g u ->
+     cardV (visited1 s0) >= timer s0 ->
      Hoare (fun st => st = s0) (DFS_finish_f W u) (fun _ s' => visited1 s0 ⊆ visited1 s')).
 Proof.
-  intros W IH s0 u.
+  intros W IH s0 u Hnvu Hvu Htb_s0.
   unfold DFS_finish_f.
-  eapply Hoare_bind.
-  - apply Hoare_visit1.
-    intros s1 Hv.
-    apply (Sets_included_trans (visited1 s0) (visited1 s0 ∪ Sets.singleton u) (visited1 s1)).
-    + apply Sets_included_union1.
-    + destruct (proj1 (Sets_equiv_Sets_included (visited1 s1) (visited1 s0 ∪ Sets.singleton u)) Hv) as [_ Hv2].
-      exact Hv2.
-  - intro; apply Hoare_repeat_break with (P := fun e_set st => visited1 s0 ⊆ visited1 st).
+  eapply Hoare_bind with
+    (Q := fun (_:unit) (s1:St) => visited1 s0 ⊆ visited1 s1 /\ cardV (visited1 s1) >= timer s1).
+  - unfold Hoare. split.
+    + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit1 custom] in Hprog.
+      destruct Hprog as [Hv [Htimer _]].
+      split.
+      * apply (Sets_included_trans (visited1 s0) (visited1 s0 ∪ Sets.singleton u) (visited1 s2)).
+        -- apply Sets_included_union1.
+        -- destruct (proj1 (Sets_equiv_Sets_included (visited1 s2) (visited1 s0 ∪ Sets.singleton u)) Hv) as [_ Hv2].
+           exact Hv2.
+      * assert (Hcv := cardV_visit1 s0 s2 u Hv Hvu Hnvu). rewrite Hcv, Htimer. lia.
+    + intros s1 Hs1 Herr. exfalso. exact Herr.
+  - intro; apply Hoare_repeat_break with
+      (P := fun e_set st => visited1 s0 ⊆ visited1 st /\ cardV (visited1 st) >= timer st).
     intros e_set.
     apply Hoare_normalize.
-    intros s1 Hs1.
+    intros s1 [Hs1 Htb_s1].
     apply Hoare_choice.
     + apply Hoare_any_bind.
       intros e.
@@ -411,70 +784,90 @@ Proof.
       intros H_not_vis.
       apply Hoare_normal_assume_bind.
       intros H_step.
-      eapply Hoare_bind with (Q := fun (_:unit) (s':St) => visited1 s1 ⊆ visited1 s').
-      { exact (IH s1 v). }
-      { simpl; intro H_unit; apply Hoare_ret'.
-        intros s2 Hsub.
-        etransitivity; [exact Hs1 | exact Hsub]. }
+      assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u H_step).
+      eapply Hoare_bind with
+        (Q := fun (_:unit) (s2:St) => visited1 s1 ⊆ visited1 s2 /\ cardV (visited1 s2) >= timer s2).
+      { exact (IH s1 v H_not_vis Hvv Htb_s1). }
+      { intros _; apply Hoare_ret.
+        intros s2 [Hsub Htb_s2]. split.
+        - etransitivity; [exact Hs1 | exact Hsub].
+        - exact Htb_s2. }
     + apply Hoare_normal_assume_bind.
       intros Hall.
-      unfold Hoare, bind, get, break, ret.
-      intros s1' a_brk s2 Hs1' Hprog.
-      rewrite Hs1' in *.
-      destruct Hprog as [t [s' [[Ht Hs'] [v [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
-      unfold set_finish in Hset; cbv beta in Hset.
-      destruct Hset as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-      rewrite Hbrk_eq; simpl; rewrite <- Hstate_eq; rewrite Hvis1; rewrite <- Hs'.
-      exact Hs1.
+      assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+        by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+      apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+      unfold Hoare. split.
+      * intros s1' a_brk s2 Hs1' Hprog.
+        rewrite Hs1' in *.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+        destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+        destruct Hset as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+        rewrite Hbrk_eq; simpl; rewrite Hstate_eq; rewrite Hvis1; rewrite <- Hs'.
+        exact Hs1.
+      * intros s1' Hs1' Herr. exfalso.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+        sets_unfold in Herr. firstorder.
 Qed.
 
 (** [DFS_finish_visited_self]
     After DFS_finish_f W u, the start vertex u is visited.
     Proved property: visited1 s' u *)
 Lemma DFS_finish_visited_self : forall W,
-  (forall s0 u,
-     Hoare (fun st => st = s0) (W u) (fun _ s' => visited1 s0 ⊆ visited1 s')) ->
-  (forall s0 u,
+  (forall s0 u, ~ visited1 s0 u -> vvalid g u ->
+     cardV (visited1 s0) >= timer s0 ->
+     Hoare (fun st => st = s0) (W u)
+       (fun _ s' => visited1 s0 ⊆ visited1 s' /\ cardV (visited1 s') >= timer s')) ->
+  (forall s0 u, ~ visited1 s0 u -> vvalid g u ->
+     cardV (visited1 s0) >= timer s0 ->
      Hoare (fun st => st = s0) (DFS_finish_f W u) (fun _ s' => visited1 s' u)).
 Proof.
-  intros W IH s0 u.
+  intros W IH s0 u Hnvu Hvu Htb_s0.
   unfold DFS_finish_f.
-  eapply Hoare_bind.
-  - apply Hoare_visit1 with (P := fun s1 => visited1 s1 u).
-    intros s1 Hv.
-    sets_unfold in Hv.
-    apply Hv.
-    auto.
-  - intro; apply Hoare_repeat_break with (P := fun e_set st => visited1 st u).
+  eapply Hoare_bind with
+    (Q := fun (_:unit) (s1:St) => visited1 s1 u /\ cardV (visited1 s1) >= timer s1).
+  - unfold Hoare. split.
+    + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit1 custom] in Hprog.
+      destruct Hprog as [Hv [Htimer _]].
+      split.
+      * sets_unfold in Hv. apply Hv. auto.
+      * assert (Hcv := cardV_visit1 s0 s2 u Hv Hvu Hnvu). rewrite Hcv, Htimer. lia.
+    + intros s1 Hs1 Herr. exfalso. exact Herr.
+  - intro; apply Hoare_repeat_break with
+      (P := fun e_set st => visited1 st u /\ cardV (visited1 st) >= timer st).
     intros e_set.
     apply Hoare_normalize.
-    intros s1 Hs1.
+    intros s1 [Hs1 Htb_s1].
     apply Hoare_choice.
     + apply Hoare_any_bind; intros e.
       apply Hoare_any_bind; intros v.
       apply Hoare_normal_assume_bind; intros H_not_e.
       apply Hoare_normal_assume_bind; intros H_not_vis.
       apply Hoare_normal_assume_bind; intros H_step.
-      eapply Hoare_bind with (Q := fun (_:unit) (s':St) => visited1 s1 ⊆ visited1 s').
-      { exact (IH s1 v). }
-      { intros _; apply Hoare_ret'.
-        intros s2 Hsub.
-        apply Hsub.
-        exact Hs1. }
+      assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u H_step).
+      eapply Hoare_bind with
+        (Q := fun (_:unit) (s2:St) => visited1 s1 ⊆ visited1 s2 /\ cardV (visited1 s2) >= timer s2).
+      { exact (IH s1 v H_not_vis Hvv Htb_s1). }
+      { intros _; apply Hoare_ret.
+        intros s2 [Hsub Htb_s2]. split.
+        - apply Hsub. exact Hs1.
+        - exact Htb_s2. }
     + apply Hoare_normal_assume_bind; intros Hall.
-      unfold Hoare, bind, get, break, ret.
-      intros s1' x s2 Hs1' Hprog.
-      rewrite Hs1' in *.
-      destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-      destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-      destruct Hbrk' as [Hbrk_eq Hstate_eq].
-      unfold set_finish in Hset'; cbv beta in Hset'.
-      destruct Hset' as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-      rewrite Hbrk_eq; simpl.
-      rewrite <- Hstate_eq.
-      rewrite Hvis1.
-      rewrite <- Hmid.
-      exact Hs1.
+      assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+        by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+      apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+      unfold Hoare. split.
+      * intros s1' x s2 Hs1' Hprog.
+        rewrite Hs1' in *.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+        destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+        destruct Hset as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+        rewrite Hbrk_eq; simpl; rewrite Hstate_eq; rewrite Hvis1; rewrite <- Hs'.
+        exact Hs1.
+      * intros s1' Hs1' Herr. exfalso.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+        sets_unfold in Herr. firstorder.
 Qed.
 
 (** Postcondition weakening: Hoare P f Q and Q -> R gives Hoare P f R. *)
@@ -491,223 +884,236 @@ Definition Q_step_visited (u' : V) (s0' : St) (_ : unit) (s' : St) : Prop :=
 
 (** [DFS_finish_step_visited]
     All step_rev neighbors of u are visited1 after DFS_finish u completes.
-    Proved property: forall v, step_rev u v -> visited1 s' v *)
+    Proved property: Q_step_visited u s0 (subset, visited-self, neighbors). *)
 Lemma DFS_finish_step_visited : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u)
-    (fun _ s' => forall v, step_rev u v -> visited1 s' v).
+    (Q_step_visited u s0).
 Proof.
-  intros s0 u.
-  apply Hoare_imp_post with (Q := Q_step_visited u s0).
-  - unfold DFS_finish.
-    apply Hoare_normal_LFix with (Q := Q_step_visited).
-    intros W IH s0' u'.
+  intros s0 u Htb.
+  apply (DFS_finish_fixpoint_ind
+           (fun (u' : V) (s0' : St) (_ : unit) (s' : St) => Q_step_visited u' s0' tt s')).
+  { intros W IHprop IHcard s0' u' Hentry'.
     unfold DFS_finish_f.
     set (P_loop := fun (e_set: E -> Prop) (st: St) =>
       visited1 s0' ⊆ visited1 st /\
       visited1 st u' /\
-      (forall e, e ∈ e_set -> forall v, step_aux g e v u' -> visited1 st v)).
-    eapply Hoare_bind.
-    + apply Hoare_visit1 with (P := fun s1 => P_loop ∅ s1).
-      intros s1 Hv.
-      unfold P_loop.
-      sets_unfold in Hv.
-      repeat split.
-      * intros w Hw. apply Hv; left; exact Hw.
-      * apply Hv; auto.
-      * intros e He; exfalso; exact He.
-    + intro; apply Hoare_repeat_break with
+      (forall e, e ∈ e_set -> forall v, step_aux g e v u' -> visited1 st v) /\
+      cardV (visited1 st) >= timer st).
+    eapply Hoare_bind with (Q := fun (_ : unit) (s1 : St) => P_loop ∅ s1).
+    { (* visit1 *)
+      unfold Hoare. split.
+      - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+        cbv beta iota delta [visit1 custom] in Hprog.
+        destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+        unfold P_loop.
+        repeat split.
+        + intros w Hw. sets_unfold in Hv. apply Hv; left; exact Hw.
+        + sets_unfold in Hv. apply Hv; auto.
+        + intros e He; exfalso; exact He.
+        + apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+      - intros s1 Hs1 Herr. exfalso. exact Herr. }
+    { (* repeat_break *)
+      intro; apply Hoare_repeat_break with
         (P := P_loop)
-        (Q := Q_step_visited u' s0').
+        (Q := fun (_ : unit) (s' : St) => Q_step_visited u' s0' tt s').
       intros e_set.
       apply Hoare_normalize.
-      intros s1 [Hsubset [Hs1_vis Hexplored]].
+      intros s1 [Hsubset [Hs1_vis [Hexplored Htb_s1]]].
       apply Hoare_choice.
-      { apply Hoare_any_bind; intros e.
+      - (* continue *)
+        apply Hoare_any_bind; intros e.
         apply Hoare_any_bind; intros v.
         apply Hoare_normal_assume_bind; intros H_not_e.
         apply Hoare_normal_assume_bind; intros H_not_vis.
         apply Hoare_normal_assume_bind; intros H_step.
-        eapply Hoare_bind with (Q := Q_step_visited v s1).
-        { exact (IH s1 v). }
-        { intro a_res; apply Hoare_ret'.
-          intros s2 [Hsubset2 [Hvis_v Hsub]].
+        assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+        eapply Hoare_bind with
+          (Q := fun (_ : unit) (s2 : St) =>
+                  Q_step_visited v s1 tt s2 /\ cardV (visited1 s2) >= timer s2 + 0).
+        { apply Hoare_conj with
+            (R := fun (_ : unit) (s2 : St) => cardV (visited1 s2) >= timer s2 + 0).
+          - apply (IHprop s1 v Htb_s1).
+          - assert (Htb0 : cardV (visited1 s1) >= timer s1 + 0) by lia.
+            apply (IHcard s1 v 0 H_not_vis Hvv Htb0). }
+        { intros _; apply Hoare_ret.
+          intros s2 [[Hsubset2 [Hvis_v Hneigh]] Hcard2].
           unfold P_loop.
           repeat split.
-          { etransitivity; [exact Hsubset | exact Hsubset2]. }
-          { apply Hsubset2, Hs1_vis. }
-          { intros e' He'.
+          + etransitivity; [exact Hsubset | exact Hsubset2].
+          + apply Hsubset2, Hs1_vis.
+          + intros e' He'.
             destruct (classic (e' = e)) as [He'_eq | He'_ne].
-            - subst e'.
+            * subst e'.
               intros v' Hstep_aux'.
               destruct (KG.(kos_unique).(step_aux_unique) g e v u' v' u' g_valid H_step Hstep_aux') as [Hv'_eq _].
               subst v'; exact Hvis_v.
-            - sets_unfold in He'.
+            * sets_unfold in He'.
               destruct He' as [He'_in | He'_sing].
-              + intros v' Hstep_aux'.
-                apply Hsubset2; apply (Hexplored e' He'_in v' Hstep_aux').
-              + exfalso; apply He'_ne; symmetry; exact He'_sing. } } }
-      { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, bind, get, break, ret.
-        intros s1' x s2 Hs1' Hprog.
-        rewrite Hs1' in *.
-        destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-        destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-        destruct Hbrk' as [Hbrk_eq Hstate_eq].
-        unfold set_finish in Hset'; cbv beta in Hset'.
-        destruct Hset' as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-        rewrite Hbrk_eq; simpl.
-        rewrite <- Hstate_eq.
-        unfold Q_step_visited.
-        rewrite Hvis1; rewrite <- Hmid.
-        repeat split.
-        * exact Hsubset.
-        * exact Hs1_vis.
-        * intros v Hstep.
-          destruct Hstep as [e Hstep_aux].
-          destruct (Hall e v Hstep_aux) as [He_in | Hvis_v].
-          { apply (Hexplored e He_in v Hstep_aux). }
-          { exact Hvis_v. } }
-  - intros _ s' [Hsubset [Hvis Hstep_vis]]; exact Hstep_vis.
+              -- intros v' Hstep_aux'.
+                 apply Hsubset2; apply (Hexplored e' He'_in v' Hstep_aux').
+              -- exfalso; apply He'_ne; symmetry; exact He'_sing.
+          + lia. }
+      - (* break *)
+        apply Hoare_normal_assume_bind; intros Hall.
+        assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+          by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+        apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+        unfold Hoare. split.
+        { intros s1' a_brk s2 Hs1' Hprog. rewrite Hs1' in *.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+          destruct Hset as [Htime [_ [_ [Hvis1 [_ [_ _]]]]]].
+          rewrite Hbrk_eq; simpl; rewrite Hstate_eq.
+          unfold Q_step_visited.
+          rewrite Hvis1, <- Hs'.
+          repeat split.
+          - exact Hsubset.
+          - exact Hs1_vis.
+          - intros w Hstep.
+            destruct Hstep as [e Hstep_aux].
+            destruct (Hall e w Hstep_aux) as [He_in | Hvis_w].
+            + apply (Hexplored e He_in w Hstep_aux).
+            + exact Hvis_w. }
+        { intros s1' Hs1' Herr. exfalso.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } } }
+  exact Htb.
 Qed.
 
 Definition neighbor_visited_rev (st : St) (v : V) : Prop :=
   forall w, step_rev v w -> visited1 st w.
-
-(** [DFS_finish_neighbor_visited_aux]
-    Helper for the neighbor_visited_rev invariant. Under the induction
-    hypothesis (W preserves visited1, subset, and neighbor_visited_rev),
-    DFS_finish_f W also preserves them.
-    Proved property: visited1 s' u /\ visited1 s0 ⊆ visited1 s' /\
-      (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v) *)
-Lemma DFS_finish_neighbor_visited_aux : forall W,
-  (forall s0 u,
-     Hoare (fun st => st = s0) (W u)
-       (fun _ s' =>
-          visited1 s' u /\
-          visited1 s0 ⊆ visited1 s' /\
-          (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v))) ->
-  (forall s0 u,
-     Hoare (fun st => st = s0) (DFS_finish_f W u)
-       (fun _ s' =>
-          visited1 s' u /\
-          visited1 s0 ⊆ visited1 s' /\
-          (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v))).
-Proof.
-  intros W IH s0 u.
-  unfold DFS_finish_f.
-  set (P_loop := fun (e_set: E -> Prop) (st: St) =>
-    visited1 st u /\
-    (forall v, visited1 st v -> visited1 s0 v \/ v = u \/ neighbor_visited_rev st v) /\
-    (forall e v, e ∈ e_set -> step_aux g e v u -> visited1 st v) /\
-    visited1 s0 ⊆ visited1 st).
-  eapply Hoare_bind.
-  - apply Hoare_visit1 with (P := fun s1 => P_loop ∅ s1).
-    intros s1 Hv.
-    unfold P_loop.
-    sets_unfold in Hv.
-    repeat split.
-    + apply Hv; auto.
-    + intros v Hv_vis.
-      apply Hv in Hv_vis.
-      destruct Hv_vis as [Hv0 | H_eq].
-      * left; exact Hv0.
-      * subst; right; left; reflexivity.
-    + intros e v He; exfalso; exact He.
-    + intros w Hw; apply Hv; left; exact Hw.
-  - intro; apply Hoare_repeat_break with
-      (P := P_loop)
-      (Q := fun (_:unit) (s':St) =>
-        visited1 s' u /\ visited1 s0 ⊆ visited1 s' /\
-        (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v)).
-    intros e_set.
-    apply Hoare_normalize.
-    intros s1 [Hs1_vis [P_vis [Hexplored Hincl]]].
-    apply Hoare_choice.
-    + apply Hoare_any_bind; intros e.
-      apply Hoare_any_bind; intros v.
-      apply Hoare_normal_assume_bind; intros H_not_e.
-      apply Hoare_normal_assume_bind; intros H_not_vis.
-      apply Hoare_normal_assume_bind; intros H_step.
-      eapply Hoare_bind with (Q := fun (_:unit) (s':St) =>
-        visited1 s' v /\ visited1 s1 ⊆ visited1 s' /\
-        (forall w, visited1 s' w -> visited1 s1 w \/ neighbor_visited_rev s' w)).
-      { exact (IH s1 v). }
-      { intros _; apply Hoare_ret'.
-        intros s2 [Hvis_v [Hsubset2 Hneigh2]].
-        unfold P_loop.
-        repeat split.
-        - apply Hsubset2, Hs1_vis.
-        - intros w Hvis_w.
-          destruct (classic (w = v)) as [Hw_eq | Hw_ne].
-          + subst w; right; right.
-            destruct (Hneigh2 v Hvis_v) as [Hv_s1 | Hv_neigh];
-            [exfalso; apply H_not_vis; exact Hv_s1 | exact Hv_neigh].
-          + destruct (classic (visited1 s1 w)) as [Hw_s1 | Hw_not_s1].
-            * destruct (P_vis w Hw_s1) as [Hw_s0 | [Hw_u | Hw_neigh]].
-              { left; exact Hw_s0. }
-              { right; left; exact Hw_u. }
-              { right; right; intros x Hstep_rev;
-                apply Hsubset2; apply Hw_neigh; exact Hstep_rev. }
-            * destruct (Hneigh2 w Hvis_w) as [Hw_s1' | Hw_neigh].
-              { exfalso; apply Hw_not_s1; exact Hw_s1'. }
-              { right; right; exact Hw_neigh. }
-        - intros e' v' He' Hstep_aux'.
-          sets_unfold in He'.
-          destruct He' as [He'_in | He'_sing].
-          + destruct (classic (e' = e)) as [He'_eq | He'_ne].
-            * subst e'.
-              destruct (KG.(kos_unique).(step_aux_unique) g e v u v' u g_valid H_step Hstep_aux') as [Hv'_eq _].
-              subst v'; exact Hvis_v.
-            * apply Hsubset2; apply (Hexplored e' v' He'_in Hstep_aux').
-          + subst e'.
-            destruct (KG.(kos_unique).(step_aux_unique) g e v u v' u g_valid H_step Hstep_aux') as [Hv'_eq _].
-            subst v'; exact Hvis_v.
-        - etransitivity; eauto. }
-    + apply Hoare_normal_assume_bind; intros Hall.
-      unfold Hoare, bind, get, break, ret.
-      intros s1' x s2 Hs1' Hprog.
-      rewrite Hs1' in *.
-      destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-      destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-      destruct Hbrk' as [Hbrk_eq Hstate_eq].
-      unfold set_finish in Hset'; cbv beta in Hset'.
-      destruct Hset' as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-      rewrite Hbrk_eq; simpl.
-      rewrite <- Hstate_eq.
-      rewrite Hvis1; rewrite <- Hmid.
-      repeat split.
-      * exact Hs1_vis.
-      * exact Hincl.
-      * intros v Hvis_v.
-        destruct (P_vis v Hvis_v) as [Hv_s0 | [Hv_u | Hv_neigh]].
-        { left; exact Hv_s0. }
-        { subst v; right; unfold neighbor_visited_rev.
-          rewrite Hvis1, <- Hmid.
-          intros w Hstep.
-          destruct Hstep as [e Hstep_aux].
-          destruct (Hall e w Hstep_aux) as [He_in | Hvis_w].
-          { apply (Hexplored e w He_in Hstep_aux). }
-          { exact Hvis_w. } }
-        { right; unfold neighbor_visited_rev; rewrite Hvis1, <- Hmid; exact Hv_neigh. }
-Qed.
 
 (** [DFS_finish_neighbor_visited_strong]
     Fixed-point version of the neighbor_visited_rev property for DFS_finish.
     Proved property: visited1 s' u /\ visited1 s0 ⊆ visited1 s' /\
       (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v) *)
 Lemma DFS_finish_neighbor_visited_strong : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u)
     (fun _ s' => visited1 s' u /\ visited1 s0 ⊆ visited1 s' /\
       (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v)).
 Proof.
-  intros s0 u.
-  unfold DFS_finish.
-  apply Hoare_normal_LFix with (Q := fun (u' : V) (s0' : St) (_ : unit) (s' : St) =>
-    visited1 s' u' /\ visited1 s0' ⊆ visited1 s' /\
-    (forall v, visited1 s' v -> visited1 s0' v \/ neighbor_visited_rev s' v)).
-  intros W IH s0' u'.
-  apply DFS_finish_neighbor_visited_aux.
-  exact IH.
+  intros s0 u Htb.
+  apply (DFS_finish_fixpoint_ind
+           (fun (u' : V) (s0' : St) (_ : unit) (s' : St) =>
+              visited1 s' u' /\ visited1 s0' ⊆ visited1 s' /\
+              (forall v, visited1 s' v -> visited1 s0' v \/ neighbor_visited_rev s' v))).
+  { intros W IHprop IHcard s0' u' Hentry'.
+    unfold DFS_finish_f.
+    set (P_loop := fun (e_set: E -> Prop) (st: St) =>
+      visited1 st u' /\
+      (forall v, visited1 st v -> visited1 s0' v \/ v = u' \/ neighbor_visited_rev st v) /\
+      (forall e v, e ∈ e_set -> step_aux g e v u' -> visited1 st v) /\
+      visited1 s0' ⊆ visited1 st /\
+      cardV (visited1 st) >= timer st).
+    eapply Hoare_bind with (Q := fun (_ : unit) (s1 : St) => P_loop ∅ s1).
+    - (* visit1 *)
+      unfold Hoare. split.
+      + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+        cbv beta iota delta [visit1 custom] in Hprog.
+        destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+        unfold P_loop.
+        repeat split.
+        * sets_unfold in Hv. apply Hv; auto.
+        * intros v Hv_vis.
+          apply Hv in Hv_vis.
+          destruct Hv_vis as [Hv0 | H_eq].
+          -- left; exact Hv0.
+          -- right; left; symmetry; exact H_eq.
+        * intros e v He; exfalso; exact He.
+        * intros w Hw; sets_unfold in Hv. apply Hv; left; exact Hw.
+        * apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+      + intros s1 Hs1 Herr. exfalso. exact Herr.
+    - (* repeat_break *)
+      intro; apply Hoare_repeat_break with
+        (P := P_loop)
+        (Q := fun (_:unit) (s':St) =>
+          visited1 s' u' /\ visited1 s0' ⊆ visited1 s' /\
+          (forall v, visited1 s' v -> visited1 s0' v \/ neighbor_visited_rev s' v)).
+      intros e_set.
+      apply Hoare_normalize.
+      intros s1 [Hs1_vis [P_vis [Hexplored [Hincl Htb_s1]]]].
+      apply Hoare_choice.
+      + apply Hoare_any_bind; intros e.
+        apply Hoare_any_bind; intros v.
+        apply Hoare_normal_assume_bind; intros H_not_e.
+        apply Hoare_normal_assume_bind; intros H_not_vis.
+        apply Hoare_normal_assume_bind; intros H_step.
+        assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+        eapply Hoare_bind with (Q := fun (_:unit) (s':St) =>
+          (visited1 s' v /\ visited1 s1 ⊆ visited1 s' /\
+           (forall w, visited1 s' w -> visited1 s1 w \/ neighbor_visited_rev s' w)) /\
+          cardV (visited1 s') >= timer s' + 0).
+        { apply Hoare_conj with
+            (Q := fun (_:unit) (s':St) =>
+                     visited1 s' v /\ visited1 s1 ⊆ visited1 s' /\
+                     (forall w, visited1 s' w -> visited1 s1 w \/ neighbor_visited_rev s' w))
+            (R := fun (_:unit) (s':St) => cardV (visited1 s') >= timer s' + 0).
+          - apply (IHprop s1 v Htb_s1).
+          - assert (Htb0 : cardV (visited1 s1) >= timer s1 + 0) by lia.
+            apply (IHcard s1 v 0 H_not_vis Hvv Htb0). }
+        { intros _; apply Hoare_ret.
+          intros s2 [[Hvis_v [Hsubset2 Hneigh2]] Htb_s2].
+          unfold P_loop.
+          repeat split.
+          - apply Hsubset2, Hs1_vis.
+          - intros w Hvis_w.
+            destruct (classic (w = v)) as [Hw_eq | Hw_ne].
+            + subst w; right; right.
+              destruct (Hneigh2 v Hvis_v) as [Hv_s1 | Hv_neigh];
+              [exfalso; apply H_not_vis; exact Hv_s1 | exact Hv_neigh].
+            + destruct (classic (visited1 s1 w)) as [Hw_s1 | Hw_not_s1].
+              * destruct (P_vis w Hw_s1) as [Hw_s0 | [Hw_u | Hw_neigh]].
+                { left; exact Hw_s0. }
+                { right; left; exact Hw_u. }
+                { right; right; intros x Hstep_rev;
+                  apply Hsubset2; apply Hw_neigh; exact Hstep_rev. }
+              * destruct (Hneigh2 w Hvis_w) as [Hw_s1' | Hw_neigh].
+                { exfalso; apply Hw_not_s1; exact Hw_s1'. }
+                { right; right; exact Hw_neigh. }
+          - intros e' v' He' Hstep_aux'.
+            sets_unfold in He'.
+            destruct He' as [He'_in | He'_sing].
+            + destruct (classic (e' = e)) as [He'_eq | He'_ne].
+              * subst e'.
+                destruct (KG.(kos_unique).(step_aux_unique) g e v u' v' u' g_valid H_step Hstep_aux') as [Hv'_eq _].
+                subst v'; exact Hvis_v.
+              * apply Hsubset2; apply (Hexplored e' v' He'_in Hstep_aux').
+            + subst e'.
+              destruct (KG.(kos_unique).(step_aux_unique) g e v u' v' u' g_valid H_step Hstep_aux') as [Hv'_eq _].
+              subst v'; exact Hvis_v.
+          - etransitivity; eauto.
+          - lia. }
+      + apply Hoare_normal_assume_bind; intros Hall.
+        assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+          by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+        apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+        unfold Hoare. split.
+        { intros s1' x s2 Hs1' Hprog.
+          rewrite Hs1' in *.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+          destruct Hset as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+          rewrite Hbrk_eq; simpl; rewrite Hstate_eq, Hvis1, <- Hs'.
+          repeat split.
+          - exact Hs1_vis.
+          - exact Hincl.
+          - intros v Hvis_v.
+            destruct (P_vis v Hvis_v) as [Hv_s0 | [Hv_u | Hv_neigh]].
+            + left; exact Hv_s0.
+            + subst v; right; unfold neighbor_visited_rev.
+              rewrite Hvis1, <- Hs'.
+              intros w Hstep.
+              destruct Hstep as [e Hstep_aux].
+              destruct (Hall e w Hstep_aux) as [He_in | Hvis_w].
+              * apply (Hexplored e w He_in Hstep_aux).
+              * exact Hvis_w.
+            + right; unfold neighbor_visited_rev; rewrite Hvis1, <- Hs'; exact Hv_neigh. }
+        { intros s1' Hs1' Herr. exfalso.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
+  exact Htb.
 Qed.
 
 (** [DFS_finish_neighbor_visited]
@@ -715,12 +1121,13 @@ Qed.
     s0, or has all its step_rev neighbors visited.
     Proved property: forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v *)
 Lemma DFS_finish_neighbor_visited : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u)
     (fun _ s' => forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v).
 Proof.
-  intros s0 u.
+  intros s0 u Htb.
   eapply Hoare_imp_post.
-  - apply DFS_finish_neighbor_visited_strong.
+  - apply (DFS_finish_neighbor_visited_strong s0 u Htb).
   - intros _ s' [Hvis_u [Hsubset Hneigh]]; exact Hneigh.
 Qed.
 
@@ -729,84 +1136,93 @@ Qed.
     Helper: every newly visited vertex is reachable_rev from u (or was
     already in s0). Uses the induction hypothesis on W.
     Proved property: forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v *)
-Lemma DFS_finish_reachable_rev_aux : forall W,
-  (forall s0 u,
-     Hoare (fun st => st = s0) (W u)
-       (fun _ s' => forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v)) ->
-  (forall s0 u,
-     Hoare (fun st => st = s0) (DFS_finish_f W u)
-       (fun _ s' => forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v)).
-Proof.
-  intros W IH s0 u.
-  unfold DFS_finish_f.
-  eapply Hoare_bind.
-  - apply Hoare_visit1 with (P := fun s1 => forall v, visited1 s1 v -> visited1 s0 v \/ reachable_rev u v).
-    intros s1 Hv.
-    sets_unfold in Hv.
-    intros v Hv_vis.
-    apply Hv in Hv_vis.
-    destruct Hv_vis as [H_vis0 | H_eq].
-    + left; exact H_vis0.
-    + subst v.
-      right.
-      apply SCC.rr_refl.
-  - intro; apply Hoare_repeat_break with (P := fun e_set st => forall v, visited1 st v -> visited1 s0 v \/ reachable_rev u v).
-    intros e_set.
-    apply Hoare_normalize.
-    intros s1' Hs1'.
-    apply Hoare_choice.
-    + apply Hoare_any_bind; intros e.
-      apply Hoare_any_bind; intros v.
-      apply Hoare_normal_assume_bind; intros H_not_e.
-      apply Hoare_normal_assume_bind; intros H_not_vis.
-      apply Hoare_normal_assume_bind; intros H_step.
-      eapply Hoare_bind with (Q := fun (_:unit) (s':St) => forall w, visited1 s' w -> visited1 s1' w \/ reachable_rev v w).
-      { exact (IH s1' v). }
-      { intros _.
-        apply Hoare_ret'.
-        intros s2 Hsub.
-        intros w Hvis.
-        destruct (Hsub w Hvis) as [Hw | Hreach].
-        - apply Hs1'.
-          exact Hw.
-        - right.
-          eapply SCC.rr_step with (v := v).
-          + unfold step_rev; eexists; exact H_step.
-          + exact Hreach.
-      }
-    + apply Hoare_normal_assume_bind; intros Hall.
-      unfold Hoare, bind, get, break, ret.
-      intros s1'' x s2 Hs1'' Hprog.
-      rewrite Hs1'' in *.
-      destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-      destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-      destruct Hbrk' as [Hbrk_eq Hstate_eq].
-      unfold set_finish in Hset'; cbv beta in Hset'.
-      destruct Hset' as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-      rewrite Hbrk_eq; simpl.
-      rewrite <- Hstate_eq.
-      rewrite Hvis1.
-      rewrite <- Hmid.
-      exact Hs1'.
-Qed.
-
 (** [DFS_finish_reachable_rev]
     Fixed-point version: after DFS_finish u, every newly visited vertex is
     reachable_rev from u (or was already in s0).
     Proved property: forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v *)
 Lemma DFS_finish_reachable_rev : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u)
     (fun _ s' => forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v).
 Proof.
-  intros s0 u.
-  unfold DFS_finish.
-  apply Hoare_normal_LFix with (Q := fun u' s0' _ s' => forall v, visited1 s' v -> visited1 s0' v \/ reachable_rev u' v).
-  intros W IH s0' u'.
-  apply DFS_finish_reachable_rev_aux.
-  exact IH.
+  intros s0 u Htb.
+  apply (DFS_finish_fixpoint_ind
+           (fun (u' : V) (s0' : St) (_ : unit) (s' : St) =>
+              forall v, visited1 s' v -> visited1 s0' v \/ reachable_rev u' v)).
+  { intros W IHprop IHcard s0' u' Hentry'.
+    unfold DFS_finish_f.
+    set (P_loop := fun (e_set: E -> Prop) (st: St) =>
+      (forall v, visited1 st v -> visited1 s0' v \/ reachable_rev u' v) /\
+      cardV (visited1 st) >= timer st).
+    eapply Hoare_bind with (Q := fun (_ : unit) (s1 : St) => P_loop ∅ s1).
+    - (* visit1 *)
+      unfold Hoare. split.
+      + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+        cbv beta iota delta [visit1 custom] in Hprog.
+        destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+        unfold P_loop.
+        split.
+        * intros v Hv_vis.
+          sets_unfold in Hv. apply Hv in Hv_vis.
+          destruct Hv_vis as [H_vis0 | H_eq].
+          -- left; exact H_vis0.
+          -- subst v. right. apply SCC.rr_refl.
+        * apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+      + intros s1 Hs1 Herr. exfalso. exact Herr.
+    - (* repeat_break *)
+      intro; apply Hoare_repeat_break with
+        (P := P_loop)
+        (Q := fun (_:unit) (s':St) => forall v, visited1 s' v -> visited1 s0' v \/ reachable_rev u' v).
+      intros e_set.
+      apply Hoare_normalize.
+      intros s1 [Hs1' Htb_s1].
+      apply Hoare_choice.
+      + apply Hoare_any_bind; intros e.
+        apply Hoare_any_bind; intros v.
+        apply Hoare_normal_assume_bind; intros H_not_e.
+        apply Hoare_normal_assume_bind; intros H_not_vis.
+        apply Hoare_normal_assume_bind; intros H_step.
+        assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+        eapply Hoare_bind with (Q := fun (_:unit) (s':St) =>
+          (forall w, visited1 s' w -> visited1 s1 w \/ reachable_rev v w) /\
+          cardV (visited1 s') >= timer s' + 0).
+        { apply Hoare_conj with
+            (R := fun (_:unit) (s':St) => cardV (visited1 s') >= timer s' + 0).
+          - apply (IHprop s1 v Htb_s1).
+          - assert (Htb0 : cardV (visited1 s1) >= timer s1 + 0) by lia.
+            apply (IHcard s1 v 0 H_not_vis Hvv Htb0). }
+        { intros _.
+          apply Hoare_ret.
+          intros s2 [Hsub Htb_s2].
+          unfold P_loop.
+          split.
+          - intros w Hvis.
+            destruct (Hsub w Hvis) as [Hw | Hreach].
+            + apply Hs1'. exact Hw.
+            + right.
+              eapply SCC.rr_step with (v := v).
+              * unfold step_rev; eexists; exact H_step.
+              * exact Hreach.
+          - lia. }
+      + apply Hoare_normal_assume_bind; intros Hall.
+        assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+          by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+        apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+        unfold Hoare. split.
+        { intros s1'' x s2 Hs1'' Hprog.
+          rewrite Hs1'' in *.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+          destruct Hset as [Htime [_ [_ [Hvis1 [_ [_ _]]]]]].
+          rewrite Hbrk_eq; simpl; rewrite Hstate_eq, Hvis1, <- Hs'.
+          exact Hs1'. }
+        { intros s1'' Hs1'' Herr. exfalso.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
+  exact Htb.
 Qed.
 
-(* Combined Q for Lfix: includes visited subset, visited, finish < timer,
+(* Combined Q for BW_fix: includes visited subset, visited, finish < timer,
    finish preservation for already-visited vertices (excluding u'),
    timer monotonicity, and finish ordering *)
 Definition Q_finish_after (u' : V) (s0' : St) (_ : unit) (s' : St) : Prop :=
@@ -827,99 +1243,116 @@ Definition Q_finish_after (u' : V) (s0' : St) (_ : unit) (s' : St) : Prop :=
     - for v ≠ u, visited1 s' v -> visited1 s0 v \/ finish s' v < finish s' u
     Proved property: Q_finish_after u s0 *)
 Lemma DFS_finish_Q_after : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (Q_finish_after u s0).
 Proof.
-  intros s0 u.
-  unfold DFS_finish.
-  apply Hoare_normal_LFix with (Q := fun u' s0' => Q_finish_after u' s0').
-  intros W IH s0' u'.
-  unfold DFS_finish_f.
-  set (P_loop := fun (e_set: E -> Prop) (st: St) =>
-    visited1 s0' ⊆ visited1 st /\
-    visited1 st u' /\
-    (forall z, visited1 s0' z -> finish st z = finish s0' z) /\
-    timer s0' <= timer st /\
-    (forall v, v <> u' -> visited1 st v -> visited1 s0' v \/ finish st v < timer st)).
-  apply Hoare_bind with (Q := fun (_:unit) => P_loop ∅).
-  + unfold P_loop, Hoare, visit1.
-    intros s1 a s2 Hs1 Hprog.
-    rewrite Hs1 in *.
-    destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
-    repeat split.
-    { sets_unfold. intros w Hw. apply Hv; left; exact Hw. }
-    { apply Hv. right; reflexivity. }
-    { intros z Hz. rewrite Hfin; reflexivity. }
-    { rewrite Htimer; auto with arith. }
-    { intros w Hw_neq Hw_vis.
-      apply Hv in Hw_vis.
-      destruct Hw_vis as [Hw0 | Hw_eq].
-      - left; exact Hw0.
-      - exfalso; apply Hw_neq; symmetry; exact Hw_eq. }
-  + intro a_res.
-    apply Hoare_repeat_break with
-      (P := P_loop)
-      (Q := Q_finish_after u' s0').
-    intros e_set.
-    apply Hoare_normalize.
-    intros s1 [Hsubset [Hs1_vis [Hfin_pres [Htimer_mono Hs1_fin]]]].
-    apply Hoare_choice.
-    { apply Hoare_any_bind; intros e.
-      apply Hoare_any_bind; intros v.
-      apply Hoare_normal_assume_bind; intros H_not_e.
-      apply Hoare_normal_assume_bind; intros H_not_vis.
-      apply Hoare_normal_assume_bind; intros H_step.
-      eapply Hoare_bind with (Q := Q_finish_after v s1).
-      - exact (IH s1 v).
-      - intro a_ret.
-        apply Hoare_ret'.
-        intros s2 [Hsubset2 [Hvis_v [Hfin_lt_v [Hfin_pres2 [Htimer2 Hfin_rel2]]]]].
+  intros s0 u Htb.
+  apply (DFS_finish_fixpoint_ind Q_finish_after).
+  { intros W IHprop IHcard s0' u' Hentry'.
+    unfold DFS_finish_f.
+    set (P_loop := fun (e_set: E -> Prop) (st: St) =>
+      visited1 s0' ⊆ visited1 st /\
+      visited1 st u' /\
+      (forall z, visited1 s0' z -> finish st z = finish s0' z) /\
+      timer s0' <= timer st /\
+      (forall v, v <> u' -> visited1 st v -> visited1 s0' v \/ finish st v < timer st) /\
+      cardV (visited1 st) >= timer st).
+    eapply Hoare_bind with (Q := fun (_ : unit) (s1 : St) => P_loop ∅ s1).
+    - (* visit1 *)
+      unfold Hoare. split.
+      + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+        cbv beta iota delta [visit1 custom] in Hprog.
+        destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
         unfold P_loop.
         repeat split.
-        + etransitivity; eauto.
-        + apply Hsubset2, Hs1_vis.
-        + intros z Hz.
-          rewrite (Hfin_pres2 z).
-          * apply Hfin_pres; exact Hz.
-          * apply Hsubset, Hz.
-          * intro H_eq; apply H_not_vis; rewrite <- H_eq; apply Hsubset, Hz.
-        + etransitivity; eauto.
-        + intros w Hw_neq Hw_vis2.
-          destruct (classic (w = v)) as [Hw_eq | Hw_ne2].
-          * subst w; right; exact Hfin_lt_v.
-          * destruct (classic (visited1 s1 w)) as [Hw_vis1 | Hw_not_vis1].
-            { destruct (Hs1_fin w Hw_neq Hw_vis1) as [Hw_s0 | Hw_fin].
-              - left; exact Hw_s0.
-              - right; rewrite (Hfin_pres2 w Hw_vis1 Hw_ne2); lia. }
-            { destruct (Hfin_rel2 w Hw_ne2 Hw_vis2) as [Hw_vis1' | Hw_fin'].
-              - exfalso; apply Hw_not_vis1; exact Hw_vis1'.
-              - right; lia. } }
-    { apply Hoare_normal_assume_bind; intros Hall.
-      unfold Hoare, bind, get, break, ret.
-      intros s1' x s2 Hs1' Hprog.
-      rewrite Hs1' in *.
-      destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-      destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-      destruct Hbrk' as [Hbrk_eq Hstate_eq].
-      unfold set_finish in Hset'; cbv beta in Hset'.
-      destruct Hset' as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-      rewrite Hbrk_eq; simpl.
-      rewrite <- Hstate_eq.
-      unfold Q_finish_after.
-      repeat split.
-      - rewrite Hvis1, <- Hmid; exact Hsubset.
-      - rewrite Hvis1, <- Hmid; exact Hs1_vis.
-      - rewrite Htime, Hfin, Ht, Hmid; auto with arith.
-      - intros z Hz Hz_ne.
-        rewrite Hfinh; [| exact Hz_ne].
-        rewrite <- Hmid.
-        exact (Hfin_pres z Hz).
-      - rewrite Htime; apply le_S; rewrite <- (f_equal timer Hmid); exact Htimer_mono.
-      - intros v Hv_neq Hv_vis.
-        rewrite Hvis1 in Hv_vis; rewrite <- Hmid in Hv_vis.
-        destruct (Hs1_fin v Hv_neq Hv_vis) as [Hv_s0 | Hv_fin].
-        + left; exact Hv_s0.
-        + right; rewrite Hfin; rewrite (Hfinh v Hv_neq); rewrite <- Hmid;
-            apply (eq_rect_r (fun x => finish s1 v < x) Hv_fin Ht). }
+        * sets_unfold in Hv. intros w Hw. apply Hv; left; exact Hw.
+        * sets_unfold in Hv. apply Hv; right; reflexivity.
+        * intros z Hz. rewrite Hfin; reflexivity.
+        * rewrite Htimer; auto with arith.
+        * intros w Hw_neq Hw_vis.
+          sets_unfold in Hv. apply Hv in Hw_vis.
+          destruct Hw_vis as [Hw0 | Hw_eq].
+          -- left; exact Hw0.
+          -- exfalso; apply Hw_neq; symmetry; exact Hw_eq.
+        * apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+      + intros s1 Hs1 Herr. exfalso. exact Herr.
+    - (* repeat_break *)
+      intro; apply Hoare_repeat_break with
+        (P := P_loop)
+        (Q := fun (_ : unit) (s' : St) => Q_finish_after u' s0' tt s').
+      intros e_set.
+      apply Hoare_normalize.
+      intros s1 [Hsubset [Hs1_vis [Hfin_pres [Htimer_mono [Hs1_fin Htb_s1]]]]].
+      apply Hoare_choice.
+      + apply Hoare_any_bind; intros e.
+        apply Hoare_any_bind; intros v.
+        apply Hoare_normal_assume_bind; intros H_not_e.
+        apply Hoare_normal_assume_bind; intros H_not_vis.
+        apply Hoare_normal_assume_bind; intros H_step.
+        assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+        eapply Hoare_bind with (Q := fun (_ : unit) (s2 : St) =>
+          Q_finish_after v s1 tt s2 /\ cardV (visited1 s2) >= timer s2 + 0).
+        { apply Hoare_conj with
+            (R := fun (_ : unit) (s2 : St) => cardV (visited1 s2) >= timer s2 + 0).
+          - apply (IHprop s1 v Htb_s1).
+          - assert (Htb0 : cardV (visited1 s1) >= timer s1 + 0) by lia.
+            apply (IHcard s1 v 0 H_not_vis Hvv Htb0). }
+        { intros a_ret.
+          apply Hoare_ret.
+          intros s2 [HQ Htb_s2].
+          unfold P_loop.
+          destruct HQ as [Hsubset2 [Hvis_v [Hfin_lt_v [Hfin_pres2 [Htimer2 Hfin_rel2]]]]].
+          repeat split.
+          * etransitivity; eauto.
+          * apply Hsubset2, Hs1_vis.
+          * intros z Hz.
+            rewrite (Hfin_pres2 z).
+            -- apply Hfin_pres; exact Hz.
+            -- apply Hsubset, Hz.
+            -- intro H_eq; apply H_not_vis; rewrite <- H_eq; apply Hsubset, Hz.
+          * etransitivity; eauto.
+          * intros w Hw_neq Hw_vis2.
+            destruct (classic (w = v)) as [Hw_eq | Hw_ne2].
+            -- subst w; right; exact Hfin_lt_v.
+            -- destruct (classic (visited1 s1 w)) as [Hw_vis1 | Hw_not_vis1].
+               ++ destruct (Hs1_fin w Hw_neq Hw_vis1) as [Hw_s0 | Hw_fin].
+                  ** left; exact Hw_s0.
+                  ** right; rewrite (Hfin_pres2 w Hw_vis1 Hw_ne2); lia.
+               ++ destruct (Hfin_rel2 w Hw_ne2 Hw_vis2) as [Hw_vis1' | Hw_fin'].
+                  ** exfalso; apply Hw_not_vis1; exact Hw_vis1'.
+                  ** right; lia.
+          * lia. }
+      + apply Hoare_normal_assume_bind; intros Hall.
+        assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+          by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+        apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+        unfold Hoare. split.
+        { intros s1' x s2 Hs1' Hprog.
+          rewrite Hs1' in *.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+          destruct Hset as [Htime [Hfin [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+          rewrite Hbrk_eq; simpl; rewrite Hstate_eq.
+          unfold Q_finish_after.
+          rewrite Hvis1, <- Hs'.
+          repeat split.
+          - exact Hsubset.
+          - exact Hs1_vis.
+          - rewrite Htime, Hfin, Ht, Hs'; auto with arith.
+          - intros z Hz Hz_ne.
+            rewrite Hfinh; [| exact Hz_ne].
+            rewrite <- Hs'.
+            exact (Hfin_pres z Hz).
+          - rewrite Htime; apply le_S; rewrite <- (f_equal timer Hs'); exact Htimer_mono.
+          - intros v Hv_neq Hv_vis.
+            destruct (Hs1_fin v Hv_neq Hv_vis) as [Hv_s0 | Hv_fin].
+            + left; exact Hv_s0.
+            + right; rewrite Hfin; rewrite (Hfinh v Hv_neq); rewrite <- Hs';
+                apply (eq_rect_r (fun x => finish s1 v < x) Hv_fin Ht). }
+        { intros s1' Hs1' Herr. exfalso.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
+  exact Htb.
 Qed.
 
 (** visit1 preserves finish. Trivial but needed for set_finish reasoning.
@@ -928,11 +1361,13 @@ Lemma Hoare_visit1_preserve_finish : forall s0 u,
   Hoare (fun st => st = s0) (visit1 u) (fun _ s' => finish s' = finish s0).
 Proof.
   intros s0 u.
-  unfold Hoare, visit1.
-  intros s1 a s2 Hs1 Hprog.
-  rewrite Hs1 in *.
-  destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
-  exact Hfin.
+  unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [visit1 custom] in Hprog.
+    destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+    exact Hfin.
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 Definition TimerDominates (s: St) : Prop :=
@@ -954,13 +1389,13 @@ Qed.
     Proved property: TimerDominates s' *)
 Lemma DFS_finish_preserves_TimerDominates : forall s0 u,
   TimerDominates s0 ->
-  ~ visited1 s0 u ->
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' => TimerDominates s').
 Proof.
-  intros s0 u Htdom Hnot_vis.
+  intros s0 u Htdom Htb.
   apply (Hoare_imp_post (fun st => st = s0) (DFS_finish u)
     (Q_finish_after u s0) (fun _ s' => TimerDominates s')).
-  - apply DFS_finish_Q_after.
+  - apply (DFS_finish_Q_after s0 u Htb).
   - intros a s' Hq.
     destruct Hq as [Hsub [Hvis_u [Hfin_lt_u [Hfin_pres [Htimer_mono Hrest]]]]].
     unfold TimerDominates.
@@ -998,9 +1433,12 @@ Qed.
 Lemma Hoare_conj (Σ A: Type) (P: Σ -> Prop) (f: program Σ A) (Q1 Q2: A -> Σ -> Prop) :
   Hoare P f Q1 -> Hoare P f Q2 -> Hoare P f (fun a s => Q1 a s /\ Q2 a s).
 Proof.
-  intros H1 H2 s1 a s2 Hpre Hin; split.
-  - apply (H1 s1 a s2 Hpre Hin).
-  - apply (H2 s1 a s2 Hpre Hin).
+  intros H1 H2.
+  unfold Hoare in *. destruct H1 as [H1n H1e], H2 as [H2n H2e]. split.
+  - intros a s1 s2 Hpre Hnrm. split.
+    + apply (H1n a s1 s2 Hpre Hnrm).
+    + apply (H2n a s1 s2 Hpre Hnrm).
+  - intros s1 Hpre Herr. exact (H1e s1 Hpre Herr).
 Qed.
 
 (** [DFS_finish_combined_post]
@@ -1008,19 +1446,20 @@ Qed.
     into a single triple-postcondition.
     Proved property: (reachable_rev u v) /\ visited u /\ subset /\ neighbor_visited_rev *)
 Lemma DFS_finish_combined_post : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' =>
     (forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v) /\
     visited1 s' u /\
     visited1 s0 ⊆ visited1 s' /\
     (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v)).
 Proof.
-  intros s0 u.
+  intros s0 u Htb.
   apply Hoare_conj with
     (Q1 := fun _ s' => forall v, visited1 s' v -> visited1 s0 v \/ reachable_rev u v)
     (Q2 := fun _ s' => visited1 s' u /\
                       visited1 s0 ⊆ visited1 s' /\
                       (forall v, visited1 s' v -> visited1 s0 v \/ neighbor_visited_rev s' v));
-    [apply DFS_finish_reachable_rev | apply DFS_finish_neighbor_visited_strong].
+    [apply (DFS_finish_reachable_rev s0 u Htb) | apply (DFS_finish_neighbor_visited_strong s0 u Htb)].
 Qed.
 
 (** [DFS_finish_preserves_ReachRevClosed]
@@ -1028,13 +1467,13 @@ Qed.
     closed under reachable_rev), provided u was not already visited1.
     Proved property: ReachRevClosed s' *)
 Lemma DFS_finish_preserves_ReachRevClosed : forall s0 u,
-  ~ visited1 s0 u ->
   ReachRevClosed s0 ->
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' => ReachRevClosed s').
 Proof.
-  intros s0 u Hnot_vis Hclosed.
+  intros s0 u Hclosed Htb.
   eapply Hoare_imp_post.
-  - apply DFS_finish_combined_post.
+  - apply (DFS_finish_combined_post s0 u Htb).
   - intros _ s' [Hreach [Hvis_u [Hsub Hneigh]]].
     unfold ReachRevClosed.
     intros v w0 Hvis_v Hrev_vw0.
@@ -1060,40 +1499,49 @@ Qed.
     the finish time is at least timer s0.
     Proved property: timer s0 <= finish s' v *)
 Lemma DFS_finish_finish_ge_timer : forall s0 u,
-  ~ visited1 s0 u ->
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' =>
     forall v, visited1 s' v -> ~ visited1 s0 v -> timer s0 <= finish s' v).
 Proof.
-  intros s0 u Hnot_vis.
-  unfold DFS_finish.
-  eapply Hoare_imp_post.
-  { apply Hoare_normal_LFix 
-      with (Q := fun (u':V) (s0':St) (_:unit) (s':St) =>
+  intros s0 u Htb.
+  eapply Hoare_imp_post with
+    (Q := fun (_:unit) (s':St) =>
+        timer s0 <= timer s' /\
+        (forall v, visited1 s' v -> ~ visited1 s0 v -> timer s0 <= finish s' v) /\
+        (forall v, visited1 s0 v -> v <> u -> finish s' v = finish s0 v) /\
+        visited1 s0 ⊆ visited1 s').
+  { apply (DFS_finish_fixpoint_ind
+           (fun (u':V) (s0':St) (_:unit) (s':St) =>
         timer s0' <= timer s' /\
         (forall v, visited1 s' v -> ~ visited1 s0' v -> timer s0' <= finish s' v) /\
         (forall v, visited1 s0' v -> v <> u' -> finish s' v = finish s0' v) /\
-        visited1 s0' ⊆ visited1 s').
-    intros W IH s0' u'.
+        visited1 s0' ⊆ visited1 s')).
+  { intros W IHprop IHcard s0' u' Hentry'.
     unfold DFS_finish_f.
     set (P_loop := fun (e_set: E -> Prop) (st: St) =>
       timer s0' <= timer st /\
       (forall v, visited1 st v -> ~ visited1 s0' v -> v <> u' -> timer s0' <= finish st v) /\
       (forall v, visited1 s0' v -> v <> u' -> finish st v = finish s0' v) /\
-      visited1 s0' ⊆ visited1 st).
+      visited1 s0' ⊆ visited1 st /\
+      cardV (visited1 st) >= timer st).
     eapply Hoare_bind with (Q := fun (_:unit) (s:St) => P_loop ∅ s).
-    { unfold Hoare, visit1; intros s1 a s2 Hs1 Hprog.
-      destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
-      unfold P_loop.
-      rewrite Htimer, Hfin, <- Hs1.
-      split; [apply le_n | split; [| split]].
-      - intros v' Hvis_v' Hv'_new Hv'_ne.
-        apply Hv in Hvis_v'. sets_unfold in Hvis_v'.
-        destruct Hvis_v' as [Hv'_s0 | Hv'_u'].
-        + exfalso; apply Hv'_new; exact Hv'_s0.
-        + exfalso; apply Hv'_ne; symmetry; exact Hv'_u'.
-      - intros v' Hvis_v' Hv'_ne. reflexivity.
-      - intros w Hw. apply Hv. left. exact Hw. }
-    { intro u_res.
+    - unfold Hoare. split.
+      + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+        cbv beta iota delta [visit1 custom] in Hprog.
+        destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+        unfold P_loop.
+        repeat split.
+        * rewrite Htimer. apply le_n.
+        * intros v' Hvis_v' Hv'_new Hv'_ne.
+          sets_unfold in Hv. apply Hv in Hvis_v'.
+          destruct Hvis_v' as [Hv'_s0 | Hv'_u'].
+          -- exfalso; apply Hv'_new; exact Hv'_s0.
+          -- exfalso; apply Hv'_ne; symmetry; exact Hv'_u'.
+        * intros v' Hvis_v' Hv'_ne. rewrite Hfin. reflexivity.
+        * intros w Hw. sets_unfold in Hv. apply Hv. left. exact Hw.
+        * apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+      + intros s1 Hs1 Herr. exfalso. exact Herr.
+    - intro u_res.
       apply Hoare_repeat_break with
         (P := P_loop) (Q := fun (_:unit) (s':St) => timer s0' <= timer s' /\
           (forall v, visited1 s' v -> ~ visited1 s0' v -> timer s0' <= finish s' v) /\
@@ -1101,54 +1549,69 @@ Proof.
           visited1 s0' ⊆ visited1 s').
       intros e_set.
       apply Hoare_normalize.
-      intros s1 [Htimer_mono [Hge_finish [Hfin_pres_s1 Hsub1]]].
+      intros s1 [Htimer_mono [Hge_finish [Hfin_pres_s1 [Hsub1 Htb_s1]]]].
       apply Hoare_choice.
-      { apply Hoare_any_bind; intros e.
+      + apply Hoare_any_bind; intros e.
         apply Hoare_any_bind; intros v.
         apply Hoare_normal_assume_bind; intros H_not_e.
         apply Hoare_normal_assume_bind; intros H_not_vis.
         apply Hoare_normal_assume_bind; intros H_step.
-        eapply Hoare_bind.
-        - apply (IH s1 v).
-        - intro uu; apply Hoare_ret'.
-          intros s2 [Htimer_mono2 [Hge_timer2 [Hfin_pres_s2 Hsub2]]].
+        assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+        eapply Hoare_bind with (Q := fun (_:unit) (s2:St) =>
+          (timer s1 <= timer s2 /\
+           (forall w, visited1 s2 w -> ~ visited1 s1 w -> timer s1 <= finish s2 w) /\
+           (forall w, visited1 s1 w -> w <> v -> finish s2 w = finish s1 w) /\
+           visited1 s1 ⊆ visited1 s2) /\
+          cardV (visited1 s2) >= timer s2 + 0).
+        { apply Hoare_conj with
+            (Q2 := fun (_:unit) (s2:St) => cardV (visited1 s2) >= timer s2 + 0).
+          - apply (IHprop s1 v Htb_s1).
+          - assert (Htb0 : cardV (visited1 s1) >= timer s1 + 0) by lia.
+            apply (IHcard s1 v 0 H_not_vis Hvv Htb0). }
+        { intro uu; apply Hoare_ret.
+          intros s2 [[Htimer_mono2 [Hge_timer2 [Hfin_pres_s2 Hsub2]]] Htb_s2].
           unfold P_loop.
-          split; [etransitivity; eauto | split; [| split]].
-          + intros w Hvis_w Hw_new Hw_ne.
+          repeat split.
+          * etransitivity; eauto.
+          * intros w Hvis_w Hw_new Hw_ne.
             destruct (classic (visited1 s1 w)) as [Hw_s1 | Hw_not_s1].
-            { rewrite (Hfin_pres_s2 w Hw_s1).
-              - apply Hge_finish; auto.
-              - intro Heq; subst w; contradiction. }
-            { apply Hge_timer2 in Hvis_w; auto; lia. }
-          + intros w Hw_s0 Hw_ne.
+            -- rewrite (Hfin_pres_s2 w Hw_s1).
+               ++ apply Hge_finish; auto.
+               ++ intro Heq; subst w; contradiction.
+            -- apply Hge_timer2 in Hvis_w; auto; lia.
+          * intros w Hw_s0 Hw_ne.
             assert (Hw_not_v : w <> v).
             { intro Heq; subst w. apply H_not_vis. apply Hsub1; exact Hw_s0. }
             rewrite (Hfin_pres_s2 w (Hsub1 w Hw_s0) Hw_not_v).
             apply Hfin_pres_s1; auto.
-          + etransitivity; eauto. }
-      { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, bind, get, break, ret.
-        intros s1' x s2 Hs1' Hprog.
-        rewrite Hs1' in *.
-        destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-        destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-        destruct Hbrk' as [Hbrk_eq Hstate_eq].
-        unfold set_finish in Hset'; cbv beta in Hset'.
-        destruct Hset' as [Htime [Hfin_u [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-        rewrite Hbrk_eq; simpl; rewrite <- Hstate_eq.
-      split; [| split; [| split]].
-        { rewrite Htime; apply le_S; rewrite <- (f_equal timer Hmid); exact Htimer_mono. }
-        { intros w Hvis_w Hw_new.
-          rewrite Hvis1, <- Hmid in Hvis_w.
-          destruct (classic (w = u')) as [Hw_eq | Hw_ne].
-          - subst w. rewrite Hfin_u, Ht. exact Htimer_mono.
-          - rewrite (Hfinh w Hw_ne), <- Hmid. apply Hge_finish; auto. }
-        { intros w Hw_s0 Hw_ne.
-          rewrite (Hfinh w Hw_ne), <- Hmid. apply Hfin_pres_s1; auto. }
-        { rewrite Hvis1, <- Hmid; exact Hsub1. } }
-    }
-  }
-  { intros _ s' [_ [Hge _]]; exact Hge. }
+          * etransitivity; eauto.
+          * lia. }
+      + apply Hoare_normal_assume_bind; intros Hall.
+        assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+          by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+        apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+        unfold Hoare. split.
+        { intros s1' x s2 Hs1' Hprog.
+          rewrite Hs1' in *.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+          destruct Hset as [Htime [Hfin_u [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+          rewrite Hbrk_eq; simpl; rewrite Hstate_eq.
+          rewrite Hvis1, <- Hs'.
+          repeat split.
+          - rewrite Htime; apply le_S; rewrite <- (f_equal timer Hs'); exact Htimer_mono.
+          - intros w Hvis_w Hw_new.
+            destruct (classic (w = u')) as [Hw_eq | Hw_ne].
+            + subst w. rewrite Hfin_u, Ht. exact Htimer_mono.
+            + rewrite (Hfinh w Hw_ne). rewrite <- Hs'. apply Hge_finish; auto.
+          - intros w Hw_s0 Hw_ne.
+            rewrite (Hfinh w Hw_ne). rewrite <- Hs'. apply Hfin_pres_s1; auto.
+          - exact Hsub1. }
+        { intros s1' Hs1' Herr. exfalso.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
+  exact Htb. }
+  intros _ s' [_ [Hge _]]. exact Hge.
 Qed.
 
 (** [finished_rev_to_root]
@@ -1225,97 +1688,108 @@ Qed.
     neighbours are in visited1.  The root's closure follows from the Hall
     condition at the break branch (all edges explored). *)
 Lemma DFS_finish_step_rev_closed : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' =>
     forall v w, visited1 s' v -> ~ visited1 s0 v -> step_rev v w -> visited1 s' w).
 Proof.
-  intros s0 u.
-  unfold DFS_finish.
-
+  intros s0 u Htb.
   set (Q_closed := fun (u': V) (s0': St) (_: unit) (s': St) =>
     visited1 s0' ⊆ visited1 s' /\
     visited1 s' u' /\
     (forall v w, visited1 s' v -> ~ visited1 s0' v -> step_rev v w -> visited1 s' w)).
-
-  cut (Hoare (fun st => st = s0) (Lfix DFS_finish_f u) (Q_closed u s0)).
-  { intro H. eapply Hoare_imp_post; [exact H | simpl; intros _ s' [_ [_ Hclosed]]; exact Hclosed]. }
-
-  apply Hoare_normal_LFix with (Q := fun u' s0' => Q_closed u' s0').
-  intros W IH s0' u'.
-  unfold DFS_finish_f, Q_closed.
-
-  set (P_loop := fun (e_set: E -> Prop) (st: St) =>
-    visited1 s0' ⊆ visited1 st /\
-    visited1 st u' /\
-    (forall v w, visited1 st v -> ~ visited1 s0' v -> v <> u' -> step_rev v w -> visited1 st w) /\
-    (forall e v, e ∈ e_set -> step_aux g e v u' -> visited1 st v)).
-
-  apply Hoare_bind with (Q := fun (_:unit) => P_loop ∅).
-  + (* visit1 u' *)
-    unfold P_loop, Hoare, visit1.
-    intros s1 a s2 Hs1 Hprog.
-    rewrite Hs1 in *. destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
-    repeat split.
-    - intros w Hw. sets_unfold. apply Hv. left. exact Hw.
-    - apply Hv. right. reflexivity.
-    - intros v' w Hvis_v' Hnew_v' Hne_v' Hstep_v'w.
-      sets_unfold in Hv. apply Hv in Hvis_v'.
-      destruct Hvis_v' as [Hv0 | Hv_eq]; [exfalso; exact (Hnew_v' Hv0)|].
-      subst v'. exfalso; exact (Hne_v' eq_refl).
-    - intros e' v' He'. exfalso; exact He'.
-  + intro a_res.
-    apply Hoare_repeat_break with (P := P_loop) (Q := fun (_:unit) (s':St) =>
-      visited1 s0' ⊆ visited1 s' /\
-      visited1 s' u' /\
-      (forall v w, visited1 s' v -> ~ visited1 s0' v -> step_rev v w -> visited1 s' w)).
-    intros e_set.
-    apply Hoare_normalize.
-    intros s1 [Hsubset [Hvis_u' [Hstep_nonroot He_set]]].
-    apply Hoare_choice.
-    { (* recursive branch *)
-      apply Hoare_any_bind; intros e.
-      apply Hoare_any_bind; intros v.
-      apply Hoare_normal_assume_bind; intros H_not_e.
-      apply Hoare_normal_assume_bind; intros H_not_vis.
-      apply Hoare_normal_assume_bind; intros H_step.
-      eapply Hoare_bind with (Q := Q_closed v s1).
-      - exact (IH s1 v).
-      - intro a_ret. apply Hoare_ret'. intros s2 [Hsub2 [Hvis_v2 Hclosed_v]].
-        unfold P_loop. repeat split.
-        * etransitivity; eauto.
-        * apply Hsub2, Hvis_u'.
+  eapply Hoare_imp_post with (Q := fun (_:unit) (s':St) => Q_closed u s0 tt s').
+  { apply (DFS_finish_fixpoint_ind Q_closed).
+    intros W IHprop IHcard s0' u' Hentry'.
+    unfold DFS_finish_f.
+    set (P_loop := fun (e_set: E -> Prop) (st: St) =>
+      visited1 s0' ⊆ visited1 st /\
+      visited1 st u' /\
+      (forall v w, visited1 st v -> ~ visited1 s0' v -> v <> u' -> step_rev v w -> visited1 st w) /\
+      (forall e v, e ∈ e_set -> step_aux g e v u' -> visited1 st v) /\
+      cardV (visited1 st) >= timer st).
+    eapply Hoare_bind with (Q := fun (_:unit) (s1:St) => P_loop ∅ s1).
+    - (* visit1 u' *)
+      unfold Hoare. split.
+      + intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+        cbv beta iota delta [visit1 custom] in Hprog.
+        destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+        unfold P_loop.
+        repeat split.
+        * intros w Hw. sets_unfold in Hv. apply Hv. left. exact Hw.
+        * sets_unfold in Hv. apply Hv. right. reflexivity.
         * intros v' w Hvis_v' Hnew_v' Hne_v' Hstep_v'w.
-          destruct (classic (visited1 s1 v')) as [Hv'_s1 | Hv'_new].
-          -- apply Hsub2. apply (Hstep_nonroot v' w Hv'_s1 Hnew_v' Hne_v' Hstep_v'w).
-          -- apply (Hclosed_v v' w Hvis_v' Hv'_new Hstep_v'w).
-        * intros e' v' He' Hstep_e'.
-           sets_unfold in He'; destruct He' as [He'_in | He'_eq].
-           -- apply Hsub2. apply (He_set e' v' He'_in Hstep_e').
-           -- subst e'. destruct (KG.(kos_unique).(step_aux_unique) g e v u' v' u' g_valid H_step Hstep_e') as [-> _].
-              exact Hvis_v2.
-      }
-    { (* break branch *)
-      apply Hoare_normal_assume_bind; intros Hall.
-      unfold Hoare, bind, get, break, ret.
-      intros s1' x s2 Hs1' Hprog.
-      rewrite Hs1' in *.
-      destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-      destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-      destruct Hbrk' as [Hbrk_eq Hstate_eq].
-      unfold set_finish in Hset'; cbv beta in Hset'.
-      destruct Hset' as [Htime [Hfin_u [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-      rewrite Hbrk_eq; simpl; rewrite <- Hstate_eq.
-      rewrite Hvis1, <- Hmid.
-      split; [exact Hsubset | split].
-      - exact Hvis_u'.
-      - intros v w Hvis_v Hnew_v Hstep_vw.
-        destruct (classic (v = u')) as [Hv_eq | Hv_ne].
-        + subst v.
-          unfold step_rev in Hstep_vw; simpl in Hstep_vw.
-          destruct Hstep_vw as [e Hstep_aux].
-          destruct (Hall e w Hstep_aux) as [He_set' | Hvis_w].
-          * apply (He_set e w He_set' Hstep_aux).
-          * exact Hvis_w.
-         + apply (Hstep_nonroot v w Hvis_v Hnew_v Hv_ne Hstep_vw). }
+          sets_unfold in Hv. apply Hv in Hvis_v'.
+          destruct Hvis_v' as [Hv0 | Hv_eq]; [exfalso; exact (Hnew_v' Hv0)|].
+          subst v'. exfalso; exact (Hne_v' eq_refl).
+        * intros e' v' He'. exfalso; exact He'.
+        * apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+      + intros s1 Hs1 Herr. exfalso. exact Herr.
+    - intro a_res.
+      apply Hoare_repeat_break with (P := P_loop) (Q := fun (_:unit) (s':St) => Q_closed u' s0' tt s').
+      intros e_set.
+      apply Hoare_normalize.
+      intros s1 [Hsubset [Hvis_u' [Hstep_nonroot [He_set Htb_s1]]]].
+      apply Hoare_choice.
+      + (* recursive branch *)
+        apply Hoare_any_bind; intros e.
+        apply Hoare_any_bind; intros v.
+        apply Hoare_normal_assume_bind; intros H_not_e.
+        apply Hoare_normal_assume_bind; intros H_not_vis.
+        apply Hoare_normal_assume_bind; intros H_step.
+        assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+        eapply Hoare_bind with (Q := fun (_:unit) (s2:St) =>
+          Q_closed v s1 tt s2 /\ cardV (visited1 s2) >= timer s2 + 0).
+        { apply Hoare_conj with
+            (Q2 := fun (_:unit) (s2:St) => cardV (visited1 s2) >= timer s2 + 0).
+          - apply (IHprop s1 v Htb_s1).
+          - assert (Htb0 : cardV (visited1 s1) >= timer s1 + 0) by lia.
+            apply (IHcard s1 v 0 H_not_vis Hvv Htb0). }
+        { intro a_ret. apply Hoare_ret.
+          intros s2 [[Hsub2 [Hvis_v2 Hclosed_v]] Htb_s2].
+          unfold P_loop. repeat split.
+          * etransitivity; eauto.
+          * apply Hsub2, Hvis_u'.
+          * intros v' w Hvis_v' Hnew_v' Hne_v' Hstep_v'w.
+            destruct (classic (visited1 s1 v')) as [Hv'_s1 | Hv'_new].
+            -- apply Hsub2. apply (Hstep_nonroot v' w Hv'_s1 Hnew_v' Hne_v' Hstep_v'w).
+            -- apply (Hclosed_v v' w Hvis_v' Hv'_new Hstep_v'w).
+          * intros e' v' He' Hstep_e'.
+             sets_unfold in He'; destruct He' as [He'_in | He'_eq].
+             -- apply Hsub2. apply (He_set e' v' He'_in Hstep_e').
+             -- subst e'. destruct (KG.(kos_unique).(step_aux_unique) g e v u' v' u' g_valid H_step Hstep_e') as [-> _].
+                exact Hvis_v2.
+          * lia. }
+      + (* break branch *)
+        apply Hoare_normal_assume_bind; intros Hall.
+        assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+          by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+        apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+        unfold Hoare. split.
+        { intros s1' x s2 Hs1' Hprog.
+          rewrite Hs1' in *.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+          destruct Hset as [Htime [Hfin_u [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+          rewrite Hbrk_eq; simpl; rewrite Hstate_eq.
+          unfold Q_closed.
+          rewrite Hvis1, <- Hs'.
+          repeat split.
+          - exact Hsubset.
+          - exact Hvis_u'.
+          - intros v w Hvis_v Hnew_v Hstep_vw.
+            destruct (classic (v = u')) as [Hv_eq | Hv_ne].
+            + subst v.
+              unfold step_rev in Hstep_vw; simpl in Hstep_vw.
+              destruct Hstep_vw as [e Hstep_aux].
+              destruct (Hall e w Hstep_aux) as [He_set' | Hvis_w].
+              * apply (He_set e w He_set' Hstep_aux).
+              * exact Hvis_w.
+            + apply (Hstep_nonroot v w Hvis_v Hnew_v Hv_ne Hstep_vw). }
+        { intros s1' Hs1' Herr. exfalso.
+          cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. }
+  - exact Htb. }
+  intros _ s' [_ [_ Hclosed]]. exact Hclosed.
 Qed.
 
 Definition ReachRevClosedEx (s: St) (x: V) : Prop :=
@@ -1339,45 +1813,64 @@ Definition Phase1_Order (s : St) : Prop :=
     visits all vertices.
     Proved property: forall v, visited1 s' v *)
 Lemma kosaraju_finish_visited_all_aux : forall W,
-  (forall s0, Hoare (fun st => st = s0) (W tt) (fun _ s' => forall v, visited1 s' v)) ->
-  (forall s0, Hoare (fun st => st = s0) (kosaraju_finish_f W tt) (fun _ s' => forall v, visited1 s' v)).
+  (forall s0, cardV (visited1 s0) >= timer s0 ->
+     Hoare (fun st => st = s0) (W tt)
+       (fun _ s' => forall v, visited1 s' v /\ cardV (visited1 s') >= timer s')) ->
+  forall s0, cardV (visited1 s0) >= timer s0 ->
+  Hoare (fun st => st = s0) (kosaraju_finish_f W tt)
+    (fun _ s' => forall v, visited1 s' v /\ cardV (visited1 s') >= timer s').
 Proof.
-  intros W IH s0.
+  intros W IH s0 Htb_s0.
   unfold kosaraju_finish_f.
   apply Hoare_choice.
-  { apply Hoare_bind with (Q := fun (u:V) (s':St) => s' = s0 /\ ~ visited1 s' u).
-    { unfold Hoare, pick_unvisited1, get.
-      intros s1 u s2 Hs1 Hprog.
-      rewrite Hs1 in *.
-      destruct Hprog as [Hnot_vis Hsame].
-      rewrite Hsame in Hnot_vis; split; [symmetry; exact Hsame | exact Hnot_vis]. }
+  { apply Hoare_bind with (Q := fun (u:V) (s':St) => s' = s0 /\ vvalid g u /\ ~ visited1 s' u).
+    { unfold Hoare. split.
+      - intros s1 a s2 Hs1 Hprog.
+        rewrite Hs1 in *.
+        cbv beta iota delta [pick_unvisited1 MonadErr.nrm_nrm get] in Hprog.
+        destruct Hprog as [[Hvv Hnot_vis] Hsame].
+        rewrite Hsame in Hnot_vis.
+        split; [symmetry; exact Hsame|split; [exact Hvv|exact Hnot_vis]].
+      - intros s1 Hs1 Herr. exfalso.
+        cbv beta iota delta [pick_unvisited1 MonadErr.nrm_err get] in Herr.
+        sets_unfold in Herr. firstorder. }
     { intro u.
       apply Hoare_normalize.
-      intros s1 [Hs1_eq Hunvis].
-      rewrite Hs1_eq.
+      intros s1 [Hs1_eq [Hvv Hunvis]].
+      subst s1.
       simpl.
-      apply Hoare_bind with (Q := fun (_:unit) (s':St) => visited1 s' u).
-      { eapply Hoare_imp_post.
-        { apply DFS_finish_Q_after. }
-        { intros _ s' [_ [Hvis_u _]]; exact Hvis_u. } }
-      { intro a; apply Hoare_normalize; intros s2 _; apply (IH s2). } } }
-  { apply Hoare_assume_bind with (Q := fun st => forall v, visited1 st v).
-    apply Hoare_ret'.
-    intros s1 [Hall _]; exact Hall. }
+      apply Hoare_bind with
+        (Q := fun (_:unit) (s':St) => cardV (visited1 s') >= timer s' + 0).
+      { apply (DFS_finish_card_timer s0 u 0 Hunvis Hvv). lia. }
+      { intro a; apply Hoare_normalize; intros s2 Htb_s2.
+        assert (Htb : cardV (visited1 s2) >= timer s2) by lia.
+        apply (IH s2 Htb). } } }
+  { apply Hoare_normal_assume_bind; intros Hall.
+    apply Hoare_ret.
+    intros s1 Hs1. subst s1. intros v. split; [apply Hall|exact Htb_s0]. }
 Qed.
 
 (** [kosaraju_finish_visited_all]
     After the full kosaraju_finish, all vertices are visited1.
     Proved property: forall v, visited1 s' v *)
 Lemma kosaraju_finish_visited_all : forall s0,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) kosaraju_finish (fun _ s' => forall v, visited1 s' v).
 Proof.
-  intros s0.
-  unfold kosaraju_finish.
-  apply Hoare_normal_LFix with (Q := fun (_:unit) (s0':St) (_:unit) (s':St) => forall v, visited1 s' v).
-  intros W IH s0' u.
-  apply kosaraju_finish_visited_all_aux.
-  intro s0''; apply (IH s0'' tt).
+  intros s0 Htb_s0.
+  apply Hoare_imp_post with
+    (Q := fun (_:unit) (s':St) =>
+           forall v, visited1 s' v /\ cardV (visited1 s') >= timer s').
+  - unfold kosaraju_finish.
+    apply Hoare_normal_LFix_closed with
+      (R := fun s => cardV (visited1 s) >= timer s)
+      (Q := fun (_:unit) (s0':St) (_:unit) (s':St) =>
+             forall v, visited1 s' v /\ cardV (visited1 s') >= timer s').
+    + intros W IH s0' u Htb_s0'.
+      apply kosaraju_finish_visited_all_aux;
+        [ intro s0''; exact (IH s0'' tt) | exact Htb_s0' ].
+    + exact Htb_s0.
+  - intros _ s' Hall v. apply (Hall v).
 Qed.
 
 (* ================================================================= *)
@@ -1405,11 +1898,12 @@ Definition Q_phase1 (u' : V) (s0' : St) (_ : unit) (s' : St) : Prop :=
      exists c, mutually_reachable a c /\ finish s' b < finish s' c).
 
 Lemma DFS_finish_phase1 : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (Q_phase1 u s0).
 Proof.
-  intros s0 u. unfold DFS_finish.
-  apply Hoare_normal_LFix with (Q := Q_phase1).
-  intros W IH s0' u'.
+  intros s0 u Htb. unfold DFS_finish.
+  apply (DFS_finish_fixpoint_ind Q_phase1).
+  intros W IHprop IHcard s0' u' Hentry'.
   unfold DFS_finish_f, Q_phase1.
 
   set (P_loop := fun (e_set : E -> Prop) (st : St) =>
@@ -1432,37 +1926,40 @@ Proof.
        visited1 st b -> ~visited1 s0' b ->
        reachable_rev a b -> ~reachable_rev b a ->
        (exists c, mutually_reachable a c /\ finish st b < finish st c) \/
-       (mutually_reachable a u' /\ finish st b < timer st))).
+       (mutually_reachable a u' /\ finish st b < timer st)) /\
+    cardV (visited1 st) >= timer st).
 
   apply Hoare_bind with (Q := fun (_:unit) => P_loop ∅).
   { (* visit1 u' establishes P_loop ∅ *)
-    unfold P_loop, Hoare, visit1.
-    intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
-    destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
-    sets_unfold in Hv.
-    repeat split.
-    - intros w Hw. apply Hv. left. exact Hw.
-    - apply Hv. right. reflexivity.
-    - intros v w Hvis Hnew Hne. apply Hv in Hvis.
-      destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; exfalso; exact (Hne eq_refl)].
-    - intros v Hvis Hnew. apply Hv in Hvis.
-      destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; apply SCC.rr_refl].
-    - intros z Hz. rewrite Hfin. reflexivity.
-    - rewrite Htimer. lia.
-    - intros v Hne Hvis. apply Hv in Hvis.
-      destruct Hvis as [H0|Heq]; [left; exact H0|exfalso; exact (Hne (eq_sym Heq))].
-    - intros v Hvis Hnew Hne. apply Hv in Hvis.
-      destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; exfalso; exact (Hne eq_refl)].
-    - intros e v He. exfalso. exact He.
-    - intros HR v Hvis Hnot_closed. apply Hv in Hvis.
-      destruct Hvis as [H0|Heq].
-      + apply HR; [exact H0|].
-        intro Hcl. apply Hnot_closed. intros w Hstep. apply Hv. left. apply Hcl. exact Hstep.
-      + subst v. apply SCC.rr_refl.
-    - intros HR a0 b0 Ha0 Hna0 Hb0 Hnb0. apply Hv in Ha0. apply Hv in Hb0.
-      destruct Ha0 as [H0|Heq]; [exfalso; exact (Hna0 H0)|subst a0].
-      destruct Hb0 as [H0|Heq]; [exfalso; exact (Hnb0 H0)|subst b0].
-      intros _ Hnot. exfalso. apply Hnot. apply SCC.rr_refl. }
+    unfold P_loop, Hoare, visit1. split.
+    - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      destruct Hprog as [Hv [Htimer [Hfin [Hv2 [Hsid _]]]]].
+      sets_unfold in Hv.
+      repeat split.
+      + intros w Hw. apply Hv. left. exact Hw.
+      + apply Hv. right. reflexivity.
+      + intros v w Hvis Hnew Hne. apply Hv in Hvis.
+        destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; exfalso; exact (Hne eq_refl)].
+      + intros v Hvis Hnew. apply Hv in Hvis.
+        destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; apply SCC.rr_refl].
+      + intros z Hz. rewrite Hfin. reflexivity.
+      + rewrite Htimer. lia.
+      + intros v Hne Hvis. apply Hv in Hvis.
+        destruct Hvis as [H0|Heq]; [left; exact H0|exfalso; exact (Hne (eq_sym Heq))].
+      + intros v Hvis Hnew Hne. apply Hv in Hvis.
+        destruct Hvis as [H0|Heq]; [exfalso; exact (Hnew H0)|subst; exfalso; exact (Hne eq_refl)].
+      + intros e v He. exfalso. exact He.
+      + intros HR v Hvis Hnot_closed. apply Hv in Hvis.
+        destruct Hvis as [H0|Heq].
+        * apply HR; [exact H0|].
+          intro Hcl. apply Hnot_closed. intros w Hstep. apply Hv. left. apply Hcl. exact Hstep.
+        * subst v. apply SCC.rr_refl.
+      + intros HR a0 b0 Ha0 Hna0 Hb0 Hnb0. apply Hv in Ha0. apply Hv in Hb0.
+        destruct Ha0 as [H0|Heq]; [exfalso; exact (Hna0 H0)|subst a0].
+        destruct Hb0 as [H0|Heq]; [exfalso; exact (Hnb0 H0)|subst b0].
+        intros _ Hnot. exfalso. apply Hnot. apply SCC.rr_refl.
+      + apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+    - intros s1 Hs1 Herr. exfalso. exact Herr. }
 
   intro a_res.
   apply Hoare_repeat_break with
@@ -1492,7 +1989,7 @@ Proof.
   intros s1 HP.
   destruct HP as [Hsub [Hvis_u [Hclosed_new [Hreach_new
                   [Hfin_old [Htimer_mono [Hfin_lt_timer [Hge_timer
-                  [He_set [HR_pres HPO_pres]]]]]]]]]].
+                  [He_set [HR_pres [HPO_pres Htb_s1]]]]]]]]]]].
   apply Hoare_choice.
 
   { (* ---- continue branch ---- *)
@@ -1501,10 +1998,14 @@ Proof.
     apply Hoare_normal_assume_bind; intros H_not_e.
     apply Hoare_normal_assume_bind; intros H_not_vis.
     apply Hoare_normal_assume_bind; intros H_step.
-    eapply Hoare_bind with (Q := Q_phase1 v s1).
-    { exact (IH s1 v). }
-    { intro junk. apply Hoare_ret'.
-      intros s2 HQ.
+    assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+    eapply Hoare_bind with (Q := fun (_:unit) (s2:St) =>
+      Q_phase1 v s1 tt s2 /\ cardV (visited1 s2) >= timer s2 + 0).
+    { apply Hoare_conj.
+      - apply (IHprop s1 v Htb_s1).
+      - apply (IHcard s1 v 0 H_not_vis Hvv). lia. }
+    { intro junk. apply Hoare_ret.
+      intros s2 [HQ Htb_s2].
       destruct HQ as [Hsub2 [Hvis_v2 [Hclosed2 [Hreach2
                       [Hfin_v_lt [Hfin_old2 [Htimer2 [Hfin_lt_v [Hge2
                       [HR2 HPO2]]]]]]]]]].
@@ -1634,126 +2135,152 @@ Proof.
                 [exfalso; exact (Hnb0 Hb0_old)|exact Hb0_lt]. }
             pose proof (Hge2 a0 Ha0 Ha0_ns1). lia.
         + (* Case A: both from W *)
-          left. exact (HPO2 HR_v a0 b0 Ha0 Ha0_ns1 Hb0 Hb0_ns1 Hrev Hnrev). } }
+          left. exact (HPO2 HR_v a0 b0 Ha0 Ha0_ns1 Hb0 Hb0_ns1 Hrev Hnrev).
+      (* 12. cardV >= timer *)
+      - lia. } }
 
   { (* ---- break branch ---- *)
     apply Hoare_normal_assume_bind; intros Hall.
-    unfold Hoare, bind, get, set_finish, break, ret.
-    intros s1' x s2 Hs1' Hprog.
-    rewrite Hs1' in *.
-    destruct Hprog as [t [s_mid [[Ht Hmid] Hrest]]].
-    destruct Hrest as [uu [s_mid2' [Hset' Hbrk']]].
-    destruct Hbrk' as [Hbrk_eq Hstate_eq].
-    unfold set_finish in Hset'; cbv beta in Hset'.
-    destruct Hset' as [Htime [Hfin_u [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
-    rewrite Hbrk_eq; simpl; rewrite <- Hstate_eq.
-    rewrite Hvis1, <- Hmid.
-    repeat split.
-    (* 1. visited1 monotonicity *)
-    - exact Hsub.
-    (* 2. visited1 s' u' *)
-    - exact Hvis_u.
-    (* 3. step_rev_closed for new — including u' via Hall *)
-    - intros x0 w0 Hvis_x0 Hnew_x0 Hstep_x0.
-      destruct (classic (x0 = u')) as [->|Hne].
-      + unfold step_rev in Hstep_x0. destruct Hstep_x0 as [e0 Hstep_aux0].
-        destruct (Hall e0 w0 Hstep_aux0) as [He0|Hw0]; [apply (He_set e0 w0 He0 Hstep_aux0)|exact Hw0].
-      + apply (Hclosed_new x0 w0 Hvis_x0 Hnew_x0 Hne Hstep_x0).
-    (* 4. reachable_rev u' for new *)
-    - exact Hreach_new.
-    (* 5. finish u' < timer *)
-    - rewrite Hfin_u, Ht, Hmid, Htime. lia.
-    (* 6. old finish preserved *)
-    - intros z Hz Hz_ne. rewrite (Hfinh z Hz_ne), <- Hmid. apply Hfin_old. exact Hz.
-    (* 7. timer monotonicity *)
-    - rewrite Htime. apply le_S. rewrite <- (f_equal timer Hmid). exact Htimer_mono.
-    (* 8. non-root new: finish < finish u' *)
-    - intros x0 Hne Hvis_x0.
-      destruct (Hfin_lt_timer x0 Hne Hvis_x0) as [Hx_old|Hx_lt].
-      + left. exact Hx_old.
-      + right. rewrite Hfin_u.
-        rewrite (Hfinh x0 Hne), <- Hmid. exact (eq_rect_r (fun y => finish s1 x0 < y) Hx_lt Ht).
-    (* 9. finish_ge_timer for new *)
-    - intros x0 Hvis_x0 Hnew_x0.
-      destruct (classic (x0 = u')) as [->|Hne].
-      + rewrite Hfin_u, Ht. exact Htimer_mono.
-      + rewrite (Hfinh x0 Hne), <- Hmid. apply Hge_timer; auto.
-    (* 10. R preservation *)
-    - intro HR0. unfold R_non_closed.
-      intros z Hz Hnc.
-      rewrite Hvis1, <- Hmid in Hz.
-      assert (Hnc' : ~ (forall w, step_rev z w -> visited1 s1 w)).
-      { intro Hcl. apply Hnc. intros w Hstep.
-        rewrite Hvis1, <- Hmid. exact (Hcl w Hstep). }
-      exact (HR_pres HR0 z Hz Hnc').
-    (* 11. Phase1_Order — resolve disjunction via finish u' = timer *)
-    - intro HR0. intros a0 b0 Ha0 Hna0 Hb0 Hnb0 Hrev Hnrev.
-      assert (Hb0_ne_u' : b0 <> u')
-        by (intro Heq; subst b0; apply Hnrev; exact (Hreach_new a0 Ha0 Hna0)).
-      destruct (HPO_pres HR0 a0 b0 Ha0 Hna0 Hb0 Hnb0 Hrev Hnrev)
-        as [[c [Hmr Hfin]]|[Hmr Hfin]].
-      + destruct (classic (c = u')) as [->|Hc_ne].
-        * exists u'. split; [exact Hmr|].
-          rewrite Hfin_u, Ht, (Hfinh b0 Hb0_ne_u'), <- Hmid.
-          destruct (Hfin_lt_timer b0 Hb0_ne_u' Hb0) as [Hb0_old|Hb0_lt];
-            [exfalso; exact (Hnb0 Hb0_old)|exact Hb0_lt].
-        * exists c. split; [exact Hmr|].
-          rewrite (Hfinh b0 Hb0_ne_u'), (Hfinh c Hc_ne), <- Hmid. exact Hfin.
-      + exists u'. split; [exact Hmr|].
-        rewrite Hfin_u, Ht, (Hfinh b0 Hb0_ne_u'), <- Hmid. exact Hfin. }
+    assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+      by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+    apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+    unfold Hoare. split.
+    { intros s1' x s2 Hs1' Hprog.
+      rewrite Hs1' in *.
+      cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+      destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset' [Hbrk_eq Hstate_eq]]]]]]].
+      destruct Hset' as [Htime [Hfin_u [Hfinh [Hvis1 [Hvis2 [Hsid _]]]]]].
+      rewrite Hbrk_eq; simpl; rewrite Hstate_eq.
+      rewrite Hvis1, <- Hs'.
+      repeat split.
+      (* 1. visited1 monotonicity *)
+      - exact Hsub.
+      (* 2. visited1 s' u' *)
+      - exact Hvis_u.
+      (* 3. step_rev_closed for new — including u' via Hall *)
+      - intros x0 w0 Hvis_x0 Hnew_x0 Hstep_x0.
+        destruct (classic (x0 = u')) as [->|Hne].
+        + unfold step_rev in Hstep_x0. destruct Hstep_x0 as [e0 Hstep_aux0].
+          destruct (Hall e0 w0 Hstep_aux0) as [He0|Hw0]; [apply (He_set e0 w0 He0 Hstep_aux0)|exact Hw0].
+        + apply (Hclosed_new x0 w0 Hvis_x0 Hnew_x0 Hne Hstep_x0).
+      (* 4. reachable_rev u' for new *)
+      - exact Hreach_new.
+      (* 5. finish u' < timer *)
+      - rewrite Hfin_u, Ht, Hs', Htime. lia.
+      (* 6. old finish preserved *)
+      - intros z Hz Hz_ne. rewrite (Hfinh z Hz_ne), <- Hs'. apply Hfin_old. exact Hz.
+      (* 7. timer monotonicity *)
+      - rewrite Htime. apply le_S. rewrite <- (f_equal timer Hs'). exact Htimer_mono.
+      (* 8. non-root new: finish < finish u' *)
+      - intros x0 Hne Hvis_x0.
+        destruct (Hfin_lt_timer x0 Hne Hvis_x0) as [Hx_old|Hx_lt].
+        + left. exact Hx_old.
+        + right. rewrite Hfin_u.
+          rewrite (Hfinh x0 Hne), <- Hs'. exact (eq_rect_r (fun y => finish s1 x0 < y) Hx_lt Ht).
+      (* 9. finish_ge_timer for new *)
+      - intros x0 Hvis_x0 Hnew_x0.
+        destruct (classic (x0 = u')) as [->|Hne].
+        + rewrite Hfin_u, Ht. exact Htimer_mono.
+        + rewrite (Hfinh x0 Hne), <- Hs'. apply Hge_timer; auto.
+      (* 10. R preservation *)
+      - intro HR0. unfold R_non_closed.
+        intros z Hz Hnc.
+        rewrite Hvis1, <- Hs' in Hz.
+        assert (Hnc' : ~ (forall w, step_rev z w -> visited1 s1 w)).
+        { intro Hcl. apply Hnc. intros w Hstep.
+          rewrite Hvis1, <- Hs'. exact (Hcl w Hstep). }
+        exact (HR_pres HR0 z Hz Hnc').
+      (* 11. Phase1_Order — resolve disjunction via finish u' = timer *)
+      - intro HR0. intros a0 b0 Ha0 Hna0 Hb0 Hnb0 Hrev Hnrev.
+        assert (Hb0_ne_u' : b0 <> u')
+          by (intro Heq; subst b0; apply Hnrev; exact (Hreach_new a0 Ha0 Hna0)).
+        destruct (HPO_pres HR0 a0 b0 Ha0 Hna0 Hb0 Hnb0 Hrev Hnrev)
+          as [[c [Hmr Hfin]]|[Hmr Hfin]].
+        + destruct (classic (c = u')) as [->|Hc_ne].
+          * exists u'. split; [exact Hmr|].
+            rewrite Hfin_u, Ht, (Hfinh b0 Hb0_ne_u'), <- Hs'.
+            destruct (Hfin_lt_timer b0 Hb0_ne_u' Hb0) as [Hb0_old|Hb0_lt];
+              [exfalso; exact (Hnb0 Hb0_old)|exact Hb0_lt].
+          * exists c. split; [exact Hmr|].
+            rewrite (Hfinh b0 Hb0_ne_u'), (Hfinh c Hc_ne), <- Hs'. exact Hfin.
+        + exists u'. split; [exact Hmr|].
+          rewrite Hfin_u, Ht, (Hfinh b0 Hb0_ne_u'), <- Hs'. exact Hfin. }
+    { intros s1' Hs1' Herr. exfalso.
+      cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+      sets_unfold in Herr. firstorder. } }
+  exact Htb.
 Qed.
 
 Lemma DFS_finish_finish_unvisited : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' =>
     forall c, ~visited1 s' c -> finish s' c = finish s0 c).
 Proof.
-  intros s0 u. unfold DFS_finish.
+  intros s0 u Htb. unfold DFS_finish.
   apply Hoare_imp_post with (Q := fun _ s' =>
     visited1 s0 ⊆ visited1 s' /\
     (forall c, ~visited1 s' c -> finish s' c = finish s0 c)).
   2: { intros _ s' [_ H]; exact H. }
-  apply Hoare_normal_LFix with
-    (Q := fun _ s0' _ s' =>
-      visited1 s0' ⊆ visited1 s' /\
-      (forall c, ~visited1 s' c -> finish s' c = finish s0' c)).
-  intros W IH s0' u'. unfold DFS_finish_f.
+  apply (DFS_finish_fixpoint_ind
+           (fun (u' : V) (s0' : St) (_ : unit) (s' : St) =>
+              visited1 s0' ⊆ visited1 s' /\
+              (forall c, ~visited1 s' c -> finish s' c = finish s0' c))).
+  intros W IHprop IHcard s0' u' Hentry'. unfold DFS_finish_f.
   set (P := fun (_ : E -> Prop) st =>
     visited1 s0' ⊆ visited1 st /\
     visited1 st u' /\
-    (forall c, ~visited1 st c -> finish st c = finish s0' c)).
+    (forall c, ~visited1 st c -> finish st c = finish s0' c) /\
+    cardV (visited1 st) >= timer st).
   apply Hoare_bind with (Q := fun _ => P ∅).
-  { unfold P, Hoare, visit1. intros s1 a s2 Hs1 Hprog.
-    rewrite Hs1 in *. destruct Hprog as [Hv [_ [Hfin _]]].
-    repeat split.
-    - intros w Hw. apply Hv. left. exact Hw.
-    - apply Hv. right. reflexivity.
-    - intros c Hc. rewrite Hfin. reflexivity. }
+  { unfold P, Hoare, visit1. split.
+    - intros s1 a s2 Hs1 Hprog.
+      rewrite Hs1 in *. destruct Hprog as [Hv [Htimer [Hfin _]]].
+      repeat split.
+      + intros w Hw. apply Hv. left. exact Hw.
+      + apply Hv. right. reflexivity.
+      + intros c Hc. rewrite Hfin. reflexivity.
+      + apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry').
+    - intros s1 Hs1 Herr. exfalso. exact Herr. }
   intro. apply Hoare_repeat_break with (P := P)
     (Q := fun _ s' => visited1 s0' ⊆ visited1 s' /\
       (forall c, ~visited1 s' c -> finish s' c = finish s0' c)).
-  intros e_set. apply Hoare_normalize. intros s1 [Hsub1 [Hvis_u1 HP1]].
+  intros e_set. apply Hoare_normalize. intros s1 [Hsub1 [Hvis_u1 [HP1 Htb_s1]]].
   apply Hoare_choice.
   { apply Hoare_any_bind; intros e0. apply Hoare_any_bind; intros v0.
     apply Hoare_normal_assume_bind; intros _.
-    apply Hoare_normal_assume_bind; intros _.
-    apply Hoare_normal_assume_bind; intros _.
-    eapply Hoare_bind. { exact (IH s1 v0). }
-    intro. apply Hoare_ret'. intros s2 [Hsub2 HW2]. unfold P. repeat split.
+    apply Hoare_normal_assume_bind; intros H_not_vis.
+    apply Hoare_normal_assume_bind; intros H_step.
+    assert (Hvv : vvalid g v0) by exact (step_vvalid1 g e0 v0 u' H_step).
+    eapply Hoare_bind with (Q := fun (_:unit) (s2:St) =>
+      (visited1 s1 ⊆ visited1 s2 /\ (forall c, ~visited1 s2 c -> finish s2 c = finish s1 c))
+      /\ cardV (visited1 s2) >= timer s2 + 0).
+    { apply Hoare_conj.
+      - apply (IHprop s1 v0 Htb_s1).
+      - apply (IHcard s1 v0 0 H_not_vis Hvv). lia. }
+    intro. apply Hoare_ret. intros s2 [[Hsub2 HW2] Htb_s2]. unfold P. repeat split.
     - etransitivity; eauto.
     - apply Hsub2. exact Hvis_u1.
     - intros c Hc. rewrite (HW2 c Hc). apply HP1.
-      intro Hv. apply Hc. apply Hsub2. exact Hv. }
+      intro Hv. apply Hc. apply Hsub2. exact Hv.
+    - lia. }
   { apply Hoare_normal_assume_bind; intros _.
-    unfold Hoare, bind, get, set_finish, break, ret.
-    intros s1' x s2 Hs1' Hprog. rewrite Hs1' in *.
-    destruct Hprog as [t [s_mid [[Ht Hmid] [uu [s_mid2' [Hset' [Hbrk_eq Hstate_eq]]]]]]].
-    unfold set_finish in Hset'; cbv beta in Hset'.
-    destruct Hset' as [_ [_ [Hfinh [Hvis1 _]]]].
-    rewrite Hbrk_eq; simpl; rewrite <- Hstate_eq. split.
-    - rewrite Hvis1, <- Hmid. exact Hsub1.
-    - intros c Hc. rewrite Hvis1, <- Hmid in Hc.
-      assert (Hc_ne : c <> u') by (intro Heq; subst; exact (Hc Hvis_u1)).
-      rewrite (Hfinh c Hc_ne), <- Hmid. exact (HP1 c Hc). }
+    assert (Htb_all : forall s, s = s1 -> timer s <= length (bijective_listV g))
+      by (intros s Hr; subst s; assert (Hle : (cardV (visited1 s1) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+    apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+    unfold Hoare. split.
+    - intros s1' x s2 Hs1' Hprog. rewrite Hs1' in *.
+      cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+      destruct Hprog as [t [s' [[Ht Hs'] [uu [s'' [Hset' [Hbrk_eq Hstate_eq]]]]]]].
+      destruct Hset' as [_ [_ [Hfinh [Hvis1 _]]]].
+      rewrite Hbrk_eq; simpl; rewrite Hstate_eq. split.
+      + rewrite Hvis1, <- Hs'. exact Hsub1.
+      + intros c Hc. rewrite Hvis1, <- Hs' in Hc.
+        assert (Hc_ne : c <> u') by (intro Heq; subst; exact (Hc Hvis_u1)).
+        rewrite (Hfinh c Hc_ne), <- Hs'. exact (HP1 c Hc).
+    - intros s1' Hs1' Herr. exfalso.
+      cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+      sets_unfold in Herr. firstorder. }
+  exact Htb.
 Qed.
 
 (** Phase 1 establishes the condensation-DAG ordering: if a can
@@ -1768,40 +2295,54 @@ Proof.
     (forall v, ~visited1 s v -> finish s v = 0) /\
     (forall a b, visited1 s a -> visited1 s b ->
        reachable_rev a b -> ~reachable_rev b a ->
-       exists c, mutually_reachable a c /\ finish s b < finish s c)).
+       exists c, mutually_reachable a c /\ finish s b < finish s c) /\
+    cardV (visited1 s) >= timer s).
   apply Hoare_imp_post with (Q := fun _ s' =>
     (forall v, visited1 s' v) /\ Inv s').
-  2: { intros _ s' [Hall [_ [_ [_ HPO]]]].
+  2: { intros _ s' [Hall [_ [_ [_ [HPO _]]]]].
        intros a b Hrev Hnrev. apply HPO; auto. }
   apply Hoare_conj.
-  - apply kosaraju_finish_visited_all.
+  - apply (kosaraju_finish_visited_all init_st).
+     unfold init_st; cbn; lia.
   - apply Hoare_normal_LFix_closed with (R := Inv)
       (Q := fun _ _ _ s' => Inv s').
-    2: { unfold Inv, init_st; cbn. split; [|split; [|split]].
+    2: { unfold Inv, init_st; cbn. split; [|split; [|split; [|split]]].
          - intros v w Hv; exfalso; exact Hv.
          - intros v Hv; exfalso; exact Hv.
          - intros v Hv; reflexivity.
-         - intros a b Ha; exfalso; exact Ha. }
+         - intros a b Ha; exfalso; exact Ha.
+         - simpl; lia. }
     intros W IH s0' u0 HInv.
-    destruct HInv as [HRC [HTD [Hfin0 HPO_vis]]].
+    destruct HInv as [HRC [HTD [Hfin0 [HPO_vis Hcard0]]]].
     unfold kosaraju_finish_f.
     apply Hoare_choice.
-    + apply Hoare_bind with (Q := fun (u:V) (s':St) => s' = s0' /\ ~visited1 s' u).
-      { unfold Hoare, pick_unvisited1, get.
-        intros s1 u s2 Hs1 Hprog. rewrite Hs1 in *.
-        destruct Hprog as [Hnot_vis Hsame].
-        rewrite Hsame in Hnot_vis; split; auto. }
-      intro u. apply Hoare_normalize. intros s1 [Hs1_eq Hunvis]; subst s1.
-      eapply Hoare_bind.
+    + apply Hoare_bind with (Q := fun (u:V) (s':St) => s' = s0' /\ vvalid g u /\ ~visited1 s' u).
+      { unfold Hoare. split.
+        - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+          cbv beta iota delta [pick_unvisited1 MonadErr.nrm_nrm get] in Hprog.
+          destruct Hprog as [[Hvv Hnot_vis] Hsame].
+          rewrite Hsame in Hnot_vis.
+          split; [symmetry; exact Hsame|split; [exact Hvv|exact Hnot_vis]].
+        - intros s1 Hs1 Herr. exfalso.
+          cbv beta iota delta [pick_unvisited1 MonadErr.nrm_err get] in Herr.
+          sets_unfold in Herr. firstorder. }
+      intro u. apply Hoare_normalize. intros s1 [Hs1_eq [Hvv Hunvis]]; subst s1.
+      eapply Hoare_bind with (Q := fun (_:unit) (s2:St) =>
+        (ReachRevClosed s2 /\ TimerDominates s2) /\
+        (forall c, ~visited1 s2 c -> finish s2 c = finish s0' c) /\
+        Q_phase1 u s0' tt s2 /\
+        cardV (visited1 s2) >= timer s2 + 0).
       { apply Hoare_conj.
         - apply Hoare_conj.
-          + apply (DFS_finish_preserves_ReachRevClosed s0' u Hunvis HRC).
-          + apply (DFS_finish_preserves_TimerDominates s0' u HTD Hunvis).
+          + apply (DFS_finish_preserves_ReachRevClosed s0' u HRC Hcard0).
+          + apply (DFS_finish_preserves_TimerDominates s0' u HTD Hcard0).
         - apply Hoare_conj.
-          + apply (DFS_finish_finish_unvisited s0' u).
-          + apply (DFS_finish_phase1 s0' u). }
+          + apply (DFS_finish_finish_unvisited s0' u Hcard0).
+          + apply Hoare_conj.
+            * apply (DFS_finish_phase1 s0' u Hcard0).
+            * apply (DFS_finish_card_timer s0' u 0 Hunvis Hvv). lia. }
       { intro junk. apply Hoare_normalize.
-        intros s2 [[HRC2 HTD2] [Hunvis2 HQ]].
+        intros s2 [[HRC2 HTD2] [Hunvis2 [HQ Hcard_s2]]].
         destruct HQ as [Hsub2 [_ [Hclosed2 [Hreach2
                         [_ [Hfin_old2 [Htimer2 [_ [Hge2 [_ HPO2]]]]]]]]]].
         assert (HR_trivial : R_non_closed u s0').
@@ -1809,7 +2350,7 @@ Proof.
           intros w Hstep. apply (HRC v w Hv).
           eapply SCC.rr_step; [exact Hstep | apply SCC.rr_refl]. }
         assert (HInv_s2 : Inv s2).
-        { unfold Inv. split; [exact HRC2 | split; [exact HTD2 | split]].
+        { unfold Inv. split; [exact HRC2 | split; [exact HTD2 | split; [| split]]].
           - intros v Hv.
             destruct (classic (visited1 s0' v)) as [Hv_s0|Hv_ns0].
             + exfalso. apply Hv. apply Hsub2. exact Hv_s0.
@@ -1837,13 +2378,14 @@ Proof.
               * rewrite (Hfin_old2 b Hb_s0 Hb_ne_u).
                 pose proof (HTD b Hb_s0). pose proof (Hge2 a Ha Ha_ns0). lia.
             + (* new-new *)
-              exact (HPO2 HR_trivial a b Ha Ha_ns0 Hb Hb_ns0 Hrev Hnrev). }
+              exact (HPO2 HR_trivial a b Ha Ha_ns0 Hb Hb_ns0 Hrev Hnrev).
+          - lia. }
         exact (IH s2 tt HInv_s2). }
     + apply Hoare_normal_assume_bind with
         (P := fun st => forall v, visited1 st v) (f := skip)
         (Q := fun _ s' => Inv s') (s0 := s0').
-      intros _. apply Hoare_ret'.
-      intros s Hs; subst s. exact (conj HRC (conj HTD (conj Hfin0 HPO_vis))).
+      intros _. apply Hoare_ret.
+      intros s Hs; subst s. repeat split; assumption.
 Qed.
 
 (* ================================================================= *)
@@ -1866,11 +2408,13 @@ Lemma Hoare_set_scc_id : forall s0 u root P,
      scc_next s1 = scc_next s0 -> P s1) ->
   Hoare (fun st => st = s0) (set_scc_id u root) (fun _ => P).
 Proof.
-  intros s0 u root P H; unfold Hoare, set_scc_id.
-  intros s1 a s2 Hs1 Hprog.
-  rewrite Hs1 in *.
-  destruct Hprog as [Huid [Hother [Htimer [Hfin [Hv1 [Hv2 Hscc_next]]]]]].
-  apply H; split; [exact Huid | split; [exact Hother | split; [exact Htimer | split; [exact Hfin | split; [exact Hv1 | split; [exact Hv2 | exact Hscc_next]]]]]].
+  intros s0 u root P H; unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [set_scc_id custom] in Hprog.
+    destruct Hprog as [Huid [Hother [Htimer [Hfin [Hv1 [Hv2 Hscc_next]]]]]].
+    apply H; split; [exact Huid | split; [exact Hother | split; [exact Htimer | split; [exact Hfin | split; [exact Hv1 | split; [exact Hv2 | exact Hscc_next]]]]]].
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 (** set_scc_root_id u assigns a fresh scc_id (scc_next) to u, then
@@ -1887,11 +2431,13 @@ Lemma Hoare_set_scc_root_id : forall s0 u P,
      visited2 s1 = visited2 s0 -> P s1) ->
   Hoare (fun st => st = s0) (set_scc_root_id u) (fun _ => P).
 Proof.
-  intros s0 u P H; unfold Hoare, set_scc_root_id.
-  intros s1 a s2 Hs1 Hprog.
-  rewrite Hs1 in *.
-  destruct Hprog as [Huid [Hscc_next [Hother [Htimer [Hfin [Hv1 Hv2]]]]]].
-  apply H; split; [exact Huid | split; [exact Hscc_next | split; [exact Hother | split; [exact Htimer | split; [exact Hfin | split; [exact Hv1 | exact Hv2]]]]]].
+  intros s0 u P H; unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [set_scc_root_id custom] in Hprog.
+    destruct Hprog as [Huid [Hscc_next [Hother [Htimer [Hfin [Hv1 Hv2]]]]]].
+    apply H; split; [exact Huid | split; [exact Hscc_next | split; [exact Hother | split; [exact Htimer | split; [exact Hfin | split; [exact Hv1 | exact Hv2]]]]]].
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 (** [DFS_scc_visited_incr]
@@ -1931,15 +2477,19 @@ Proof.
         apply Hoare_normal_assume_bind; intros H_step.
         eapply Hoare_bind with (Q := fun (_:unit) (s':St) => visited2 s1 ⊆ visited2 s').
         { exact (IH s1 v). }
-        { intro; apply Hoare_ret'.
+        { intro; apply Hoare_ret.
           intros s2 Hsub.
           etransitivity; [exact Hs1 | exact Hsub]. }
       * apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros ss aa tt HH Hret.
-        rewrite HH in *.
-        destruct Hret as [-> ->].
-        simpl. exact Hs1.
+        unfold Hoare. split.
+        { intros ss aa tt HH Hbrk.
+          rewrite HH in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hbrk.
+          destruct Hbrk as [-> ->].
+          exact Hs1. }
+        { intros ss HH Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. }
 Qed.
 
 (** [DFS_scc_visited_self]
@@ -1976,14 +2526,18 @@ Proof.
         apply Hoare_normal_assume_bind; intros H_step.
         eapply Hoare_bind with (Q := fun (_:unit) (s':St) => visited2 s1 ⊆ visited2 s').
         { exact (IH s1 v). }
-        { intro; apply Hoare_ret'.
+        { intro; apply Hoare_ret.
           intros s2 Hsub; apply Hsub; exact Hs1. }
        * apply Hoare_normal_assume_bind; intros Hall.
-         unfold Hoare, break, ret.
-         intros ss aa tt HH Hret.
-         rewrite HH in *.
-         destruct Hret as [-> ->].
-         simpl. exact Hs1.
+         unfold Hoare. split.
+         { intros ss aa tt HH Hbrk.
+           rewrite HH in *.
+           cbv beta iota delta [custom break MonadErr.ret] in Hbrk.
+           destruct Hbrk as [-> ->].
+           exact Hs1. }
+         { intros ss HH Herr. exfalso.
+           cbv beta iota delta [custom break MonadErr.ret] in Herr.
+           sets_unfold in Herr. firstorder. }
 Qed.
 
 Definition Q_scc_step_visited (u' : V) (s0' : St) (_ : unit) (s' : St) : Prop :=
@@ -2040,7 +2594,7 @@ Proof.
           apply Hoare_normal_assume_bind; intros H_step.
           eapply Hoare_bind with (Q := Q_scc_step_visited v s1).
           - exact (IH s1 v).
-          - intro a_res; apply Hoare_ret'.
+          - intro a_res; apply Hoare_ret.
             intros s2 [Hsubset2 [Hvis_v Hsub]].
             unfold P_loop. split; [| split].
             { etransitivity; [exact Hsubset | exact Hsubset2]. }
@@ -2055,20 +2609,23 @@ Proof.
                 { intros v' Hstep_aux'; apply Hsubset2; apply (Hexplored e' He'_in v' Hstep_aux'). }
                 { exfalso; apply He'_ne; symmetry; exact He'_sing. } } } }
          { apply Hoare_normal_assume_bind; intros Hall.
-           unfold Hoare, break, ret.
-            intros s' b s'' Hs' Hprog.
-           rewrite Hs' in *.
-           destruct Hprog as [-> ->].
-           simpl.
-           unfold Q_scc_step_visited.
-          repeat split.
-          - exact Hsubset.
-          - exact Hs1_vis.
-          - intros v Hstep.
-            destruct Hstep as [e Hstep_aux].
-            destruct (Hall e v Hstep_aux) as [He_in | Hvis_v].
-            + apply (Hexplored e He_in v Hstep_aux).
-            + exact Hvis_v. }
+           unfold Hoare. split.
+           { intros s' b s'' Hs' Hprog.
+             rewrite Hs' in *.
+             cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+             destruct Hprog as [-> ->].
+             unfold Q_scc_step_visited.
+             repeat split.
+             - exact Hsubset.
+             - exact Hs1_vis.
+             - intros v Hstep.
+               destruct Hstep as [e Hstep_aux].
+               destruct (Hall e v Hstep_aux) as [He_in | Hvis_v].
+               + apply (Hexplored e He_in v Hstep_aux).
+               + exact Hvis_v. }
+           { intros s' Hs' Herr. exfalso.
+             cbv beta iota delta [custom break MonadErr.ret] in Herr.
+             sets_unfold in Herr. firstorder. } }
   - intros _ s' [Hsubset [Hvis Hstep_vis]]; exact Hstep_vis.
 Qed.
 
@@ -2144,7 +2701,7 @@ Proof.
           visited2 s' v /\ visited2 s1 ⊆ visited2 s' /\
           (forall w, visited2 s' w -> visited2 s1 w \/ neighbor_visited s' w)).
         { exact (IH s1 v). }
-        { intros _; apply Hoare_ret'.
+        { intros _; apply Hoare_ret.
           intros s2 [Hvis_v [Hsubset2 Hneigh2]].
           unfold P_loop.
           repeat split.
@@ -2176,24 +2733,27 @@ Proof.
               subst v'; exact Hvis_v.
           - etransitivity; eauto. } }
       { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros s' b s'' Hs' Hprog.
-        rewrite Hs' in *.
-        destruct Hprog as [-> ->].
-        simpl.
-        repeat split.
-        - exact Hs1_vis.
-        - exact Hincl.
-        - intros w Hvis_w.
-          destruct (P_vis w Hvis_w) as [Hw_s0 | [Hw_u | Hw_neigh]].
-          + left; exact Hw_s0.
-          + subst w; right; unfold neighbor_visited.
-            intros v0 Hstep.
-            destruct Hstep as [e0 Hstep_aux].
-            destruct (Hall e0 v0 Hstep_aux) as [He_in | Hvis_v0].
-            { apply (Hexplored e0 v0 He_in Hstep_aux). }
-            { exact Hvis_v0. }
-          + right; exact Hw_neigh. }
+        unfold Hoare. split.
+        { intros s' b s'' Hs' Hprog.
+          rewrite Hs' in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [-> ->].
+          repeat split.
+          - exact Hs1_vis.
+          - exact Hincl.
+          - intros w Hvis_w.
+            destruct (P_vis w Hvis_w) as [Hw_s0 | [Hw_u | Hw_neigh]].
+            + left; exact Hw_s0.
+            + subst w; right; unfold neighbor_visited.
+              intros v0 Hstep.
+              destruct Hstep as [e0 Hstep_aux].
+              destruct (Hall e0 v0 Hstep_aux) as [He_in | Hvis_v0].
+              { apply (Hexplored e0 v0 He_in Hstep_aux). }
+              { exact Hvis_v0. }
+            + right; exact Hw_neigh. }
+        { intros s' Hs' Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
 Qed.
 
 (** [DFS_scc_neighbor_visited_strong]
@@ -2265,18 +2825,22 @@ Proof.
           (Q := fun (_:unit) (s':St) =>
             forall v0, visited2 s' v0 -> visited2 s1 v0 \/ reachable g v v0).
         { exact (IH s1 v). }
-        { intros _; apply Hoare_ret'.
+        { intros _; apply Hoare_ret.
           intros s2 Hreach_v.
           intros w Hvis_w.
           destruct (Hreach_v w Hvis_w) as [Hw_s1 | Hw_v].
           - apply HP; exact Hw_s1.
           - right. etransitivity; [apply step_rt; exists e; exact H_step | eauto]. } }
       { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros s' b s'' Hs' Hprog.
-        rewrite Hs' in *.
-        destruct Hprog as [-> ->].
-        simpl. exact HP. }
+        unfold Hoare. split.
+        { intros s' b s'' Hs' Hprog.
+          rewrite Hs' in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [-> ->].
+          exact HP. }
+        { intros s' Hs' Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
 Qed.
 
 (** [DFS_scc_reachable_from_u]
@@ -2482,14 +3046,15 @@ Proof.
     visited2 s0' ⊆ visited2 st).
   apply Hoare_bind with (Q := fun (_:unit) (s':St) => visited2 s' u' /\ visited2 s' == visited2 s0' ∪ Sets.singleton u' /\ scc_id s' = scc_id s0').
   + (* visit2 u' *)
-    unfold Hoare, visit2.
-    intros s1 a s2 Hs1 Hprog.
-    rewrite Hs1 in *.
-    destruct Hprog as [Hv [Htimer [Hfin [Hv1 [Hsid Hscc_next]]]]].
-    split; [| split].
-    - sets_unfold. apply Hv. right; reflexivity.
-    - exact Hv.
-    - exact Hsid.
+    unfold Hoare, visit2. split.
+    * intros s1 a s2 Hs1 Hprog.
+      rewrite Hs1 in *.
+      destruct Hprog as [Hv [Htimer [Hfin [Hv1 [Hsid Hscc_next]]]]].
+      split; [| split].
+      - sets_unfold. apply Hv. right; reflexivity.
+      - exact Hv.
+      - exact Hsid.
+    * intros s1 Hs1 Herr. exfalso. exact Herr.
   + intros junk. apply Hoare_normalize.
     intros s2 [Hvis_u2 [Hv_char2 Hscc_eq]].
     eapply Hoare_bind.
@@ -2532,7 +3097,7 @@ Proof.
         apply Hoare_normal_assume_bind; intros H_step.
         eapply Hoare_bind with (Q := Q v s1).
         { exact (IH s1 v). }
-        { intro junk3. simpl. apply Hoare_ret'.
+        { intro junk3. simpl. apply Hoare_ret.
           intros s3 [Hnew_s3 [Hpres_s3 [Hroot_s3 Hsub3]]].
           unfold P_loop.
           repeat split.
@@ -2558,11 +3123,15 @@ Proof.
             intros w Hw_s0. apply Hsub3, HP4; exact Hw_s0. } }
       { (* break branch *)
         apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros s'' b' s''' Hs'' Hprog.
-        rewrite Hs'' in *.
-        destruct Hprog as [-> ->].
-        simpl. exact (conj HP1 (conj HP2 (conj HP3 HP4))). } }
+        unfold Hoare. split.
+        { intros s'' b' s''' Hs'' Hprog.
+          rewrite Hs'' in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [-> ->].
+          exact (conj HP1 (conj HP2 (conj HP3 HP4))). }
+        { intros s'' Hs'' Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } } }
   { simpl. intros a s' H. exact H. }
 Qed.
 
@@ -2659,20 +3228,23 @@ Qed.
 Lemma visit2_preserves_scc_next : forall s0 u,
   Hoare (fun st => st = s0) (visit2 u) (fun _ s' => scc_next s' = scc_next s0).
 Proof.
-  intros s0 u. intros s1 a s2 Hs1 Hprog. subst s1.
-  sets_unfold in Hprog.
-  unfold visit2 in Hprog.
-  simpl in Hprog.
-  destruct Hprog as [_ [_ [_ [_ [_ Hscc]]]]]. exact Hscc.
+  intros s0 u. unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [visit2 custom] in Hprog.
+    destruct Hprog as [_ [_ [_ [_ [_ Hscc]]]]]. exact Hscc.
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 Lemma set_scc_id_preserves_scc_next : forall s0 u root0,
   Hoare (fun st => st = s0) (set_scc_id u root0) (fun _ s' => scc_next s' = scc_next s0).
 Proof.
-  intros s0 u root0. intros s1 a s2 Hs1 Hprog. subst s1.
-  sets_unfold in Hprog.
-  unfold set_scc_id in Hprog. simpl in Hprog.
-  destruct Hprog as [_ [_ [_ [_ [_ [_ Hscc]]]]]]. exact Hscc.
+  intros s0 u root0. unfold Hoare. split.
+  - intros s1 a s2 Hs1 Hprog.
+    rewrite Hs1 in *.
+    cbv beta iota delta [set_scc_id custom] in Hprog.
+    destruct Hprog as [_ [_ [_ [_ [_ [_ Hscc]]]]]]. exact Hscc.
+  - intros s1 Hs1 Herr. exfalso. exact Herr.
 Qed.
 
 Lemma DFS_scc_preserves_scc_next : forall s0 root u,
@@ -2703,13 +3275,17 @@ Proof.
         apply Hoare_normal_assume_bind; intros _. apply Hoare_normal_assume_bind; intros _.
         apply Hoare_normal_assume_bind; intros _. eapply Hoare_bind.
         - exact (IH s v).
-        - intro; apply Hoare_ret'. intros s' Hnext. etransitivity; eauto. }
+        - intro; apply Hoare_ret. intros s' Hnext. etransitivity; eauto. }
       { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros s'' b' s''' Hs'' Hprog.
-        rewrite Hs'' in *.
-        destruct Hprog as [-> ->].
-        simpl. exact Hinv. } 
+        unfold Hoare. split.
+        { intros s'' b' s''' Hs'' Hprog.
+          rewrite Hs'' in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [-> ->].
+          exact Hinv. }
+        { intros s'' Hs'' Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
 Qed.
 
 Lemma DFS_scc_preserves_visited1 : forall s0 root u,
@@ -2721,16 +3297,20 @@ Proof.
   intros W IH s0' u'. unfold DFS_scc_f.
   apply Hoare_bind with
     (Q := fun (_:unit) (s':St) => visited1 s' = visited1 s0').
-  + intros s1 a s2 Hs1 Hprog. subst s1. sets_unfold in Hprog.
-    unfold visit2 in Hprog. simpl in Hprog.
-    destruct Hprog as [_ [_ [_ [Hv1 _]]]]. exact Hv1.
+  + unfold Hoare. split.
+    * intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit2 custom] in Hprog.
+      destruct Hprog as [_ [_ [_ [Hv1 _]]]]. exact Hv1.
+    * intros s1 Hs1 Herr. exfalso. exact Herr.
   + intro junk. apply Hoare_normalize. intros s1 Hv1_eq1.
     apply Hoare_bind with
       (Q := fun (_:unit) (s':St) => visited1 s' = visited1 s0').
     * eapply Hoare_imp_post.
-      - intros s3 a s4 Hs3 Hprog. subst s3. sets_unfold in Hprog.
-        unfold set_scc_id in Hprog. simpl in Hprog.
-        destruct Hprog as [_ [_ [_ [_ [Hv1 _]]]]]. exact Hv1.
+      - unfold Hoare. split.
+        ++ intros s3 a s4 Hs3 Hprog. rewrite Hs3 in *.
+           cbv beta iota delta [set_scc_id custom] in Hprog.
+           destruct Hprog as [_ [_ [_ [_ [Hv1 _]]]]]. exact Hv1.
+        ++ intros s3 Hs3 Herr. exfalso. exact Herr.
       - simpl. intros _ s' Heq. rewrite Heq. exact Hv1_eq1.
     * intro junk2.
       apply Hoare_repeat_break with
@@ -2742,11 +3322,15 @@ Proof.
         apply Hoare_normal_assume_bind; intros _. apply Hoare_normal_assume_bind; intros _.
         apply Hoare_normal_assume_bind; intros _. eapply Hoare_bind.
         - exact (IH s v).
-        - intro; apply Hoare_ret'. intros s' Hnext. etransitivity; eauto. }
+        - intro; apply Hoare_ret. intros s' Hnext. etransitivity; eauto. }
       { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros s'' b' s''' Hs'' Hprog. rewrite Hs'' in *. destruct Hprog as [-> ->].
-        simpl. exact Hinv. }
+        unfold Hoare. split.
+        { intros s'' b' s''' Hs'' Hprog. rewrite Hs'' in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [-> ->]. exact Hinv. }
+        { intros s'' Hs'' Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
 Qed.
 
 Lemma DFS_scc_preserves_finish : forall s0 root u,
@@ -2758,16 +3342,20 @@ Proof.
   intros W IH s0' u'. unfold DFS_scc_f.
   apply Hoare_bind with
     (Q := fun (_:unit) (s':St) => finish s' = finish s0').
-  + intros s1 a s2 Hs1 Hprog. subst s1. sets_unfold in Hprog.
-    unfold visit2 in Hprog. simpl in Hprog.
-    destruct Hprog as [_ [_ [Hfin _]]]. exact Hfin.
+  + unfold Hoare. split.
+    * intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit2 custom] in Hprog.
+      destruct Hprog as [_ [_ [Hfin _]]]. exact Hfin.
+    * intros s1 Hs1 Herr. exfalso. exact Herr.
   + intro junk. apply Hoare_normalize. intros s1 Hfin_eq1.
     apply Hoare_bind with
       (Q := fun (_:unit) (s':St) => finish s' = finish s0').
     * eapply Hoare_imp_post.
-      - intros s3 a s4 Hs3 Hprog. subst s3. sets_unfold in Hprog.
-        unfold set_scc_id in Hprog. simpl in Hprog.
-        destruct Hprog as [_ [_ [_ [Hfin _]]]]. exact Hfin.
+      - unfold Hoare. split.
+        ++ intros s3 a s4 Hs3 Hprog. rewrite Hs3 in *.
+           cbv beta iota delta [set_scc_id custom] in Hprog.
+           destruct Hprog as [_ [_ [_ [Hfin _]]]]. exact Hfin.
+        ++ intros s3 Hs3 Herr. exfalso. exact Herr.
       - simpl. intros _ s' Heq. rewrite Heq. exact Hfin_eq1.
     * intro junk2.
       apply Hoare_repeat_break with
@@ -2779,11 +3367,15 @@ Proof.
         apply Hoare_normal_assume_bind; intros _. apply Hoare_normal_assume_bind; intros _.
         apply Hoare_normal_assume_bind; intros _. eapply Hoare_bind.
         - exact (IH s v).
-        - intro; apply Hoare_ret'. intros s' Hnext. etransitivity; eauto. }
+        - intro; apply Hoare_ret. intros s' Hnext. etransitivity; eauto. }
       { apply Hoare_normal_assume_bind; intros Hall.
-        unfold Hoare, break, ret.
-        intros s'' b' s''' Hs'' Hprog. rewrite Hs'' in *. destruct Hprog as [-> ->].
-        simpl. exact Hinv. }
+        unfold Hoare. split.
+        { intros s'' b' s''' Hs'' Hprog. rewrite Hs'' in *.
+          cbv beta iota delta [custom break MonadErr.ret] in Hprog.
+          destruct Hprog as [-> ->]. exact Hinv. }
+        { intros s'' Hs'' Herr. exfalso.
+          cbv beta iota delta [custom break MonadErr.ret] in Herr.
+          sets_unfold in Herr. firstorder. } }
 Qed.
 
 Lemma DFS_scc_R : forall s1 root,
@@ -2873,11 +3465,16 @@ Proof.
   unfold kosaraju_scc_f.
   apply Hoare_choice.
   { apply Hoare_bind with (Q := fun (u:V) (s':St) => s' = s0 /\ ~ visited2 s' u).
-    { unfold Hoare, pick_unvisited2, get.
-      intros s1 u s2 Hs1 Hprog.
-      rewrite Hs1 in *.
-      destruct Hprog as [[Hnot_vis _] Hsame].
-      rewrite Hsame in Hnot_vis; split; [symmetry; exact Hsame | exact Hnot_vis]. }
+    { unfold Hoare. split.
+      - intros s1 a s2 Hs1 Hprog.
+        rewrite Hs1 in *.
+        cbv beta iota delta [pick_unvisited2 MonadErr.nrm_nrm get] in Hprog.
+        destruct Hprog as [[_ [Hnot_vis _]] Hsame].
+        rewrite Hsame in Hnot_vis.
+        split; [symmetry; exact Hsame | exact Hnot_vis].
+      - intros s1 Hs1 Herr. exfalso.
+        cbv beta iota delta [pick_unvisited2 MonadErr.nrm_err get] in Herr.
+        sets_unfold in Herr. firstorder. }
     { intro u.
       apply Hoare_normalize.
       intros s1 [Hs1_eq Hunvis].
@@ -2892,9 +3489,9 @@ Proof.
           { apply DFS_scc_neighbor_visited_strong. }
           { intros _ s' [Hvis_u _]; exact Hvis_u. } }
         { intro a; apply Hoare_normalize; intros s3 _; apply (IH s3). } } } }
-  { apply Hoare_assume_bind with (Q := fun st => forall v, visited2 st v).
-    apply Hoare_ret'.
-    intros s1 [Hall _]; exact Hall. }
+  { apply Hoare_normal_assume_bind; intros Hall.
+    apply Hoare_ret.
+    intros s1 Hs1. subst s1. exact Hall. }
 Qed.
 
 (** [kosaraju_scc_all_visited]
@@ -2930,11 +3527,16 @@ Proof.
     apply Hoare_choice.
     { (* recursive branch: pick root -> set_scc_root_id -> DFS_scc -> W *)
       apply Hoare_bind with (Q := fun (u:V) (s':St) => s' = s0' /\ ~ visited2 s' u).
-      { unfold Hoare, pick_unvisited2, get.
-        intros s1 u s2 Hs1 Hprog.
-        rewrite Hs1 in *.
-        destruct Hprog as [[Hnot_vis _] Hsame].
-        rewrite Hsame in Hnot_vis; split; auto. }
+      { unfold Hoare. split.
+        - intros s1 a s2 Hs1 Hprog.
+          rewrite Hs1 in *.
+          cbv beta iota delta [pick_unvisited2 MonadErr.nrm_nrm get] in Hprog.
+          destruct Hprog as [[_ [Hnot_vis _]] Hsame].
+          rewrite Hsame in Hnot_vis.
+          split; [symmetry; exact Hsame | exact Hnot_vis].
+        - intros s1 Hs1 Herr. exfalso.
+          cbv beta iota delta [pick_unvisited2 MonadErr.nrm_err get] in Herr.
+          sets_unfold in Herr. firstorder. }
       { intro root.
         apply Hoare_normalize.
         intros s1 [Hs1_eq Hunvis]; subst s1.
@@ -2963,7 +3565,7 @@ Proof.
         (Q := fun (_:unit) (s':St) => ForwardReachClosed s')
         (s0 := s0').
       intros Hall.
-      apply Hoare_ret'; intros s Hs; subst s; exact Hclosed'. } }
+      apply Hoare_ret; intros s Hs; subst s; exact Hclosed'. } }
   { exact Hclosed. }
 Qed.
 
@@ -3031,10 +3633,15 @@ Proof.
     { apply Hoare_bind with (Q := fun (u:V) (s':St) =>
         s' = s0' /\ ~ visited2 s' u /\
         (forall w, ~ visited2 s' w -> finish s' u >= finish s' w)).
-      { unfold Hoare, pick_unvisited2, get.
-        intros s1 u s2 Hs1 Hprog. rewrite Hs1 in *.
-        destruct Hprog as [[Hnot_vis Hmax2] Hsame].
-        rewrite Hsame in *; repeat split; auto. }
+      { unfold Hoare. split.
+        - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+          cbv beta iota delta [pick_unvisited2 MonadErr.nrm_nrm get] in Hprog.
+          destruct Hprog as [[_ [Hnot_vis Hmax2]] Hsame].
+          rewrite Hsame in Hnot_vis, Hmax2.
+          repeat split; [symmetry; exact Hsame | exact Hnot_vis | exact Hmax2].
+        - intros s1 Hs1 Herr. exfalso.
+          cbv beta iota delta [pick_unvisited2 MonadErr.nrm_err get] in Herr.
+          sets_unfold in Herr. firstorder. }
       { intro root. apply Hoare_normalize.
         intros s1 [Hs1_eq [Hnot_root2 Hmax2]]; subst s1.
         apply (round_W_R s0' root W HR' Hnot_root2 Hmax2).
@@ -3042,68 +3649,100 @@ Proof.
     { apply Hoare_normal_assume_bind with
         (P := fun st => forall v, visited2 st v) (f := skip)
         (Q := fun (_:unit) (s':St) => R s') (s0 := s0').
-      intros Hall. apply Hoare_ret'; intros s Hs; subst s; exact HR'. } }
+      intros Hall. apply Hoare_ret; intros s Hs; subst s; exact HR'. } }
   { exact HR0. }
 Qed.
 
 Lemma DFS_finish_preserves_visited2 : forall s0 u,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) (DFS_finish u) (fun _ s' => visited2 s' = visited2 s0).
 Proof.
-  intros s0 u. unfold DFS_finish.
-  apply Hoare_normal_LFix with
-    (Q := fun (u':V) (s0':St) (_:unit) (s':St) => visited2 s' = visited2 s0').
-  intros W IH s0' u'. unfold DFS_finish_f.
+  intros s0 u Htb. unfold DFS_finish.
+  apply (DFS_finish_fixpoint_ind
+           (fun (u' : V) (s0' : St) (_ : unit) (s' : St) => visited2 s' = visited2 s0')).
+  { intros W IHprop IHcard s0' u' Hentry'. unfold DFS_finish_f.
   apply Hoare_bind with
-    (Q := fun (_:unit) (s':St) => visited2 s' = visited2 s0').
-  + intros s1 a s2 Hs1 Hprog. subst s1. sets_unfold in Hprog.
-    unfold visit1 in Hprog. simpl in Hprog.
-    destruct Hprog as [_ [_ [_ [Hv2 _]]]]. exact Hv2.
+    (Q := fun (_:unit) (s':St) => visited2 s' = visited2 s0' /\ cardV (visited1 s') >= timer s').
+  + unfold Hoare. split.
+    * intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+      cbv beta iota delta [visit1 custom] in Hprog.
+      destruct Hprog as [Hv [Htimer [Hfin [Hv2 _]]]].
+      split.
+      { exact Hv2. }
+      { apply (cardV_visit1_nosteps s0' s2 u' Hv Htimer Hentry'). }
+    * intros s1 Hs1 Herr. exfalso. exact Herr.
   + intro junk.
     apply Hoare_repeat_break with
-      (P := fun _ st => visited2 st = visited2 s0')
+      (P := fun _ st => visited2 st = visited2 s0' /\ cardV (visited1 st) >= timer st)
       (Q := fun _ s' => visited2 s' = visited2 s0').
-    intros e_set. apply Hoare_normalize. intros s Hinv.
+    intros e_set. apply Hoare_normalize. intros s [Hinv Hcard_s].
     apply Hoare_choice.
     { apply Hoare_any_bind; intros e; apply Hoare_any_bind; intros v.
-      apply Hoare_normal_assume_bind; intros _. apply Hoare_normal_assume_bind; intros _.
-      apply Hoare_normal_assume_bind; intros _. eapply Hoare_bind.
-      - exact (IH s v).
-      - intro; apply Hoare_ret'. intros s' Hnext. etransitivity; eauto. }
+      apply Hoare_normal_assume_bind; intros _.
+      apply Hoare_normal_assume_bind; intros H_not_vis.
+      apply Hoare_normal_assume_bind; intros H_step.
+      assert (Hvv : vvalid g v) by exact (step_vvalid1 g e v u' H_step).
+      eapply Hoare_bind with (Q := fun (_:unit) (s':St) =>
+        visited2 s' = visited2 s /\ cardV (visited1 s') >= timer s' + 0).
+      { apply Hoare_conj.
+        - apply (IHprop s v Hcard_s).
+        - apply (IHcard s v 0 H_not_vis Hvv). lia. }
+      { intro; apply Hoare_ret. intros s' [Hnext Hcard_s'].
+        split; [etransitivity; [exact Hnext | exact Hinv] | lia]. } }
     { apply Hoare_normal_assume_bind; intros Hall.
-      unfold Hoare, bind, get, set_finish, break, ret.
-      intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
-      destruct Hprog as [t [s' [[Ht Hs'] Hrest]]].
-      destruct Hrest as [v [s'' [Hset [Hbrk_eq Hstate_eq]]]].
-      rewrite Hbrk_eq. simpl. rewrite <- Hstate_eq.
-      unfold set_finish in Hset; cbv beta in Hset.
-      destruct Hset as [_ [_ [_ [_ [Hv2 _]]]]].
-      rewrite Hv2. rewrite <- Hs'. exact Hinv. }
+      assert (Htb_all : forall st', st' = s -> timer st' <= length (bijective_listV g))
+        by (intros st' Hr; subst st'; assert (Hle : (cardV (visited1 s) <= length (bijective_listV g))%nat) by apply cardV_le; lia).
+      apply (proj2 (Hoare_assertS_bind _ _ _ _ Htb_all)).
+      unfold Hoare. split.
+      { intros s1' a s2 Hs1' Hprog. rewrite Hs1' in *.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom break MonadErr.ret] in Hprog.
+        destruct Hprog as [t [s' [[Ht Hs'] [v [s'' [Hset [Hbrk_eq Hstate_eq]]]]]]].
+        destruct Hset as [_ [_ [_ [_ [Hv2 _]]]]].
+        rewrite Hbrk_eq; simpl; rewrite Hstate_eq.
+        rewrite Hv2, <- Hs'. exact Hinv. }
+      { intros s1' Hs1' Herr. exfalso.
+        cbv beta iota delta [MonadErr.bind MonadErr.nrm_err get set_finish custom break MonadErr.ret] in Herr.
+        sets_unfold in Herr. firstorder. } } }
+  exact Htb.
 Qed.
 
 Lemma kosaraju_finish_preserves_visited2 : forall s0,
+  cardV (visited1 s0) >= timer s0 ->
   Hoare (fun st => st = s0) kosaraju_finish (fun _ s' => visited2 s' = visited2 s0).
 Proof.
-  intros s0. unfold kosaraju_finish.
-  apply Hoare_normal_LFix with
+  intros s0 Htb_s0. unfold kosaraju_finish.
+  apply Hoare_normal_LFix_closed with
+    (R := fun s => cardV (visited1 s) >= timer s)
     (Q := fun (_:unit) (s0':St) (_:unit) (s':St) => visited2 s' = visited2 s0').
-  intros W IH s0' u. simpl.
-  unfold kosaraju_finish_f.
-  apply Hoare_choice.
-  { apply Hoare_bind with (Q := fun (u0:V) (s':St) => s' = s0' /\ ~ visited1 s' u0).
-    { unfold Hoare, pick_unvisited1, get.
-      intros s1 u0 s2 Hs1 Hprog. rewrite Hs1 in *.
-      destruct Hprog as [Hnot_vis Hsame]. rewrite Hsame in Hnot_vis. split; auto. }
-    { intro u0. apply Hoare_normalize. intros s1 [Hs1_eq Hunvis]; subst s1.
-      apply Hoare_bind with
-        (Q := fun (_:unit) (s':St) => visited2 s' = visited2 s0').
-      - apply (DFS_finish_preserves_visited2 s0' u0).
-      - intro junk.
-        apply Hoare_normalize. intros s3 Hv2_eq3.
-        eapply Hoare_imp_post.
-        { apply (IH s3 tt). }
-        { simpl. intros _ s' Hv2'. rewrite Hv2'. exact Hv2_eq3. } } }
-  { apply Hoare_assume_bind with (Q := fun st => forall v, visited1 st v).
-    apply Hoare_ret'. intros s1 [Hall Hs]. subst s1. reflexivity. }
+  + intros W IH s0' u Htb_s0'. simpl.
+    unfold kosaraju_finish_f.
+    apply Hoare_choice.
+    { apply Hoare_bind with (Q := fun (u0:V) (s':St) => s' = s0' /\ vvalid g u0 /\ ~ visited1 s' u0).
+      { unfold Hoare. split.
+        - intros s1 a s2 Hs1 Hprog. rewrite Hs1 in *.
+          cbv beta iota delta [pick_unvisited1 MonadErr.nrm_nrm get] in Hprog.
+          destruct Hprog as [[Hvv Hnot_vis] Hsame].
+          rewrite Hsame in Hnot_vis.
+          split; [symmetry; exact Hsame | split; [exact Hvv | exact Hnot_vis]].
+        - intros s1 Hs1 Herr. exfalso.
+          cbv beta iota delta [pick_unvisited1 MonadErr.nrm_err get] in Herr.
+          sets_unfold in Herr. firstorder. }
+      { intro u0. apply Hoare_normalize. intros s1 [Hs1_eq [Hvv Hunvis]]; subst s1.
+        apply Hoare_bind with
+          (Q := fun (_:unit) (s':St) => visited2 s' = visited2 s0' /\ cardV (visited1 s') >= timer s').
+        - apply Hoare_conj.
+          + apply (DFS_finish_preserves_visited2 s0' u0 Htb_s0').
+          + eapply Hoare_imp_post.
+            { apply (DFS_finish_card_timer s0' u0 0 Hunvis Hvv). lia. }
+            { simpl. intros _ s' Htb'. lia. }
+        - intro junk.
+          apply Hoare_normalize. intros s3 [Hv2_eq3 Htb_s3].
+          eapply Hoare_imp_post.
+          { apply (IH s3 tt Htb_s3). }
+          { simpl. intros _ s' Hv2'. rewrite Hv2'. exact Hv2_eq3. } } }
+    { apply Hoare_normal_assume_bind; intros _.
+      apply Hoare_ret. intros s1 Hs1. subst s1. reflexivity. }
+  + exact Htb_s0.
 Qed.
 
 Lemma kosaraju_finish_R : Hoare (fun st => st = init_st) kosaraju_finish (fun _ s' => R s').
@@ -3114,7 +3753,9 @@ Proof.
     + apply kosaraju_finish_phase1_order.
     + apply Hoare_conj.
       * apply (kosaraju_finish_visited_all init_st).
-      * apply kosaraju_finish_preserves_visited2.
+        unfold init_st; cbn; lia.
+      * apply (kosaraju_finish_preserves_visited2 init_st).
+        unfold init_st; cbn; lia.
   - simpl. intros _ s' [Hphase [Hvis1 Hv2_eq]].
     split; [| split; [| split; [| split]]].
     { intros u v Hvis _. rewrite Hv2_eq in Hvis. exfalso; exact Hvis. }
@@ -3160,6 +3801,7 @@ Proof.
   - apply Hoare_conj.
     + apply kosaraju_finish_R.
     + apply (kosaraju_finish_preserves_visited2 init_st).
+       unfold init_st; cbn; lia.
   - intro junk. apply Hoare_normalize.
     intros s1 [HR Hv2_eq].
     assert (HAT0 : AntiTopo s1).
@@ -3181,10 +3823,15 @@ Proof.
         { apply Hoare_bind with (Q := fun (u:V) (s':St) =>
             s' = s0' /\ ~visited2 s' u /\
             (forall w, ~visited2 s' w -> finish s' u >= finish s' w)).
-          { unfold Hoare, pick_unvisited2, get.
-            intros ss uu ss2 Hss Hprog. rewrite Hss in *.
-            destruct Hprog as [[Hn Hm] Hsame].
-            rewrite Hsame in *; repeat split; auto. }
+          { unfold Hoare. split.
+            - intros ss uu ss2 Hss Hprog. rewrite Hss in *.
+              cbv beta iota delta [pick_unvisited2 MonadErr.nrm_nrm get] in Hprog.
+              destruct Hprog as [[_ [Hn Hm]] Hsame].
+              rewrite Hsame in Hn, Hm.
+              repeat split; [symmetry; exact Hsame | exact Hn | exact Hm].
+            - intros ss Hss Herr. exfalso.
+              cbv beta iota delta [pick_unvisited2 MonadErr.nrm_err get] in Herr.
+              sets_unfold in Herr. firstorder. }
           intro root. apply Hoare_normalize.
           intros sx [Hsx [Hnot_root Hmax]]; subst sx.
           assert (HR_full : R s0') by exact (conj HFC (conj Hphase (conj Hvis1 (conj Hscclt Hcorrect)))).
@@ -3249,7 +3896,7 @@ Proof.
             (f := skip)
             (Q := fun _ s' => AntiTopo s')
             (s0 := s0').
-          intros _. apply Hoare_ret'; intros s Hs; subst; exact HAT'. }
+          intros _. apply Hoare_ret; intros s Hs; subst; exact HAT'. }
     + intros _ s' [[Hvisited HR'] HAT'].
       destruct HR' as [_ [_ [_ [_ Hcorrect']]]].
       split; [exact Hvisited|split].
@@ -3258,7 +3905,7 @@ Proof.
 Qed.
 
 (* ================================================================= *)
-(* mono_cont + Lfix unfold lemmas for DFS_finish_f / DFS_scc_f.       *)
+(* mono_cont + BW_fix unfold lemmas for DFS_finish_f / DFS_scc_f.       *)
 (* These let the cursor continuations in the refinement lib relate    *)
 (* dfs_finish_from/dfs_scc_from to the abstract DFS step behaviour.   *)
 (* Mirrors DFS.DFS_mono_cont / DFS_unfold in algorithms/DFS/DFS.v.    *)
@@ -3268,7 +3915,7 @@ Qed.
     pointwise-included value (codomain [C -> program Σ B]), then for any
     fixed [a : C] the specialisation [fun W => f W a] is also mono_cont.
     This bridges the gap left by [mono_cont_auto], which does not descend
-    through applications of an [Lfix]-producing function to a concrete
+    through applications of an [BW_fix]-producing function to a concrete
     argument (the [repeat_break (...) ∅] shape in DFS_finish_f). *)
 
 Lemma mono_cont_at {Σ A B C: Type}
@@ -3276,17 +3923,11 @@ Lemma mono_cont_at {Σ A B C: Type}
   mono_cont f -> mono_cont (fun W => f W a).
 Proof.
   intro Hf. unfold mono_cont in Hf. destruct Hf as [Hmono Hcont]. split.
-  - (* mono part *)
-    unfold mono, Proper, respectful.
-    intros W1 W2 HW.
-    assert (Hinc : Sets.included (f W1) (f W2)) by (apply Hmono; assumption).
-    sets_unfold. sets_unfold in Hinc. apply Hinc.
-  - (* continuous part *)
-    unfold continuous, sseq_continuous.
-    intros T HT.
-    cbv beta.
-    assert (Heq : Sets.equiv (f (⋃ T)) (⋃ (fun n => f (T n)))) by (apply Hcont; assumption).
-    sets_unfold. sets_unfold in Heq. apply Heq.
+  - unfold mono, Proper, respectful. intros W1 W2 HW.
+    apply Hmono. exact HW.
+  - unfold continuous in *. intros T HT.
+    unfold seq_continuous in Hcont.
+    apply (Hcont T HT).
 Qed.
 
 Lemma mono_cont_pointwise {Σ A B C: Type}
@@ -3294,14 +3935,10 @@ Lemma mono_cont_pointwise {Σ A B C: Type}
   (forall c, mono_cont (fun W => f W c)) -> mono_cont f.
 Proof.
   intro Hf. unfold mono_cont. split.
-  - unfold mono, Proper, respectful. intros W1 W2 HW.
-    assert (Hinc : forall c, Sets.included (f W1 c) (f W2 c)).
-    { intros c. destruct (Hf c) as [Hmono _]. apply Hmono; assumption. }
-    sets_unfold. sets_unfold in Hinc. intros c. apply (Hinc c).
-  - unfold continuous, sseq_continuous. intros T HT. cbv beta.
-    assert (Heq : forall c, Sets.equiv (f (⋃ T) c) (⋃ (fun n => f (T n) c))).
-    { intros c. destruct (Hf c) as [_ Hcont]. apply Hcont; assumption. }
-    sets_unfold. sets_unfold in Heq. intros c. apply (Heq c).
+  - unfold mono, Proper, respectful. intros W1 W2 HW c.
+    destruct (Hf c) as [Hmono _]. apply Hmono. exact HW.
+  - unfold continuous. intros T HT c.
+    destruct (Hf c) as [_ Hcont]. apply Hcont. exact HT.
 Qed.
 
 Lemma DFS_finish_f_mono_cont : mono_cont DFS_finish_f.
@@ -3311,7 +3948,7 @@ Proof.
   | |- mono_cont (fun (W : V -> program St unit) => ?F ?X) =>
       apply (mono_cont_at (fun (W : V -> program St unit) => F) X)
   end.
-  apply mono_cont_Lfix; intros; unfold repeat_break_f.
+  apply mono_cont_BW_fix; intros; unfold repeat_break_f.
   all: (apply mono_cont_pointwise; intro; mono_cont_auto).
 Qed.
 
@@ -3322,100 +3959,24 @@ Proof.
   | |- mono_cont (fun (W : V -> program St unit) => ?F ?X) =>
       apply (mono_cont_at (fun (W : V -> program St unit) => F) X)
   end.
-  apply mono_cont_Lfix; intros; unfold repeat_break_f.
+  apply mono_cont_BW_fix; intros; unfold repeat_break_f.
   all: (apply mono_cont_pointwise; intro; mono_cont_auto).
 Qed.
 
 Lemma DFS_finish_unfold (u : V) :
-  DFS_finish u == DFS_finish_f DFS_finish u.
+  @PartialOrder_Setoid.equiv (MonadErr.M St unit) _ (DFS_finish u) (DFS_finish_f DFS_finish u).
 Proof.
-  unfold DFS_finish. revert u. change (DFS_finish == DFS_finish_f DFS_finish).
-  apply Lfix_fixpoint'. exact DFS_finish_f_mono_cont.
+  unfold DFS_finish. revert u.
+  change (@PartialOrder_Setoid.equiv (V -> MonadErr.M St unit) _ DFS_finish (DFS_finish_f DFS_finish)).
+  apply BW_fixpoint'. exact DFS_finish_f_mono_cont.
 Qed.
 
 Lemma DFS_scc_unfold (root u : V) :
-  DFS_scc root u == DFS_scc_f root (DFS_scc root) u.
+  @PartialOrder_Setoid.equiv (MonadErr.M St unit) _ (DFS_scc root u) (DFS_scc_f root (DFS_scc root) u).
 Proof.
-  unfold DFS_scc. revert u. change (DFS_scc root == DFS_scc_f root (DFS_scc root)).
-  apply Lfix_fixpoint'. apply DFS_scc_f_mono_cont.
-Qed.
-
-(* ================================================================= *)
-(* Absorbability: under a reach-closed + self-visited + scc-id-stable *)
-(* state, DFS_scc root u performs the no-op transition (tt, st).      *)
-(* This is the shared foundation for the dfs2 refinement gaps A/B:    *)
-(* at loop exit / visited-skip the abstract DFS_scc on an already-    *)
-(* visited vertex whose out-neighbours are all visited reduces to     *)
-(* just the break branch of its repeat_break (no recursion), hence    *)
-(* `safe (dfs_scc root u) X` forces `X tt st` via wp_spec.            *)
-(* ================================================================= *)
-
-(* Generic mono_cont of repeat_break_f: holds for any body since the  *)
-(* recursive variable W occurs only applied (W a') in the continue    *)
-(* branch; the break branch and body a are W-free.                    *)
-Lemma repeat_break_f_mono_cont : forall (A B: Type)
-  (body: A -> program St (CntOrBrk A B)),
-  mono_cont (repeat_break_f body).
-Proof.
-  intros A B body. unfold repeat_break_f.
-  apply mono_cont_pointwise; intro; mono_cont_auto.
-Qed.
-
-(* If body a can directly produce (by_break b) at state s without     *)
-(* changing the state, then repeat_break body a produces b at s: take *)
-(* the break branch at the first Lfix iteration.                      *)
-Lemma repeat_break_break_step : forall (A B: Type)
-  (body: A -> program St (CntOrBrk A B)) (a: A) (s: St) (b: B),
-  body a s (by_break b) s ->
-  (repeat_break body a) s b s.
-Proof.
-  intros A B body a s b Hbrk.
-  unfold repeat_break, Lfix.
-  sets_unfold.
-  exists 1.
-  cbv [Nat.iter].
-  unfold repeat_break_f, bind.
-  exists (by_break b), s. split; [exact Hbrk|].
-  cbv beta iota. unfold ret. split; reflexivity.
-Qed.
-
-(* DFS_scc root u from a state where u is visited2, u's forward       *)
-(* out-neighbours are all visited2, and scc_id u = scc_id root, can    *)
-(* only take the no-op transition (tt, st): visit2 u and set_scc_id    *)
-(* are absorbed (idempotent / already-set), and the repeat_break       *)
-(* immediately breaks.                                                *)
-Lemma DFS_scc_absorb : forall root u (st: St),
-  (forall v, step g u v -> visited2 st v) ->
-  visited2 st u ->
-  scc_id st u = scc_id st root ->
-  DFS_scc root u st tt st.
-Proof.
-  intros root u st Hneigh Hvisu Hsid.
-  assert (Hv : visit2 u st tt st).
-  { unfold visit2. split.
-    - apply (proj2 (Sets_equiv_Sets_included (visited2 st) (visited2 st ∪ Sets.singleton u))).
-      split.
-      + intros x Hx. left. exact Hx.
-      + intros x Hx. sets_unfold in Hx. destruct Hx as [Hx | Hx].
-        * exact Hx.
-        * sets_unfold in Hx. subst x. exact Hvisu.
-    - repeat split; reflexivity. }
-  assert (Hs : set_scc_id u root st tt st).
-  { unfold set_scc_id. split.
-    - exact Hsid.
-    - repeat split; intros v _; reflexivity. }
-  assert (Hbody : DFS_scc_f root (DFS_scc root) u st tt st).
-  { unfold DFS_scc_f, bind.
-    eexists (tt), st. split; [exact Hv |].
-    eexists (tt), st. split; [exact Hs |].
-    apply repeat_break_break_step.
-    cbv beta. sets_unfold. right.
-    unfold bind. eexists (tt), st. split.
-    - unfold test. split; [| reflexivity].
-      intros e0 v0 Hsa. right. apply Hneigh. exists e0. exact Hsa.
-    - unfold break, ret. split; reflexivity. }
-  destruct (proj1 (Sets_equiv_Sets_included (DFS_scc root u) (DFS_scc_f root (DFS_scc root) u)) (DFS_scc_unfold root u)) as [_ Hinc].
-  apply Hinc. exact Hbody.
+  unfold DFS_scc. revert u.
+  change (@PartialOrder_Setoid.equiv (V -> MonadErr.M St unit) _ (DFS_scc root) (DFS_scc_f root (DFS_scc root))).
+  apply BW_fixpoint'. apply DFS_scc_f_mono_cont.
 Qed.
 
 End Kosaraju.

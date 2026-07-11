@@ -18,7 +18,7 @@ Local Open Scope string_scope.
 Local Open Scope list.
 Import naive_C_Rules.
 From MonadLib Require Export MonadLib.
-From MonadLib.StateRelMonad Require Export StateRelMonad.
+From MonadLib.MonadErr Require Export StateRelMonadErr.
 Export MonadNotation.
 Local Open Scope monad.
 From AUXLib Require Import int_auto Axioms Feq Idents ListLib VMap relations.

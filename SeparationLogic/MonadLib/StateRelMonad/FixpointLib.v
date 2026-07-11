@@ -134,10 +134,10 @@ Qed.
     rewrite H1.
     eapply increasing_program_plus';auto.
   Qed.
-  
-  Lemma mono_intro {A B: Type}:
-    forall (f: (A -> program Σ B) -> A -> program Σ B),
-      (forall a, mono (fun W => f W a)) ->
+
+  Lemma mono_intro {A C D: Type} {A_S: Sets.SETS A} {D_S: Sets.SETS D}:
+    forall (f: A -> C -> D),
+      (forall c, mono (fun a => f a c)) ->
       mono f.
   Proof.
     unfold mono, Proper, respectful.
@@ -207,9 +207,9 @@ Qed.
     - right. eapply H0; eauto.
   Qed.
 
-  Lemma continuous_intro {A B: Type}:
-    forall (f: (A -> program Σ B) -> A -> program Σ B),
-      (forall a, continuous (fun W => f W a)) ->
+  Lemma continuous_intro {A C D: Type} {A_S: Sets.SETS A} {D_S: Sets.SETS D}:
+    forall (f: A -> C -> D),
+      (forall c, continuous (fun a => f a c)) ->
       continuous f.
   Proof.
     unfold continuous, sseq_continuous, sseq_mono.
@@ -217,28 +217,34 @@ Qed.
     eapply H; eauto.
   Qed.
 
-  Lemma continuous_const {A B C: Type}:
-    forall (f: program Σ C),
-      continuous (fun (W: A -> program Σ B) => f).
+  Lemma continuous_const {A B C: Type} {B_S: Sets.SETS B} {C_S: Sets.SETS C} {B_SETS_Properties: SETS_Properties B} {C_SETS_Properties: SETS_Properties C}:
+    forall (f: C),
+      continuous (fun (W: A -> B) => f).
   Proof.
     intros.
     unfold continuous, sseq_continuous, sseq_mono.
     intros.
-    sets_unfold; split; intros.
-    - exists 0; auto.
-    - destruct H0; auto.
+    apply Sets_equiv_Sets_included.
+    split; intros.
+    - apply (Sets_included_indexed_union 0 (fun _ : nat => f)).
+    - apply Sets_indexed_union_included.
+      intros.
+      apply Sets_included_refl.
   Qed.
 
-  Lemma continuous_const' {B C: Type}:
-    forall (f: program Σ C),
-      continuous (fun (W: program Σ B) => f).
+  Lemma continuous_const' {B C: Type}  {B_S: Sets.SETS B} {C_S: Sets.SETS C} {B_SETS_Properties: SETS_Properties B} {C_SETS_Properties: SETS_Properties C}:
+    forall (f: C),
+      continuous (fun (W: B) => f).
   Proof.
     intros.
     unfold continuous, sseq_continuous, sseq_mono.
     intros.
-    sets_unfold; split; intros.
-    - exists 0; auto.
-    - destruct H0; auto.
+    apply Sets_equiv_Sets_included.
+    split; intros.
+    - apply (Sets_included_indexed_union 0 (fun _ : nat => f)).
+    - apply Sets_indexed_union_included.
+      intros.
+      apply Sets_included_refl.
   Qed.
 
   Lemma continuous_bind {A B C D: Type}:
@@ -359,9 +365,10 @@ Qed.
         exists i; auto.
   Qed.
 
-  Lemma mono_cont_intro {A B: Type}:
-    forall (f: (A -> program Σ B) -> A -> program Σ B),
-      (forall a, mono_cont (fun W => f W a)) ->
+  Lemma mono_cont_intro {A C D: Type} {A_S: Sets.SETS A} {D_S: Sets.SETS D}:
+    forall (f: (A) -> (C -> D)),
+      (forall (c: C),
+        mono_cont (fun (W: A) => f W c)) ->
       mono_cont f.
   Proof.
     unfold mono_cont; intros.
@@ -372,14 +379,14 @@ Qed.
       intros; apply H.
   Qed.
 
-  Lemma mono_cont_const {A B C: Type}:
-    forall (f: program Σ C),
-      mono_cont (fun (W: A -> program Σ B) => f).
+  Lemma mono_cont_const {B C: Type} {B_S: Sets.SETS B} {C_S: Sets.SETS C} {B_SETS_Properties: SETS_Properties B} {C_SETS_Properties: SETS_Properties C}:
+    forall (f: C),
+      mono_cont (fun (W: B) => f).
   Proof.
     intros.
     unfold mono_cont.
     split; try easy.
-    apply continuous_const.
+    apply continuous_const'.
   Qed.
 
   Lemma mono_cont_const' {B C: Type}:
@@ -389,7 +396,7 @@ Qed.
     intros.
     unfold mono_cont.
     split; try easy.
-    apply continuous_const'.
+    apply continuous_const.
   Qed.
 
   Lemma mono_cont_bind {A B C D: Type}:
@@ -464,20 +471,44 @@ Qed.
 
 End mono_and_continuous_lemmas.
 
+Lemma mono_cont_at {A C D: Type} {A_S: Sets.SETS A} {D_S: Sets.SETS D}
+      (f: A -> C -> D) (a: C) :
+  mono_cont f -> mono_cont (fun W => f W a).
+Proof.
+  intro Hf. unfold mono_cont in Hf. destruct Hf as [Hmono Hcont]. split.
+  - (* mono part *)
+    unfold mono, Proper, respectful.
+    intros W1 W2 HW.
+    assert (Hinc : Sets.included (f W1) (f W2)) by (apply Hmono; assumption).
+    sets_unfold. sets_unfold in Hinc. apply Hinc.
+  - (* continuous part *)
+    unfold continuous, sseq_continuous.
+    intros T HT.
+    cbv beta.
+    assert (Heq : Sets.equiv (f (⋃ T)) (⋃ (fun n => f (T n)))) by (apply Hcont; assumption).
+    sets_unfold. sets_unfold in Heq. apply Heq.
+Qed.
+
 Ltac mono_cont_auto :=
   match goal with
-  | |- mono_cont (fun (W: ?A -> program ?Σ ?B) (a: ?A) => _) => apply mono_cont_intro; intros; mono_cont_auto
+  | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => repeat_break _) => unfold repeat_break; apply mono_cont_Lfix; [intros; unfold repeat_break_f; mono_cont_auto | intros; unfold repeat_break_f; mono_cont_auto]
+  | |- mono_cont (fun (W: ?A -> program ?Σ ?B) (a: ?C) => _) => apply mono_cont_intro; intros; mono_cont_auto
   | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => bind _ _) => apply mono_cont_bind; [try mono_cont_auto | intros; try mono_cont_auto]
   | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => choice _ _) => apply mono_cont_choice; [try mono_cont_auto | try mono_cont_auto]
   | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => match ?a with _ => _ end) => destruct a; try mono_cont_auto
   | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => Lfix _) => apply mono_cont_Lfix; intros; try mono_cont_auto
   | |- mono_cont (bind _) => (apply mono_cont_bind || apply mono_cont_bind'); [try mono_cont_auto | intros; try mono_cont_auto]
-  | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => _) => try apply mono_cont_const; try easy
+  | |- mono_cont (fun (W: ?A -> program ?Σ ?B) => _) => ((try apply mono_cont_const; try easy) ||   match goal with
+    | |- mono_cont (fun (W : ?T) => ?F ?X) =>
+        try apply (mono_cont_at (fun (W : T) => F) X);
+        try mono_cont_auto
+  end)
   | |- mono_cont (fun (W: program ?Σ ?B) => bind _ _) => apply mono_cont_bind'; [try mono_cont_auto | intros; try mono_cont_auto]
   | |- mono_cont (fun (W: program ?Σ ?B) => choice _ _) => apply mono_cont_choice'; [try mono_cont_auto | try mono_cont_auto]
   | |- mono_cont (fun (W: program ?Σ ?B) => match ?a with _ => _ end) => destruct a; try mono_cont_auto
   | |- mono_cont (fun (W: program ?Σ ?B) => Lfix _) => apply mono_cont_Lfix; intros; try mono_cont_auto
   | |- mono_cont (fun (W: program ?Σ ?B) => _) => try apply mono_cont_const'; try easy
+  | |- mono_cont (fun (W : ?T) => ?F ?X) => apply (mono_cont_at (fun (W : T) => F) X); try mono_cont_auto
   end.
 
 Section loop_unfold.

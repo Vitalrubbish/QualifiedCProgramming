@@ -1,4 +1,4 @@
-#include "safeexec_def.h"
+#include "safeexecE_def.h"
 #include "verification_stdlib.h"
 #include "int_array_def.h"
 
@@ -195,6 +195,7 @@ void dfs2(int root, int u, int n,
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l, sid_l, root_v),
                bind(dfs_scc(g, root, u), f), X) &&
       0 <= u && u < n && 0 <= root && root < n && n <= 2147483647 &&
+      Znth(root, vis2_l, 0) != 0 &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
       IntArray::full(fadj_row, n + 1, fadj_row_l) *
       IntArray::full(vis2, n, vis2_l) *
@@ -228,6 +229,7 @@ void dfs2(int root, int u, int n,
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l, sid_l, root_v),
                dfs_scc(g, root, u), X) &&
       0 <= u && u < n && 0 <= root && root < n && n <= 2147483647 &&
+      Znth(root, vis2_l, 0) != 0 &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
       IntArray::full(fadj_row, n + 1, fadj_row_l) *
       IntArray::full(vis2, n, vis2_l) *
@@ -273,6 +275,11 @@ void dfs2(int root, int u, int n,
         Znth(u, sid_m, 0) == Znth(root, sid_m, 0) &&
         (forall (j: Z), (lo <= j && j < i) =>
                     (Znth(Znth(j, fadj_col_l, 0), vis2_m, 0) != 0)) &&
+        Znth(root, vis2_m, 0) != 0 &&
+        (forall (w: Z), (0 <= w && w < n) =>
+                    (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_m, 0) != 0)) &&
+        (forall (w: Z), (0 <= w && w < n) =>
+                    (w != u => Znth(w, vis2_l, 0) != 0 => Znth(w, sid_l, 0) == Znth(w, sid_m, 0))) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(vis2, n, vis2_m) *
@@ -299,6 +306,11 @@ void dfs2(int root, int u, int n,
         Znth(u, sid_m, 0) == Znth(root, sid_m, 0) &&
         (forall (j: Z), (lo <= j && j < i) =>
                     (Znth(Znth(j, fadj_col_l, 0), vis2_m, 0) != 0)) &&
+        Znth(root, vis2_m, 0) != 0 &&
+        (forall (w: Z), (0 <= w && w < n) =>
+                    (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_m, 0) != 0)) &&
+        (forall (w: Z), (0 <= w && w < n) =>
+                    (w != u => Znth(w, vis2_l, 0) != 0 => Znth(w, sid_l, 0) == Znth(w, sid_m, 0))) &&
         0 <= v && v < n && v == Znth(i, fadj_col_l, 0) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
