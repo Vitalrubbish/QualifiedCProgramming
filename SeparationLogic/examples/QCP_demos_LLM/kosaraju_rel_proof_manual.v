@@ -34,7 +34,7 @@ Lemma proof_of_dfs1_safety_wit_11_split_goal_2 : dfs1_safety_wit_11_split_goal_2
 Proof. pre_process; entailer!; cbv [Znth nth Z.to_nat]; lia. Qed.
 
 Lemma proof_of_dfs1_safety_wit_11 : dfs1_safety_wit_11.
-Proof. Admitted. 
+Proof. left; intros; pre_process. match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H end. pose proof (count_nonzero_le_Zlength vis1_m) as Hc. assert (count_nonzero vis1_m <= n_pre) by lia. entailer!. all: cbv [Znth nth Z.to_nat]; lia. Qed.
 
 Lemma proof_of_dfs1_entail_wit_1 : dfs1_entail_wit_1.
 Proof. Admitted. 
@@ -49,7 +49,7 @@ Lemma proof_of_dfs1_entail_wit_2_split_goal_3 : dfs1_entail_wit_2_split_goal_3.
 Proof. intros; pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 C9]]]]]]]] end; assert (Hb : (0 <= i < m_of radj_row_l_low_level_spec)%Z) by lia; pose proof (C8 i Hb) as Hc; destruct Hc as [Hc1 Hc2]; entailer!; try exact Hc1; try lia. Qed.
 
 Lemma proof_of_dfs1_entail_wit_2 : dfs1_entail_wit_2.
-Proof. Admitted. 
+Proof. right; intros. pose proof (proof_of_dfs1_entail_wit_2_split_goal_1) as H1. pose proof (proof_of_dfs1_entail_wit_2_split_goal_2) as H2. pose proof (proof_of_dfs1_entail_wit_2_split_goal_3) as H3. unfold dfs1_entail_wit_2_split_goal_1 in H1. unfold dfs1_entail_wit_2_split_goal_2 in H2. unfold dfs1_entail_wit_2_split_goal_3 in H3. apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ solve [eapply H1; repeat eassumption] | solve [eapply H2; repeat eassumption] ] | solve [eapply H3; repeat eassumption] ] | pre_process; entailer! ]. Qed.
 
 Lemma proof_of_dfs1_entail_wit_3_1 : dfs1_entail_wit_3_1.
 Proof. pre_process; cbv [applyf dfs_finish_fromK] in *; Exists timer_v_. Exists vis1_l_. Exists fin_l_; entailer!; lia. Qed.
@@ -67,7 +67,7 @@ Lemma proof_of_dfs1_partial_solve_wit_6_pure_split_goal_2 : dfs1_partial_solve_w
 Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
 
 Lemma proof_of_dfs1_partial_solve_wit_6_pure : dfs1_partial_solve_wit_6_pure.
-Proof. Admitted. 
+Proof. right; intros. pose proof (proof_of_dfs1_partial_solve_wit_6_pure_split_goal_1) as H1. pose proof (proof_of_dfs1_partial_solve_wit_6_pure_split_goal_2) as H2. unfold dfs1_partial_solve_wit_6_pure_split_goal_1 in H1. unfold dfs1_partial_solve_wit_6_pure_split_goal_2 in H2. apply _derivable1_andp_intros; [ solve [eapply H1; repeat eassumption] | solve [eapply H2; repeat eassumption] ]. Qed.
 
 Lemma proof_of_dfs2_entail_wit_1_split_goal_1 : dfs2_entail_wit_1_split_goal_1.
 Proof. intros; pre_process; entailer!; repeat match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; intros Hne Hvis; assert (HLu : (0 <= u_pre)%Z) by lia; match goal with |- Znth ?k ?L 0 = _ => assert (HL : (0 <= k < Zlength sid_l_low_level_spec)%Z) by lia; symmetry; rewrite (Znth_replace_neq sid_l_low_level_spec k u_pre (Znth root_pre sid_l_low_level_spec 0) 0 HL HLu Hne); reflexivity end. Qed.
@@ -118,7 +118,7 @@ Lemma proof_of_dfs2_entail_wit_2_split_goal_3 : dfs2_entail_wit_2_split_goal_3.
 Proof. intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hb : (0 <= i < m_of fadj_row_l_low_level_spec)%Z) by lia; pose proof (C8 i Hb) as Hc; destruct Hc as [Hc1 Hc2]; entailer!; try exact Hc1; try lia. Qed.
 
 Lemma proof_of_dfs2_entail_wit_2 : dfs2_entail_wit_2.
-Proof. Admitted. 
+Proof. right; intros. pose proof (proof_of_dfs2_entail_wit_2_split_goal_1) as H1. pose proof (proof_of_dfs2_entail_wit_2_split_goal_2) as H2. pose proof (proof_of_dfs2_entail_wit_2_split_goal_3) as H3. unfold dfs2_entail_wit_2_split_goal_1 in H1. unfold dfs2_entail_wit_2_split_goal_2 in H2. unfold dfs2_entail_wit_2_split_goal_3 in H3. apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ solve [eapply H1; repeat eassumption] | solve [eapply H2; repeat eassumption] ] | solve [eapply H3; repeat eassumption] ] | pre_process; entailer! ]. Qed.
 
 Lemma proof_of_dfs2_entail_wit_3_1_split_goal_1 : dfs2_entail_wit_3_1_split_goal_1.
 Proof. intros; pre_process; entailer!; try lia; try congruence; try assumption. Qed.
@@ -127,7 +127,7 @@ Lemma proof_of_dfs2_entail_wit_3_1_split_goal_2 : dfs2_entail_wit_3_1_split_goal
 Proof. intros; pre_process; entailer!; [ destruct (Z.eqb lo i) eqn:E; [ apply Z.eqb_eq in E; rewrite E; rewrite <- PreH31; exact PreH4 | apply Z.eqb_neq in E; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; assert (Hlli : (lo <= lo < i)%Z) by lia; assert (Hblo : (0 <= lo < m_of fadj_row_l_low_level_spec)%Z) by lia; destruct (C8 lo Hblo) as [Hlo' Hhi']; assert (Hw : (0 <= Znth lo fadj_col_l_low_level_spec 0 < n_pre)%Z) by lia; exact (PreH6 (Znth lo fadj_col_l_low_level_spec 0) Hw (PreH25 lo Hlli)) ] | replace (i + 1 - 1)%Z with i by lia; rewrite <- PreH31; exact PreH4 ]. Qed.
 
 Lemma proof_of_dfs2_entail_wit_3_1_split_goal_3 : dfs2_entail_wit_3_1_split_goal_3.
-Proof. Admitted. 
+Proof. intros; pre_process; entailer!. pose proof (PreH7 u_pre (conj PreH18 PreH19) PreH23) as Hu. pose proof (PreH7 root_pre (conj PreH20 PreH21) PreH26) as Hr. lia. Qed.
 
 Lemma proof_of_dfs2_entail_wit_3_1_split_goal_4 : dfs2_entail_wit_3_1_split_goal_4.
 Proof. pre_process; match goal with H : csr_wf1 _ _ _ _ _ |- _ => destruct H | H : csr_wf2 _ _ _ _ _ |- _ => destruct H | _ => idtac end; entailer!; try lia; try congruence; try assumption. Qed.
@@ -151,7 +151,16 @@ Lemma proof_of_dfs2_return_wit_1_split_goal_1 : dfs2_return_wit_1_split_goal_1.
 Proof. Admitted. 
 
 Lemma proof_of_dfs2_return_wit_1_split_goal_2 : dfs2_return_wit_1_split_goal_2.
-Proof. Admitted. 
+Proof. intros; pre_process; entailer!; apply (dfs2_return_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i vis2_m sid_m root_v_low_level_spec X_low_level_spec);
+  [ exact PreH2
+  | exact PreH3
+  | exact PreH17
+  | exact PreH18
+  | rewrite <- PreH6; exact PreH19
+  | split; [ exact PreH12 | rewrite PreH4; exact PreH13 ]
+  | split; [ exact PreH14 | rewrite PreH4; exact PreH15 ]
+  | rewrite <- PreH7; lia
+  | exact PreH5 ]. Qed.
 
 Lemma proof_of_dfs2_return_wit_1 : dfs2_return_wit_1.
 Proof. Admitted. 
@@ -160,11 +169,11 @@ Lemma proof_of_dfs2_partial_solve_wit_8_pure_split_goal_1 : dfs2_partial_solve_w
 Proof. intros; pre_process; entailer!; rewrite PreH39; apply (dfs2_recurse_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec root_pre u_pre i vis2_m sid_m root_v_low_level_spec X_low_level_spec); [ rewrite <- PreH21; exact PreH24 | rewrite <- PreH39; lia | rewrite <- PreH39; exact PreH15 | exact PreH19 ]. Qed.
 
 Lemma proof_of_dfs2_partial_solve_wit_8_pure : dfs2_partial_solve_wit_8_pure.
-Proof. Admitted. 
+Proof. right; intros. pose proof (proof_of_dfs2_partial_solve_wit_8_pure_split_goal_1) as H1. unfold dfs2_partial_solve_wit_8_pure_split_goal_1 in H1. eapply H1; repeat eassumption. Qed.
 
 Lemma proof_of_dfs2_derive_bind_spec_by_low_level_spec : dfs2_derive_bind_spec_by_low_level_spec.
-Proof. Admitted. 
+Proof. intros; pre_process. apply safeExec_bind in H2 as (X_low_level_spec & Hsafe_first & Hsafe_cont). Exists g_bind_spec. Exists fadj_col_l_bind_spec. Exists fadj_row_l_bind_spec. Exists vis2_l_bind_spec. Exists sid_l_bind_spec. Exists root_v_bind_spec. Exists X_low_level_spec. split_pure_spatial. - cancel (IntArray.full fadj_col_pre (m_of fadj_row_l_bind_spec) fadj_col_l_bind_spec). cancel (IntArray.full fadj_row_pre (n_pre + 1) fadj_row_l_bind_spec). cancel (IntArray.full vis2_pre n_pre vis2_l_bind_spec). cancel (IntArray.full sid_pre n_pre sid_l_bind_spec). apply derivable1_wand_sepcon_adjoint. Intros vis2_l__2 sid_l__2. Exists vis2_l__2. Exists sid_l__2. split_pure_spatial. + cancel (IntArray.full fadj_col_pre (m_of fadj_row_l_bind_spec) fadj_col_l_bind_spec). cancel (IntArray.full fadj_row_pre (n_pre + 1) fadj_row_l_bind_spec). cancel (IntArray.full vis2_pre n_pre vis2_l__2). cancel (IntArray.full sid_pre n_pre sid_l__2). + split_pures; dump_pre_spatial. exact H2. exact H1. unfold applyf. apply (Hsafe_cont (pre_dfs2 g_bind_spec fadj_col_l_bind_spec fadj_row_l_bind_spec vis2_l__2 sid_l__2 root_v_bind_spec) tt). exact H10. exact H11. exact H12. exact H13. exact H14. - split_pures; dump_pre_spatial. exact H. exact H0. exact H1. exact Hsafe_first. exact H3. exact H4. exact H5. exact H6. exact H7. exact H8. Qed.
 
 Lemma proof_of_dfs1_derive_bind_spec_by_low_level_spec : dfs1_derive_bind_spec_by_low_level_spec.
-Proof. Admitted. 
+Proof. intros; pre_process. apply safeExec_bind in H1 as (X_low_level_spec & Hsafe_first & Hsafe_cont). Exists g_bind_spec. Exists radj_col_l_bind_spec. Exists radj_row_l_bind_spec. Exists vis1_l_bind_spec. Exists fin_l_bind_spec. Exists timer_v_bind_spec. Exists X_low_level_spec. split_pure_spatial. - cancel (IntArray.full radj_col_pre (m_of radj_row_l_bind_spec) radj_col_l_bind_spec). cancel (IntArray.full radj_row_pre (n_pre + 1) radj_row_l_bind_spec). cancel (IntArray.full vis1_pre n_pre vis1_l_bind_spec). cancel (IntArray.full fin_pre n_pre fin_l_bind_spec). cancel (IntArray.full timer_p_pre 1 (timer_v_bind_spec :: nil)). apply derivable1_wand_sepcon_adjoint. Intros timer_v__2 vis1_l__2 fin_l__2. Exists timer_v__2. Exists vis1_l__2. Exists fin_l__2. split_pure_spatial. + cancel (IntArray.full radj_col_pre (m_of radj_row_l_bind_spec) radj_col_l_bind_spec). cancel (IntArray.full radj_row_pre (n_pre + 1) radj_row_l_bind_spec). cancel (IntArray.full vis1_pre n_pre vis1_l__2). cancel (IntArray.full fin_pre n_pre fin_l__2). cancel (IntArray.full timer_p_pre 1 (timer_v__2 :: nil)). + split_pures; dump_pre_spatial. exact H1. exact H0. unfold applyf. apply (Hsafe_cont (pre_dfs1 g_bind_spec radj_col_l_bind_spec radj_row_l_bind_spec vis1_l__2 fin_l__2 timer_v__2) tt). exact H9. exact H10. exact H11. - split_pures; dump_pre_spatial. exact H. exact H0. exact Hsafe_first. exact H2. exact H3. exact H4. exact H5. exact H6. exact H7. Qed.
 

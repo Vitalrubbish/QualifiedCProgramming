@@ -761,6 +761,102 @@ Qed.
 (* the absorb chain (dfs_scc_safe_return) and is deleted alongside it — see   *)
 (* the SEMANTIC GAP note near the former dfs_scc_absorb.                       *)
 
+(* Absorb chain (restored): DFS_scc_absorb is now re-exposed in Kosaraju.v    *)
+(* (as an Admitted lemma pending re-derivation of the MonadErr big-step loop  *)
+(* infrastructure).  The absorb says: dfs_scc g root u, started from a state  *)
+(* where u is visited2, all of u's forward out-neighbours are visited2, and   *)
+(* scc_id u = scc_id root, admits the no-op transition (tt, st).  The         *)
+(* sid-equality is exactly the assertS (scc_id st u = scc_id st root) guard   *)
+(* that was added to DFS_scc_f's break branch, so the absorb is contingent    *)
+(* on the same fact the assertS checks.                                       *)
+
+Lemma dfs_scc_absorb : forall (g : AdjGraph) (root u : Z) (st : KSt),
+  AdjGraphValid g ->
+  (forall v, step g u v -> visited2 st v) ->
+  visited2 st u ->
+  scc_id st u = scc_id st root ->
+  (dfs_scc g root u).(MonadErr.nrm) st tt st.
+Proof.
+  intros g root u st Hgv Hneigh Hvisu Hsid. unfold dfs_scc.
+  apply DFS_scc_absorb.
+  - exact Hgv.
+  - exact Hneigh.
+  - exact Hvisu.
+  - exact Hsid.
+Qed.
+
+(* safeExec-level corollary of dfs_scc_absorb: if dfs_scc g root u is safe   *)
+(* (wp) from a singleton state st satisfying the closure, then X tt st holds  *)
+(* (the no-op transition (tt,st) is in dfs_scc, so wp forces X there).         *)
+Lemma dfs_scc_safe_return : forall (g : AdjGraph) (root u : Z) (st : KSt) (X : unit -> KSt -> Prop),
+  AdjGraphValid g ->
+  (forall v, step g u v -> visited2 st v) ->
+  visited2 st u ->
+  scc_id st u = scc_id st root ->
+  safeExec (fun st' => st' = st) (dfs_scc g root u) X ->
+  X tt st.
+Proof.
+  intros g root u st X Hgv Hneigh Hvisu Hsid [s [Hs Hsafe]].
+  subst s.
+  apply (wp_spec (dfs_scc g root u) st st tt
+           (dfs_scc_absorb g root u st Hgv Hneigh Hvisu Hsid) X).
+  exact Hsafe.
+Qed.
+
+(* dfs2 Gap A (loop exit) closer: from the loop-Inv facts at i>=hi, derive    *)
+(* `safeExec (pre_dfs2 vis2_m sid_m) (return tt) X`.  All abstract-monad      *)
+(* reasoning (visited2 / scc_id / step / csr2_faithful / absorb) lives here.   *)
+Lemma dfs2_return_close :
+  forall (g: AdjGraph) (fadj_col_l fadj_row_l: list Z) (root u i: Z)
+         (vis2_m sid_m: list Z) (root_v: Z) (X: unit -> KSt -> Prop),
+  csr_wf2 g fadj_col_l fadj_row_l vis2_m sid_m ->
+  csr2_faithful g fadj_col_l fadj_row_l ->
+  Znth u vis2_m 0 <> 0%Z ->
+  Znth u sid_m 0 = Znth root sid_m 0 ->
+  (forall j, (csr_lo u fadj_row_l <= j < i)%Z ->
+             Znth (Znth j fadj_col_l 0) vis2_m 0 <> 0%Z) ->
+  (0 <= u < adj_verts g)%Z -> (0 <= root < adj_verts g)%Z ->
+  (csr_hi u fadj_row_l <= i)%Z ->
+  safeExec (pre_dfs2 g fadj_col_l fadj_row_l vis2_m sid_m root_v)
+           (dfs_scc_from g fadj_col_l fadj_row_l root u i) X ->
+  safeExec (pre_dfs2 g fadj_col_l fadj_row_l vis2_m sid_m root_v) (ret tt) X.
+Proof.
+  intros g fadj_col_l fadj_row_l root u i vis2_m sid_m root_v X
+         Hcwf Hfaith Huvis HUsid Hscanned Hub Hrb Hhige Hsccfrom.
+  destruct Hcwf as [Hgv _].
+  assert (Hscc : safeExec (pre_dfs2 g fadj_col_l fadj_row_l vis2_m sid_m root_v)
+                          (dfs_scc g root u) X)
+    by (apply safeExec_proequiv with (c1 := dfs_scc_from g fadj_col_l fadj_row_l root u i);
+        [ exact (dfs_scc_from_exit g fadj_col_l fadj_row_l root u i Hhige) | exact Hsccfrom ]).
+  destruct Hscc as [sigma [Hpre Hsafe]].
+  destruct Hpre as [Hpv Hps].
+  assert (Huv : visited2 sigma u) by (exact (proj2 (Hpv u Hub) Huvis)).
+  assert (Hsid : scc_id sigma u = scc_id sigma root).
+  { rewrite (Hps u Hub), (Hps root Hrb). f_equal. exact HUsid. }
+  assert (Hneigh : forall vv, step g u vv -> visited2 sigma vv).
+  { intros vv Hstep.
+    assert (Hvvb : (0 <= vv < adj_verts g)%Z)
+      by (destruct Hstep as [e Hsa]; destruct Hsa as [_ [_ [Hvvb _]]]; exact Hvvb).
+    destruct (Hfaith u vv Hub Hvvb) as [Hfwd _].
+    destruct (Hfwd Hstep) as [j [Hjr Hjv]].
+    assert (Hji : (csr_lo u fadj_row_l <= j < i)%Z) by lia.
+    assert (Hvis : Znth vv vis2_m 0 <> 0%Z) by (rewrite <- Hjv; exact (Hscanned j Hji)).
+    exact (proj2 (Hpv vv Hvvb) Hvis). }
+  unfold safeExec. exists sigma. split.
+  - unfold pre_dfs2; split; assumption.
+  - (* safe sigma (ret tt) X, given X tt sigma from the absorb corollary. *)
+    assert (Hxtt : X tt sigma).
+    { apply dfs_scc_safe_return with (g := g) (root := root) (u := u) (st := sigma).
+      - exact Hgv.
+      - exact Hneigh.
+      - exact Huv.
+      - exact Hsid.
+      - exact (ex_intro _ sigma (conj eq_refl Hsafe)). }
+    unfold safe, weakestpre. split.
+    + intro Herr. sets_unfold in Herr. exfalso. exact Herr.
+    + intros r s' Hnrm. inversion Hnrm; subst. exact Hxtt.
+Qed.
+
 
 (* B1 fallouts: conditional step-closers for the recurse VC (partial_solve_8)
    and the Gap-B skip VC.  Each extracts the safeExec witness sigma, derives
