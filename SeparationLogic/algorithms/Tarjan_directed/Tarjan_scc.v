@@ -255,24 +255,18 @@ Section TarjanSCC.
         - intro b. subst F.
           unfold forset_f.
           split.
-          + (* mono part: pointwise in universe' *)
-            intros W1 W2 Hincl universe'.
+          + intros W1 W2 Hincl universe'.
             pose proof (forset_body_mono_cont u b universe') as Hfb.
             destruct Hfb as [Hfb_mono _].
-            red in Hfb_mono.
-            apply Hfb_mono; assumption.
-          + (* continuous part: sup commutes pointwise *)
-            intros T HmonoT universe'.
+            red in Hfb_mono. apply Hfb_mono; assumption.
+          + intros T HmonoT universe'.
             pose proof (forset_body_mono_cont u b universe') as Hfb.
             destruct Hfb as [_ Hfb_cont].
-            red in Hfb_cont.
-            exact (Hfb_cont T HmonoT). }
+            red in Hfb_cont. exact (Hfb_cont T HmonoT). }
       destruct Hmono_Lfix as [Hmono_Lfix Hcont_Lfix].
       split.
-      + intros W1 W2 Hincl.
-        exact (Hmono_Lfix W1 W2 Hincl univ).
-      + intros T HmonoT.
-        cbv [Sets.lift_indexed_union].
+      + intros W1 W2 Hincl. exact (Hmono_Lfix W1 W2 Hincl univ).
+      + intros T HmonoT. cbv [Sets.lift_indexed_union].
         exact (Hcont_Lfix T HmonoT univ). }
     intros _.
     apply mono_cont_const.
@@ -307,15 +301,15 @@ Section TarjanSCC.
     unfold state_to_dfs_tree, original_vvalid. reflexivity.
   Qed.
 
-  (** [state_to_dfs_tree_step_char]: Forward characterization of
+  (** [tree_step_char]: Forward characterization of
       directed edges in the DFS tree.  If the tree has an edge
       [x → y], then [fa s y = x], [fa s y ≠ y] (the [fa] field
       was actually assigned), and [y] is visited.
 
       The converse direction requires an additional edge-existence
       condition in the original graph [g]; see
-      [state_to_dfs_tree_step_char_backward]. *)
-  Lemma state_to_dfs_tree_step_char (s: SCCSt) (root x y: V):
+      [tree_step_char_backward]. *)
+  Lemma tree_step_char (s: SCCSt) (root x y: V):
     dg_step (state_to_dfs_tree s root) x y ->
     fa s y = x /\ fa s y <> y /\ y ∈ visited s.
   Proof.
@@ -333,13 +327,13 @@ Section TarjanSCC.
     split; [exact Hfst_eq | split; [exact Hfa_ne | exact Hvis]].
   Qed.
 
-  (** [state_to_dfs_tree_step_char_backward]: The converse direction
+  (** [tree_step_char_backward]: The converse direction
       of the edge characterization, requiring that a corresponding
       edge exists in the original graph [g].  This condition holds
       in reachable algorithm states because [fa s y = x] can only
       be established by [set_fa] in the tree-edge branch of
       [process_edge], which is guarded by [dg_step g x y]. *)
-  Lemma state_to_dfs_tree_step_char_backward (s: SCCSt) (root x y: V):
+  Lemma tree_step_char_backward (s: SCCSt) (root x y: V):
     dg_step g x y ->
     fa s y = x -> fa s y <> y -> y ∈ visited s ->
     dg_step (state_to_dfs_tree s root) x y.
@@ -364,7 +358,7 @@ Section TarjanSCC.
     dg_step (state_to_dfs_tree s root) (fa s v) v.
   Proof.
     intros Hstep_g Hvis Hfa_ne.
-    eapply state_to_dfs_tree_step_char_backward;
+    eapply tree_step_char_backward;
       eauto.
   Qed.
 
@@ -396,7 +390,7 @@ Section TarjanSCC.
     ~ dg_step (state_to_dfs_tree s root) v v.
   Proof.
     intros Hstep.
-    apply state_to_dfs_tree_step_char in Hstep.
+    apply tree_step_char in Hstep.
     destruct Hstep as [Hfa_eq [Hfa_ne _]].
     apply Hfa_ne. exact Hfa_eq.
   Qed.

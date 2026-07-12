@@ -143,6 +143,11 @@ Algorithms_FILES = \
 	Tarjan/Tarjan_is_dfn.v Tarjan/Tarjan_no_cross_edge.v Tarjan/Tarjan_is_low.v \
 	Tarjan/Tarjan_bridge_iff.v Tarjan/Tarjan_tarjan.v \
 	Kosaraju/SCC.v Kosaraju/Kosaraju.v \
+	Tarjan_directed/SCC_basic.v Tarjan_directed/Tarjan_scc.v \
+	Tarjan_directed/Tarjan_scc_basics.v Tarjan_directed/Tarjan_scc_is_dfn.v \
+	Tarjan_directed/Tarjan_scc_low_defs.v Tarjan_directed/Tarjan_scc_low_pure.v \
+	Tarjan_directed/Tarjan_scc_low_primitives.v \
+	Tarjan_directed/Tarjan_scc_is_low.v \
 
 SumLib_FILES = \
 	Sum.v \

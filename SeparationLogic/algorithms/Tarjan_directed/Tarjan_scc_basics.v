@@ -29,6 +29,79 @@ Ltac my_destruct H := destruct H as [? [? ?]].
 Tactic Notation "hoare_bind''" uconstr(H) :=
   eapply Hoare_bind; [ | intros; eapply H]; intros.
 
+(** Lifts a pointwise Hoare triple to a general precondition P. *)
+Theorem Hoare_normalize {Σ A: Type}:
+  forall (P: Σ -> Prop) f (Q: A -> Σ -> Prop),
+    (forall s0, P s0 -> Hoare (fun s => s = s0) f Q) ->
+    Hoare P f Q.
+Proof.
+  unfold Hoare. intros.
+  revert H1.
+  apply (H s1); tauto.
+Qed.
+
+(** If P holds at s0, then assume P;; f has the Hoare triple for
+    singleton precondition s = s0. Used for assume-guard elimination. *)
+Theorem Hoare_normal_assume_bind {Σ A: Type}:
+  forall (P: Σ -> Prop) f (Q: A -> Σ -> Prop) s0,
+    (P s0 -> Hoare (fun s => s = s0) f Q) ->
+    (Hoare (fun s => s = s0) (assume P;; f) Q).
+Proof.
+  intros.
+  apply Hoare_assume_bind.
+  apply Hoare_normalize.
+  intros.
+  destruct H0.
+  subst; tauto.
+Qed.
+
+(** Lfix induction principle in normal form: if f W a satisfies Q a s0
+    under the hypothesis that W a does, then Lfix f a also satisfies it. *)
+Theorem Hoare_normal_LFix {Σ A B: Type}:
+  forall (Q: A -> Σ -> B -> Σ -> Prop)
+         (f: (A -> StateRelMonad.M Σ B) -> (A -> StateRelMonad.M Σ B)),
+    (forall (W: A -> StateRelMonad.M Σ B),
+       (forall s0 a, Hoare (fun s => s = s0) (W a) (Q a s0)) ->
+       (forall s0 a, Hoare (fun s => s = s0) (f W a) (Q a s0))) ->
+    (forall s0 a, Hoare (fun s => s = s0) (Lfix f a) (Q a s0)).
+Proof.
+  intros.
+  unfold Hoare.
+  intros s1 b s2 ? ?.
+  change (exists n, (s1, b, s2) ∈ Nat.iter n f ∅ a) in H1.
+  destruct H1 as [n ?].
+  revert s1 b s2 H0 H1.
+  change (Hoare (fun s => s = s0) (Nat.iter n f ∅ a) (Q a s0)).
+  revert s0 a.
+  induction n.
+  + unfold Hoare; simpl; sets_unfold; tauto.
+  + simpl.
+    apply H.
+    apply IHn.
+Qed.
+
+(** Lfix induction with an invariant R closed under the recursive step. *)
+Theorem Hoare_normal_LFix_closed {Σ A B: Type}:
+  forall (R: Σ -> Prop)
+         (Q: A -> Σ -> B -> Σ -> Prop)
+         (f: (A -> StateRelMonad.M Σ B) -> (A -> StateRelMonad.M Σ B)),
+    (forall (W: A -> StateRelMonad.M Σ B),
+       (forall s0 a, R s0 -> Hoare (fun s => s = s0) (W a) (Q a s0)) ->
+       (forall s0 a, R s0 -> Hoare (fun s => s = s0) (f W a) (Q a s0))) ->
+    (forall s0 a, R s0 -> Hoare (fun s => s = s0) (Lfix f a) (Q a s0)).
+Proof.
+  intros R Q f H s0 a HR.
+  unfold Hoare. intros s1 b s2 H0 H1.
+  change (exists n, (s1, b, s2) ∈ Nat.iter n f ∅ a) in H1.
+  destruct H1 as [n ?].
+  revert s1 b s2 H0 H1.
+  change (Hoare (fun s => s = s0) (Nat.iter n f ∅ a) (Q a s0)).
+  revert s0 a HR.
+  induction n.
+  + unfold Hoare; simpl; sets_unfold; tauto.
+  + simpl. apply H. apply IHn.
+Qed.
+
 Section BASICS.
 
   Context {V E: Type}
@@ -158,6 +231,15 @@ Proof.
   subst s. simpl. sets_unfold. tauto.
 Qed.
 
+Lemma set_fa_keep_stack_in_visited (v p: V):
+  Hoare (fun s: @SCCSt V => stack_in_visited s)
+        (set_fa v p)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold set_fa. intro_state. hoare_auto_s.
+  subst s. simpl. auto.
+Qed.
+
 Lemma set_fa_new_fa (v: V) (p: V):
   Hoare (fun s: @SCCSt V => True)
         (set_fa v p)
@@ -208,6 +290,33 @@ Proof.
   unfold push_stack. intro_state. hoare_auto_s.
   subst s. simpl. left; reflexivity.
 Qed.
+
+(** [push_stack_keep_stack_in_visited]: push_stack preserves
+    [stack_in_visited], provided the vertex being pushed is already
+    visited. This is the key lemma for establishing [stack_in_visited]
+    as an invariant. *)
+Lemma push_stack_keep_stack_in_visited (v: V):
+  Hoare (fun s: @SCCSt V => v ∈ visited s /\ stack_in_visited s)
+        (push_stack v)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold push_stack. intro_state. hoare_auto_s.
+  subst s. simpl. unfold stack_in_visited. intros w [Hw | Hw].
+  - subst w. destruct H as [Hvis _]. exact Hvis.
+  - destruct H as [_ Hsi]. apply Hsi. exact Hw.
+Qed.
+
+Lemma stack_in_visited_init: stack_in_visited initSt.
+Proof.
+  unfold stack_in_visited, initSt. simpl.
+  intros v H. destruct H.
+Qed.
+
+(** [stack_in_visited_impl]: extract the state-level implication from
+    the [stack_in_visited] predicate. *)
+Lemma stack_in_visited_impl (s: @SCCSt V) (v: V):
+  stack_in_visited s -> In v (stack s) -> v ∈ visited s.
+Proof. unfold stack_in_visited. auto. Qed.
 
 Lemma update_low_keep_visited (u w: V) (n: nat):
   Hoare (fun s: @SCCSt V => w ∈ visited s)
@@ -269,6 +378,29 @@ Proof.
   subst s. unfold pop_scc_state.
   destruct (stack_split_at (stack s0) u) as [popped rest] eqn:?.
   simpl. auto.
+Qed.
+
+(** [pop_scc_keep_stack_in_visited]: pop_scc only removes vertices
+    from the stack, so it preserves [stack_in_visited]. *)
+Lemma pop_scc_keep_stack_in_visited (u: V):
+  Hoare (fun s: @SCCSt V => stack_in_visited s)
+        (pop_scc u)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold pop_scc. intro_state. hoare_auto_s.
+  subst s. unfold pop_scc_state. simpl.
+  destruct (stack_split_at (stack s0) u) as [popped rest] eqn:Hsplit.
+  unfold stack_in_visited. intros w Hw.
+  apply H. (* Use precondition: In w (stack s0) → w ∈ visited s0 *)
+  (* Need: In w (stack s0). From Hsplit: stack_split returns (popped, rest). *)
+  revert u popped rest Hsplit Hw.
+  induction (stack s0) as [| x xs IH]; intros u popped rest Hsplit Hw.
+  - cbn in Hsplit. inversion Hsplit. subst popped rest. cbn in Hw. destruct Hw.
+  - cbn in Hsplit.
+    destruct (equiv_decb x u) eqn:Heqx.
+    + inversion Hsplit. subst popped rest. simpl. right. exact Hw.
+    + destruct (stack_split_at xs u) as [popped' rest'] eqn:Hsplit_inner.
+      inversion Hsplit. subst popped rest. simpl. right. apply (IH u popped' rest' Hsplit_inner Hw).
 Qed.
 
 Lemma pop_scc_keep_dfn (u w: V) (dfnw: nat):
@@ -333,6 +465,37 @@ Lemma preloop_in_stack (u: V):
 Proof.
   unfold preloop. unfold_op. intro_state. hoare_auto_s.
   subst s. simpl. left; reflexivity.
+Qed.
+
+(** [preloop_keep_stack_elements]: preloop pushes [u] but keeps all
+    existing stack elements. *)
+Lemma preloop_keep_stack_elements (u v: V):
+  Hoare (fun s: @SCCSt V => In v (stack s))
+        (preloop u)
+        (fun _ s => In v (stack s)).
+Proof.
+  unfold preloop. unfold_op. intro_state. hoare_auto_s.
+  subst s. simpl. right. exact H.
+Qed.
+
+(** [preloop_a_no_child]: after preloop [a], the vertex [a] has no
+    outgoing tree edges in [state_to_dfs_tree].  Requires [wf_scc_state s0]
+    to use [fa_visited] for the proof that [fa s0 w = a → w = a]. *)
+
+(** [preloop_keep_stack_in_visited]: preloop u preserves [stack_in_visited]
+    because it visits u before pushing it. *)
+Lemma preloop_keep_stack_in_visited (u: V):
+  Hoare (fun s: @SCCSt V => stack_in_visited s)
+        (preloop u)
+        (fun _ s => stack_in_visited s).
+Proof.
+  unfold preloop. unfold_op. intro_state. hoare_auto_s.
+  subst s. simpl.
+  unfold stack_in_visited. intros w [Hw | Hw].
+  - subst w. sets_unfold. right; reflexivity.
+  - (* w ∈ stack s0. H: stack_in_visited s0 gives w ∈ visited s0.
+       Post-state visited = visited s0 ∪ [u], so w is still visited. *)
+    simpl. sets_unfold. left. apply H. exact Hw.
 Qed.
 
 Lemma preloop_dfn_set (u: V) (t: nat):
@@ -1095,7 +1258,6 @@ Proof.
     + destruct H1. subst s. destruct H; split; auto.
 Qed.
 
-(* ================================================================ *)
 (* Self-visitation and forall-preservation theorems                  *)
 (* ================================================================ *)
 

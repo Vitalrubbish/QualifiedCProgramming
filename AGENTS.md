@@ -125,6 +125,58 @@ ticket、prompt、report 或 skill 文档中的 lib 语义必须落到上述四�
 - 主 agent 在进入 `done` 或结束当前 case 工作流前，必须执行最终临时文件清理：删除本轮产生的 `.tmp` 内容、Coq `.aux` 文件、pytest / Python 编译缓存等非交付临时产物；不得删除正式 `.c`、`*_goal.v`、`*_proof_auto.v`、`*_proof_manual.v`、`*_goal_check.v`、`common_case_formal_lib`。
 - 如果从下游 phase 二次进入 `annotation` 或 `vc-proving`，主 agent 必须向新的 subagent 提供结构化回流摘要，至少说明：为什么回流、上一轮在哪里失败、哪些 witness / 文件受影响、与上一轮相比哪些输入已经变化。
 
+# 开发环境
+
+## Opam 环境
+
+每次进行 Rocq 相关开发（编译 `.v` 文件、运行 `coqc`、使用 `rocq-mcp`）前，**必须**先进入 README.md 指定的 opam 环境：
+
+```bash
+eval $(opam env)
+```
+
+验证环境正确：
+
+```bash
+coqc --version  # 应显示 Rocq 8.20.1 或兼容版本
+pet --version   # 0.2.x，rocq-mcp 交互式工具依赖
+```
+
+当前项目 opam switch 为 `coq-8.20`（OCaml 4.14.1 + Rocq/Coq 8.20.1）。
+
+## Rocq-MCP 交互式证明
+
+项目已配置 `rocq-mcp`（MCP server for Rocq），提供交互式证明能力，替代盲编译循环。Agent 在证明开发中**必须优先使用 rocq-mcp 工具**。
+
+### 可用工具
+
+| 工具 | 用途 |
+|------|------|
+| `rocq_compile_file` | 编译整个 `.v` 文件，返回错误位置和 goal 信息。适合检查已完成证明。|
+| `rocq_start` | 启动交互式 proof session，返回 `state_id` 和 proof goals。可按定理名、位置、或 import 三种模式启动。|
+| `rocq_check` | 从 `state_id` 执行 proof 命令，返回新 state。cached imports 保证快速迭代。|
+| `rocq_step_multi` | 一次性尝试多个 tactic，返回每个的结果。适合探索 proof 方向。|
+| `rocq_query` | 搜索 Rocq 环境：查 lemma、check 类型、inspect 定义。|
+| `rocq_verify` | 在 `Module M.` sandbox 中验证 proof 是否真的证明了原命题。|
+| `rocq_assumptions` | 列出定理依赖的 axioms。|
+| `rocq_toc` | 获取 `.v` 文件结构大纲。|
+
+### 交互式开发工作流
+
+1. **编译检查**：`rocq_compile_file` 编译文件获取错误
+2. **定位错误**：根据返回的 `start_line`/`end_line` 跳到出错位置
+3. **启动交互**：`rocq_start` 用 `by_position` 模式跳转到错误位置，获取 `state_id` 和 goals
+4. **探索证明**：`rocq_step_multi` 尝试多个 tactic
+5. **提交证明**：`rocq_check` 执行选定 tactic，推进 state
+6. **完成证明**：重复 step 4-5 直到 `proof_finished: True`
+
+### 注意事项
+
+- 交互式 session 读取 `.v` 文件后**不会跟踪外部修改**——如果文件被其他进程修改，需要 `rocq_start(force_restart=True)` 重启 session
+- `rocq_compile_file` 默认清理编译产物；传 `keep_vo=True` 保留 `.vo`（当其他文件 `Require` 此文件时需要）
+- 对大型文件的 iterative proving，优先用 `rocq_start` + `rocq_check`（cache imports）而非反复 `rocq_compile_file`
+- `workspace` 参数应指向项目根目录 `/mnt/d/Rocq/QualifiedCProgramming`
+
 # 完成标准
 
 只有在以下条件同时满足时，任务才算完成：
@@ -132,9 +184,10 @@ ticket、prompt、report 或 skill 文档中的 lib 语义必须落到上述四�
 1. symbolic execution 已到文件尾，且生成文件是最新的。
 2. 所有需要的 manual VC 都已完成证明，或已被明确退回 annotation 修正。
 3. 对应的 `*_goal_check.v` 编译通过。
-4. 最终检查确认：`*_proof_manual.v`、`common_case_formal_lib` 没有遗留 `Admitted` 或额外 `Axiom`，没有使用任何 forbidden lemma（列表见 `.agents/skills/verification-orchestrator/docs/forbidden_lemma.md`），`*_proof_manual.v` 只含 witness proofs 且没有 helper lemmas / forbidden top-level 定义，`common_case_formal_lib` 的 annotation-approved spec 定义不是算法镜像，冻结前缀未被 proving 改写，冻结前缀后的 helper-suffix imports 均为审计通过的 `Require Import` 行、helper lemmas 均已证明且没有 forbidden top-level 定义，并且不存在过期生成文件或残留 scratch / `.tmp` / `.aux` 临时文件。
+4. 最终检查确认：`*_proof_manual.v`、`common_case_formal_lib` 没有遗留 `Admitted` 或额外 `Axiom`，`*_proof_manual.v` 只含 witness proofs 且没有 helper lemmas / forbidden top-level 定义，`common_case_formal_lib` 的 annotation-approved spec 定义不是算法镜像，冻结前缀未被 proving 改写，冻结前缀后的 helper-suffix imports 均为审计通过的 `Require Import` 行、helper lemmas 均已证明且没有 forbidden top-level 定义，并且不存在过期生成文件或残留 scratch / `.tmp` / `.aux` 临时文件。
 
 # 文档撰写
+**重要**：这是一个 fork 过来的仓库，禁止修改原仓库中的文档；如需修改原仓库中代码，必须经由用户的同意！！！与此同时，如果你修改了原仓库中的代码，必须**确保**仓库中其它的项目（证明）能够正常工作。
 如果没有特殊说明，所有除 README.md 的文档都应当位于 `docs` 下。docs 现在分为以下几个部分：
 1. `docs/dev` 所有的开发文档，其中
 - 所有的文件名都应当采用 `<日期>-<内容>.md`，例如 `20260610-scc-definition.md`；
@@ -148,3 +201,14 @@ ticket、prompt、report 或 skill 文档中的 lib 语义必须落到上述四�
 - `docs/GraphLib`内部的文件树应当严格是`SeperationLogic/GraphLib`的一个子集；
 - 如果在 `agent` 开发过程中对 `SeperationLogic/GraphLib` 中的文件有所修改，修改的内容必须同步到 `docs/GraphLib` 当中；
 - 如果你**怀疑** `docs/GraphLib` 中的内容有误，请你结合`SeperationLogic`中的具体实现提出勘误；
+
+# 仓库提交
+1. 本项目的 github 远程仓库地址是 https://github.com/Vitalrubbish/QualifiedCProgramming
+- 如果需要将修改同步到远程仓库中，请使用 `git push fork main`；
+2. `commit message` 中只保留修改内容，不出现 `Co-Author` 信息；
+
+# 重要
+1. 严禁使用除了Edit工具以外的其它任何手段来修改任何内容！！！
+2. 在调用 `git checkout` 回滚之前**必须**向用户提出申请！！！
+3. 如果你对某个具体位置的证明状态有疑问，你可以随时停下来向用户询问。
+4. 如果你不清楚某个定理的机制或者某个命令的机制，可以参考 **Kosaraju 的成功案例** 或者阅读库文件。
