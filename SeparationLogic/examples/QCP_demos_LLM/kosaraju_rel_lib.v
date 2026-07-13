@@ -851,6 +851,101 @@ Proof.
   rewrite Hfuel. apply dfs_scc_iter_recurse_err_imp; [ exact Hilt | exact Hnvis | exact Herr ].
 Qed.
 
+(* Reverse-direction err-imps (err at i -> err at i+1 / bind), used by the
+   repeat_break-to-cursor simulation dfs_scc_from_sim.  The forward err-imps
+   above go i+1 -> i (matching dfs2_skip_close / dfs2_recurse_close); the
+   simulation peels the cursor step FORWARD (i -> i+1), so it needs the
+   reverse direction, which holds under the same visited/~visited hypothesis
+   (the failing test branch contributes no err at st). *)
+Lemma dfs_scc_iter_skip_err_rev_imp :
+  forall (g : AdjGraph) (fadj_col_l : list Z) (root u hi i : Z) (fuel : nat)
+         (st : KSt),
+    (i < hi)%Z ->
+    visited2 st (Znth i fadj_col_l 0) ->
+    (dfs_scc_iter g fadj_col_l root u hi i (S fuel)).(MonadErr.err) st ->
+    (dfs_scc_iter g fadj_col_l root u hi (i + 1) fuel).(MonadErr.err) st.
+Proof.
+  intros g fadj_col_l root u hi i fuel st Hilt Hvis Herr.
+  simpl in Herr. destruct (Z.leb hi i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice in Herr.
+    sets_unfold in Herr.
+    destruct Herr as [HL | HR].
+    + apply bind_err_iff in HL.
+      destruct HL as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hc]. subst s0. exact Hsk2.
+    + apply bind_err_iff in HR.
+      destruct HR as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hnc]. exfalso. apply Hnc. exact Hvis.
+Qed.
+
+Lemma dfs_scc_iter_recurse_err_rev_imp :
+  forall (g : AdjGraph) (fadj_col_l : list Z) (root u hi i : Z) (fuel : nat)
+         (st : KSt),
+    (i < hi)%Z ->
+    ~ visited2 st (Znth i fadj_col_l 0) ->
+    (dfs_scc_iter g fadj_col_l root u hi i (S fuel)).(MonadErr.err) st ->
+    ((_ <- dfs_scc g root (Znth i fadj_col_l 0) ;;
+      dfs_scc_iter g fadj_col_l root u hi (i + 1) fuel)).(MonadErr.err) st.
+Proof.
+  intros g fadj_col_l root u hi i fuel st Hilt Hnvis Herr.
+  simpl in Herr. destruct (Z.leb hi i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice in Herr.
+    sets_unfold in Herr.
+    destruct Herr as [HL | HR].
+    + apply bind_err_iff in HL.
+      destruct HL as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hc].
+        exfalso. apply Hnvis. exact Hc.
+    + apply bind_err_iff in HR.
+      destruct HR as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hnc]. subst s0. exact Hsk2.
+Qed.
+
+Lemma dfs_scc_from_skip_err_rev_imp :
+  forall (g : AdjGraph) (fadj_col_l fadj_row_l : list Z) (root u i : Z)
+         (st : KSt),
+    (i < csr_hi u fadj_row_l)%Z ->
+    visited2 st (Znth i fadj_col_l 0) ->
+    (dfs_scc_from g fadj_col_l fadj_row_l root u i).(MonadErr.err) st ->
+    (dfs_scc_from g fadj_col_l fadj_row_l root u (i + 1)).(MonadErr.err) st.
+Proof.
+  intros g fadj_col_l fadj_row_l root u i st Hilt Hvis Herr.
+  unfold dfs_scc_from in *.
+  assert (Hfuel : Z.to_nat (csr_hi u fadj_row_l - i) =
+                  S (Z.to_nat (csr_hi u fadj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u fadj_row_l - i = (csr_hi u fadj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel in Herr.
+  exact (dfs_scc_iter_skip_err_rev_imp g fadj_col_l root u _ i _ st Hilt Hvis Herr).
+Qed.
+
+Lemma dfs_scc_from_recurse_err_rev_imp :
+  forall (g : AdjGraph) (fadj_col_l fadj_row_l : list Z) (root u i : Z)
+         (st : KSt),
+    (i < csr_hi u fadj_row_l)%Z ->
+    ~ visited2 st (Znth i fadj_col_l 0) ->
+    (dfs_scc_from g fadj_col_l fadj_row_l root u i).(MonadErr.err) st ->
+    ((_ <- dfs_scc g root (Znth i fadj_col_l 0) ;;
+      dfs_scc_from g fadj_col_l fadj_row_l root u (i + 1))).(MonadErr.err) st.
+Proof.
+  intros g fadj_col_l fadj_row_l root u i st Hilt Hnvis Herr.
+  unfold dfs_scc_from in *.
+  assert (Hfuel : Z.to_nat (csr_hi u fadj_row_l - i) =
+                  S (Z.to_nat (csr_hi u fadj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u fadj_row_l - i = (csr_hi u fadj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel in Herr.
+  exact (dfs_scc_iter_recurse_err_rev_imp g fadj_col_l root u _ i _ st Hilt Hnvis Herr).
+Qed.
+
 Lemma dfs_scc_from_exit :
   forall (g : AdjGraph) (fadj_col_l fadj_row_l : list Z) (root u i : Z),
     (csr_hi u fadj_row_l <= i)%Z ->
@@ -1290,4 +1385,71 @@ Proof.
             (set_scc_id_pre_dfs2_step g fc fr (replace_Znth u 1 vis) sid root_v u root
                Hvlen1 Hslen Hub Hroot)) in Hsafe.
   exact Hsafe.
+Qed.
+
+(* ================================================================= *)
+(* Reusable MonadErr helper lemmas (pure monad, no algorithm props). *)
+(* Used by dfs_scc_from_sim to factor the repeat_break nrm-step out of *)
+(* the simulation's BASE/RECURSE cases.                               *)
+(* ================================================================= *)
+
+(* wp_seq: sequence-specialised wp_bind, bridging the eta gap between
+   `f ;; rest` (= bind f (fun _ => rest)) and wp_bind's `x <- f ;; g x`. *)
+Lemma wp_seq {Σ A B: Type} (f: program Σ A) (rest: program Σ B) (Q: B -> Σ -> Prop) :
+  (weakestpre (f ;; rest) Q == weakestpre f (fun _ => weakestpre rest Q))%sets.
+Proof.
+  intros σ. apply (wp_bind f (fun (_:A) => rest) Q).
+Qed.
+
+(* repeat_break_break_step: body produces by_break b at sigma (no state change)
+   -> repeat_break produces b at sigma (first iteration takes the break branch). *)
+Lemma repeat_break_break_step :
+  forall (Σ: Type) {A: Type} {B: Type}
+         (body: A -> program Σ (CntOrBrk A B)) (a: A) (b: B) (σ: Σ),
+    (body a).(MonadErr.nrm) σ (@by_break A B b) σ ->
+    (repeat_break body a).(MonadErr.nrm) σ b σ.
+Proof.
+  intros Σ A B body a b σ Hbodystep.
+  (* Lift the function-equiv repeat_break_unfold to a pointwise equiv via
+     the Equiv_lift / lift_rel2 mechanism (same pattern as range_iter_unfold). *)
+  pose proof (repeat_break_unfold body) as Hunf.
+  unfold equiv in Hunf. simpl in Hunf.
+  unfold Equiv_lift, LiftConstructors.lift_rel2 in Hunf.
+  specialize (Hunf a) as Hpt.
+  destruct Hpt as [Hnrmpt Herrpt].
+  sets_unfold in Hnrmpt.
+  specialize (Hnrmpt σ b σ) as [Hfwd Hbwd].
+  apply Hbwd.
+  simpl.
+  unfold MonadErr.bind. simpl.
+  eexists (by_break b). exists σ. split.
+  - exact Hbodystep.
+  - simpl.
+    split; [ reflexivity | reflexivity ].
+Qed.
+
+(* repeat_break_continue_step: body produces by_continue a' at (σ -> σ'),
+   then repeat_break body a' produces b at (σ' -> σ'') -> repeat_break body a
+   produces b at (σ -> σ''). *)
+Lemma repeat_break_continue_step :
+  forall (Σ: Type) {A: Type} {B: Type}
+         (body: A -> program Σ (CntOrBrk A B)) (a a': A) (σ σ': Σ) (b: B) (σ'': Σ),
+    (body a).(MonadErr.nrm) σ (by_continue a') σ' ->
+    (repeat_break body a').(MonadErr.nrm) σ' b σ'' ->
+    (repeat_break body a).(MonadErr.nrm) σ b σ''.
+Proof.
+  intros Σ A B body a a' σ σ' b σ'' Hbodystep Hrec.
+  pose proof (repeat_break_unfold body) as Hunf.
+  unfold equiv in Hunf. simpl in Hunf.
+  unfold Equiv_lift, LiftConstructors.lift_rel2 in Hunf.
+  specialize (Hunf a) as Hpt.
+  destruct Hpt as [Hnrmpt Herrpt].
+  sets_unfold in Hnrmpt.
+  specialize (Hnrmpt σ b σ'') as [Hfwd Hbwd].
+  apply Hbwd.
+  simpl.
+  unfold MonadErr.bind. simpl.
+  eexists (by_continue a'). exists σ'. split.
+  - exact Hbodystep.
+  - simpl. exact Hrec.
 Qed.
