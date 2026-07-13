@@ -117,13 +117,13 @@ intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as
 intros; pre_process; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; cbv [csr_lo csr_hi]; entailer!; reflexivity
 
 === proof_of_dfs2_entail_wit_1_split_goal_9 ===
-Admitted
+intros; pre_process; entailer!; apply (dfs2_entry_close g_low_level_spec fadj_col_l_low_level_spec fadj_row_l_low_level_spec vis2_l_low_level_spec sid_l_low_level_spec root_pre u_pre root_v_low_level_spec X_low_level_spec); [ exact PreH1 | exact PreH2 | split; [ exact PreH5 | rewrite PreH3; exact PreH6 ] | split; [ exact PreH7 | rewrite PreH3; exact PreH8 ] | exact PreH10 | exact PreH4 ]
 
 === proof_of_dfs2_entail_wit_1_split_goal_10 ===
 intros; pre_process; entailer!; match goal with H : csr_wf2 _ _ _ _ _ |- _ => destruct H as [C1 [C2 [C3 [C4 [C5 [C6 [C7 [C8 [C9 C10]]]]]]]]] end; unfold csr_wf2 in *; repeat (rewrite Zlength_replace_Znth in * |- *); repeat (split; try assumption; try lia; try congruence)
 
 === proof_of_dfs2_entail_wit_1 ===
-Admitted
+right; intros. pose proof (proof_of_dfs2_entail_wit_1_split_goal_1) as H1. pose proof (proof_of_dfs2_entail_wit_1_split_goal_2) as H2. pose proof (proof_of_dfs2_entail_wit_1_split_goal_3) as H3. pose proof (proof_of_dfs2_entail_wit_1_split_goal_4) as H4. pose proof (proof_of_dfs2_entail_wit_1_split_goal_5) as H5. pose proof (proof_of_dfs2_entail_wit_1_split_goal_6) as H6. pose proof (proof_of_dfs2_entail_wit_1_split_goal_7) as H7. pose proof (proof_of_dfs2_entail_wit_1_split_goal_8) as H8. pose proof (proof_of_dfs2_entail_wit_1_split_goal_9) as H9. pose proof (proof_of_dfs2_entail_wit_1_split_goal_10) as H10. unfold dfs2_entail_wit_1_split_goal_1 in H1. unfold dfs2_entail_wit_1_split_goal_2 in H2. unfold dfs2_entail_wit_1_split_goal_3 in H3. unfold dfs2_entail_wit_1_split_goal_4 in H4. unfold dfs2_entail_wit_1_split_goal_5 in H5. unfold dfs2_entail_wit_1_split_goal_6 in H6. unfold dfs2_entail_wit_1_split_goal_7 in H7. unfold dfs2_entail_wit_1_split_goal_8 in H8. unfold dfs2_entail_wit_1_split_goal_9 in H9. unfold dfs2_entail_wit_1_split_goal_10 in H10. apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ apply _derivable1_andp_intros; [ solve [eapply H1; repeat eassumption] | solve [eapply H2; repeat eassumption] ] | solve [eapply H3; repeat eassumption] ] | solve [eapply H4; repeat eassumption] ] | solve [eapply H5; repeat eassumption] ] | solve [eapply H6; repeat eassumption] ] | solve [eapply H7; repeat eassumption] ] | solve [eapply H8; repeat eassumption] ] | solve [eapply H9; repeat eassumption] ] | solve [eapply H10; repeat eassumption] ] | pre_process; entailer! ]
 
 === proof_of_dfs2_entail_wit_2_split_goal_1 ===
 intros; pre_process; entailer!
