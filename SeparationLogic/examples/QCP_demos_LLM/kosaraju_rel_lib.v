@@ -1134,3 +1134,160 @@ Proof.
   - apply Z.eqb_neq in E. assert (Hlli : ((lo <= lo)%Z /\ (lo < i)%Z)) by lia.
     exact (Hscan lo Hlli).
 Qed.
+
+(* ===================================================================== *)
+(* dfs2_entry_close infrastructure (phase-2 entry refinement).            *)
+(*                                                                        *)
+(* The entry VC (dfs2_entail_wit_1_split_goal_9) reduces to: given        *)
+(*   safeExec (pre_dfs2 vis sid) (dfs_scc g root u) X,                    *)
+(* show safeExec (pre_dfs2 vis1 sid') (dfs_scc_from g fc fr root u lo) X, *)
+(* where vis1 = replace_Znth u 1 vis, sid' = replace_Znth u (sid[root]) sid. *)
+(*                                                                        *)
+(* dfs2_repeat_body is the body of DFS_scc_f, u-parametrised, with the    *)
+(* recursive leaf W = dfs_scc g root.  It is definitionally equal to the  *)
+(* body of DFS_scc_f g root (dfs_scc g root) u (verified by reflexivity    *)
+(* in dfs2_scc_unfold_repeat), so repeat_break congruence is free.        *)
+(*                                                                        *)
+(* visit2_pre_dfs2_step / set_scc_id_pre_dfs2_step peel the visit2 u +    *)
+(* set_scc_id u root prelude off safeExec(dfs_scc g root u), leaving      *)
+(* safeExec over repeat_break (dfs2_repeat_body g root u) empty at the    *)
+(* post-visit/set_scc_id state.  dfs2_visit_setid_decompose composes the  *)
+(* two peels with dfs2_scc_unfold_repeat + safeExec_proequiv.             *)
+(*                                                                        *)
+(* The remaining piece is dfs_scc_from_sim: the cursor-vs-repeat_break    *)
+(* simulation (safe(repeat_break B e_set_i) -> safe(dfs_scc_from ... u i)),*)
+(* which is the main wp-induction workload and is tracked separately.     *)
+(* ===================================================================== *)
+
+Definition dfs2_repeat_body (g: AdjGraph) (root u: Z)
+  : (Z * Z -> Prop) -> program KSt (CntOrBrk (Z * Z -> Prop) unit) :=
+  fun e_set =>
+    choice
+      (e <- any (Z * Z);;
+       v <- any Z;;
+       assume (fun (_ : KSt) => ~ e ∈ e_set);;
+       assume (fun st => ~ visited2 st v);;
+       assume (fun (_ : KSt) => step_aux g e u v);;
+       dfs_scc g root v;;
+       continue (e_set ∪ Sets.singleton e))
+      (assume (fun st =>
+                 forall (e: Z * Z) (v: Z),
+                   step_aux g e u v ->
+                   e ∈ e_set \/ visited2 st v);;
+       assertS (fun st => scc_id st u = scc_id st root);;
+       break tt).
+
+Lemma dfs2_scc_unfold_repeat :
+  forall (g: AdjGraph) (root u: Z),
+  dfs_scc g root u
+  ==
+  visit2 u ;; set_scc_id u root ;; repeat_break (dfs2_repeat_body g root u) ∅.
+Proof.
+  intros g root u.
+  rewrite dfs_scc_unfold.
+  unfold DFS_scc_f.
+  reflexivity.
+Qed.
+
+Lemma visit2_pre_dfs2_step :
+  forall (g: AdjGraph) (fc fr vis sid: list Z) (root_v u: Z),
+    (Zlength vis = adj_verts g)%Z ->
+    (0 <= u < adj_verts g)%Z ->
+    pre_dfs2 g fc fr vis sid root_v -@ visit2 u -⥅
+      (pre_dfs2 g fc fr (replace_Znth u 1 vis) sid root_v) ♯ tt.
+Proof.
+  intros g fc fr vis sid root_v u Hvlen Hub st0 Hpre.
+  destruct Hpre as [Hpv Hps].
+  assert (HLu : (0 <= u < Zlength vis)%Z) by (rewrite Hvlen; exact Hub).
+  pose (st1 := MkSt (timer st0) (finish st0) (visited1 st0)
+                       (fun w => visited2 st0 w \/ w = u) (scc_id st0) (scc_next st0)).
+  assert (Hnrm : (visit2 u).(MonadErr.nrm) st0 tt st1).
+  { unfold visit2. simpl. split.
+    - (* visited2 st1 == visited2 st0 ∪ {u} *)
+      unfold st1. simpl. sets_unfold. intros w. split; intros Hw.
+      + destruct Hw as [Hw | Hw]; [ left; exact Hw | subst w; right; reflexivity ].
+      + destruct Hw as [Hw | Hw]; [ left; exact Hw | subst w; right; reflexivity ].
+    - unfold st1. simpl. repeat split; reflexivity.
+  }
+  exists st1. split; [ exact Hnrm | ].
+  unfold pre_dfs2. split.
+  - intros w Hw. assert (HLw : (0 <= w < Zlength vis)%Z) by (rewrite Hvlen; exact Hw).
+    unfold st1. simpl. split; intros Hvis.
+    + destruct (Z.eqb w u) eqn:E.
+      * apply Z.eqb_eq in E. subst w. rewrite (Znth_replace_eq vis u 1 0 HLu). lia.
+      * apply Z.eqb_neq in E. rewrite (Znth_replace_neq vis w u 1 0 HLw (proj1 HLu) E).
+        destruct Hvis as [Hv | Hwu].
+        -- apply (proj1 (Hpv w Hw)). exact Hv.
+        -- exfalso. apply E. exact Hwu.
+    + destruct (Z.eqb w u) eqn:E.
+      * apply Z.eqb_eq in E. subst w. right. reflexivity.
+      * apply Z.eqb_neq in E. rewrite (Znth_replace_neq vis w u 1 0 HLw (proj1 HLu) E) in Hvis.
+        left. apply (proj2 (Hpv w Hw)). exact Hvis.
+  - intros w Hw. unfold st1. simpl. exact (Hps w Hw).
+Qed.
+
+Lemma set_scc_id_pre_dfs2_step :
+  forall (g: AdjGraph) (fc fr vis sid: list Z) (root_v u root: Z),
+    (Zlength vis = adj_verts g)%Z ->
+    (Zlength sid = adj_verts g)%Z ->
+    (0 <= u < adj_verts g)%Z ->
+    (0 <= root < adj_verts g)%Z ->
+    pre_dfs2 g fc fr vis sid root_v -@ set_scc_id u root -⥅
+      (pre_dfs2 g fc fr vis (replace_Znth u (Znth root sid 0) sid) root_v) ♯ tt.
+Proof.
+  intros g fc fr vis sid root_v u root Hvlen Hslen Hub Hroot st0 Hpre.
+  destruct Hpre as [Hpv Hps].
+  assert (HLu : (0 <= u < Zlength sid)%Z) by (rewrite Hslen; exact Hub).
+  assert (HLroot : (0 <= root < Zlength sid)%Z) by (rewrite Hslen; exact Hroot).
+  pose (st1 := MkSt (timer st0) (finish st0) (visited1 st0) (visited2 st0)
+              (fun w => if Z.eqb w u then scc_id st0 root else scc_id st0 w)
+              (scc_next st0)).
+  assert (Hnrm : (set_scc_id u root).(MonadErr.nrm) st0 tt st1).
+  { unfold set_scc_id. simpl. split.
+    - unfold st1. simpl. destruct (Z.eqb u u) eqn:E.
+      + reflexivity.
+      + apply Z.eqb_neq in E. exfalso. apply E. reflexivity.
+    - split.
+      + intros v Hvne. unfold st1. simpl. destruct (Z.eqb v u) eqn:E.
+        * apply Z.eqb_eq in E. exfalso. apply Hvne. exact E.
+        * reflexivity.
+      + unfold st1. simpl. repeat split; reflexivity.
+  }
+  exists st1. split; [ exact Hnrm | ].
+  unfold pre_dfs2. split.
+  - intros w Hw. exact (Hpv w Hw).
+  - intros w Hw. assert (HLw : (0 <= w < Zlength sid)%Z) by (rewrite Hslen; exact Hw).
+    unfold st1. simpl. destruct (Z.eqb w u) eqn:E.
+    + apply Z.eqb_eq in E. subst w. rewrite (Znth_replace_eq sid u (Znth root sid 0) 0 HLu).
+      apply Hps. exact Hroot.
+    + apply Z.eqb_neq in E. rewrite (Znth_replace_neq sid w u (Znth root sid 0) 0 HLw (proj1 HLu) E).
+      apply Hps. exact Hw.
+Qed.
+
+Lemma dfs2_visit_setid_decompose :
+  forall (g: AdjGraph) (fc fr vis sid: list Z) (root_v u root: Z) (X: unit -> KSt -> Prop),
+    (Zlength vis = adj_verts g)%Z ->
+    (Zlength sid = adj_verts g)%Z ->
+    (0 <= u < adj_verts g)%Z ->
+    (0 <= root < adj_verts g)%Z ->
+    safeExec (pre_dfs2 g fc fr vis sid root_v) (dfs_scc g root u) X ->
+    safeExec (pre_dfs2 g fc fr (replace_Znth u 1 vis) (replace_Znth u (Znth root sid 0) sid) root_v)
+             (repeat_break (dfs2_repeat_body g root u) ∅) X.
+Proof.
+  intros g fc fr vis sid root_v u root X Hvlen Hslen Hub Hroot Hsafe.
+  rewrite (dfs2_scc_unfold_repeat g root u) in Hsafe.
+  apply (highstepbind_derive (visit2 u)
+            (fun _ => set_scc_id u root ;; repeat_break (dfs2_repeat_body g root u) ∅)
+            (pre_dfs2 g fc fr vis sid root_v) tt
+            (pre_dfs2 g fc fr (replace_Znth u 1 vis) sid root_v)
+            (visit2_pre_dfs2_step g fc fr vis sid root_v u Hvlen Hub)) in Hsafe.
+  assert (Hvlen1 : (Zlength (replace_Znth u 1 vis) = adj_verts g)%Z).
+  { rewrite Zlength_replace_Znth. exact Hvlen. }
+  apply (highstepbind_derive (set_scc_id u root)
+            (fun _ => repeat_break (dfs2_repeat_body g root u) ∅)
+            (pre_dfs2 g fc fr (replace_Znth u 1 vis) sid root_v) tt
+            (pre_dfs2 g fc fr (replace_Znth u 1 vis) (replace_Znth u (Znth root sid 0) sid) root_v)
+            (set_scc_id_pre_dfs2_step g fc fr (replace_Znth u 1 vis) sid root_v u root
+               Hvlen1 Hslen Hub Hroot)) in Hsafe.
+  exact Hsafe.
+Qed.
