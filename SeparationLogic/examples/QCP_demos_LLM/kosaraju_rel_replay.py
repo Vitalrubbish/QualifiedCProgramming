@@ -65,7 +65,11 @@ def apply_policies(lines):
             name = m.group(2)
             body = lines[i+1]
             if name in ARCH:
-                new = f"Proof. {terminate(ARCH[name])} Qed.\n"
+                tac = ARCH[name].strip()
+                if tac == "Admitted":
+                    new = "Proof. Admitted. \n"
+                else:
+                    new = f"Proof. {terminate(ARCH[name])} Qed.\n"
             elif "Abort" in body:
                 new = f"Proof. {TEMPLATE} Qed.\n"
             elif "Admitted" in body:

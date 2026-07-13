@@ -437,41 +437,49 @@ Definition pre_dfs2 (g : AdjGraph)
 (* sweep over u's reverse (resp. forward) neighbours: at cursor i    *)
 (* the chosen vertex is radj_col_l[i] (resp. fadj_col_l[i]).         *)
 (*                                                                   *)
-(* dfs_finish_iter g radj_col_l u i n is a structurally decreasing   *)
-(* (fuel n) cursor sweep starting at i: at each step it descends     *)
-(* into dfs_finish g (radj_col_l[i]) and continues at i+1; once the  *)
-(* cursor reaches hi (i.e. n fuel exhausted / i >= hi) it re-enters  *)
-(* dfs_finish g u, which — with all reverse neighbours now visited — *)
-(* performs only the set_finish u timer tail of the abstract DFS.    *)
+(* dfs_finish_iter g radj_col_l u hi i fuel is a structurally        *)
+(* decreasing (fuel) cursor sweep starting at i.  At each step v =   *)
+(* radj_col_l[i]; if v is already visited1, SKIP (advance cursor);   *)
+(* otherwise RECURSE into dfs_finish g v then advance.  Once the     *)
+(* cursor reaches hi (i >= hi) it performs the set_finish u timer    *)
+(* tail — mirroring the C post-loop {t0=timer; fin[u]=t0; timer++}   *)
+(* and the DFS_finish_f break branch's `get timer ;; set_finish u t`. *)
 (*                                                                   *)
-(* dfs_finish_from g radj_col_l radj_row_l u i is the cursor-resumed *)
-(* continuation with fuel (hi - i), where hi = csr_hi u radj_row_l.  *)
+(* dfs_scc_iter is the phase-2 analogue over the forward graph; its  *)
+(* exit is `ret tt` because dfs2 has NO post-loop block (the         *)
+(* function returns immediately after the cursor sweep).             *)
 (*                                                                   *)
-(* This is NOT a mirror of the C algorithm: it is an abstract-monad  *)
-(* program whose four structural unfoldings (entry / step-rec /      *)
-(* step-skip / exit) discharge by Fixpoint computation.  No Admitted, *)
-(* Axiom or Parameter is used here; the VCs these induce are the     *)
-(* manual obligations for the proving phase.                         *)
+(* dfs_finish_from / dfs_scc_from specialise iter with fuel          *)
+(* (csr_hi u row_l - i), so the entry (i = csr_lo u), step, and      *)
+(* exit (i = csr_hi u) unfoldings discharge by Fixpoint computation. *)
+(* No Admitted, Axiom or Parameter is used here.                     *)
 (* ================================================================= *)
 
 Fixpoint dfs_finish_iter
   (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat)
   : program KSt unit :=
   match fuel with
-  | O => dfs_finish g u
+  | O => t <- get (fun st t => t = timer st) ;; set_finish u t
   | S fuel' =>
-      if Z.leb hi i then dfs_finish g u
-      else (_ <- dfs_finish g (Znth i radj_col_l 0) ;;
-             dfs_finish_iter g radj_col_l u hi (i + 1) fuel')
+      if Z.leb hi i then t <- get (fun st t => t = timer st) ;; set_finish u t
+      else
+        (* vis-conditional cursor — matches the C `if (vis1[v]==0)` and the
+           abstract repeat_break's `assume ~visited1 st v` guard.  At position
+           i, v = Znth i radj_col_l 0: if v is already visited1, SKIP (advance
+           cursor); otherwise RECURSE into dfs_finish g v then advance. *)
+        if_else (fun st => visited1 st (Znth i radj_col_l 0))
+                (dfs_finish_iter g radj_col_l u hi (i + 1) fuel')
+                (_ <- dfs_finish g (Znth i radj_col_l 0) ;;
+                 dfs_finish_iter g radj_col_l u hi (i + 1) fuel')
   end.
 
 Fixpoint dfs_scc_iter
   (g : AdjGraph) (fadj_col_l : list Z) (root u hi i : Z) (fuel : nat)
   : program KSt unit :=
   match fuel with
-  | O => dfs_scc g root u
+  | O => ret tt
   | S fuel' =>
-      if Z.leb hi i then dfs_scc g root u
+      if Z.leb hi i then ret tt
       else
         (* B1: vis-conditional cursor — matches the C `if (vis2[v]==0)` and the
            abstract repeat_break's `assume ~visited2 st v` guard.  At position
@@ -510,24 +518,50 @@ Definition dfs_scc_fromK
 (* abstract set_finish / finalisation tail).  No Admitted / Axiom.    *)
 (* ================================================================= *)
 
-Lemma dfs_finish_iter_step :
-  forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat),
+Lemma dfs_finish_iter_skip_step :
+  forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat)
+         (st : KSt) (a : unit) (s' : KSt),
     (i < hi)%Z ->
-    dfs_finish_iter g radj_col_l u hi i (S fuel)
-    == (_ <- dfs_finish g (Znth i radj_col_l 0) ;;
-        dfs_finish_iter g radj_col_l u hi (i + 1) fuel).
+    visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_iter g radj_col_l u hi i (S fuel)).(MonadErr.nrm) st a s' <->
+    (dfs_finish_iter g radj_col_l u hi (i + 1) fuel).(MonadErr.nrm) st a s'.
 Proof.
-  intros g radj_col_l u hi i fuel Hilt.
-  simpl.
-  destruct (Z.leb hi i) eqn:E.
-  - apply Z.leb_le in E. lia.
-  - reflexivity.
+  intros g radj_col_l u hi i fuel st a s' Hilt Hvis.
+  simpl. destruct (Z.leb hi i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice, test. unfold_monad. sets_unfold.
+    split.
+    + intros [H | H].
+      * destruct H as [b [s2 [[Hs2 Hcond] Hsk]]]. subst s2. exact Hsk.
+      * destruct H as [b [s2 [[Hs2 Hncond] _]]]. exfalso. apply Hncond. exact Hvis.
+    + intros Hsk. left. exists tt. exists st. split; [ split; [ reflexivity | exact Hvis ] | exact Hsk ].
+Qed.
+
+Lemma dfs_finish_iter_recurse_step :
+  forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat)
+         (st : KSt) (a : unit) (s' : KSt),
+    (i < hi)%Z ->
+    ~ visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_iter g radj_col_l u hi i (S fuel)).(MonadErr.nrm) st a s' <->
+    ((_ <- dfs_finish g (Znth i radj_col_l 0) ;;
+      dfs_finish_iter g radj_col_l u hi (i + 1) fuel)).(MonadErr.nrm) st a s'.
+Proof.
+  intros g radj_col_l u hi i fuel st a s' Hilt Hnvis.
+  simpl. destruct (Z.leb hi i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice, test. unfold_monad. sets_unfold.
+    split.
+    + intros [H | H].
+      * destruct H as [b [s2 [[Hs2 Hcond] _]]]. exfalso. apply Hnvis. exact Hcond.
+      * destruct H as [b [s2 [[Hs2 Hncond] Hrec]]]. subst s2. exact Hrec.
+    + intros Hrec. right. exists tt. exists st. split; [ split; [ reflexivity | exact Hnvis ] | exact Hrec ].
 Qed.
 
 Lemma dfs_finish_iter_exit :
   forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat),
     (hi <= i)%Z ->
-    dfs_finish_iter g radj_col_l u hi i (S fuel) == dfs_finish g u.
+    dfs_finish_iter g radj_col_l u hi i (S fuel)
+    == (t <- get (fun st t => t = timer st) ;; set_finish u t).
 Proof.
   intros g radj_col_l u hi i fuel Hge.
   simpl.
@@ -578,7 +612,7 @@ Qed.
 Lemma dfs_scc_iter_exit :
   forall (g : AdjGraph) (fadj_col_l : list Z) (root u hi i : Z) (fuel : nat),
     (hi <= i)%Z ->
-    dfs_scc_iter g fadj_col_l root u hi i (S fuel) == dfs_scc g root u.
+    dfs_scc_iter g fadj_col_l root u hi i (S fuel) == ret tt.
 Proof.
   intros g fadj_col_l root u hi i fuel Hge.
   simpl.
@@ -636,14 +670,15 @@ Qed.
    Z.to_nat fuel accounting.  When i < hi, Z.to_nat (hi - i) = S _ and
    the next cursor's fuel is Z.to_nat (hi - (i+1)) = pred (Z.to_nat (hi-i)). *)
 
-Lemma dfs_finish_from_step :
-  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z),
+Lemma dfs_finish_from_skip_step :
+  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z)
+         (st : KSt) (a : unit) (s' : KSt),
     (i < csr_hi u radj_row_l)%Z ->
-    dfs_finish_from g radj_col_l radj_row_l u i
-    == (_ <- dfs_finish g (Znth i radj_col_l 0) ;;
-        dfs_finish_from g radj_col_l radj_row_l u (i + 1)).
+    visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_from g radj_col_l radj_row_l u i).(MonadErr.nrm) st a s' <->
+    (dfs_finish_from g radj_col_l radj_row_l u (i + 1)).(MonadErr.nrm) st a s'.
 Proof.
-  intros g radj_col_l radj_row_l u i Hilt.
+  intros g radj_col_l radj_row_l u i st a s' Hilt Hvis.
   unfold dfs_finish_from.
   assert (Hfuel : Z.to_nat (csr_hi u radj_row_l - i) =
                   S (Z.to_nat (csr_hi u radj_row_l - (i + 1)))).
@@ -651,14 +686,85 @@ Proof.
                    (csr_hi u radj_row_l - (i + 1)) + 1) by lia.
     rewrite Hsub, Z2Nat.inj_add by lia.
     rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel. apply dfs_finish_iter_skip_step; [ lia | exact Hvis ].
+Qed.
+
+Lemma dfs_finish_from_recurse_step :
+  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z)
+         (st : KSt) (a : unit) (s' : KSt),
+    (i < csr_hi u radj_row_l)%Z ->
+    ~ visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_from g radj_col_l radj_row_l u i).(MonadErr.nrm) st a s' <->
+    ((_ <- dfs_finish g (Znth i radj_col_l 0) ;;
+      dfs_finish_from g radj_col_l radj_row_l u (i + 1))).(MonadErr.nrm) st a s'.
+Proof.
+  intros g radj_col_l radj_row_l u i st a s' Hilt Hnvis.
+  unfold dfs_finish_from.
+  assert (Hfuel : Z.to_nat (csr_hi u radj_row_l - i) =
+                  S (Z.to_nat (csr_hi u radj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u radj_row_l - i =
+                   (csr_hi u radj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel. apply dfs_finish_iter_recurse_step; [ lia | exact Hnvis ].
+Qed.
+
+Lemma dfs_finish_from_skip_err_imp :
+  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z)
+         (st : KSt),
+    (i < csr_hi u radj_row_l)%Z ->
+    visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_from g radj_col_l radj_row_l u (i + 1)).(MonadErr.err) st ->
+    (dfs_finish_from g radj_col_l radj_row_l u i).(MonadErr.err) st.
+Proof.
+  intros g radj_col_l radj_row_l u i st Hilt Hvis Herr.
+  unfold dfs_finish_from in *.
+  assert (Hfuel : Z.to_nat (csr_hi u radj_row_l - i) =
+                  S (Z.to_nat (csr_hi u radj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u radj_row_l - i =
+                   (csr_hi u radj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
   rewrite Hfuel.
-  apply dfs_finish_iter_step. lia.
+  simpl. destruct (Z.leb (csr_hi u radj_row_l) i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice. sets_unfold.
+    left. rewrite bind_err_iff. right.
+    exists tt. exists st. split; [ | exact Herr ].
+    unfold test. sets_unfold. split; [ reflexivity | exact Hvis ].
+Qed.
+
+Lemma dfs_finish_from_recurse_err_imp :
+  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z)
+         (st : KSt),
+    (i < csr_hi u radj_row_l)%Z ->
+    ~ visited1 st (Znth i radj_col_l 0) ->
+    ((_ <- dfs_finish g (Znth i radj_col_l 0) ;;
+      dfs_finish_from g radj_col_l radj_row_l u (i + 1))).(MonadErr.err) st ->
+    (dfs_finish_from g radj_col_l radj_row_l u i).(MonadErr.err) st.
+Proof.
+  intros g radj_col_l radj_row_l u i st Hilt Hnvis Herr.
+  unfold dfs_finish_from in *.
+  assert (Hfuel : Z.to_nat (csr_hi u radj_row_l - i) =
+                  S (Z.to_nat (csr_hi u radj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u radj_row_l - i =
+                   (csr_hi u radj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel.
+  simpl. destruct (Z.leb (csr_hi u radj_row_l) i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice. sets_unfold.
+    right. rewrite bind_err_iff. right.
+    exists tt. exists st. split; [ | exact Herr ].
+    unfold test. sets_unfold. split; [ reflexivity | exact Hnvis ].
 Qed.
 
 Lemma dfs_finish_from_exit :
   forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z),
     (csr_hi u radj_row_l <= i)%Z ->
-    dfs_finish_from g radj_col_l radj_row_l u i == dfs_finish g u.
+    dfs_finish_from g radj_col_l radj_row_l u i
+    == (t <- get (fun st t => t = timer st) ;; set_finish u t).
 Proof.
   intros g radj_col_l radj_row_l u i Hge.
   unfold dfs_finish_from.
@@ -748,7 +854,7 @@ Qed.
 Lemma dfs_scc_from_exit :
   forall (g : AdjGraph) (fadj_col_l fadj_row_l : list Z) (root u i : Z),
     (csr_hi u fadj_row_l <= i)%Z ->
-    dfs_scc_from g fadj_col_l fadj_row_l root u i == dfs_scc g root u.
+    dfs_scc_from g fadj_col_l fadj_row_l root u i == ret tt.
 Proof.
   intros g fadj_col_l fadj_row_l root u i Hge.
   unfold dfs_scc_from.
@@ -761,100 +867,119 @@ Qed.
 (* the absorb chain (dfs_scc_safe_return) and is deleted alongside it — see   *)
 (* the SEMANTIC GAP note near the former dfs_scc_absorb.                       *)
 
-(* Absorb chain (restored): DFS_scc_absorb is now re-exposed in Kosaraju.v    *)
-(* (as an Admitted lemma pending re-derivation of the MonadErr big-step loop  *)
-(* infrastructure).  The absorb says: dfs_scc g root u, started from a state  *)
-(* where u is visited2, all of u's forward out-neighbours are visited2, and   *)
-(* scc_id u = scc_id root, admits the no-op transition (tt, st).  The         *)
-(* sid-equality is exactly the assertS (scc_id st u = scc_id st root) guard   *)
-(* that was added to DFS_scc_f's break branch, so the absorb is contingent    *)
-(* on the same fact the assertS checks.                                       *)
+(* Absorb chain REMOVED.  With the cursor exit set to `ret tt` (dfs2) and
+   `get timer ;; set_finish u t` (dfs1), the loop-exit VC no longer needs to
+   bridge a re-entered `dfs_scc g root u` / `dfs_finish g u` to a no-op or
+   set_finish transition via DFS_scc_absorb.  The exit lemma
+   (dfs_scc_from_exit / dfs_finish_from_exit) now equates the cursor
+   continuation directly to the exit monad, so the return VC is a plain
+   safeExec_proequiv.  No Admitted absorb lemmas are needed. *)
 
-Lemma dfs_scc_absorb : forall (g : AdjGraph) (root u : Z) (st : KSt),
-  AdjGraphValid g ->
-  (forall v, step g u v -> visited2 st v) ->
-  visited2 st u ->
-  scc_id st u = scc_id st root ->
-  (dfs_scc g root u).(MonadErr.nrm) st tt st.
-Proof.
-  intros g root u st Hgv Hneigh Hvisu Hsid. unfold dfs_scc.
-  apply DFS_scc_absorb.
-  - exact Hgv.
-  - exact Hneigh.
-  - exact Hvisu.
-  - exact Hsid.
-Qed.
-
-(* safeExec-level corollary of dfs_scc_absorb: if dfs_scc g root u is safe   *)
-(* (wp) from a singleton state st satisfying the closure, then X tt st holds  *)
-(* (the no-op transition (tt,st) is in dfs_scc, so wp forces X there).         *)
-Lemma dfs_scc_safe_return : forall (g : AdjGraph) (root u : Z) (st : KSt) (X : unit -> KSt -> Prop),
-  AdjGraphValid g ->
-  (forall v, step g u v -> visited2 st v) ->
-  visited2 st u ->
-  scc_id st u = scc_id st root ->
-  safeExec (fun st' => st' = st) (dfs_scc g root u) X ->
-  X tt st.
-Proof.
-  intros g root u st X Hgv Hneigh Hvisu Hsid [s [Hs Hsafe]].
-  subst s.
-  apply (wp_spec (dfs_scc g root u) st st tt
-           (dfs_scc_absorb g root u st Hgv Hneigh Hvisu Hsid) X).
-  exact Hsafe.
-Qed.
-
-(* dfs2 Gap A (loop exit) closer: from the loop-Inv facts at i>=hi, derive    *)
-(* `safeExec (pre_dfs2 vis2_m sid_m) (return tt) X`.  All abstract-monad      *)
-(* reasoning (visited2 / scc_id / step / csr2_faithful / absorb) lives here.   *)
+(* dfs2 Gap A (loop exit) closer: at i >= hi, dfs_scc_from ... u i == ret tt,
+   so `safeExec P (dfs_scc_from ... u i) X` is rewritten to
+   `safeExec P (ret tt) X` by program equivalence.  Trivial. *)
 Lemma dfs2_return_close :
   forall (g: AdjGraph) (fadj_col_l fadj_row_l: list Z) (root u i: Z)
          (vis2_m sid_m: list Z) (root_v: Z) (X: unit -> KSt -> Prop),
-  csr_wf2 g fadj_col_l fadj_row_l vis2_m sid_m ->
-  csr2_faithful g fadj_col_l fadj_row_l ->
-  Znth u vis2_m 0 <> 0%Z ->
-  Znth u sid_m 0 = Znth root sid_m 0 ->
-  (forall j, (csr_lo u fadj_row_l <= j < i)%Z ->
-             Znth (Znth j fadj_col_l 0) vis2_m 0 <> 0%Z) ->
-  (0 <= u < adj_verts g)%Z -> (0 <= root < adj_verts g)%Z ->
   (csr_hi u fadj_row_l <= i)%Z ->
   safeExec (pre_dfs2 g fadj_col_l fadj_row_l vis2_m sid_m root_v)
            (dfs_scc_from g fadj_col_l fadj_row_l root u i) X ->
   safeExec (pre_dfs2 g fadj_col_l fadj_row_l vis2_m sid_m root_v) (ret tt) X.
 Proof.
-  intros g fadj_col_l fadj_row_l root u i vis2_m sid_m root_v X
-         Hcwf Hfaith Huvis HUsid Hscanned Hub Hrb Hhige Hsccfrom.
-  destruct Hcwf as [Hgv _].
-  assert (Hscc : safeExec (pre_dfs2 g fadj_col_l fadj_row_l vis2_m sid_m root_v)
-                          (dfs_scc g root u) X)
-    by (apply safeExec_proequiv with (c1 := dfs_scc_from g fadj_col_l fadj_row_l root u i);
-        [ exact (dfs_scc_from_exit g fadj_col_l fadj_row_l root u i Hhige) | exact Hsccfrom ]).
+  intros g fadj_col_l fadj_row_l root u i vis2_m sid_m root_v X Hhige Hsccfrom.
+  apply safeExec_proequiv with (c1 := dfs_scc_from g fadj_col_l fadj_row_l root u i).
+  - exact (dfs_scc_from_exit g fadj_col_l fadj_row_l root u i Hhige).
+  - exact Hsccfrom.
+Qed.
+
+(* dfs1 loop-exit closer: at i >= hi, dfs_finish_from ... u i ==
+   (t <- get timer ;; set_finish u t).  The C post-loop reads timer_p[0],
+   sets fin[u] = t0, timer_p[0] = t0+1 — exactly the nrm transition of
+   `get (fun st t => t = timer st) ;; set_finish u t`: from st (timer = timer_m)
+   it steps to st' with timer st' = S (timer st) and finish st' u = timer st.
+   Given the safeExec witness sigma with pre_dfs1 vis_m fin_m timer_m and
+   timer_m = Z.to_nat (timer sigma), the post-state sigma' has
+     timer sigma' = S timer_m,  finish sigma' u = timer_m,
+   which matches pre_dfs1 vis_m (replace_Znth u timer_m fin_m) (S timer_m)
+   (vis1 unchanged by set_finish; finish[u] = timer_m; other finish preserved).
+   Then X tt sigma' follows from the wp of the exit monad. *)
+Lemma dfs1_return_close :
+  forall (g: AdjGraph) (radj_col_l radj_row_l: list Z) (u i: Z)
+         (vis1_m fin_m: list Z) (timer_m: Z) (X: unit -> KSt -> Prop),
+  (0 <= u < adj_verts g)%Z ->
+  (0 <= timer_m)%Z ->
+  Zlength fin_m = adj_verts g ->
+  (csr_hi u radj_row_l <= i)%Z ->
+  safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_m)
+           (dfs_finish_from g radj_col_l radj_row_l u i) X ->
+  safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m
+              (replace_Znth u timer_m fin_m) (timer_m + 1)) (ret tt) X.
+Proof.
+  intros g radj_col_l radj_row_l u i vis1_m fin_m timer_m X
+         Hub Htm Hlenfin Hhige Hsccfrom.
+  assert (Hexit : PartialOrder_Setoid.equiv
+            (dfs_finish_from g radj_col_l radj_row_l u i)
+            (t <- get (fun st t => t = timer st) ;; set_finish u t))
+    by (apply dfs_finish_from_exit; exact Hhige).
+  assert (Hscc : safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_m)
+                          (t <- get (fun st t => t = timer st) ;; set_finish u t) X).
+  { eapply safeExec_proequiv with (c1 := dfs_finish_from g radj_col_l radj_row_l u i).
+    - exact Hexit.
+    - exact Hsccfrom. }
   destruct Hscc as [sigma [Hpre Hsafe]].
-  destruct Hpre as [Hpv Hps].
-  assert (Huv : visited2 sigma u) by (exact (proj2 (Hpv u Hub) Huvis)).
-  assert (Hsid : scc_id sigma u = scc_id sigma root).
-  { rewrite (Hps u Hub), (Hps root Hrb). f_equal. exact HUsid. }
-  assert (Hneigh : forall vv, step g u vv -> visited2 sigma vv).
-  { intros vv Hstep.
-    assert (Hvvb : (0 <= vv < adj_verts g)%Z)
-      by (destruct Hstep as [e Hsa]; destruct Hsa as [_ [_ [Hvvb _]]]; exact Hvvb).
-    destruct (Hfaith u vv Hub Hvvb) as [Hfwd _].
-    destruct (Hfwd Hstep) as [j [Hjr Hjv]].
-    assert (Hji : (csr_lo u fadj_row_l <= j < i)%Z) by lia.
-    assert (Hvis : Znth vv vis2_m 0 <> 0%Z) by (rewrite <- Hjv; exact (Hscanned j Hji)).
-    exact (proj2 (Hpv vv Hvvb) Hvis). }
-  unfold safeExec. exists sigma. split.
-  - unfold pre_dfs2; split; assumption.
-  - (* safe sigma (ret tt) X, given X tt sigma from the absorb corollary. *)
-    assert (Hxtt : X tt sigma).
-    { apply dfs_scc_safe_return with (g := g) (root := root) (u := u) (st := sigma).
-      - exact Hgv.
-      - exact Hneigh.
-      - exact Huv.
-      - exact Hsid.
-      - exact (ex_intro _ sigma (conj eq_refl Hsafe)). }
-    unfold safe, weakestpre. split.
-    + intro Herr. sets_unfold in Herr. exfalso. exact Herr.
-    + intros r s' Hnrm. inversion Hnrm; subst. exact Hxtt.
+  destruct Hpre as [Hpv [Hpf Hpt]].
+  pose (sigma' := MkSt (S (timer sigma))
+                       (fun v => if Z.eqb v u then timer sigma else finish sigma v)
+                       (visited1 sigma) (visited2 sigma)
+                       (scc_id sigma) (scc_next sigma)).
+  assert (Hfsu : finish sigma' u = timer sigma).
+  { unfold sigma'. simpl. destruct (Z.eqb u u) eqn:Eu.
+    - reflexivity.
+    - apply Z.eqb_neq in Eu. exfalso. apply Eu. reflexivity. }
+  assert (Hfsv : forall v, v <> u -> finish sigma' v = finish sigma v).
+  { intros v Hvne. unfold sigma'. simpl. destruct (Z.eqb v u) eqn:Ev.
+    - apply Z.eqb_eq in Ev. exfalso. apply Hvne. exact Ev.
+    - reflexivity. }
+  assert (Htimer' : timer sigma' = S (timer sigma)) by (unfold sigma'; reflexivity).
+  assert (Hvis1' : visited1 sigma' = visited1 sigma) by (unfold sigma'; reflexivity).
+  assert (Hvis2' : visited2 sigma' = visited2 sigma) by (unfold sigma'; reflexivity).
+  assert (Hsid' : scc_id sigma' = scc_id sigma) by (unfold sigma'; reflexivity).
+  assert (Hsnext' : scc_next sigma' = scc_next sigma) by (unfold sigma'; reflexivity).
+  assert (Hnrm : (t <- get (fun st t => t = timer st) ;; set_finish u t).(MonadErr.nrm)
+                  sigma tt sigma').
+  { cbv beta iota delta [MonadErr.bind MonadErr.nrm_nrm get set_finish custom].
+    eexists. exists sigma. split.
+    - split; [ reflexivity | reflexivity ].
+    - simpl. split; [ exact Htimer' | ].
+      split; [ exact Hfsu | ].
+      split; [ exact Hfsv | ].
+      split; [ exact Hvis1' | ].
+      split; [ exact Hvis2' | ].
+      split; [ exact Hsid' | ].
+      exact Hsnext'. }
+  assert (Hxtt : X tt sigma')
+    by (eapply wp_spec; eassumption).
+  unfold safeExec. exists sigma'. split.
+  - unfold pre_dfs1.
+    assert (HnZ : Z.to_nat (timer_m + 1) = S (Z.to_nat timer_m)).
+    { rewrite Z.add_1_r. apply Z2Nat.inj_succ. lia. }
+    rewrite HnZ. split; [ | split; [ | ] ].
+    + intros x Hr. unfold sigma'. simpl. split; intros Hvis.
+      * apply (proj1 (Hpv x Hr)). exact Hvis.
+      * apply (proj2 (Hpv x Hr)). exact Hvis.
+    + intros w Hr. unfold sigma'. simpl.
+      destruct (Z.eqb w u) eqn:Eu0.
+      * apply Z.eqb_eq in Eu0. subst w.
+        assert (Hin : (0 <= u < Zlength fin_m)%Z) by (rewrite Hlenfin; lia).
+        rewrite (Znth_replace_eq fin_m u timer_m 0 Hin). exact Hpt.
+      * apply Z.eqb_neq in Eu0.
+        assert (Hin : (0 <= w < Zlength fin_m)%Z) by (rewrite Hlenfin; lia).
+        rewrite (Znth_replace_neq fin_m w u timer_m 0 Hin (proj1 Hub) Eu0).
+        apply (Hpf w Hr).
+    + rewrite Htimer'. f_equal. exact Hpt.
+  - unfold safe, weakestpre. split.
+    + intro Herr. cbv beta iota delta [MonadErr.ret] in Herr. sets_unfold in Herr. exfalso. exact Herr.
+    + intros r s' Hnrm2. cbv beta iota delta [MonadErr.ret] in Hnrm2. inversion Hnrm2; subst. exact Hxtt.
 Qed.
 
 
@@ -919,6 +1044,72 @@ Proof.
       exact Herr.
     + intros a s' Ht. destruct Hsafe as [_ Hpost]. apply Hpost.
       apply (proj2 (dfs_scc_from_recurse_step g fadj_col_l fadj_row_l root u i sigma a s' Hilt Hnvisv)).
+      exact Ht.
+Qed.
+
+(* dfs1 analogues of dfs2_skip_close / dfs2_recurse_close.  vis-conditional
+   cursor: at position i, v = Znth i radj_col_l 0; if visited1, SKIP (advance
+   cursor); if not, RECURSE into dfs_finish g v then advance.  Each extracts
+   the safeExec witness sigma, derives visited1/~visited1 of v at sigma via
+   pre_dfs1, applies dfs_finish_from_skip_step / dfs_finish_from_recurse_step,
+   and reconstructs. *)
+Lemma dfs1_skip_close :
+  forall (g: AdjGraph) (radj_col_l radj_row_l: list Z) (u i: Z)
+         (vis1_m fin_m: list Z) (timer_v: Z) (X: unit -> KSt -> Prop),
+  (i < csr_hi u radj_row_l)%Z ->
+  (0 <= Znth i radj_col_l 0 < adj_verts g)%Z ->
+  Znth (Znth i radj_col_l 0) vis1_m 0 <> 0%Z ->
+  safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_v)
+           (dfs_finish_from g radj_col_l radj_row_l u i) X ->
+  safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_v)
+           (dfs_finish_from g radj_col_l radj_row_l u (i + 1)) X.
+Proof.
+  intros g radj_col_l radj_row_l u i vis1_m fin_m timer_v X
+         Hilt Hvvb Hvvis Hsccfrom.
+  destruct Hsccfrom as [sigma [Hpre Hsafe]].
+  destruct Hpre as [Hpv [Hpf Hpt]].
+  assert (Hvisv : visited1 sigma (Znth i radj_col_l 0))
+    by (exact (proj2 (Hpv (Znth i radj_col_l 0) Hvvb) Hvvis)).
+  unfold safeExec. exists sigma. split.
+  - unfold pre_dfs1; split; [ exact Hpv | split; [ exact Hpf | exact Hpt ] ].
+  - unfold safe, weakestpre. split.
+    + intros Herr. destruct Hsafe as [Hnoerr _]. exfalso. apply Hnoerr.
+      apply (dfs_finish_from_skip_err_imp g radj_col_l radj_row_l u i sigma Hilt Hvisv).
+      exact Herr.
+    + intros a s' Ht. destruct Hsafe as [_ Hpost]. apply Hpost.
+      apply (proj2 (dfs_finish_from_skip_step g radj_col_l radj_row_l u i sigma a s' Hilt Hvisv)).
+      exact Ht.
+Qed.
+
+Lemma dfs1_recurse_close :
+  forall (g: AdjGraph) (radj_col_l radj_row_l: list Z) (u i: Z)
+         (vis1_m fin_m: list Z) (timer_v: Z) (X: unit -> KSt -> Prop),
+  (i < csr_hi u radj_row_l)%Z ->
+  (0 <= Znth i radj_col_l 0 < adj_verts g)%Z ->
+  Znth (Znth i radj_col_l 0) vis1_m 0 = 0%Z ->
+  safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_v)
+           (dfs_finish_from g radj_col_l radj_row_l u i) X ->
+  safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_v)
+           (bind (dfs_finish g (Znth i radj_col_l 0))
+                 (dfs_finish_fromK g radj_col_l radj_row_l u (i + 1))) X.
+Proof.
+  intros g radj_col_l radj_row_l u i vis1_m fin_m timer_v X
+         Hilt Hvvb Hvvis0 Hsccfrom.
+  destruct Hsccfrom as [sigma [Hpre Hsafe]].
+  destruct Hpre as [Hpv [Hpf Hpt]].
+  assert (Hnvisv : ~ visited1 sigma (Znth i radj_col_l 0)).
+  { intro Hvv.
+    assert (Hzz : Znth (Znth i radj_col_l 0) vis1_m 0 <> 0%Z)
+      by (apply (proj1 (Hpv (Znth i radj_col_l 0) Hvvb)); exact Hvv).
+    lia. }
+  unfold safeExec. exists sigma. split.
+  - unfold pre_dfs1; split; [ exact Hpv | split; [ exact Hpf | exact Hpt ] ].
+  - unfold safe, weakestpre. split.
+    + intros Herr. destruct Hsafe as [Hnoerr _]. exfalso. apply Hnoerr.
+      apply (dfs_finish_from_recurse_err_imp g radj_col_l radj_row_l u i sigma Hilt Hnvisv).
+      exact Herr.
+    + intros a s' Ht. destruct Hsafe as [_ Hpost]. apply Hpost.
+      apply (proj2 (dfs_finish_from_recurse_step g radj_col_l radj_row_l u i sigma a s' Hilt Hnvisv)).
       exact Ht.
 Qed.
 
