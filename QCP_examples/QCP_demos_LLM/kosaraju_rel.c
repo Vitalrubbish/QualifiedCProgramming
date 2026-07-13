@@ -209,7 +209,6 @@ void dfs2(int root, int u, int n,
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l_, sid_l_, root_v),
                applyf(f, tt), X) &&
       Znth(u, vis2_l_, 0) != 0 &&
-      Znth(u, sid_l_, 0) == Znth(root, sid_l_, 0) &&
       (forall (w: Z), (0 <= w && w < n) =>
                   (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_l_, 0) != 0)) &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
@@ -241,7 +240,6 @@ void dfs2(int root, int u, int n,
       safeExec(pre_dfs2(g, fadj_col_l, fadj_row_l, vis2_l_, sid_l_, root_v),
                return(tt), X) &&
       Znth(u, vis2_l_, 0) != 0 &&
-      Znth(u, sid_l_, 0) == Znth(root, sid_l_, 0) &&
       (forall (w: Z), (0 <= w && w < n) =>
                   (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_l_, 0) != 0)) &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
@@ -270,11 +268,8 @@ void dfs2(int root, int u, int n,
         0 <= lo && lo <= i && i <= hi && hi <= m_of(fadj_row_l) &&
         0 <= u && u < n && 0 <= root && root < n && n <= 2147483647 &&
         Znth(u, vis2_m, 0) != 0 &&
-        Znth(u, sid_m, 0) == Znth(root, sid_m, 0) &&
         (forall (j: Z), (lo <= j && j < i) =>
                     (Znth(Znth(j, fadj_col_l, 0), vis2_m, 0) != 0)) &&
-        (forall (j: Z), (lo <= j && j < i) =>
-                    (Znth(Znth(j, fadj_col_l, 0), sid_m, 0) == Znth(root, sid_m, 0))) &&
         Znth(root, vis2_m, 0) != 0 &&
         (forall (w: Z), (0 <= w && w < n) =>
                     (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_m, 0) != 0)) &&
@@ -301,11 +296,8 @@ void dfs2(int root, int u, int n,
         0 <= lo && lo <= i && i < hi && hi <= m_of(fadj_row_l) &&
         0 <= u && u < n && 0 <= root && root < n && n <= 2147483647 &&
         Znth(u, vis2_m, 0) != 0 &&
-        Znth(u, sid_m, 0) == Znth(root, sid_m, 0) &&
         (forall (j: Z), (lo <= j && j < i) =>
                     (Znth(Znth(j, fadj_col_l, 0), vis2_m, 0) != 0)) &&
-        (forall (j: Z), (lo <= j && j < i) =>
-                    (Znth(Znth(j, fadj_col_l, 0), sid_m, 0) == Znth(root, sid_m, 0))) &&
         Znth(root, vis2_m, 0) != 0 &&
         (forall (w: Z), (0 <= w && w < n) =>
                     (Znth(w, vis2_l, 0) != 0 => Znth(w, vis2_m, 0) != 0)) &&
