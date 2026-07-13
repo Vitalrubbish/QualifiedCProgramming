@@ -145,9 +145,7 @@ Algorithms_FILES = \
 	Kosaraju/SCC.v Kosaraju/Kosaraju.v \
 	Tarjan_directed/SCC_basic.v Tarjan_directed/Tarjan_scc.v \
 	Tarjan_directed/Tarjan_scc_basics.v Tarjan_directed/Tarjan_scc_is_dfn.v \
-	Tarjan_directed/Tarjan_scc_low_defs.v Tarjan_directed/Tarjan_scc_low_pure.v \
-	Tarjan_directed/Tarjan_scc_low_primitives.v \
-	Tarjan_directed/Tarjan_scc_is_low.v \
+	Tarjan_directed/Tarjan_scc_is_low.v Tarjan_directed/Tarjan_scc_correctness.v
 
 SumLib_FILES = \
 	Sum.v \
@@ -541,7 +539,7 @@ else
 	$(call timeit,COQC $*.v,$(COQC) $(COQ_FLAG) $(CURRENT_DIR)/$*.v)
 endif
 
-	
+
 
 all: \
 	$(EXAMPLE:%.v=%.vo) \
