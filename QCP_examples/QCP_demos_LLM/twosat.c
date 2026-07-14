@@ -8,7 +8,7 @@
      */
 
 /* ==================================================================== */
-/* Vertex encoding macros                                                */
+/* Vertex encoding functions                                            */
 /*                                                                       */
 /* Variable v (1-indexed, 1 <= v <= n) → two literals:                   */
 /*   vertex 2*(v-1)   = literal (v, true)   (even)                      */
@@ -55,9 +55,10 @@ int neg_vertex(int a)
 /* main: 2SAT satisfiability via implication graph + Kosaraju SCC       */
 /*                                                                      */
 /* Input:                                                                */
-/*   n       = number of boolean variables (1..n)                       */
-/*   m       = number of clauses                                        */
-/*   clauses = array of 2*m ints: each pair (a,b) is clause (a OR b)    */
+/*   n     = number of boolean variables (1..n)                         */
+/*   m     = number of clauses                                          */
+/*   lit1  = array of m ints: first literal of each clause (lit1[i] OR lit2[i]) */
+/*   lit2  = array of m ints: second literal of each clause (lit1[i] OR lit2[i]) */
 /*                                                                       */
 /* Builds the implication graph as CSR arrays (fadj/radj), runs          */
 /* Kosaraju (dfs1 on reverse graph, dfs2 on forward graph in decreasing  */
@@ -76,14 +77,16 @@ int neg_vertex(int a)
 /*          vis2_l sid_l       dfs2 visited / scc-id lists              */
 /*          X1 X2              monadic continuations for dfs1 / dfs2    */
 /* ==================================================================== */
-int main(int n, int m, int *clauses)
+int main(int n, int m, int *lit1, int *lit2)
   /*@ With
-        clauses_l
+        lit1_l lit2_l
       Require
         n > 0 && m > 0 &&
-        IntArray::full(clauses, 2*m, clauses_l) &&
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) &&
         m < 1073741824 && n < 1073741824 &&
-        (forall (k : Z), (0 <= k && k < 2 * m) => Znth(k, clauses_l, 0) != 0 && -n <= Znth(k, clauses_l, 0) && Znth(k, clauses_l, 0) <= n)
+        (forall (k : Z), (0 <= k && k < m) => Znth(k, lit1_l, 0) != 0 && -n <= Znth(k, lit1_l, 0) && Znth(k, lit1_l, 0) <= n) &&
+        (forall (k : Z), (0 <= k && k < m) => Znth(k, lit2_l, 0) != 0 && -n <= Znth(k, lit2_l, 0) && Znth(k, lit2_l, 0) <= n)
       Ensure
         emp
    */
@@ -118,7 +121,8 @@ int main(int n, int m, int *clauses)
         n == n@pre && m == m@pre &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, fadj_l, 0) == 0) &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, radj_l, 0) == 0) &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -142,7 +146,8 @@ int main(int n, int m, int *clauses)
         (forall (k : Z), (0 <= k && k < i) => Znth(k, v2l, 0) == 0) &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, fnl, 0) == 0) &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, sdl, 0) == 0) &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -161,7 +166,8 @@ int main(int n, int m, int *clauses)
         exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
         0 <= i && i <= verts &&
         n == n@pre && m == m@pre &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -187,7 +193,8 @@ int main(int n, int m, int *clauses)
         n == n@pre && m == m@pre &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, fcl, 0) == Znth(k, fadj_l, 0)) &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, rcl, 0) == Znth(k, radj_l, 0)) &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -202,21 +209,20 @@ int main(int n, int m, int *clauses)
     */
     for (int i = 0; i <= verts; i++) { fcur[i] = fadj_row[i]; rcur[i] = radj_row[i]; }
 
-    /* ---- Process clauses with ONE read per iteration ---- */
-    int saved_a = 0;
+    /* ---- Process clauses ---- */
     /*@ Inv Assert
         exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
-        0 <= i && i <= 2 * m &&
+        0 <= i && i <= m &&
         n == n@pre && m == m@pre &&
         verts == 2 * n && total_edges == 2 * m &&
-        (i % 2 == 1 => saved_a == Znth(i - 1, clauses_l, 0)) &&
-        (i % 2 == 1 => -n <= saved_a && saved_a <= n && saved_a != 0) &&
-        (forall (k : Z), (0 <= k && k < 2 * m) => Znth(k, clauses_l, 0) != 0 && -n <= Znth(k, clauses_l, 0) && Znth(k, clauses_l, 0) <= n) &&
+        (forall (k : Z), (0 <= k && k < m) => Znth(k, lit1_l, 0) != 0 && -n <= Znth(k, lit1_l, 0) && Znth(k, lit1_l, 0) <= n) &&
+        (forall (k : Z), (0 <= k && k < m) => Znth(k, lit2_l, 0) != 0 && -n <= Znth(k, lit2_l, 0) && Znth(k, lit2_l, 0) <= n) &&
         (forall (k : Z), (0 <= k && k < verts + 1) => 0 <= Znth(k, fcl, 0) && Znth(k, fcl, 0) <= total_edges) &&
         (forall (k : Z), (0 <= k && k < verts) => Znth(k, fcl, 0) < total_edges) &&
         (forall (k : Z), (0 <= k && k < verts + 1) => 0 <= Znth(k, rcl, 0) && Znth(k, rcl, 0) <= total_edges) &&
         (forall (k : Z), (0 <= k && k < verts) => Znth(k, rcl, 0) < total_edges) &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -229,71 +235,84 @@ int main(int n, int m, int *clauses)
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
-    for (int i = 0; i < 2 * m; i++) {
+    for (int i = 0; i < m; i++) {
         /*@ Given fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl */
-        int val = clauses[i];
-        if (i % 2 == 0) {
-            saved_a = val;
-        } else {
-            int na = saved_a > 0 ? 2 * saved_a - 1 : -2 * saved_a - 2;
-            int nb = val > 0 ? 2 * val - 1 : -2 * val - 2;
-            int va = saved_a > 0 ? 2 * saved_a - 2 : -2 * saved_a - 1;
-            int vb = val > 0 ? 2 * val - 2 : -2 * val - 1;
-            /*@ Assert
-                0 <= na && na < verts &&
-                0 <= nb && nb < verts &&
-                0 <= va && va < verts &&
-                0 <= vb && vb < verts
-            */
-            int p = fcur[na];
-            /*@ Assert 0 <= p && p < total_edges */
-            fadj_col[p] = vb;
-            fcur[na] = p + 1;
-            int q = rcur[vb];
-            /*@ Assert 0 <= q && q < total_edges */
-            radj_col[q] = na; rcur[vb] = q + 1;
-            int r = fcur[nb];
-            /*@ Assert 0 <= r && r < total_edges */
-            fadj_col[r] = va; fcur[nb] = r + 1;
-            int s = rcur[va];
-            /*@ Assert 0 <= s && s < total_edges */
-            radj_col[s] = nb; rcur[va] = s + 1;
-        }
+        int const a = lit1[i];
+        int const b = lit2[i];
+        int const na = a > 0 ? 2 * a - 1 : -2 * a - 2;
+        int const nb = b > 0 ? 2 * b - 1 : -2 * b - 2;
+        int const va = a > 0 ? 2 * a - 2 : -2 * a - 1;
+        int const vb = b > 0 ? 2 * b - 2 : -2 * b - 1;
+        /*@ Assert
+            0 <= na && na < verts &&
+            0 <= nb && nb < verts &&
+            0 <= va && va < verts &&
+            0 <= vb && vb < verts &&
+            0 <= Znth(na, fcl, 0) &&
+            (forall (k : Z), (0 <= k && k < m) => Znth(k, lit1_l, 0) != 0 && -n <= Znth(k, lit1_l, 0) && Znth(k, lit1_l, 0) <= n) &&
+            (forall (k : Z), (0 <= k && k < m) => Znth(k, lit2_l, 0) != 0 && -n <= Znth(k, lit2_l, 0) && Znth(k, lit2_l, 0) <= n) &&
+            (forall (k : Z), (0 <= k && k < verts + 1) => 0 <= Znth(k, fcl, 0) && Znth(k, fcl, 0) <= total_edges) &&
+            (forall (k : Z), (0 <= k && k < verts) => Znth(k, fcl, 0) < total_edges) &&
+            (forall (k : Z), (0 <= k && k < verts + 1) => 0 <= Znth(k, rcl, 0) && Znth(k, rcl, 0) <= total_edges) &&
+            (forall (k : Z), (0 <= k && k < verts) => Znth(k, rcl, 0) < total_edges) &&
+            IntArray::full(lit1, m, lit1_l) *
+            IntArray::full(lit2, m, lit2_l) *
+            IntArray::full(fadj_row, verts + 1, fadj_l) *
+            IntArray::full(radj_row, verts + 1, radj_l) *
+            IntArray::full(fadj_col, total_edges, fcol_l) *
+            IntArray::full(radj_col, total_edges, rcol_l) *
+            IntArray::full(vis1, verts, v1l) *
+            IntArray::full(fin, verts, fnl) *
+            IntArray::full(timer_p, 1, tpl) *
+            IntArray::full(vis2, verts, v2l) *
+            IntArray::full(sid, verts, sdl) *
+            IntArray::full(fcur, verts + 1, fcl) *
+            IntArray::full(rcur, verts + 1, rcl)
+        */
+        int const p = fcur[na];
+        int const q = rcur[vb];
+        int const r = fcur[nb];
+        int const s = rcur[va];
+        /*@ Assert
+            0 <= na && na < verts &&
+            0 <= nb && nb < verts &&
+            0 <= va && va < verts &&
+            0 <= vb && vb < verts &&
+            0 <= p && p < total_edges &&
+            0 <= q && q < total_edges &&
+            0 <= r && r < total_edges &&
+            0 <= s && s < total_edges &&
+            (forall (k : Z), (0 <= k && k < m) => Znth(k, lit1_l, 0) != 0 && -n <= Znth(k, lit1_l, 0) && Znth(k, lit1_l, 0) <= n) &&
+            (forall (k : Z), (0 <= k && k < m) => Znth(k, lit2_l, 0) != 0 && -n <= Znth(k, lit2_l, 0) && Znth(k, lit2_l, 0) <= n) &&
+            (forall (k : Z), (0 <= k && k < verts + 1) => 0 <= Znth(k, fcl, 0) && Znth(k, fcl, 0) <= total_edges) &&
+            (forall (k : Z), (0 <= k && k < verts) => Znth(k, fcl, 0) < total_edges) &&
+            (forall (k : Z), (0 <= k && k < verts + 1) => 0 <= Znth(k, rcl, 0) && Znth(k, rcl, 0) <= total_edges) &&
+            (forall (k : Z), (0 <= k && k < verts) => Znth(k, rcl, 0) < total_edges) &&
+            IntArray::full(lit1, m, lit1_l) *
+            IntArray::full(lit2, m, lit2_l) *
+            IntArray::full(fadj_row, verts + 1, fadj_l) *
+            IntArray::full(radj_row, verts + 1, radj_l) *
+            IntArray::full(fadj_col, total_edges, fcol_l) *
+            IntArray::full(radj_col, total_edges, rcol_l) *
+            IntArray::full(vis1, verts, v1l) *
+            IntArray::full(fin, verts, fnl) *
+            IntArray::full(timer_p, 1, tpl) *
+            IntArray::full(vis2, verts, v2l) *
+            IntArray::full(sid, verts, sdl) *
+            IntArray::full(fcur, verts + 1, fcl) *
+            IntArray::full(rcur, verts + 1, rcl)
+        */
+        fadj_col[p] = vb;
+        fcur[na] = p + 1;
+        radj_col[q] = na;
+        rcur[vb] = q + 1;
+        fadj_col[r] = va;
+        fcur[nb] = r + 1;
+        radj_col[s] = nb;
+        rcur[va] = s + 1;
     }
 
-    /* ================================================================ */
-    /* Second pass: fill adjacency column arrays.                        */
-    /* ================================================================ */
-    /*@ Inv Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl bol,
-        0 <= i && i <= 2 * m && i % 2 == 0 &&
-        n == n@pre && m == m@pre &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
-        IntArray::full(fadj_row, verts + 1, fadj_l) *
-        IntArray::full(radj_row, verts + 1, radj_l) *
-        IntArray::full(fadj_col, total_edges, fcol_l) *
-        IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
-        IntArray::full(sid, verts, sdl) *
-        IntArray::full(fcur, verts + 1, fcl) *
-        IntArray::full(rcur, verts + 1, rcl) *
-        IntArray::full(b_only, m, bol)
-    */
-    for (int i = 0; i < 2 * m; i += 2) {
-        int a = clauses[i];
-        int b = b_only[i / 2];
-        int na = neg_vertex(a);
-        int nb = neg_vertex(b);
-        int va = lit_vertex(a);
-        int vb = lit_vertex(b);
-        fadj_col[fcur[na]++] = vb;
-        radj_col[rcur[vb]++] = na;
-        fadj_col[fcur[nb]++] = va;
-        radj_col[rcur[va]++] = nb;
-    }
+
 
     /* ================================================================ */
     /* Phase 1 (dfs1): reverse-graph DFS                                */
@@ -304,7 +323,8 @@ int main(int n, int m, int *clauses)
         exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
         0 <= u && u <= verts &&
         n == n@pre && m == m@pre &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -340,7 +360,8 @@ int main(int n, int m, int *clauses)
         exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
         0 <= round && round <= verts &&
         n == n@pre && m == m@pre &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -360,7 +381,8 @@ int main(int n, int m, int *clauses)
                 exists v2l fnl fadj_l radj_l fcol_l rcol_l v1l tpl sdl fcl rcl,
                 0 <= v && v <= verts &&
                 n == n@pre && m == m@pre &&
-                IntArray::full(clauses, 2 * m, clauses_l) *
+                IntArray::full(lit1, m, lit1_l) *
+                IntArray::full(lit2, m, lit2_l) *
                 IntArray::full(fadj_row, verts + 1, fadj_l) *
                 IntArray::full(radj_row, verts + 1, radj_l) *
                 IntArray::full(fadj_col, total_edges, fcol_l) *
@@ -403,7 +425,8 @@ int main(int n, int m, int *clauses)
         n == n@pre && m == m@pre &&
         (result == 0 => (forall (v : Z), (1 <= v && v < u) => Znth(2*(v-1), sdl, 0) <> Znth(2*(v-1)+1, sdl, 0))) &&
         (result == 1 => exists (vw : Z), (1 <= vw && vw < u) && Znth(2*(vw-1), sdl, 0) == Znth(2*(vw-1)+1, sdl, 0)) &&
-        IntArray::full(clauses, 2 * m, clauses_l) *
+        IntArray::full(lit1, m, lit1_l) *
+        IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) *
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
