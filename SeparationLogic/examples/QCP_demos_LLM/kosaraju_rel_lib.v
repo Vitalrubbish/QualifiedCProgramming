@@ -7,6 +7,7 @@ Require Import Coq.Classes.Morphisms.
 Require Import Coq.micromega.Psatz.
 Require Import Lia.
 Require Import Coq.Logic.Classical.
+Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Sorting.Permutation.
 From AUXLib Require Import int_auto Axioms Feq Idents ListLib VMap relations.
 Require Import SetsClass.SetsClass. Import SetsNotation.
@@ -1427,6 +1428,33 @@ Proof.
     split; [ reflexivity | reflexivity ].
 Qed.
 
+(* repeat_break_break_step_gen: generalised break-step allowing the body to
+   change the state (sigma -> sigma') before emitting by_break b.  Needed by
+   dfs_finish_from_sim BASE: DFS_finish_f's break branch runs `set_finish u t`,
+   which mutates the state, unlike phase-2's break (assertS sid ;; break). *)
+Lemma repeat_break_break_step_gen :
+  forall (Σ: Type) {A: Type} {B: Type}
+         (body: A -> program Σ (CntOrBrk A B)) (a: A) (b: B) (σ σ': Σ),
+    (body a).(MonadErr.nrm) σ (@by_break A B b) σ' ->
+    (repeat_break body a).(MonadErr.nrm) σ b σ'.
+Proof.
+  intros Σ A B body a b σ σ' Hbodystep.
+  pose proof (repeat_break_unfold body) as Hunf.
+  unfold equiv in Hunf. simpl in Hunf.
+  unfold Equiv_lift, LiftConstructors.lift_rel2 in Hunf.
+  specialize (Hunf a) as Hpt.
+  destruct Hpt as [Hnrmpt Herrpt].
+  sets_unfold in Hnrmpt.
+  specialize (Hnrmpt σ b σ') as [Hfwd Hbwd].
+  apply Hbwd.
+  simpl.
+  unfold MonadErr.bind. simpl.
+  eexists (by_break b). exists σ'. split.
+  - exact Hbodystep.
+  - simpl.
+    split; [ reflexivity | reflexivity ].
+Qed.
+
 (* repeat_break_continue_step: body produces by_continue a' at (σ -> σ'),
    then repeat_break body a' produces b at (σ' -> σ'') -> repeat_break body a
    produces b at (σ -> σ''). *)
@@ -2000,3 +2028,777 @@ Proof.
   (* Wrap back to safeExec: exists σ', split. *)
   exists σ'. split; [ exact Hpreσ' | exact Hsafe_ih ].
 Qed.
+
+(* ===================================================================== *)
+(* dfs1_entry_close infrastructure (phase-1 entry refinement).           *)
+(*                                                                        *)
+(* The entry VC (dfs1_entail_wit_1, second disjunct) reduces to: given    *)
+(*   safeExec (pre_dfs1 vis1 fin timer_v) (dfs_finish g u) X,             *)
+(* show safeExec (pre_dfs1 (replace_Znth u 1 vis1) fin timer_v)           *)
+(*        (dfs_finish_from g radj_col radj_row u lo) X.                   *)
+(*                                                                        *)
+(* dfs_finish_repeat_body is the body of DFS_finish_f, u-parametrised,    *)
+(* with W = dfs_finish g.  Note: step_aux g e v u (REVERSED — u is the   *)
+(* target on the reverse graph), and the break branch does `assertS      *)
+(* timer<=|V|;; get timer;; set_finish u t` (state-changing, unlike       *)
+(* phase-2's assertS sid ;; break).                                       *)
+(* ===================================================================== *)
+
+(* AdjGraph VListBijective instance: derived from FiniteGraph, matching the
+   Section-local `kos_vlist` in Kosaraju.v.  This lets `bijective_listV g`
+   resolve in lib.v definitions (needed by dfs_finish_repeat_body's assertS
+   timer <= |V|), and keeps definitional equality with DFS_finish_f's body. *)
+#[export] Instance AdjGraph_vlistbijective : VListBijective AdjGraph Z (Z * Z) :=
+  finite_graph_vlist_bijective AdjGraph Z (Z * Z).
+
+Definition dfs_finish_repeat_body (g: AdjGraph) (u: Z)
+  : (Z * Z -> Prop) -> program KSt (CntOrBrk (Z * Z -> Prop) unit) :=
+  fun e_set =>
+    choice
+      (e <- any (Z * Z);;
+       v <- any Z;;
+       assume (fun (_ : KSt) => ~ e ∈ e_set);;
+       assume (fun st => ~ visited1 st v);;
+       assume (fun (_ : KSt) => step_aux g e v u);;
+       dfs_finish g v;;
+       continue (e_set ∪ Sets.singleton e))
+      (assume (fun st =>
+                 forall (e: Z * Z) (v: Z),
+                   step_aux g e v u ->
+                   e ∈ e_set \/ visited1 st v);;
+       assertS (fun st => (timer st <= length (bijective_listV g))%nat);;
+       t <- get (fun st t => t = timer st);;
+       set_finish u t;;
+       break tt).
+
+Lemma dfs_finish_unfold_repeat :
+  forall (g: AdjGraph) (u: Z),
+  dfs_finish g u
+  ==
+  visit1 u ;; repeat_break (dfs_finish_repeat_body g u) ∅.
+Proof.
+  intros g u.
+  rewrite dfs_finish_unfold.
+  unfold DFS_finish_f.
+  reflexivity.
+Qed.
+
+(* visit1_pre_dfs1_step: peel the visit1 u prelude off safeExec(dfs_finish g u).
+   visit1 u adds u to visited1 (visited1 st2 == visited1 st1 ∪ {u}), all other
+   fields unchanged.  So pre_dfs1 vis1 fin timer_v -@ visit1 u -⥅
+   pre_dfs1 (replace_Znth u 1 vis1) fin timer_v. *)
+Lemma visit1_pre_dfs1_step :
+  forall (g: AdjGraph) (radj_col_l radj_row_l vis1 fin_l: list Z) (timer_v u: Z),
+    (Zlength vis1 = adj_verts g)%Z ->
+    (0 <= u < adj_verts g)%Z ->
+    pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v -@ visit1 u -⥅
+      (pre_dfs1 g radj_col_l radj_row_l (replace_Znth u 1 vis1) fin_l timer_v) ♯ tt.
+Proof.
+  intros g radj_col_l radj_row_l vis1 fin_l timer_v u Hvlen Hub st0 Hpre.
+  destruct Hpre as [Hpv [Hpf Hpt]].
+  assert (HLu : (0 <= u < Zlength vis1)%Z) by (rewrite Hvlen; exact Hub).
+  pose (st1 := MkSt (timer st0) (finish st0)
+                     (fun w => visited1 st0 w \/ w = u)
+                     (visited2 st0) (scc_id st0) (scc_next st0)).
+  assert (Hnrm : (visit1 u).(MonadErr.nrm) st0 tt st1).
+  { unfold visit1. simpl. split.
+    - (* visited1 st1 == visited1 st0 ∪ {u} *)
+      unfold st1. simpl. sets_unfold. intros w. split; intros Hw.
+      + destruct Hw as [Hw | Hw]; [ left; exact Hw | subst w; right; reflexivity ].
+      + destruct Hw as [Hw | Hw]; [ left; exact Hw | subst w; right; reflexivity ].
+    - unfold st1. simpl. repeat split; reflexivity.
+  }
+  exists st1. split; [ exact Hnrm | ].
+  unfold pre_dfs1. split.
+  - intros w Hw. assert (HLw : (0 <= w < Zlength vis1)%Z) by (rewrite Hvlen; exact Hw).
+    unfold st1. simpl. split; intros Hvis.
+    + destruct (Z.eqb w u) eqn:E.
+      * apply Z.eqb_eq in E. subst w. rewrite (Znth_replace_eq vis1 u 1 0 HLu). lia.
+      * apply Z.eqb_neq in E. rewrite (Znth_replace_neq vis1 w u 1 0 HLw (proj1 HLu) E).
+        destruct Hvis as [Hv | Hwu].
+        -- apply (proj1 (Hpv w Hw)). exact Hv.
+        -- exfalso. apply E. exact Hwu.
+    + destruct (Z.eqb w u) eqn:E.
+      * apply Z.eqb_eq in E. subst w. right. reflexivity.
+      * apply Z.eqb_neq in E. rewrite (Znth_replace_neq vis1 w u 1 0 HLw (proj1 HLu) E) in Hvis.
+        left. apply (proj2 (Hpv w Hw)). exact Hvis.
+  - split.
+    + intros w Hw. unfold st1. simpl. exact (Hpf w Hw).
+    + unfold st1. simpl. exact Hpt.
+Qed.
+
+(* dfs1_visit_decompose: peel visit1 u prelude, landing safeExec over
+   repeat_break (dfs_finish_repeat_body g u) ∅ at the post-visit1 state. *)
+Lemma dfs1_visit_decompose :
+  forall (g: AdjGraph) (radj_col_l radj_row_l vis1 fin_l: list Z) (timer_v u: Z)
+         (X: unit -> KSt -> Prop),
+    (Zlength vis1 = adj_verts g)%Z ->
+    (0 <= u < adj_verts g)%Z ->
+    safeExec (pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v) (dfs_finish g u) X ->
+    safeExec (pre_dfs1 g radj_col_l radj_row_l (replace_Znth u 1 vis1) fin_l timer_v)
+             (repeat_break (dfs_finish_repeat_body g u) ∅) X.
+Proof.
+  intros g radj_col_l radj_row_l vis1 fin_l timer_v u X Hvlen Hub Hsafe.
+  rewrite (dfs_finish_unfold_repeat g u) in Hsafe.
+  apply (highstepbind_derive (visit1 u)
+            (fun _ => repeat_break (dfs_finish_repeat_body g u) ∅)
+            (pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v) tt
+            (pre_dfs1 g radj_col_l radj_row_l (replace_Znth u 1 vis1) fin_l timer_v)
+            (visit1_pre_dfs1_step g radj_col_l radj_row_l vis1 fin_l timer_v u Hvlen Hub)) in Hsafe.
+  exact Hsafe.
+Qed.
+
+(* ===================================================================== *)
+(* Reverse-direction err-imps for dfs_finish_iter / dfs_finish_from       *)
+(* (phase-1 analogues of dfs_scc_iter/from_*_err_rev_imp).               *)
+(* Used by dfs_finish_from_sim to peel the cursor step FORWARD (i -> i+1).*)
+(* ===================================================================== *)
+
+Lemma dfs_finish_iter_skip_err_rev_imp :
+  forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat)
+         (st : KSt),
+    (i < hi)%Z ->
+    visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_iter g radj_col_l u hi i (S fuel)).(MonadErr.err) st ->
+    (dfs_finish_iter g radj_col_l u hi (i + 1) fuel).(MonadErr.err) st.
+Proof.
+  intros g radj_col_l u hi i fuel st Hilt Hvis Herr.
+  simpl in Herr. destruct (Z.leb hi i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice in Herr.
+    sets_unfold in Herr.
+    destruct Herr as [HL | HR].
+    + apply bind_err_iff in HL.
+      destruct HL as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hc]. subst s0. exact Hsk2.
+    + apply bind_err_iff in HR.
+      destruct HR as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hnc]. exfalso. apply Hnc. exact Hvis.
+Qed.
+
+Lemma dfs_finish_iter_recurse_err_rev_imp :
+  forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat)
+         (st : KSt),
+    (i < hi)%Z ->
+    ~ visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_iter g radj_col_l u hi i (S fuel)).(MonadErr.err) st ->
+    ((_ <- dfs_finish g (Znth i radj_col_l 0) ;;
+      dfs_finish_iter g radj_col_l u hi (i + 1) fuel)).(MonadErr.err) st.
+Proof.
+  intros g radj_col_l u hi i fuel st Hilt Hnvis Herr.
+  simpl in Herr. destruct (Z.leb hi i) eqn:E.
+  - apply Z.leb_le in E. exfalso. lia.
+  - unfold if_else, choice in Herr.
+    sets_unfold in Herr.
+    destruct Herr as [HL | HR].
+    + apply bind_err_iff in HL.
+      destruct HL as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hc].
+        exfalso. apply Hnvis. exact Hc.
+    + apply bind_err_iff in HR.
+      destruct HR as [Htest | [x [s0 [Hnm Hsk2]]]].
+      * exfalso. unfold test in Htest. sets_unfold in Htest. exact Htest.
+      * unfold test in Hnm. simpl in Hnm. destruct Hnm as [Hs2eq Hnc]. subst s0. exact Hsk2.
+Qed.
+
+Lemma dfs_finish_from_skip_err_rev_imp :
+  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z)
+         (st : KSt),
+    (i < csr_hi u radj_row_l)%Z ->
+    visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_from g radj_col_l radj_row_l u i).(MonadErr.err) st ->
+    (dfs_finish_from g radj_col_l radj_row_l u (i + 1)).(MonadErr.err) st.
+Proof.
+  intros g radj_col_l radj_row_l u i st Hilt Hvis Herr.
+  unfold dfs_finish_from in *.
+  assert (Hfuel : Z.to_nat (csr_hi u radj_row_l - i) =
+                  S (Z.to_nat (csr_hi u radj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u radj_row_l - i = (csr_hi u radj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel in Herr.
+  exact (dfs_finish_iter_skip_err_rev_imp g radj_col_l u _ i _ st Hilt Hvis Herr).
+Qed.
+
+Lemma dfs_finish_from_recurse_err_rev_imp :
+  forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z)
+         (st : KSt),
+    (i < csr_hi u radj_row_l)%Z ->
+    ~ visited1 st (Znth i radj_col_l 0) ->
+    (dfs_finish_from g radj_col_l radj_row_l u i).(MonadErr.err) st ->
+    ((_ <- dfs_finish g (Znth i radj_col_l 0) ;;
+      dfs_finish_from g radj_col_l radj_row_l u (i + 1))).(MonadErr.err) st.
+Proof.
+  intros g radj_col_l radj_row_l u i st Hilt Hnvis Herr.
+  unfold dfs_finish_from in *.
+  assert (Hfuel : Z.to_nat (csr_hi u radj_row_l - i) =
+                  S (Z.to_nat (csr_hi u radj_row_l - (i + 1)))).
+  { assert (Hsub : csr_hi u radj_row_l - i = (csr_hi u radj_row_l - (i + 1)) + 1) by lia.
+    rewrite Hsub, Z2Nat.inj_add by lia.
+    rewrite Nat.add_1_r. reflexivity. }
+  rewrite Hfuel in Herr.
+  exact (dfs_finish_iter_recurse_err_rev_imp g radj_col_l u _ i _ st Hilt Hnvis Herr).
+Qed.
+
+(* ===================================================================== *)
+(* dfs_finish_from_sim: cursor (dfs_finish_from) vs repeat_break          *)
+(* simulation (phase-1 entry refinement core).                           *)
+(*                                                                        *)
+(* Differences from dfs_scc_from_sim (phase-2):                           *)
+(* - csr1_faithful: step g v u <-> exists j in [lo u, hi u) with          *)
+(*   Znth j radj_col 0 = v (REVERSE graph; u is the target).              *)
+(* - break branch (R): assertS timer<=|V| ;; get timer ;; set_finish u t *)
+(*   (state-CHANGING: timer++, finish[u]=t).  BASE case lands at sigma'   *)
+(*   (= set_finish post-state), not sigma.                                *)
+(* - algorithm lemma DFS_finish_neighbor_visited_strong (Qed) needs the   *)
+(*   extra premise cardV(visited1 sigma) >= timer sigma; carried through  *)
+(*   RECURSE via visited1-monotonicity (timer unchanged by dfs_finish g v *)
+(*   until its own set_finish, but cardV only grows).                     *)
+(* - timer-bound for BASE's assertS: timer sigma <= length                *)
+(*   (bijective_listV g), also carried as a premise.                      *)
+(* ===================================================================== *)
+
+Lemma dfs_finish_from_sim :
+  forall (g: AdjGraph) (radj_col_l radj_row_l vis1_l fin_l: list Z) (u lo hi i: Z)
+         (n: nat) (X: unit -> KSt -> Prop) (σ: KSt),
+    let B := dfs_finish_repeat_body g u in
+    csr_lo u radj_row_l = lo ->
+    csr_hi u radj_row_l = hi ->
+    csr_wf1 g radj_col_l radj_row_l vis1_l fin_l ->
+    csr1_faithful g radj_col_l radj_row_l ->
+    (0 <= u < adj_verts g)%Z ->
+    Z.to_nat (hi - i) = n ->
+    (lo <= i)%Z ->
+    forall (e_set: Z * Z -> Prop),
+      (forall (e: Z * Z), e_set e ->
+         exists k, (lo <= k < i)%Z /\ e = (Znth k radj_col_l 0, u)) ->
+      (forall k, (lo <= k < i)%Z -> ~ e_set (Znth k radj_col_l 0, u) ->
+         visited1 σ (Znth k radj_col_l 0)) ->
+      (forall j, (lo <= j < hi)%Z -> ~ visited1 σ (Znth j radj_col_l 0) ->
+         ~ e_set (Znth j radj_col_l 0, u)) ->
+      visited1 σ u ->
+      (count_pred (visited1 σ) (bijective_listV g) >= timer σ)%nat ->
+      (timer σ <= length (bijective_listV g))%nat ->
+      safe σ (repeat_break B e_set) X ->
+      safe σ (dfs_finish_from g radj_col_l radj_row_l u i) X.
+Proof.
+  intros g radj_col_l radj_row_l vis1_l fin_l u lo hi i n X σ B Hlo Heqhi Hwf Hfaith Hu Hfuel Hloi
+         e_set HA HB HE HD HcardV Htimerbd Hsafe.
+  revert i X σ Hfuel Hloi e_set HA HB HE HD HcardV Htimerbd Hsafe.
+  induction n as [|n' IHn].
+  - (* BASE: Z.to_nat (hi - i) = 0, hence i >= hi *)
+    intros i X σ Hfuel Hloi e_set HA HB HE HD HcardV Htimerbd Hsafe.
+    assert (Hge : (hi <= i)%Z).
+    { destruct (Z.le_gt_cases hi i) as [Hle | Hgt]; [ exact Hle | ].
+      exfalso.
+      assert (Hpos : (0 < hi - i)%Z) by lia.
+      destruct (Z.eq_dec (hi - i) 0) as [Heq | Hneq].
+      - subst. lia.
+      - assert (Hn0 : (Z.to_nat (hi - i) <> 0)%nat).
+        { intro Hz. assert (0 <= hi - i)%Z by lia.
+          pose proof (Z2Nat.id (hi - i) H) as Hid.
+          rewrite Hz in Hid. lia. }
+        rewrite Hfuel in Hn0. exfalso. apply Hn0. reflexivity. }
+    assert (Hclosure : (forall (e: Z * Z) (v: Z), step_aux g e v u ->
+                                    e ∈ e_set \/ visited1 σ v)).
+    { intros e v Hstep.
+      assert (Hstep_g : reachable_basic.step g v u) by (eapply step_trivial; eassumption).
+      destruct Hstep as [Heq [Hvv [Hvu Hiny]]].
+      subst e.
+      pose proof (Hfaith u v Hu Hvv) as Hiff.
+      apply (proj1 Hiff) in Hstep_g as [j [Hjlo Hjv]].
+      destruct (classic (e_set (v, u))) as [Hin | Hnin].
+      - left. exact Hin.
+      - right. rewrite <- Hjv. apply (HB j). lia.
+        rewrite Hjv. exact Hnin. }
+    (* sigma' = set_finish post-state: timer sigma' = S (timer sigma),
+       finish sigma' u = timer sigma, other fields unchanged. *)
+    pose (σ' := MkSt (S (timer σ))
+                     (fun w => if Z.eqb w u then timer σ else finish σ w)
+                     (visited1 σ) (visited2 σ)
+                     (scc_id σ) (scc_next σ)).
+    assert (Hfsu : finish σ' u = timer σ).
+    { unfold σ'. simpl. destruct (Z.eqb u u) eqn:Eu.
+      - reflexivity.
+      - apply Z.eqb_neq in Eu. exfalso. apply Eu. reflexivity. }
+    assert (Hfsv : forall v, v <> u -> finish σ' v = finish σ v).
+    { intros v Hvne. unfold σ'. simpl. destruct (Z.eqb v u) eqn:Ev.
+      - apply Z.eqb_eq in Ev. exfalso. apply Hvne. exact Ev.
+      - reflexivity. }
+    assert (Htimer' : timer σ' = S (timer σ)) by (unfold σ'; reflexivity).
+    assert (Hvis1' : visited1 σ' = visited1 σ) by (unfold σ'; reflexivity).
+    assert (Hvis2' : visited2 σ' = visited2 σ) by (unfold σ'; reflexivity).
+    assert (Hsid' : scc_id σ' = scc_id σ) by (unfold σ'; reflexivity).
+    assert (Hsnext' : scc_next σ' = scc_next σ) by (unfold σ'; reflexivity).
+    assert (Hbodystep : (B e_set).(MonadErr.nrm) σ (@by_break (Z*Z->Prop) unit tt) σ').
+    { unfold B, dfs_finish_repeat_body.
+      unfold choice. simpl.
+      right.
+      unfold_monad. simpl.
+      eexists tt. eexists σ. split.
+      - split; [ reflexivity | exact Hclosure ].
+      - eexists tt. eexists σ. split.
+        + split; [ reflexivity | exact Htimerbd ].
+        + eexists (timer σ). eexists σ. split.
+          * split; [ reflexivity | reflexivity ].
+          * eexists tt. eexists σ'. split.
+            -- split; [ exact Htimer' | ].
+               split; [ exact Hfsu | ].
+               split; [ exact Hfsv | ].
+               split; [ exact Hvis1' | ].
+               split; [ exact Hvis2' | ].
+               split; [ exact Hsid' | ].
+               exact Hsnext'.
+            -- simpl. split; [ reflexivity | reflexivity ]. }
+    assert (Hrbstep : (repeat_break B e_set).(MonadErr.nrm) σ tt σ').
+    { eapply repeat_break_break_step_gen. exact Hbodystep. }
+    assert (Hxtt : X tt σ') by (eapply wp_spec; eassumption).
+    unfold safe in *.
+    assert (Hge' : (csr_hi u radj_row_l <= i)%Z) by (rewrite Heqhi; exact Hge).
+    pose proof (wp_progequiv (t <- get (fun st t => t = timer st) ;; set_finish u t)
+                  (dfs_finish_from g radj_col_l radj_row_l u i) X
+                  (dfs_finish_from_exit g radj_col_l radj_row_l u i Hge')) as Hwp.
+    sets_unfold in Hwp.
+    specialize (Hwp σ) as [Hfwd Hbwd].
+    unfold weakestpre in *.
+    sets_unfold in Hfwd.
+    apply Hfwd.
+    sets_unfold.
+    split.
+    + (* ~err (get timer ;; set_finish u t) σ: get.err = ∅, set_finish.err = ∅ *)
+      intro Herr.
+      unfold MonadErr.bind in Herr.
+      apply bind_err_iff in Herr.
+      destruct Herr as [Hget | [t [s2 [Hgetstep Hfin]]]].
+      * exfalso. exact Hget.
+      * exfalso. exact Hfin.
+    + intros r σ'' Hexitstep.
+      unfold MonadErr.bind in Hexitstep.
+      apply bind_nrm_iff in Hexitstep.
+      destruct Hexitstep as [t [s2 [Hgetstep Hfinstep]]].
+      destruct Hgetstep as [HgetP HgetEq].
+      (* get keeps state: s2 = σ (HgetEq : σ = s2); bound t = timer σ *)
+      subst s2. subst t.
+      (* set_finish u (timer σ): σ'' = σ' by field equality *)
+      assert (Heqσ'' : σ'' = σ').
+      { destruct σ'' as [tm fm v1m v2m sm snm] eqn:Eσ''.
+        cbv beta iota delta [set_finish custom MonadErr.nrm_nrm] in Hfinstep.
+        destruct Hfinstep as [Ht [Hfu [Hfv [Hv1 [Hv2 [Hs Hsn]]]]]].
+        unfold σ'.
+        f_equal.
+        - exact Ht.
+        - extensionality w. destruct (Z.eqb w u) eqn:E.
+          + apply Z.eqb_eq in E. subst w. exact Hfu.
+          + apply Z.eqb_neq in E. exact (Hfv w E).
+        - exact Hv1.
+        - exact Hv2.
+        - exact Hs.
+        - exact Hsn. }
+      subst σ''. destruct r. exact Hxtt.
+  - (* STEP: hi - i = S n', i.e. lo <= i < hi *)
+    intros i X σ Hfuel Hloi e_set HA HB HE HD HcardV Htimerbd Hsafe.
+    assert (Hilt : (i < hi)%Z).
+    { assert (Hnonneg : (0 <= hi - i)%Z).
+      { destruct (Z.le_gt_cases hi i) as [Hle | Hgt].
+        - exfalso. assert (Heqz : hi - i = 0) by lia.
+          rewrite Heqz in Hfuel. simpl in Hfuel. discriminate.
+        - lia. }
+      lia. }
+    assert (Hilt' : (i < csr_hi u radj_row_l)%Z) by (rewrite Heqhi; exact Hilt).
+    set (v := Znth i radj_col_l 0) in *.
+    destruct (classic (visited1 σ v)) as [Hvisv | Hnvisv].
+    + (* SKIP: visited1 σ v *)
+      assert (Hfuel' : Z.to_nat (hi - (i + 1)) = n').
+      { assert (Hsub : hi - i = (hi - (i + 1)) + 1) by lia.
+        assert (Hnonneg1 : (0 <= hi - (i + 1))%Z) by lia.
+        rewrite Hsub in Hfuel.
+        rewrite Z2Nat.inj_add in Hfuel by lia.
+        rewrite Nat.add_1_r in Hfuel. injection Hfuel. auto. }
+      assert (Hloi' : (lo <= i + 1)%Z) by lia.
+      assert (HA' : forall (e: Z * Z), e_set e ->
+                     exists k, (lo <= k < i + 1)%Z /\ e = (Znth k radj_col_l 0, u)).
+      { intros e He. destruct (HA e He) as [k [Hk Heq]]. exists k. split; [ lia | exact Heq ]. }
+      assert (HB' : forall k, (lo <= k < i + 1)%Z -> ~ e_set (Znth k radj_col_l 0, u) ->
+                     visited1 σ (Znth k radj_col_l 0)).
+      { intros k Hk Hne.
+        destruct (Z.le_gt_cases k (i - 1)) as [Hle | Hgt].
+        - apply (HB k); [ lia | exact Hne ].
+        - assert (Hki : k = i) by lia. subst k. exact Hvisv. }
+      assert (HE' : forall j, (lo <= j < hi)%Z -> ~ visited1 σ (Znth j radj_col_l 0) ->
+                     ~ e_set (Znth j radj_col_l 0, u)).
+      { exact HE. }
+      assert (Hsafe_ih : safe σ (dfs_finish_from g radj_col_l radj_row_l u (i + 1)) X).
+      { eapply IHn; [ exact Hfuel' | exact Hloi' | exact HA' | exact HB' | exact HE' |
+                      exact HD | exact HcardV | exact Htimerbd | exact Hsafe ]. }
+      unfold safe in *.
+      unfold weakestpre in *.
+      split.
+      * intro Herr.
+        destruct Hsafe_ih as [Hnoerr _].
+        exfalso. apply Hnoerr.
+        apply (dfs_finish_from_skip_err_rev_imp g radj_col_l radj_row_l u i σ Hilt' Hvisv).
+        exact Herr.
+      * intros a s' Hstep.
+        destruct Hsafe_ih as [_ Hpost].
+        apply Hpost.
+        apply (proj1 (dfs_finish_from_skip_step g radj_col_l radj_row_l u i σ a s' Hilt' Hvisv)).
+        exact Hstep.
+    + (* RECURSE: ~visited1 σ v *)
+      assert (Hagvalid : gvalid g) by (destruct Hwf as [Hgv _]; exact Hgv).
+      assert (Hvbound : (0 <= v < adj_verts g)%Z).
+      { pose proof Hwf as [Hgv0 [Hlenfr [Hlenvis [Hlenfin [Hmof [Hlo0 [Hhilem [Hcolbound [Hlolohi Hmofbound]]]]]]]]].
+        assert (Hhilem_u : (csr_hi u radj_row_l <= m_of radj_row_l)%Z) by (apply Hhilem; exact Hu).
+        assert (Hlo0u : (0 <= csr_lo u radj_row_l)%Z) by (apply Hlo0; exact Hu).
+        assert (Him : (0 <= i < m_of radj_row_l)%Z).
+        { split; [ rewrite Hlo in Hlo0u; lia | lia ]. }
+        exact (Hcolbound i Him). }
+      assert (Hnotinv : ~ e_set (v, u)).
+      { apply (HE i). split; [ exact Hloi | exact Hilt ]. exact Hnvisv. }
+      assert (Hstep_g : reachable_basic.step g v u).
+      { destruct (Hfaith u v Hu Hvbound) as [Hfwd Hbwd].
+        apply Hbwd. exists i. split.
+        - assert (Hloi' : (csr_lo u radj_row_l <= i)%Z). { rewrite Hlo. exact Hloi. }
+          split; [ exact Hloi' | exact Hilt' ].
+        - reflexivity. }
+      assert (Hstepeq : step_aux g (v, u) v u).
+      { destruct Hstep_g as [e Heq].
+        destruct Heq as [Heqrefl [Hxv [Hyu Hiny]]].
+        simpl in *. subst e. split; [ reflexivity | split; [ exact Hvbound | split;
+          [ exact Hu | exact Hiny ] ] ]. }
+      set (e_set' := e_set ∪ Sets.singleton (v, u)).
+      unfold safe in *.
+      unfold weakestpre in *.
+      split.
+      * (* ~err (dfs_finish_from ... u i) σ *)
+        assert (HnoerrBE : ~ (B e_set).(MonadErr.err) σ).
+        { assert (Hunf : @equiv (program KSt unit) _
+                        (repeat_break B e_set)
+                        (x <- B e_set ;;
+                         match x with
+                         | by_continue a' => repeat_break B a'
+                         | by_break b' => ret b'
+                         end)).
+          { pose proof (repeat_break_unfold B) as Hu2.
+            unfold equiv in Hu2. simpl in Hu2.
+            unfold Equiv_lift, LiftConstructors.lift_rel2 in Hu2.
+            specialize (Hu2 e_set) as [Hn Hh].
+            constructor; assumption. }
+          pose proof (wp_progequiv
+                   (x <- B e_set ;; match x with by_continue a' => repeat_break B a' | by_break b' => ret b' end)
+                   (repeat_break B e_set) X Hunf) as Hwp.
+          sets_unfold in Hwp. specialize (Hwp σ) as [_ Hwpb].
+          unfold weakestpre in Hwpb. sets_unfold in Hwpb.
+          pose proof Hsafe as Hsafe0. apply Hwpb in Hsafe0.
+          sets_unfold in Hsafe0. destruct Hsafe0 as [HnoerrBind _].
+          apply bind_noerr_iff in HnoerrBind. destruct HnoerrBind as [Hne _]. exact Hne. }
+        intro Herr.
+        apply (dfs_finish_from_recurse_err_rev_imp g radj_col_l radj_row_l u i σ Hilt' Hnvisv) in Herr.
+        apply bind_err_iff in Herr.
+        destruct Herr as [Herrv | [ha [smid [Hnm Hsccerr]]]].
+        -- (* dfs_finish g v errs at σ: contradiction with ~err (B e_set) σ. *)
+           exfalso. apply HnoerrBE.
+           unfold B, dfs_finish_repeat_body, choice. sets_unfold. left.
+           apply bind_err_iff. right.
+           eexists (v, u). eexists σ. split.
+           { reflexivity. }
+           apply bind_err_iff. right.
+           eexists v. eexists σ. split.
+           { reflexivity. }
+           apply bind_err_iff. right.
+           eexists tt. eexists σ. split.
+           { split; [ reflexivity | exact Hnotinv ]. }
+           apply bind_err_iff. right.
+           eexists tt. eexists σ. split.
+           { split; [ reflexivity | exact Hnvisv ]. }
+           apply bind_err_iff. right.
+           eexists tt. eexists σ. split.
+           { split; [ reflexivity | exact Hstepeq ]. }
+           apply bind_err_iff. left. exact Herrv.
+        -- (* dfs_finish_from (i+1) errs at smid *)
+           assert (Hbodycont_smid :
+                     (B e_set).(MonadErr.nrm) σ (@by_continue (Z*Z->Prop) unit e_set') smid).
+           { unfold B, dfs_finish_repeat_body, choice. simpl.
+             left. simpl.
+             eexists (v, u). eexists σ. split.
+             - reflexivity.
+             - eexists v. eexists σ. split.
+               + reflexivity.
+               + eexists tt. eexists σ. split.
+                 * split; [ reflexivity | exact Hnotinv ].
+                 * eexists tt. eexists σ. split.
+                   -- split; [ reflexivity | exact Hnvisv ].
+                   -- eexists tt. eexists σ. split.
+                      ++ split; [ reflexivity | exact Hstepeq ].
+                      ++ eexists ha. eexists smid. split.
+                         ** exact Hnm.
+                         ** simpl. split; [ reflexivity | reflexivity ]. }
+           assert (Hsafe_smid : safe smid (repeat_break B e_set') X).
+           { unfold safe in *.
+             unfold weakestpre in *.
+             assert (Hunf : @equiv (program KSt unit) _
+                           (repeat_break B e_set)
+                           (x <- B e_set ;;
+                            match x with
+                            | by_continue a' => repeat_break B a'
+                            | by_break b' => ret b'
+                            end)).
+             { pose proof (repeat_break_unfold B) as Hu2.
+               unfold equiv in Hu2. simpl in Hu2.
+               unfold Equiv_lift, LiftConstructors.lift_rel2 in Hu2.
+               specialize (Hu2 e_set) as [Hn Hh].
+               constructor; assumption. }
+             pose proof (wp_progequiv
+                           (x <- B e_set ;; match x with by_continue a' => repeat_break B a' | by_break b' => ret b' end)
+                           (repeat_break B e_set) X Hunf) as Hwp.
+             sets_unfold in Hwp. specialize (Hwp σ) as [_ Hwpb].
+             unfold weakestpre in Hwpb. sets_unfold in Hwpb.
+             apply Hwpb in Hsafe.
+             sets_unfold in Hsafe. destruct Hsafe as [HnoerrBind HpostBind].
+             apply bind_noerr_iff in HnoerrBind.
+             destruct HnoerrBind as [HnoerrBEset HpostBEset].
+             split.
+             - intro Herr'.
+               assert (Herrmatch : (match (@by_continue (Z*Z->Prop) unit e_set') with
+                                    | by_continue a' => repeat_break B a'
+                                    | by_break b' => ret b' end).(MonadErr.err) smid).
+               { simpl. exact Herr'. }
+               apply (HpostBEset (@by_continue (Z*Z->Prop) unit e_set') smid Hbodycont_smid) in Herrmatch.
+               exact Herrmatch.
+             - intros r0 σf Hrb.
+               apply HpostBind.
+               assert (HnrmMatch : (x <- B e_set ;; match x with by_continue a' => repeat_break B a' | by_break b' => ret b' end).(MonadErr.nrm) σ r0 σf).
+               { unfold MonadErr.bind. simpl.
+                 eexists (@by_continue (Z*Z->Prop) unit e_set'). eexists smid. split.
+                 - exact Hbodycont_smid.
+                 - simpl. exact Hrb. }
+               exact HnrmMatch. }
+           assert (Huneqv : u <> v).
+           { intro Heq. apply Hnvisv. rewrite <- Heq. exact HD. }
+           assert (Hstrong_smid :
+                     visited1 smid v /\ visited1 σ ⊆ visited1 smid /\
+                     (count_pred (visited1 σ) (bijective_listV g) >= timer σ)%nat).
+           { assert (HcardV' : (count_pred (visited1 σ) (bijective_listV g) >= timer σ)%nat).
+             { exact HcardV. }
+             pose proof (@DFS_finish_neighbor_visited_strong AdjGraph Z (Z * Z) KG g Hagvalid σ v
+                          HcardV') as Hh.
+             unfold Hoare in Hh. destruct Hh as [HhNrm _].
+             specialize (HhNrm ha σ smid (refl_equal _) Hnm) as [Hself [Hmono _]].
+             split; [ exact Hself | split; [ exact Hmono | exact HcardV' ] ]. }
+           destruct Hstrong_smid as [Hvis_self_smid [Hvis_mono_smid HcardV_orig]].
+           assert (Hcardtimer_smid : (count_pred (visited1 smid) (bijective_listV g) >= timer smid)%nat).
+           { assert (Hc0 : (count_pred (visited1 σ) (bijective_listV g) >= timer σ + 0)%nat) by lia.
+             pose proof (@DFS_finish_card_timer AdjGraph Z (Z * Z) KG g Hagvalid σ v 0%nat
+                          Hnvisv Hvbound Hc0) as Hh.
+             unfold Hoare in Hh. destruct Hh as [HhNrm _].
+             pose proof (HhNrm ha σ smid (refl_equal _) Hnm) as Hcard.
+             unfold cardV in *.
+            assert (Hge0 : (timer smid + 0 = timer smid)%nat) by lia.
+            rewrite Hge0 in Hcard. exact Hcard. }
+           assert (HA'_smid : forall (e: Z * Z), e_set' e ->
+                               exists k, (lo <= k < i + 1)%Z /\ e = (Znth k radj_col_l 0, u)).
+           { intros e He. sets_unfold in He. destruct He as [He | Heuv].
+             - destruct (HA e He) as [k [Hk Hkeq]]. exists k. split; [ lia | exact Hkeq ].
+             - exists i. split.
+               + split; [ exact Hloi | lia ].
+               + symmetry. exact Heuv. }
+           assert (HB'_smid : forall k, (lo <= k < i + 1)%Z -> ~ e_set' (Znth k radj_col_l 0, u) ->
+                               visited1 smid (Znth k radj_col_l 0)).
+           { intros k Hk Hne.
+             destruct (Z.le_gt_cases k (i - 1)) as [Hle | Hgt].
+             - assert (HkZnth_neq_v : Znth k radj_col_l 0 <> v).
+               { intro Heq. apply Hne. rewrite Heq. sets_unfold. right. reflexivity. }
+               assert (Hne_eset : ~ e_set (Znth k radj_col_l 0, u)).
+               { intro Hin. apply Hne. sets_unfold. left. exact Hin. }
+               assert (Hklt : (lo <= k < i)%Z) by lia.
+               apply Hvis_mono_smid. apply (HB k Hklt Hne_eset).
+             - assert (Hki : k = i) by lia. subst k.
+               exfalso. apply Hne. sets_unfold. right. reflexivity. }
+           assert (HE'_smid : forall j, (lo <= j < hi)%Z -> ~ visited1 smid (Znth j radj_col_l 0) ->
+                               ~ e_set' (Znth j radj_col_l 0, u)).
+           { intros j Hj Hnvisj.
+             destruct (Z.eq_dec (Znth j radj_col_l 0) v) as [Heq | Hneq].
+             - exfalso. rewrite Heq in Hnvisj. exact (Hnvisj Hvis_self_smid).
+             - intro Hin. apply Hneq.
+               sets_unfold in Hin. destruct Hin as [HinE | Hsin].
+               + assert (Hnvis_orig : ~ visited1 σ (Znth j radj_col_l 0)).
+                 { intro Hv. apply Hnvisj. apply Hvis_mono_smid. exact Hv. }
+                 exfalso. apply (HE j Hj Hnvis_orig). exact HinE.
+               + injection Hsin as Heqv. exact (eq_sym Heqv). }
+           assert (HD'_smid : visited1 smid u).
+           { apply Hvis_mono_smid. exact HD. }
+           assert (Htimerbd_smid : (timer smid <= length (bijective_listV g))%nat).
+           { assert (Hle : (count_pred (visited1 smid) (bijective_listV g) <= length (bijective_listV g))%nat).
+             { pose proof (@cardV_le AdjGraph Z (Z * Z) KG g (visited1 smid)) as Hcardle.
+               unfold cardV in Hcardle. exact Hcardle. }
+             lia. }
+           assert (Hloi_smid : (lo <= i + 1)%Z) by lia.
+           assert (Hfuel_smid : Z.to_nat (hi - (i + 1)) = n').
+           { assert (Hsub : hi - i = (hi - (i + 1)) + 1) by lia.
+             assert (Hnonneg1 : (0 <= hi - (i + 1))%Z) by lia.
+             rewrite Hsub in Hfuel. rewrite Z2Nat.inj_add in Hfuel by lia.
+             rewrite Nat.add_1_r in Hfuel. injection Hfuel. auto. }
+           assert (Hsafe_ih_smid : safe smid (dfs_finish_from g radj_col_l radj_row_l u (i + 1)) X).
+           { eapply IHn; [ exact Hfuel_smid | exact Hloi_smid | exact HA'_smid | exact HB'_smid |
+                           exact HE'_smid | exact HD'_smid | exact Hcardtimer_smid | exact Htimerbd_smid |
+                           exact Hsafe_smid ]. }
+           destruct Hsafe_ih_smid as [Hnoerr_smid _].
+           exfalso. apply Hnoerr_smid. exact Hsccerr.
+      * (* forall r σ', nrm (dfs_finish_from ... u i) σ r σ' -> X r σ' *)
+        intros r σ' Hstep.
+        apply (proj1 (dfs_finish_from_recurse_step g radj_col_l radj_row_l u i σ r σ' Hilt' Hnvisv)) in Hstep.
+        apply bind_nrm_iff in Hstep.
+        destruct Hstep as [hu [σ'' [Hdfsstep Hcontstep]]].
+        assert (Hbodycont : (B e_set).(MonadErr.nrm) σ (@by_continue (Z*Z->Prop) unit e_set') σ'').
+        { unfold B, dfs_finish_repeat_body, choice. simpl.
+          left. simpl.
+          eexists (v, u). eexists σ. split.
+          - reflexivity.
+          - eexists v. eexists σ. split.
+            + reflexivity.
+            + eexists tt. eexists σ. split.
+              * split; [ reflexivity | exact Hnotinv ].
+              * eexists tt. eexists σ. split.
+                -- split; [ reflexivity | exact Hnvisv ].
+                -- eexists tt. eexists σ. split.
+                   ++ split; [ reflexivity | exact Hstepeq ].
+                   ++ eexists hu. eexists σ''. split.
+                      ** exact Hdfsstep.
+                      ** simpl. split; [ reflexivity | reflexivity ]. }
+        assert (Hsafe'' : safe σ'' (repeat_break B e_set') X).
+        { unfold safe in *.
+          unfold weakestpre in *.
+          assert (Hunf : @equiv (program KSt unit) _
+                        (repeat_break B e_set)
+                        (x <- B e_set ;;
+                         match x with
+                         | by_continue a' => repeat_break B a'
+                         | by_break b' => ret b'
+                         end)).
+          { pose proof (repeat_break_unfold B) as Hu2.
+            unfold equiv in Hu2. simpl in Hu2.
+            unfold Equiv_lift, LiftConstructors.lift_rel2 in Hu2.
+            specialize (Hu2 e_set) as [Hn Hh].
+            constructor; assumption. }
+          pose proof (wp_progequiv
+                        (x <- B e_set ;; match x with by_continue a' => repeat_break B a' | by_break b' => ret b' end)
+                        (repeat_break B e_set) X Hunf) as Hwp.
+          sets_unfold in Hwp. specialize (Hwp σ) as [_ Hwpb].
+          unfold weakestpre in Hwpb. sets_unfold in Hwpb.
+          apply Hwpb in Hsafe.
+          sets_unfold in Hsafe. destruct Hsafe as [HnoerrBind HpostBind].
+          apply bind_noerr_iff in HnoerrBind.
+          destruct HnoerrBind as [HnoerrBEset HpostBEset].
+          split.
+          - intro Herr'.
+            assert (Herrmatch : (match (@by_continue (Z*Z->Prop) unit e_set') with
+                                 | by_continue a' => repeat_break B a'
+                                 | by_break b' => ret b' end).(MonadErr.err) σ'').
+            { simpl. exact Herr'. }
+            apply (HpostBEset (@by_continue (Z*Z->Prop) unit e_set') σ'' Hbodycont) in Herrmatch.
+            exact Herrmatch.
+          - intros r0 σf Hrb.
+            apply HpostBind.
+            assert (HnrmMatch : (x <- B e_set ;; match x with by_continue a' => repeat_break B a' | by_break b' => ret b' end).(MonadErr.nrm) σ r0 σf).
+            { unfold MonadErr.bind. simpl.
+              eexists (@by_continue (Z*Z->Prop) unit e_set'). eexists σ''. split.
+              - exact Hbodycont.
+              - simpl. exact Hrb. }
+            exact HnrmMatch. }
+        assert (Hfuel' : Z.to_nat (hi - (i + 1)) = n').
+        { assert (Hsub : hi - i = (hi - (i + 1)) + 1) by lia.
+          assert (Hnonneg1 : (0 <= hi - (i + 1))%Z) by lia.
+          rewrite Hsub in Hfuel. rewrite Z2Nat.inj_add in Hfuel by lia.
+          rewrite Nat.add_1_r in Hfuel. injection Hfuel. auto. }
+        assert (Hloi' : (lo <= i + 1)%Z) by lia.
+        assert (HA' : forall (e: Z * Z), e_set' e ->
+                       exists k, (lo <= k < i + 1)%Z /\ e = (Znth k radj_col_l 0, u)).
+        { intros e He. sets_unfold in He. destruct He as [He | Heuv].
+          - destruct (HA e He) as [k [Hk Hkeq]]. exists k. split; [ lia | exact Hkeq ].
+          - exists i. split.
+            + split; [ exact Hloi | lia ].
+            + symmetry. exact Heuv. }
+        assert (Huneqv : u <> v).
+        { intro Heq. apply Hnvisv. rewrite <- Heq. exact HD. }
+        assert (Hstrong :
+                  visited1 σ'' v /\ visited1 σ ⊆ visited1 σ'' /\
+                  (count_pred (visited1 σ) (bijective_listV g) >= timer σ)%nat).
+        { assert (HcardV' : (count_pred (visited1 σ) (bijective_listV g) >= timer σ)%nat).
+          { exact HcardV. }
+          pose proof (@DFS_finish_neighbor_visited_strong AdjGraph Z (Z * Z) KG g Hagvalid σ v
+                       HcardV') as Hh.
+          unfold Hoare in Hh. destruct Hh as [HhNrm _].
+          specialize (HhNrm hu σ σ'' (refl_equal _) Hdfsstep) as [Hself [Hmono _]].
+          split; [ exact Hself | split; [ exact Hmono | exact HcardV' ] ]. }
+        destruct Hstrong as [Hvis_v_self [Hvis_mono HcardV_orig]].
+        assert (Hcardtimer'' : (count_pred (visited1 σ'') (bijective_listV g) >= timer σ'')%nat).
+        { assert (Hc0 : (count_pred (visited1 σ) (bijective_listV g) >= timer σ + 0)%nat) by lia.
+          pose proof (@DFS_finish_card_timer AdjGraph Z (Z * Z) KG g Hagvalid σ v 0%nat
+                       Hnvisv Hvbound Hc0) as Hh.
+          unfold Hoare in Hh. destruct Hh as [HhNrm _].
+          pose proof (HhNrm hu σ σ'' (refl_equal _) Hdfsstep) as Hcard.
+          unfold cardV in *.
+          assert (Hge0 : (timer σ'' + 0 = timer σ'')%nat) by lia.
+          rewrite Hge0 in Hcard. exact Hcard. }
+        assert (HB' : forall k, (lo <= k < i + 1)%Z -> ~ e_set' (Znth k radj_col_l 0, u) ->
+                       visited1 σ'' (Znth k radj_col_l 0)).
+        { intros k Hk Hne.
+          destruct (Z.le_gt_cases k (i - 1)) as [Hle | Hgt].
+          - assert (HkZnth_neq_v : Znth k radj_col_l 0 <> v).
+            { intro Heq. apply Hne. rewrite Heq. sets_unfold. right. reflexivity. }
+            assert (Hne_eset : ~ e_set (Znth k radj_col_l 0, u)).
+            { intro Hin. apply Hne. sets_unfold. left. exact Hin. }
+            pose proof (HB k) as Hkb.
+            assert (Hklt : (lo <= k < i)%Z) by lia.
+            specialize (Hkb Hklt Hne_eset).
+            apply Hvis_mono. exact Hkb.
+          - assert (Hki : k = i) by lia. subst k.
+            exfalso. apply Hne. sets_unfold. right. reflexivity. }
+        assert (HE' : forall j, (lo <= j < hi)%Z -> ~ visited1 σ'' (Znth j radj_col_l 0) ->
+                       ~ e_set' (Znth j radj_col_l 0, u)).
+        { intros j Hj Hnvisj.
+          destruct (Z.eq_dec (Znth j radj_col_l 0) v) as [Heq | Hneq].
+          - exfalso. rewrite Heq in Hnvisj. exact (Hnvisj Hvis_v_self).
+          - intro Hin. apply Hneq.
+            sets_unfold in Hin. destruct Hin as [HinE | Hsin].
+            + assert (Hnvis_orig : ~ visited1 σ (Znth j radj_col_l 0)).
+              { intro Hv. apply Hnvisj. apply Hvis_mono. exact Hv. }
+              exfalso. apply (HE j Hj Hnvis_orig). exact HinE.
+            + injection Hsin as Heqv. exact (eq_sym Heqv). }
+        assert (HD' : visited1 σ'' u).
+        { apply Hvis_mono. exact HD. }
+        assert (Htimerbd' : (timer σ'' <= length (bijective_listV g))%nat).
+        { assert (Hle : (count_pred (visited1 σ'') (bijective_listV g) <= length (bijective_listV g))%nat).
+          { pose proof (@cardV_le AdjGraph Z (Z * Z) KG g (visited1 σ'')) as Hcardle.
+            unfold cardV in Hcardle. exact Hcardle. }
+          lia. }
+        assert (Hsafe_ih : safe σ'' (dfs_finish_from g radj_col_l radj_row_l u (i + 1)) X).
+        { eapply IHn; [ exact Hfuel' | exact Hloi' | exact HA' | exact HB' | exact HE' |
+                        exact HD' | exact Hcardtimer'' | exact Htimerbd' | exact Hsafe'' ]. }
+        apply Hsafe_ih. exact Hcontstep.
+Qed.
+
+(* ===================================================================== *)
+(* dfs1_entry_close + count_pred-count_nonzero bridge: BLOCKED.          *)
+(*                                                                        *)
+(* dfs1_entry_close itself is fully designed (see .tmp/entry_close_progress.md *)
+(* ROUND 9 UPDATE 4): it composes dfs1_visit_decompose + dfs_finish_from_sim, *)
+(* needing only the count_pred-count_nonzero bridge (pre_dfs1_count_pred_eq) *)
+(* to discharge HcardV/Htimerbd from pre_dfs1.                            *)
+(*                                                                        *)
+(* The BLOCKER is upstream: dfs1_entail_wit_1's goal (kosaraju_rel_goal.v *)
+(* line 375-428) does NOT carry a csr1_faithful hypothesis (dfs1's spec in *)
+(* kosaraju_rel.c line 46-95 omits it, unlike dfs2 which has csr2_faithful). *)
+(* dfs_finish_from_sim needs csr1_faithful for BASE's Hclosure and        *)
+(* RECURSE's Hstep_g (linking CSR radj_col to abstract reverse-graph       *)
+(* in-edges).  So dfs1_entry_close is left out of lib.v until the          *)
+(* annotation phase adds csr1_faithful to dfs1's spec (Requires re-symexec, *)
+(* out of scope for this continuation-design pass).                       *)
+(*                                                                        *)
+(* What IS delivered (all Qed, lib.v clean): dfs_finish_repeat_body,       *)
+(* dfs_finish_unfold_repeat, visit1_pre_dfs1_step, dfs1_visit_decompose,   *)
+(* 4× dfs_finish_*_err_rev_imp, repeat_break_break_step_gen, and the core *)
+(* dfs_finish_from_sim (BASE/SKIP/RECURSE, ~450 lines).                    *)
+(* ===================================================================== *)
