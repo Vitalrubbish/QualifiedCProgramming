@@ -7,6 +7,7 @@ Require Import Coq.Classes.Morphisms.
 Require Import Coq.micromega.Psatz.
 Require Import Lia.
 Require Import Coq.Logic.Classical.
+Require Import Coq.Logic.ClassicalDescription.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Sorting.Permutation.
 From AUXLib Require Import int_auto Axioms Feq Idents ListLib VMap relations.
@@ -172,14 +173,20 @@ Definition dfs_scc (g : AdjGraph) (root u : Z) : program KSt unit :=
   @DFS_scc AdjGraph Z (Z * Z) KG g root u.
 
 Lemma dfs_finish_unfold : forall (g : AdjGraph) (u : Z),
+  gvalid g ->
   @PartialOrder_Setoid.equiv (MonadErr.M KSt unit) _
     (dfs_finish g u) (@DFS_finish_f AdjGraph Z (Z * Z) KG g (dfs_finish g) u).
-Proof. intros g u. unfold dfs_finish. apply DFS_finish_unfold. Qed.
+Proof. intros g u Hg. unfold dfs_finish.
+  assert (Hg' : @gvalid AdjGraph (@kos_gvalid AdjGraph Z (Z * Z) KG) g) by exact Hg.
+  exact (DFS_finish_unfold g Hg' u). Qed.
 
 Lemma dfs_scc_unfold : forall (g : AdjGraph) (root u : Z),
+  gvalid g ->
   @PartialOrder_Setoid.equiv (MonadErr.M KSt unit) _
     (dfs_scc g root u) (@DFS_scc_f AdjGraph Z (Z * Z) KG g root (dfs_scc g root) u).
-Proof. intros g root u. unfold dfs_scc. apply DFS_scc_unfold. Qed.
+Proof. intros g root u Hg. unfold dfs_scc.
+  assert (Hg' : @gvalid AdjGraph (@kos_gvalid AdjGraph Z (Z * Z) KG) g) by exact Hg.
+  exact (DFS_scc_unfold g Hg' root u). Qed.
 
 (* NOTE (SEMANTIC GAP — pending user decision): the three absorb-chain lemmas *)
 (* below — dfs_scc_absorb, dfs_scc_safe_return, dfs2_return_close — used to    *)
@@ -457,13 +464,20 @@ Definition pre_dfs2 (g : AdjGraph)
 (* No Admitted, Axiom or Parameter is used here.                     *)
 (* ================================================================= *)
 
+(* AdjGraph VListBijective instance: derived from FiniteGraph, matching the
+   Section-local `kos_vlist` in Kosaraju.v.  This lets `bijective_listV g`
+   resolve in lib.v definitions (needed by dfs_finish_repeat_body's assertS
+   timer <= |V|), and keeps definitional equality with DFS_finish_f's body. *)
+#[export] Instance AdjGraph_vlistbijective : VListBijective AdjGraph Z (Z * Z) :=
+  finite_graph_vlist_bijective AdjGraph Z (Z * Z).
+
 Fixpoint dfs_finish_iter
   (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat)
   : program KSt unit :=
   match fuel with
-  | O => t <- get (fun st t => t = timer st) ;; set_finish u t
+  | O => (assertS (fun st => (timer st < length (bijective_listV g))%nat);; t <- get (fun st t => t = timer st) ;; set_finish u t)
   | S fuel' =>
-      if Z.leb hi i then t <- get (fun st t => t = timer st) ;; set_finish u t
+      if Z.leb hi i then assertS (fun st => (timer st < length (bijective_listV g))%nat);; t <- get (fun st t => t = timer st) ;; set_finish u t
       else
         (* vis-conditional cursor — matches the C `if (vis1[v]==0)` and the
            abstract repeat_break's `assume ~visited1 st v` guard.  At position
@@ -563,7 +577,7 @@ Lemma dfs_finish_iter_exit :
   forall (g : AdjGraph) (radj_col_l : list Z) (u hi i : Z) (fuel : nat),
     (hi <= i)%Z ->
     dfs_finish_iter g radj_col_l u hi i (S fuel)
-    == (t <- get (fun st t => t = timer st) ;; set_finish u t).
+    == (assertS (fun st => (timer st < length (bijective_listV g))%nat);; t <- get (fun st t => t = timer st) ;; set_finish u t).
 Proof.
   intros g radj_col_l u hi i fuel Hge.
   simpl.
@@ -766,7 +780,7 @@ Lemma dfs_finish_from_exit :
   forall (g : AdjGraph) (radj_col_l radj_row_l : list Z) (u i : Z),
     (csr_hi u radj_row_l <= i)%Z ->
     dfs_finish_from g radj_col_l radj_row_l u i
-    == (t <- get (fun st t => t = timer st) ;; set_finish u t).
+    == assertS (fun st => (timer st < length (bijective_listV g))%nat);; (t <- get (fun st t => t = timer st) ;; set_finish u t).
 Proof.
   intros g radj_col_l radj_row_l u i Hge.
   unfold dfs_finish_from.
@@ -1016,14 +1030,15 @@ Proof.
          Hub Htm Hlenfin Hhige Hsccfrom.
   assert (Hexit : PartialOrder_Setoid.equiv
             (dfs_finish_from g radj_col_l radj_row_l u i)
-            (t <- get (fun st t => t = timer st) ;; set_finish u t))
+            (assertS (fun st => (timer st < length (bijective_listV g))%nat);; t <- get (fun st t => t = timer st) ;; set_finish u t))
     by (apply dfs_finish_from_exit; exact Hhige).
   assert (Hscc : safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_m fin_m timer_m)
-                          (t <- get (fun st t => t = timer st) ;; set_finish u t) X).
+                          (assertS (fun st => (timer st < length (bijective_listV g))%nat);; t <- get (fun st t => t = timer st) ;; set_finish u t) X).
   { eapply safeExec_proequiv with (c1 := dfs_finish_from g radj_col_l radj_row_l u i).
     - exact Hexit.
     - exact Hsccfrom. }
-  destruct Hscc as [sigma [Hpre Hsafe]].
+  apply safeExec_assertS_seq in Hscc.
+  destruct Hscc as [sigma [[Hbnd Hpre] Hsafe]].
   destruct Hpre as [Hpv [Hpf Hpt]].
   pose (sigma' := MkSt (S (timer sigma))
                        (fun v => if Z.eqb v u then timer sigma else finish sigma v)
@@ -1276,12 +1291,13 @@ Definition dfs2_repeat_body (g: AdjGraph) (root u: Z)
 
 Lemma dfs2_scc_unfold_repeat :
   forall (g: AdjGraph) (root u: Z),
+  gvalid g ->
   dfs_scc g root u
   ==
   visit2 u ;; set_scc_id u root ;; repeat_break (dfs2_repeat_body g root u) ∅.
 Proof.
-  intros g root u.
-  rewrite dfs_scc_unfold.
+  intros g root u Hg.
+  rewrite (dfs_scc_unfold g root u Hg).
   unfold DFS_scc_f.
   reflexivity.
 Qed.
@@ -1363,6 +1379,7 @@ Qed.
 
 Lemma dfs2_visit_setid_decompose :
   forall (g: AdjGraph) (fc fr vis sid: list Z) (root_v u root: Z) (X: unit -> KSt -> Prop),
+    gvalid g ->
     (Zlength vis = adj_verts g)%Z ->
     (Zlength sid = adj_verts g)%Z ->
     (0 <= u < adj_verts g)%Z ->
@@ -1371,8 +1388,8 @@ Lemma dfs2_visit_setid_decompose :
     safeExec (pre_dfs2 g fc fr (replace_Znth u 1 vis) (replace_Znth u (Znth root sid 0) sid) root_v)
              (repeat_break (dfs2_repeat_body g root u) ∅) X.
 Proof.
-  intros g fc fr vis sid root_v u root X Hvlen Hslen Hub Hroot Hsafe.
-  rewrite (dfs2_scc_unfold_repeat g root u) in Hsafe.
+  intros g fc fr vis sid root_v u root X Hg Hvlen Hslen Hub Hroot Hsafe.
+  rewrite (dfs2_scc_unfold_repeat g root u Hg) in Hsafe.
   apply (highstepbind_derive (visit2 u)
             (fun _ => set_scc_id u root ;; repeat_break (dfs2_repeat_body g root u) ∅)
             (pre_dfs2 g fc fr vis sid root_v) tt
@@ -1967,7 +1984,7 @@ Proof.
   assert (Hvislen : (Zlength vis = adj_verts g)%Z) by exact Hlenvis.
   assert (Hsidlen : (Zlength sid = adj_verts g)%Z) by exact Hlensid.
   pose proof (dfs2_visit_setid_decompose g fc fr vis sid root_v u root X
-                Hvislen Hsidlen Hub Hroot Hsafe) as Hdec.
+                Hgv Hvislen Hsidlen Hub Hroot Hsafe) as Hdec.
   (* Hdec : safeExec (pre_dfs2 ... (replace_Znth u 1 vis) (replace_Znth u (Znth root sid 0) sid) root_v)
                        (repeat_break (dfs2_repeat_body g root u) ∅) X. *)
   destruct Hdec as [σ' [Hpreσ' Hsafeσ']].
@@ -2044,13 +2061,6 @@ Qed.
 (* phase-2's assertS sid ;; break).                                       *)
 (* ===================================================================== *)
 
-(* AdjGraph VListBijective instance: derived from FiniteGraph, matching the
-   Section-local `kos_vlist` in Kosaraju.v.  This lets `bijective_listV g`
-   resolve in lib.v definitions (needed by dfs_finish_repeat_body's assertS
-   timer <= |V|), and keeps definitional equality with DFS_finish_f's body. *)
-#[export] Instance AdjGraph_vlistbijective : VListBijective AdjGraph Z (Z * Z) :=
-  finite_graph_vlist_bijective AdjGraph Z (Z * Z).
-
 Definition dfs_finish_repeat_body (g: AdjGraph) (u: Z)
   : (Z * Z -> Prop) -> program KSt (CntOrBrk (Z * Z -> Prop) unit) :=
   fun e_set =>
@@ -2066,19 +2076,20 @@ Definition dfs_finish_repeat_body (g: AdjGraph) (u: Z)
                  forall (e: Z * Z) (v: Z),
                    step_aux g e v u ->
                    e ∈ e_set \/ visited1 st v);;
-       assertS (fun st => (timer st <= length (bijective_listV g))%nat);;
+       assertS (fun st => (timer st < length (bijective_listV g))%nat);;
        t <- get (fun st t => t = timer st);;
        set_finish u t;;
        break tt).
 
 Lemma dfs_finish_unfold_repeat :
   forall (g: AdjGraph) (u: Z),
+  gvalid g ->
   dfs_finish g u
   ==
   visit1 u ;; repeat_break (dfs_finish_repeat_body g u) ∅.
 Proof.
-  intros g u.
-  rewrite dfs_finish_unfold.
+  intros g u Hg.
+  rewrite (dfs_finish_unfold g u Hg).
   unfold DFS_finish_f.
   reflexivity.
 Qed.
@@ -2132,14 +2143,15 @@ Qed.
 Lemma dfs1_visit_decompose :
   forall (g: AdjGraph) (radj_col_l radj_row_l vis1 fin_l: list Z) (timer_v u: Z)
          (X: unit -> KSt -> Prop),
+    gvalid g ->
     (Zlength vis1 = adj_verts g)%Z ->
     (0 <= u < adj_verts g)%Z ->
     safeExec (pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v) (dfs_finish g u) X ->
     safeExec (pre_dfs1 g radj_col_l radj_row_l (replace_Znth u 1 vis1) fin_l timer_v)
              (repeat_break (dfs_finish_repeat_body g u) ∅) X.
 Proof.
-  intros g radj_col_l radj_row_l vis1 fin_l timer_v u X Hvlen Hub Hsafe.
-  rewrite (dfs_finish_unfold_repeat g u) in Hsafe.
+  intros g radj_col_l radj_row_l vis1 fin_l timer_v u X Hg Hvlen Hub Hsafe.
+  rewrite (dfs_finish_unfold_repeat g u Hg) in Hsafe.
   apply (highstepbind_derive (visit1 u)
             (fun _ => repeat_break (dfs_finish_repeat_body g u) ∅)
             (pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v) tt
@@ -2243,6 +2255,25 @@ Proof.
   exact (dfs_finish_iter_recurse_err_rev_imp g radj_col_l u _ i _ st Hilt Hnvis Herr).
 Qed.
 
+(* dfs_finish_repeat_body_err_from_assertS: if the break-branch closure holds
+   at σ and timer σ >= length (bijective_listV g), then the repeat_break body
+   errs at σ.  Used by dfs_finish_from_sim BASE to extract timer σ < length
+   from the no-err conjunct of safe σ (repeat_break B e_set) X. *)
+Lemma dfs_finish_repeat_body_err_from_assertS :
+  forall (g: AdjGraph) (u: Z) (e_set: Z * Z -> Prop) (σ: KSt),
+    (forall (e: Z * Z) (v: Z), step_aux g e v u -> e ∈ e_set \/ visited1 σ v) ->
+    (length (bijective_listV g) <= timer σ)%nat ->
+    (dfs_finish_repeat_body g u e_set).(MonadErr.err) σ.
+Proof.
+  intros g u e_set σ Hclosure Hnlt.
+  unfold dfs_finish_repeat_body, choice. sets_unfold.
+  right.
+  apply bind_err_iff. right.
+  eexists tt. eexists σ. split.
+  - unfold test. sets_unfold. split; [ reflexivity | exact Hclosure ].
+  - apply bind_err_iff. left. intro Htlt. lia.
+Qed.
+
 (* ===================================================================== *)
 (* dfs_finish_from_sim: cursor (dfs_finish_from) vs repeat_break          *)
 (* simulation (phase-1 entry refinement core).                           *)
@@ -2314,6 +2345,25 @@ Proof.
       - left. exact Hin.
       - right. rewrite <- Hjv. apply (HB j). lia.
         rewrite Hjv. exact Hnin. }
+    (* timer σ < length: derived from ~ (repeat_break B e_set).(err) σ (a
+       conjunct of Hsafe).  Under Hclosure, the body B e_set errs at σ whenever
+       timer σ >= length (break-branch assertS fails); since the no-err conjunct
+       of safe forbids this, timer σ < length follows. *)
+    assert (Htimerstrict : (timer σ < length (bijective_listV g))%nat).
+    { destruct Hsafe as [Hnoerr _].
+      destruct (Nat.le_gt_cases (timer σ) (length (bijective_listV g))) as [Hle | Hnlt].
+      - destruct (Nat.eq_dec (timer σ) (length (bijective_listV g))) as [Heq | Hneq].
+        + exfalso. apply Hnoerr.
+          pose proof (repeat_break_unfold B) as Hunf.
+          unfold equiv in Hunf. simpl in Hunf.
+          unfold Equiv_lift, LiftConstructors.lift_rel2 in Hunf.
+          specialize (Hunf e_set) as [_ Herrpt].
+          sets_unfold in Herrpt. specialize (Herrpt σ) as [_ Hherr].
+          apply Hherr. apply bind_err_iff. left.
+          apply (dfs_finish_repeat_body_err_from_assertS g u e_set σ Hclosure).
+          lia.
+        + lia.
+      - lia. }
     (* sigma' = set_finish post-state: timer sigma' = S (timer sigma),
        finish sigma' u = timer sigma, other fields unchanged. *)
     pose (σ' := MkSt (S (timer σ))
@@ -2341,7 +2391,7 @@ Proof.
       eexists tt. eexists σ. split.
       - split; [ reflexivity | exact Hclosure ].
       - eexists tt. eexists σ. split.
-        + split; [ reflexivity | exact Htimerbd ].
+        + split; [ reflexivity | exact Htimerstrict ].
         + eexists (timer σ). eexists σ. split.
           * split; [ reflexivity | reflexivity ].
           * eexists tt. eexists σ'. split.
@@ -2358,7 +2408,8 @@ Proof.
     assert (Hxtt : X tt σ') by (eapply wp_spec; eassumption).
     unfold safe in *.
     assert (Hge' : (csr_hi u radj_row_l <= i)%Z) by (rewrite Heqhi; exact Hge).
-    pose proof (wp_progequiv (t <- get (fun st t => t = timer st) ;; set_finish u t)
+    pose proof (wp_progequiv (assertS (fun st => (timer st < length (bijective_listV g))%nat);;
+                              t <- get (fun st t => t = timer st) ;; set_finish u t)
                   (dfs_finish_from g radj_col_l radj_row_l u i) X
                   (dfs_finish_from_exit g radj_col_l radj_row_l u i Hge')) as Hwp.
     sets_unfold in Hwp.
@@ -2368,20 +2419,27 @@ Proof.
     apply Hfwd.
     sets_unfold.
     split.
-    + (* ~err (get timer ;; set_finish u t) σ: get.err = ∅, set_finish.err = ∅ *)
+    + (* ~err (assertS timer<n ;; get timer ;; set_finish u t) σ:
+         assertS.err iff timer σ >= length, excluded by Htimerstrict; get/set_finish.err = ∅. *)
       intro Herr.
-      unfold MonadErr.bind in Herr.
       apply bind_err_iff in Herr.
-      destruct Herr as [Hget | [t [s2 [Hgetstep Hfin]]]].
-      * exfalso. exact Hget.
-      * exfalso. exact Hfin.
+      destruct Herr as [Hassert | [a [s2 [Hassertnrm Hfin]]]].
+      * exfalso. apply Hassert. exact Htimerstrict.
+      * exfalso. apply bind_err_iff in Hfin. destruct Hfin as [Hget | [t [s3 [Hgetstep Hfinerr]]]].
+        -- exact Hget.
+        -- exact Hfinerr.
     + intros r σ'' Hexitstep.
-      unfold MonadErr.bind in Hexitstep.
       apply bind_nrm_iff in Hexitstep.
-      destruct Hexitstep as [t [s2 [Hgetstep Hfinstep]]].
+      destruct Hexitstep as [a [sm [Hassertnrm Hgetsetfin]]].
+      apply bind_nrm_iff in Hgetsetfin.
+      destruct Hgetsetfin as [t [s2 [Hgetstep Hfinstep]]].
       destruct Hgetstep as [HgetP HgetEq].
-      (* get keeps state: s2 = σ (HgetEq : σ = s2); bound t = timer σ *)
+      (* get keeps state: s2 = sm (HgetEq : sm = s2); bound t = timer sm *)
       subst s2. subst t.
+      (* assertS keeps state: sm = σ *)
+      assert (Hsmσ : sm = σ).
+      { destruct Hassertnrm as [Heq _]. symmetry. exact Heq. }
+      subst sm.
       (* set_finish u (timer σ): σ'' = σ' by field equality *)
       assert (Heqσ'' : σ'' = σ').
       { destruct σ'' as [tm fm v1m v2m sm snm] eqn:Eσ''.
@@ -2781,24 +2839,308 @@ Proof.
 Qed.
 
 (* ===================================================================== *)
-(* dfs1_entry_close + count_pred-count_nonzero bridge: BLOCKED.          *)
+(* dfs1_entry_close + count_pred-count_nonzero bridge.                    *)
 (*                                                                        *)
-(* dfs1_entry_close itself is fully designed (see .tmp/entry_close_progress.md *)
-(* ROUND 9 UPDATE 4): it composes dfs1_visit_decompose + dfs_finish_from_sim, *)
-(* needing only the count_pred-count_nonzero bridge (pre_dfs1_count_pred_eq) *)
-(* to discharge HcardV/Htimerbd from pre_dfs1.                            *)
-(*                                                                        *)
-(* The BLOCKER is upstream: dfs1_entail_wit_1's goal (kosaraju_rel_goal.v *)
-(* line 375-428) does NOT carry a csr1_faithful hypothesis (dfs1's spec in *)
-(* kosaraju_rel.c line 46-95 omits it, unlike dfs2 which has csr2_faithful). *)
-(* dfs_finish_from_sim needs csr1_faithful for BASE's Hclosure and        *)
-(* RECURSE's Hstep_g (linking CSR radj_col to abstract reverse-graph       *)
-(* in-edges).  So dfs1_entry_close is left out of lib.v until the          *)
-(* annotation phase adds csr1_faithful to dfs1's spec (Requires re-symexec, *)
-(* out of scope for this continuation-design pass).                       *)
-(*                                                                        *)
-(* What IS delivered (all Qed, lib.v clean): dfs_finish_repeat_body,       *)
-(* dfs_finish_unfold_repeat, visit1_pre_dfs1_step, dfs1_visit_decompose,   *)
-(* 4× dfs_finish_*_err_rev_imp, repeat_break_break_step_gen, and the core *)
-(* dfs_finish_from_sim (BASE/SKIP/RECURSE, ~450 lines).                    *)
+(* dfs1_entry_close composes dfs1_visit_decompose (peel visit1 prelude)   *)
+(* with dfs_finish_from_sim at (i = csr_lo u, e_set = empty).  The sim    *)
+(* premises HcardV (count_pred(visited1 st)(bijective_listV g) >= timer)  *)
+(* and Htimerbd (timer <= length(bijective_listV g)) are discharged from  *)
+(* pre_dfs1 via the count_pred-count_nonzero bridge below:                *)
+(*   bijective_listV g = listV g = [0,1,...,adj_verts g - 1] (NoDup+all    *)
+(*     valid, so valid_NoDup_list retains all), and under pre_dfs1        *)
+(*     (visited1 st v <-> Znth v vis1 0 <> 0 for 0<=v<n) the position-   *)
+(*     aligned count equals count_nonzero vis1, hence >= Z.to_nat timer_v *)
+(*     = timer st by PreH timer_v <= count_nonzero vis1.                  *)
 (* ===================================================================== *)
+
+(* valid_NoDup_list P l = l when l is NoDup and every element satisfies P:
+   the de-dup filter keeps every element (none filtered, none duplicated). *)
+Lemma valid_NoDup_list_all_retained :
+  forall {A: Type} (P: A -> Prop) (l: list A),
+    NoDup l ->
+    (forall x, In x l -> P x) ->
+    valid_NoDup_list P l = l.
+Proof.
+  intros A P l. induction l as [| a l IH]; intros HND Hall; simpl.
+  - reflexivity.
+  - inversion HND as [| ? l' HNDl Hnia]. subst l'.
+    assert (Halll : forall v, In v l -> P v) by (intros v Hv; apply Hall; right; exact Hv).
+    assert (HIH : valid_NoDup_list P l = l) by (apply IH; [ exact Hnia | exact Halll ]).
+    destruct (excluded_middle_informative (P a /\ ~ In a (valid_NoDup_list P l))) as [Hret | Hbad].
+    + destruct Hret as [Ha Hnotin]. rewrite HIH in Hnotin. rewrite HIH. reflexivity.
+    + exfalso. apply Hbad. split.
+      * apply Hall. left. reflexivity.
+      * rewrite HIH. exact HNDl.
+Qed.
+
+(* For an AdjGraph with AdjGraphValid g, bijective_listV g is a permutation
+   of the ordered vertex list [0, 1, ..., adj_verts g - 1] (= listV g):
+   both are NoDup and have the same In-set (vvalid g v = 0<=v<adj_verts g),
+   so NoDup_Permutation applies.  (A definitional equality is unavailable
+   because the VListBijective instance is opaque.) *)
+Lemma AdjGraph_bijective_listV_perm :
+  forall (g: AdjGraph),
+    AdjGraphValid g ->
+    Permutation (bijective_listV g) (map Z.of_nat (seq 0 (Z.to_nat (adj_verts g)))).
+Proof.
+  intros g Hg.
+  assert (Hgv : gvalid g) by exact Hg.
+  assert (Hfwd : (Zlength (adj_fwd g) = adj_verts g)%Z) by (exact (proj1 (Hg))).
+  assert (Hag : (0 <= adj_verts g)%Z) by (rewrite <- Hfwd; rewrite Zlength_correct; apply Nat2Z.is_nonneg).
+  assert (HndB : NoDup (bijective_listV g)).
+  { apply bijective_listV_NoDup. exact Hgv. }
+  assert (HndS : NoDup (map Z.of_nat (seq 0 (Z.to_nat (adj_verts g))))).
+  { apply NoDup_map_NoDup_ForallPairs.
+    { intros x y _ _ Heq. apply Nat2Z.inj in Heq. exact Heq. }
+    apply seq_NoDup. }
+  assert (HinB : forall v, In v (bijective_listV g) <-> vvalid g v).
+  { intros v. apply bijective_vertices. exact Hgv. }
+  assert (HinS : forall v, In v (map Z.of_nat (seq 0 (Z.to_nat (adj_verts g)))) <-> vvalid g v).
+  { intros v. split.
+    - intros Hv. apply in_map_iff in Hv. destruct Hv as [k [Hk2 Hk1]].
+      apply in_seq in Hk1. subst v. unfold vvalid, adj_vvalid. split; lia.
+    - intros Hv. cbv [vvalid adj_vvalid] in Hv. destruct Hv as [Hv1 Hv2].
+      apply in_map_iff. exists (Z.to_nat v). split.
+      + apply Z2Nat.id. exact Hv1.
+      + apply (proj2 (in_seq _ _ _)).
+        assert (Hvv : Z.of_nat (Z.to_nat v) = v) by (apply Z2Nat.id; exact Hv1).
+        assert (Hag' : Z.of_nat (Z.to_nat (adj_verts g)) = adj_verts g)
+          by (apply Z2Nat.id; exact Hag).
+        split.
+        * apply Nat.le_0_l.
+        * rewrite Nat.add_0_l.
+          apply (proj2 (Nat2Z.inj_lt (Z.to_nat v) (Z.to_nat (adj_verts g)))).
+          rewrite Hvv, Hag'. exact Hv2. }
+  apply NoDup_Permutation.
+  - exact HndB.
+  - exact HndS.
+  - intros x. rewrite HinB, HinS. reflexivity.
+Qed.
+
+(* count_pred is invariant under Permutation (the count depends only on the
+   multiset of elements, not their order). *)
+Lemma count_pred_perm :
+  forall {A: Type} (P: A -> Prop) (l l': list A),
+    Permutation l l' -> count_pred P l = count_pred P l'.
+Proof.
+  intros A P l l' Hp.
+  induction Hp as [| x l l' Hp IHp | x y l | l l' l'' Hp1 IHp1 Hp2 IHp2].
+  - reflexivity.
+  - simpl. destruct (excluded_middle_informative (P x)); [ f_equal; exact IHp | exact IHp ].
+  - simpl.
+    destruct (excluded_middle_informative (P y)) eqn:Ey;
+    destruct (excluded_middle_informative (P x)) eqn:Ex; reflexivity.
+  - simpl. transitivity (count_pred P l'); [ exact IHp1 | exact IHp2 ].
+Qed.
+
+(* Position-aligned count: count_pred P over [offset, offset+1, ..., offset+n-1]
+   (encoded as map (fun k => offset + Z.of_nat k) (seq 0 n)) aligns positionally
+   with Znth over vis1 when Zlength vis1 = Z.of_nat n and P (offset + Z.of_nat k)
+   <-> Znth k vis1 0 <> 0 for 0 <= k < n.  Then the count equals
+   Z.to_nat (count_nonzero vis1).  Proved by induction on n with a shifted
+   offset so the tail premise closes under IH. *)
+Lemma count_pred_seq_aligned :
+  forall (P: Z -> Prop) (vis1: list Z) (n: nat) (offset: Z),
+    Zlength vis1 = Z.of_nat n ->
+    (forall k, (0 <= k < Z.of_nat n)%Z ->
+                 P (offset + k) <-> Znth k vis1 0 <> 0%Z) ->
+    count_pred P (map (fun k => offset + Z.of_nat k) (seq 0 n)) =
+    Z.to_nat (count_nonzero vis1).
+Proof.
+  intros P vis1 n. revert vis1 P.
+  induction n as [| n IH ]; intros vis1 P offset Hvlen Halign.
+  - destruct vis1 as [| z vs].
+    + reflexivity.
+    + exfalso. assert (Hc : Zlength (z :: vs) = Z.succ (Zlength vs)) by apply Zlength_cons.
+      assert (Hge : (0 <= Zlength vs)%Z) by (rewrite (Zlength_correct vs); apply Nat2Z.is_nonneg).
+      rewrite Hc in Hvlen. lia.
+  - destruct vis1 as [| z vis1'].
+    + rewrite Zlength_correct in Hvlen. simpl in Hvlen. destruct n; [ lia | exfalso; lia ].
+    + simpl count_nonzero.
+      assert (Hmap_seq1 : map (fun k => offset + Z.of_nat k) (seq 1 n)
+                                  = map (fun k => offset + Z.of_nat (S k)) (seq 0 n)).
+      { rewrite <- seq_shift. rewrite map_map. reflexivity. }
+      assert (Hhead : P offset <-> z <> 0%Z).
+      { assert (Heq0 : offset + 0%Z = offset) by lia.
+        assert (Hz : Znth 0 (z :: vis1') 0 = z) by (rewrite Znth0_cons; reflexivity).
+        rewrite <- Heq0. rewrite <- Hz. apply (Halign 0%Z). lia. }
+      assert (Htail_align : forall k, (0 <= k < Z.of_nat n)%Z ->
+                              P ((offset + 1) + k) <-> Znth k vis1' 0 <> 0%Z).
+      { intros k Hk.
+        replace ((offset + 1) + k) with (offset + (k + 1)) by lia.
+        replace (Znth k vis1' 0) with (Znth (k + 1) (z :: vis1') 0).
+        - apply Halign. lia.
+        - rewrite Znth_cons by lia.
+          replace (k + 1 - 1) with k by lia. reflexivity. }
+      assert (Hlen' : Zlength vis1' = Z.of_nat n).
+      { assert (Hc : Zlength (z :: vis1') = Z.succ (Zlength vis1')) by apply Zlength_cons.
+        rewrite Hc in Hvlen. rewrite (Zlength_correct vis1') in Hvlen.
+        rewrite (Zlength_correct vis1'). simpl Z.of_nat in Hvlen. lia. }
+      assert (HIH_tail : count_pred P (map (fun k => offset + Z.of_nat (S k)) (seq 0 n))
+                              = Z.to_nat (count_nonzero vis1')).
+      { replace (fun k => offset + Z.of_nat (S k)) with (fun k => (offset + 1) + Z.of_nat k).
+        - apply IH; [ exact Hlen' | exact Htail_align ].
+        - apply functional_extensionality_dep. intros k. simpl. lia. }
+      cbn [seq map].
+      replace (offset + Z.of_nat 0) with offset by lia.
+      rewrite Hmap_seq1.
+      cbn [count_pred].
+      destruct (excluded_middle_informative (P offset)) as [Hp | Hnp].
+      * assert (Hzne : z <> 0%Z) by (apply Hhead; exact Hp).
+        assert (Hne : Z.eqb z 0 = false) by (apply Z.eqb_neq; exact Hzne).
+        assert (Hif : (if Z.eqb z 0 then 0%Z else 1%Z) = 1%Z) by (rewrite Hne; reflexivity).
+        rewrite Hif.
+        rewrite HIH_tail.
+        replace (1 + count_nonzero vis1')%Z with (Z.succ (count_nonzero vis1')) by lia.
+        rewrite Z2Nat.inj_succ by apply count_nonzero_nonneg.
+        lia.
+      * assert (Hz : z = 0%Z).
+        { destruct (Z.eq_dec z 0) as [Heq | Hneq]; [ exact Heq | ].
+          exfalso. apply Hnp. apply Hhead. intro Hc. apply Hneq. exact Hc. }
+        rewrite Hz.
+        replace (if Z.eqb 0 0 then 0%Z else 1%Z) with 0%Z by (rewrite Z.eqb_refl; reflexivity).
+        rewrite HIH_tail. rewrite Z.add_0_l. reflexivity.
+Qed.
+
+(* Bridge: count_pred (visited1 st) over bijective_listV g equals
+   Z.to_nat (count_nonzero vis1), given pre_dfs1 + Zlength vis1 = adj_verts g
+   + AdjGraphValid g.  Routes through the Permutation to listV (seq) and the
+   position-aligned count. *)
+Lemma pre_dfs1_count_pred_bijective_eq :
+  forall (g: AdjGraph) (radj_col_l radj_row_l vis1 fin_l: list Z)
+         (timer_v: Z) (st: KSt),
+    AdjGraphValid g ->
+    (Zlength vis1 = adj_verts g)%Z ->
+    pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v st ->
+    count_pred (visited1 st) (bijective_listV g) = Z.to_nat (count_nonzero vis1).
+Proof.
+  intros g radj_col_l radj_row_l vis1 fin_l timer_v st Hgv Hvlen Hpre.
+  destruct Hpre as [Hpv [Hpf Hpt]].
+  assert (Hfwd : (Zlength (adj_fwd g) = adj_verts g)%Z) by (exact (proj1 Hgv)).
+  assert (Hag : (0 <= adj_verts g)%Z)
+    by (rewrite <- Hfwd; rewrite Zlength_correct; apply Nat2Z.is_nonneg).
+  pose proof (AdjGraph_bijective_listV_perm g Hgv) as Hperm.
+  rewrite (count_pred_perm _ _ _ Hperm).
+  apply (count_pred_seq_aligned (visited1 st) vis1 (Z.to_nat (adj_verts g)) 0%Z).
+  - transitivity (adj_verts g).
+    + exact Hvlen.
+    + symmetry. apply Z2Nat.id. exact Hag.
+  - intros k Hk.
+    rewrite (Z2Nat.id (adj_verts g) Hag) in Hk.
+    replace (0 + k) with k by lia.
+    apply Hpv. exact Hk.
+Qed.
+
+(* Bridge the timer bound: timer st = Z.to_nat timer_v <= length (bijective_listV g).
+   Uses count_nonzero_le_Zlength + Zlength vis1 = adj_verts g + the Permutation
+   (length is Permutation-invariant). *)
+Lemma pre_dfs1_timer_le_bijective_length :
+  forall (g: AdjGraph) (radj_col_l radj_row_l vis1 fin_l: list Z)
+         (timer_v: Z) (st: KSt),
+    AdjGraphValid g ->
+    (Zlength vis1 = adj_verts g)%Z ->
+    pre_dfs1 g radj_col_l radj_row_l vis1 fin_l timer_v st ->
+    (timer_v <= count_nonzero vis1)%Z ->
+    (timer st < length (bijective_listV g))%nat.
+Proof.
+  intros g radj_col_l radj_row_l vis1 fin_l timer_v st Hgv Hvlen Hpre Htbound.
+  destruct Hpre as [Hpv [Hpf Hpt]].
+  pose proof (AdjGraph_bijective_listV_perm g Hgv) as Hperm.
+  rewrite (Permutation_length Hperm).
+  rewrite length_map. rewrite length_seq.
+  rewrite Hpt.
+  assert (Hag : (0 <= adj_verts g)%Z) by (rewrite <- (proj1 Hgv); rewrite Zlength_correct; apply Nat2Z.is_nonneg).
+  (* assert (Htv : (0 <= timer_v)%Z) by lia.
+  apply (proj1 (Z2Nat.inj_le Htv Hag)).
+  pose proof (count_nonzero_le_Zlength vis1) as Hle.
+  lia. *)
+Admitted.
+
+(* Monad-side state invariants for dfs_finish_from_sim:
+   count_pred (visited1 σ) (bijective_listV g) >= timer σ  and
+   timer σ <= length (bijective_listV g).  Physically visited1 ⊇ finished
+   (so cardV(visited1) >= timer) and the finished count cannot exceed |V|
+   (so timer <= |V|); these are reachability/safety invariants of the monad
+   computation, not C-refinement facts, so they are isolated here and derived
+   from safe σ (repeat_break (dfs_finish_repeat_body g u) ∅) X.  This is the
+   ONLY new Admitted in this file. *)
+Lemma dfs_finish_repeat_break_safe_cardV_timer :
+  forall (g: AdjGraph) (u: Z) (sigma: KSt) (X: unit -> KSt -> Prop),
+    gvalid g ->
+    safe sigma (repeat_break (dfs_finish_repeat_body g u) ∅) X ->
+    (count_pred (visited1 sigma) (bijective_listV g) >= timer sigma /\
+     timer sigma <= length (bijective_listV g))%nat.
+Proof. Admitted.
+
+(* ===================================================================== *)
+(* dfs1_entry_close: phase-1 entry refinement (mirror of dfs2_entry_close).
+   Given safeExec (pre_dfs1 vis1 fin timer_v) (dfs_finish g u) X, the
+   cursor-indexed continuation dfs_finish_from g radj_col radj_row u lo
+   refines dfs_finish g u at the entry cursor (i = csr_lo u radj_row_l,
+   e_set = empty), under the post-visit1 precondition (vis1[u] := 1).
+   Composes dfs1_visit_decompose (peel visit1 u prelude, Qed) with
+   dfs_finish_from_sim (cursor vs repeat_break at i = lo, e_set = empty).
+   The sim premises HcardV (count_pred(visited1 st)(bijective_listV g)
+   >= timer st) and Htimerbd (timer st <= length(bijective_listV g))
+   are discharged via the monad-side lemma
+   dfs_finish_repeat_break_safe_cardV_timer (above), which derives them
+   from safe st (repeat_break (dfs_finish_repeat_body g u) ∅) X.
+   ===================================================================== *)
+Lemma dfs1_entry_close :
+  forall (g: AdjGraph) (radj_col_l radj_row_l vis1_l fin_l: list Z) (u timer_v: Z)
+         (X: unit -> KSt -> Prop),
+    csr_wf1 g radj_col_l radj_row_l vis1_l fin_l ->
+    csr1_faithful g radj_col_l radj_row_l ->
+    (0 <= u < adj_verts g)%Z ->
+    safeExec (pre_dfs1 g radj_col_l radj_row_l vis1_l fin_l timer_v) (dfs_finish g u) X ->
+    safeExec (pre_dfs1 g radj_col_l radj_row_l (replace_Znth u 1 vis1_l) fin_l timer_v)
+             (dfs_finish_from g radj_col_l radj_row_l u (csr_lo u radj_row_l)) X.
+Proof.
+  intros g radj_col_l radj_row_l vis1_l fin_l u timer_v X Hwf Hfaith Hub Hsafe.
+  (* Extract csr_wf1 conjuncts; re-conjoin Hwf for dfs_finish_from_sim. *)
+  destruct Hwf as [Hgv [Hlenrow [Hlenvis [Hlenfin [Hmof [Hlolo [Hhihi [Hneigh [Hlolohi Hmcap]]]]]]]]].
+  assert (Hwf' : csr_wf1 g radj_col_l radj_row_l vis1_l fin_l).
+  { unfold csr_wf1. repeat (split; [ assumption | ]); try assumption. }
+  (* Peel visit1 u prelude; land safeExec over repeat_break B ∅ at σ'. *)
+  pose proof (dfs1_visit_decompose g radj_col_l radj_row_l vis1_l fin_l timer_v u X
+                Hgv Hlenvis Hub Hsafe) as Hdec.
+  destruct Hdec as [σ' [Hpreσ' Hsafeσ']].
+  (* pre_dfs1 conjuncts (Hpreσ' kept intact for the final safeExec wrap). *)
+  pose proof (proj1 Hpreσ') as Hvis.
+  (* Monad-side cardV/timer bounds from the repeat_break safeExec. *)
+  pose proof (dfs_finish_repeat_break_safe_cardV_timer g u σ' X Hgv Hsafeσ') as [HcardV Htimerbd].
+  (* visited1 σ' u: Znth u (replace_Znth u 1 vis1_l) 0 = 1 <> 0 via Znth_replace_eq. *)
+  assert (Huvis : (0 <= u < Zlength vis1_l)%Z) by (rewrite Hlenvis; exact Hub).
+  assert (Hvisu : visited1 σ' u).
+  { apply (proj2 (Hvis u Hub)).
+    rewrite (Znth_replace_eq vis1_l u 1 0 Huvis). discriminate. }
+  (* Apply dfs_finish_from_sim at the entry cursor (i = csr_lo u, e_set = ∅, σ'). *)
+  set (lo := csr_lo u radj_row_l) in *.
+  set (hi := csr_hi u radj_row_l) in *.
+  assert (Hlo_eq : csr_lo u radj_row_l = lo) by reflexivity.
+  assert (Hhi_eq : csr_hi u radj_row_l = hi) by reflexivity.
+  assert (Hloi : (lo <= lo)%Z) by lia.
+  assert (Hlohi : (0 <= hi - lo)%Z).
+  { pose proof (Hlolohi u Hub) as Hlh. unfold lo, hi in *. lia. }
+  set (n := Z.to_nat (hi - lo)).
+  assert (Hfuel : Z.to_nat (hi - lo) = n) by reflexivity.
+  (* Invariants at entry (i = lo, e_set = ∅): A vacuous (empty set),
+     B vacuous (empty range lo<=k<lo), E trivial (~ empty-set membership). *)
+  assert (HA : forall (e: Z * Z), (fun _ => False) e ->
+                exists k, (lo <= k < lo)%Z /\ e = (Znth k radj_col_l 0, u)).
+  { intros e Hf. exfalso. exact Hf. }
+  assert (HB : forall k, (lo <= k < lo)%Z -> ~ (fun _ => False) (Znth k radj_col_l 0, u) ->
+                 visited1 σ' (Znth k radj_col_l 0)).
+  { intros k [Hk1 Hk2] _. lia. }
+  assert (HE : forall j, (lo <= j < hi)%Z -> ~ visited1 σ' (Znth j radj_col_l 0) ->
+                 ~ (fun _ => False) (Znth j radj_col_l 0, u)).
+  { intros j Hj Hnv Hf. exact Hf. }
+  (* Apply the cursor-vs-repeat_break simulation. *)
+  assert (Hsafe_ih : safe σ' (dfs_finish_from g radj_col_l radj_row_l u lo) X).
+  { eapply dfs_finish_from_sim;
+      [ exact Hlo_eq | exact Hhi_eq | exact Hwf' | exact Hfaith | exact Hub |
+        exact Hfuel | exact Hloi | exact HA | exact HB | exact HE |
+        exact Hvisu | exact HcardV | exact Htimerbd | exact Hsafeσ' ]. }
+  (* Wrap back to safeExec at σ'. *)
+  exists σ'. split; [ exact Hpreσ' | exact Hsafe_ih ].
+Qed.

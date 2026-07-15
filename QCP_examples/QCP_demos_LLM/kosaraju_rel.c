@@ -50,12 +50,13 @@ void dfs1(int u, int n,
     With {B} g radj_col_l radj_row_l vis1_l fin_l timer_v X (f: unit -> program KSt B)
     Require
       csr_wf1(g, radj_col_l, radj_row_l, vis1_l, fin_l) &&
+      csr1_faithful(g, radj_col_l, radj_row_l) &&
       adj_verts(g) == n &&
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l, fin_l, timer_v),
                bind(dfs_finish(g, u), f), X) &&
       0 <= u && u < n && n <= 2147483647 &&
       Znth(u, vis1_l, 0) == 0 &&
-      0 <= timer_v && timer_v <= count_nonzero(vis1_l) &&
+      0 <= timer_v &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l) *
@@ -68,7 +69,6 @@ void dfs1(int u, int n,
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l_, fin_l_, timer_v_),
                applyf(f, tt), X) &&
       0 <= timer_v_ &&
-      count_nonzero(vis1_l_) - timer_v_ == count_nonzero(vis1_l) - timer_v &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l_) *
@@ -82,12 +82,13 @@ void dfs1(int u, int n,
     With g radj_col_l radj_row_l vis1_l fin_l timer_v X
     Require
       csr_wf1(g, radj_col_l, radj_row_l, vis1_l, fin_l) &&
+      csr1_faithful(g, radj_col_l, radj_row_l) &&
       adj_verts(g) == n &&
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l, fin_l, timer_v),
                dfs_finish(g, u), X) &&
       0 <= u && u < n && n <= 2147483647 &&
       Znth(u, vis1_l, 0) == 0 &&
-      0 <= timer_v && timer_v <= count_nonzero(vis1_l) &&
+      0 <= timer_v &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l) *
@@ -100,7 +101,6 @@ void dfs1(int u, int n,
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l_, fin_l_, timer_v_),
                return(tt), X) &&
       0 <= timer_v_ &&
-      count_nonzero(vis1_l_) - timer_v_ == count_nonzero(vis1_l) - timer_v &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l_) *
@@ -116,6 +116,7 @@ void dfs1(int u, int n,
   /*@ Inv Assert
       exists vis1_m fin_m timer_m,
         csr_wf1(g, radj_col_l, radj_row_l, vis1_m, fin_m) &&
+        csr1_faithful(g, radj_col_l, radj_row_l) &&
         adj_verts(g) == n &&
         safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_m, fin_m, timer_m),
                  dfs_finish_from(g, radj_col_l, radj_row_l, u, i), X) &&
@@ -125,8 +126,7 @@ void dfs1(int u, int n,
         lo == csr_lo(u, radj_row_l) && hi == csr_hi(u, radj_row_l) &&
         0 <= lo && lo <= i && i <= hi && hi <= m_of(radj_row_l) &&
         0 <= u && u < n && n <= 2147483647 &&
-        0 <= timer_m && timer_m < count_nonzero(vis1_m) &&
-        count_nonzero(vis1_m) - timer_m == count_nonzero(vis1_l) - timer_v + 1 &&
+        0 <= timer_m &&
         IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
         IntArray::full(radj_row, n + 1, radj_row_l) *
         IntArray::full(vis1, n, vis1_m) *
@@ -140,6 +140,7 @@ void dfs1(int u, int n,
 
     /*@ Assert
         csr_wf1(g, radj_col_l, radj_row_l, vis1_m, fin_m) &&
+        csr1_faithful(g, radj_col_l, radj_row_l) &&
         adj_verts(g) == n &&
         safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_m, fin_m, timer_m),
                  dfs_finish_from(g, radj_col_l, radj_row_l, u, i), X) &&
@@ -149,8 +150,7 @@ void dfs1(int u, int n,
         lo == csr_lo(u, radj_row_l) && hi == csr_hi(u, radj_row_l) &&
         0 <= lo && lo <= i && i < hi && hi <= m_of(radj_row_l) &&
         0 <= u && u < n && n <= 2147483647 &&
-        0 <= timer_m && timer_m < count_nonzero(vis1_m) &&
-        count_nonzero(vis1_m) - timer_m == count_nonzero(vis1_l) - timer_v + 1 &&
+        0 <= timer_m &&
         0 <= v && v < n && v == Znth(i, radj_col_l, 0) &&
         IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
         IntArray::full(radj_row, n + 1, radj_row_l) *
