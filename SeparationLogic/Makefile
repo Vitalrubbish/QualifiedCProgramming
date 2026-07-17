@@ -219,6 +219,7 @@ LLM_FRIENDLY_CASES_Lib_FILES = \
 	poly_sll_lib.v sll_lib.v sll_insert_sort_lib.v functional_queue_lib.v dll_queue_lib.v sll_queue_lib.v simple_arith/Apos_lib.v simple_arith/PDiv_lib.v bst_lib.v bst_fp_lib.v swap_lib.v eval_lib.v avl_shape.v sll_shape_lib.v dll_shape_lib.v \
 	sll_merge_rel_lib.v kmp_lib.v kmp_rel_lib.v int_array_merge_rel_lib.v kosaraju_rel_lib.v \
 	majorityElement_lib.v sortArray_lib.v zephyr_slist_lib.v union_find_err_rel_lib.v \
+	twosat_lib.v
 
 LLM_BENCH_Lib_FILES = \
 	Algorithms/coin_change/coin_change_lib.v \
@@ -275,7 +276,7 @@ LLM_FRIENDLY_CASES_EXAMPLE_FILE_NAME = \
 	poly_sll sll sll_insert_sort functional_queue dll_queue sll_queue simple_arith/abs simple_arith/add simple_arith/max3 simple_arith/gcd simple_arith/Always_pos simple_arith/div_test simple_arith/exgcd \
 	sum bst_insert bst_insert_rec bst_fp_insert bst_fp_delete swap eval bst_delete_rec bst_delete_rec2 avl_insert sll_auto dll_auto array_auto chars \
 	kmp_rel int_array_merge_rel sll_merge_rel sll_split_while majorityElement sortArray sortArray2 sortArray3 array_cases union_find_err_rel kosaraju_rel \
-	two_d_int_array two_d_int_ptr_array two_d_char_ptr_array
+	two_d_int_array two_d_int_ptr_array two_d_char_ptr_array twosat
 
 LLM_BENCH_EXAMPLE_FILE_NAME = \
 	Algorithms/coin_change/coin_change \
