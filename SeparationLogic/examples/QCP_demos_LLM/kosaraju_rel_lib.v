@@ -67,7 +67,8 @@ Definition adj_step_aux (g : AdjGraph) (e : Z * Z) (x y : Z) : Prop :=
   adj_vvalid g y /\
   In y (nth (Z.to_nat x) (adj_fwd g) nil).
 
-(* gvalid: well-formed adjacency list. *)
+(* gvalid: well-formed adjacency list.  The converse is guarded because
+   Z.to_nat maps negative integers to zero, which is not a graph index. *)
 Definition AdjGraphValid (g : AdjGraph) : Prop :=
   (Zlength (adj_fwd g) = adj_verts g)%Z /\
   (Zlength (adj_rev g) = adj_verts g)%Z /\
@@ -75,7 +76,7 @@ Definition AdjGraphValid (g : AdjGraph) : Prop :=
     forall v, In v (nth (Z.to_nat u) (adj_fwd g) nil) -> (0 <= v < adj_verts g)%Z) /\
   (forall u, (0 <= u < adj_verts g)%Z ->
     forall v, In v (nth (Z.to_nat u) (adj_rev g) nil) -> (0 <= v < adj_verts g)%Z) /\
-  (forall u v,
+  (forall u v, (0 <= u < adj_verts g)%Z -> (0 <= v < adj_verts g)%Z ->
     In v (nth (Z.to_nat u) (adj_fwd g) nil) <->
     In u (nth (Z.to_nat v) (adj_rev g) nil)).
 
@@ -428,6 +429,47 @@ Definition csr_wf2 (g : AdjGraph)
   (forall u, (0 <= u < adj_verts g)%Z ->
      (csr_lo u fadj_row_l <= csr_hi u fadj_row_l)%Z) /\
   (m_of fadj_row_l <= 2147483646)%Z.
+
+(* The immutable forward-CSR part of [csr_wf2].  It deliberately omits
+   vis2/sid: those lists are mutable phase-2 work arrays, while every
+   conjunct below is fixed by the CSR construction before [kosaraju]. *)
+Definition csr_wf2_core (g : AdjGraph)
+  (fadj_col_l fadj_row_l : list Z) : Prop :=
+  AdjGraphValid g /\
+  Zlength fadj_row_l = adj_verts g + 1 /\
+  m_of fadj_row_l = Zlength fadj_col_l /\
+  (forall u, (0 <= u < adj_verts g)%Z ->
+     0 <= csr_lo u fadj_row_l)%Z /\
+  (forall u, (0 <= u < adj_verts g)%Z ->
+     csr_hi u fadj_row_l <= m_of fadj_row_l)%Z /\
+  (forall j, (0 <= j < m_of fadj_row_l)%Z ->
+     (0 <= Znth j fadj_col_l 0 < adj_verts g)%Z) /\
+  (forall u, (0 <= u < adj_verts g)%Z ->
+     (csr_lo u fadj_row_l <= csr_hi u fadj_row_l)%Z) /\
+  (m_of fadj_row_l <= 2147483646)%Z.
+
+Lemma csr_wf2_of_core :
+  forall g fadj_col_l fadj_row_l vis2_l sid_l,
+    csr_wf2_core g fadj_col_l fadj_row_l ->
+    Zlength vis2_l = adj_verts g ->
+    Zlength sid_l = adj_verts g ->
+    csr_wf2 g fadj_col_l fadj_row_l vis2_l sid_l.
+Proof.
+  intros g fadj_col_l fadj_row_l vis2_l sid_l Hcore Hvis Hsid.
+  unfold csr_wf2_core in Hcore.
+  unfold csr_wf2.
+  destruct Hcore as
+    [Hvalid [Hrow [Hm [Hlo [Hhi [Hcol [Horder Hbound]]]]]]].
+  split; [exact Hvalid|].
+  split; [exact Hrow|].
+  split; [exact Hvis|].
+  split; [exact Hsid|].
+  split; [exact Hm|].
+  split; [exact Hlo|].
+  split; [exact Hhi|].
+  split; [exact Hcol|].
+  split; [exact Horder|exact Hbound].
+Qed.
 
 (* pre_dfs2: ONLY the C-program-state <-> monad-state correspondence. *)
 Definition pre_dfs2 (g : AdjGraph)

@@ -19,6 +19,10 @@
     (twosat_processed_complete : Z -> Z -> list Z -> list Z -> list Z -> list Z -> list Z -> list Z -> list Z -> list Z -> Prop)
     (twosat_partial_csr_bridge : Z -> Z -> Z -> list Z -> list Z -> list Z -> list Z -> list Z -> list Z -> Prop)
     (twosat_kosaraju_graph : Z -> Z -> list Z -> list Z -> list Z -> list Z -> list Z -> list Z -> Prop)
+    (twosat_clause_input_wf : Z -> Z -> list Z -> list Z -> Prop)
+    (sid_matches_twosat_r13 : list Z -> Z -> Z -> list Z -> list Z -> Prop)
+    (twosat_conflict_scan_result_r13 : list Z -> Z -> Z -> Prop)
+    (twosat_return_contract_r12 : Z -> Z -> list Z -> list Z -> Z -> Prop)
 */
 
 /* ==================================================================== */
@@ -47,7 +51,7 @@ void free_int_array(int *a)
   ;
 
 int lit_vertex(int a)
-  /*@ Require INT_MIN < a && a != 0 && emp
+  /*@ Require -1073741824 <= a && a <= 1073741824 && a != 0 && emp
       Ensure (a > 0 => __return == 2 * (a - 1)) &&
               (a < 0 => __return == 2 * (-a - 1) + 1) && emp
    */
@@ -57,7 +61,7 @@ int lit_vertex(int a)
 }
 
 int neg_vertex(int a)
-  /*@ Require INT_MIN < a && a != 0 && emp
+  /*@ Require -1073741824 <= a && a <= 1073741824 && a != 0 && emp
       Ensure (a > 0 => __return == 2 * a - 1) &&
               (a < 0 => __return == -2 * a - 2) && emp
    */
@@ -102,7 +106,7 @@ int main(int n, int m, int *lit1, int *lit2)
         (forall (k : Z), (0 <= k && k < m) => Znth(k, lit1_l, 0) != 0 && -n <= Znth(k, lit1_l, 0) && Znth(k, lit1_l, 0) <= n) &&
         (forall (k : Z), (0 <= k && k < m) => Znth(k, lit2_l, 0) != 0 && -n <= Znth(k, lit2_l, 0) && Znth(k, lit2_l, 0) <= n)
       Ensure
-        emp
+        twosat_return_contract_r12(n, m, lit1_l, lit2_l, __return) && emp
    */
 {
     int const verts = 2 * n;
@@ -116,13 +120,7 @@ int main(int n, int m, int *lit1, int *lit2)
     int *fadj_col = malloc_int_array(total_edges);
     int *radj_col = malloc_int_array(total_edges);
 
-    /* ---- DFS phase-1 arrays (reverse graph) ---- */
-    int *vis1 = malloc_int_array(verts);
-    int *fin  = malloc_int_array(verts);
-    int *timer_p = malloc_int_array(1);
-
-    /* ---- DFS phase-2 arrays (forward graph) ---- */
-    int *vis2 = malloc_int_array(verts);
+    /* Kosaraju owns its DFS work arrays; main retains only sid. */
     int *sid  = malloc_int_array(verts);
 
     /* ---- Cursor arrays (copies of row pointers for second pass) ---- */
@@ -130,7 +128,7 @@ int main(int n, int m, int *lit1, int *lit2)
     int *rcur = malloc_int_array(verts + 1);
 
     /*@ Inv Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
+        exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
         0 <= i && i <= verts + 1 &&
         n == n@pre && m == m@pre &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, fadj_l, 0) == 0) &&
@@ -141,24 +139,17 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
     for (int i = 0; i <= verts; i++) { fadj_row[i] = 0; radj_row[i] = 0; }
     /*@ Inv Assert
-        exists v1l v2l fnl sdl fcol_l rcol_l tpl fcl rcl fadj_l radj_l,
+        exists sdl fcol_l rcol_l fcl rcl fadj_l radj_l,
         0 <= i && i <= verts &&
         n == n@pre && m == m@pre &&
         (forall (k : Z), (0 <= k && k < verts + 1) => Znth(k, fadj_l, 0) == 0) &&
         (forall (k : Z), (0 <= k && k < verts + 1) => Znth(k, radj_l, 0) == 0) &&
-        (forall (k : Z), (0 <= k && k < i) => Znth(k, v1l, 0) == 0) &&
-        (forall (k : Z), (0 <= k && k < i) => Znth(k, v2l, 0) == 0) &&
-        (forall (k : Z), (0 <= k && k < i) => Znth(k, fnl, 0) == 0) &&
         (forall (k : Z), (0 <= k && k < i) => Znth(k, sdl, 0) == 0) &&
         IntArray::full(lit1, m, lit1_l) *
         IntArray::full(lit2, m, lit2_l) *
@@ -166,19 +157,15 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
-    for (int i = 0; i < verts; i++) { vis1[i] = 0; vis2[i] = 0; fin[i] = 0; sid[i] = 0; }
+    for (int i = 0; i < verts; i++) { sid[i] = 0; }
 
     /* ---- Count the four CSR entries contributed by each clause ---- */
     /*@ Inv Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
+        exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
         0 <= i && i <= m &&
         n == n@pre && m == m@pre &&
         verts == 2 * n && total_edges == 2 * m &&
@@ -189,16 +176,12 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
     for (int i = 0; i < m; i++) {
-        /*@ Given fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl */
+        /*@ Given fadj_l radj_l fcol_l rcol_l sdl fcl rcl */
         int const a = lit1[i];
         int const b = lit2[i];
         int const na = a > 0 ? 2 * a - 1 : -2 * a - 2;
@@ -220,10 +203,6 @@ int main(int n, int m, int *lit1, int *lit2)
             IntArray::full(radj_row, verts + 1, radj_l) *
             IntArray::full(fadj_col, total_edges, fcol_l) *
             IntArray::full(radj_col, total_edges, rcol_l) *
-            IntArray::full(vis1, verts, v1l) *
-            IntArray::full(fin, verts, fnl) *
-            IntArray::full(timer_p, 1, tpl) *
-            IntArray::full(vis2, verts, v2l) *
             IntArray::full(sid, verts, sdl) *
             IntArray::full(fcur, verts + 1, fcl) *
             IntArray::full(rcur, verts + 1, rcl)
@@ -235,20 +214,18 @@ int main(int n, int m, int *lit1, int *lit2)
     }
 
     /*@ Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
+        exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
         n == n@pre && m == m@pre && verts == 2 * n && total_edges == 2 * m &&
         twosat_degree_prefix(n, m, m, lit1_l, lit2_l, fadj_l, radj_l) &&
         IntArray::full(lit1, m, lit1_l) * IntArray::full(lit2, m, lit2_l) *
         IntArray::full(fadj_row, verts + 1, fadj_l) * IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) * IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) * IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) * IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) * IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
 
     /*@ Inv Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
+        exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
         0 <= i && i <= verts &&
         n == n@pre && m == m@pre &&
         twosat_rows_prefix_step(n, m, i, lit1_l, lit2_l, fadj_l, radj_l) &&
@@ -258,10 +235,6 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
@@ -274,7 +247,7 @@ int main(int n, int m, int *lit1, int *lit2)
 
     /* ---- Copy row pointers into cursors ---- */
     /*@ Inv Assert
-        exists fcl rcl fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl,
+        exists fcl rcl fadj_l radj_l fcol_l rcol_l sdl,
         0 <= i && i <= verts + 1 &&
         n == n@pre && m == m@pre &&
         twosat_rows_prefix_step(n, m, verts, lit1_l, lit2_l, fadj_l, radj_l) &&
@@ -286,10 +259,6 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
@@ -299,7 +268,7 @@ int main(int n, int m, int *lit1, int *lit2)
     /* ---- Process clauses ---- */
 
     /*@ Inv Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
+        exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
         0 <= i && i <= m &&
         n == n@pre && m == m@pre &&
         verts == 2 * n && total_edges == 2 * m &&
@@ -323,16 +292,12 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
     for (int i = 0; i < m; i++) {
-        /*@ Given fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl */
+        /*@ Given fadj_l radj_l fcol_l rcol_l sdl fcl rcl */
         int const a = lit1[i];
         int const b = lit2[i];
         int const na = a > 0 ? 2 * a - 1 : -2 * a - 2;
@@ -381,10 +346,6 @@ int main(int n, int m, int *lit1, int *lit2)
             IntArray::full(radj_row, verts + 1, radj_l) *
             IntArray::full(fadj_col, total_edges, fcol_l) *
             IntArray::full(radj_col, total_edges, rcol_l) *
-            IntArray::full(vis1, verts, v1l) *
-            IntArray::full(fin, verts, fnl) *
-            IntArray::full(timer_p, 1, tpl) *
-            IntArray::full(vis2, verts, v2l) *
             IntArray::full(sid, verts, sdl) *
             IntArray::full(fcur, verts + 1, fcl) *
             IntArray::full(rcur, verts + 1, rcl)
@@ -450,10 +411,6 @@ int main(int n, int m, int *lit1, int *lit2)
             IntArray::full(radj_row, verts + 1, radj_l) *
             IntArray::full(fadj_col, total_edges, fcol_l) *
             IntArray::full(radj_col, total_edges, rcol_l) *
-            IntArray::full(vis1, verts, v1l) *
-            IntArray::full(fin, verts, fnl) *
-            IntArray::full(timer_p, 1, tpl) *
-            IntArray::full(vis2, verts, v2l) *
             IntArray::full(sid, verts, sdl) *
             IntArray::full(fcur, verts + 1, fcl) *
             IntArray::full(rcur, verts + 1, rcl)
@@ -469,7 +426,7 @@ int main(int n, int m, int *lit1, int *lit2)
     }
 
     /*@ Assert
-        exists fadj_l radj_l fcol_l rcol_l v1l fnl tpl v2l sdl fcl rcl,
+        exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
         twosat_processed_complete(n, m, lit1_l, lit2_l, fcol_l, fadj_l, rcol_l, radj_l, fcl, rcl) &&
         twosat_partial_csr_bridge(n, m, m, fcol_l, fadj_l, fcl, rcol_l, radj_l, rcl) &&
         twosat_kosaraju_graph(n, m, lit1_l, lit2_l, fcol_l, fadj_l, rcol_l, radj_l) &&
@@ -480,13 +437,37 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
+    */
+
+    /*@ Assert
+        exists g fcol_l fadj_l sdl,
+        1 <= verts && verts <= 2147483647 &&
+        csr2_faithful(g, fcol_l, fadj_l) &&
+        AdjGraphValid(g) && csr_wf2_core(g, fcol_l, fadj_l) &&
+        adj_verts(g) == verts &&
+        IntArray::full(fadj_col, m_of(fadj_l), fcol_l) *
+        IntArray::full(fadj_row, verts + 1, fadj_l) *
+        IntArray::full(sid, verts, sdl)
+    */
+    /* The high-level driver owns reverse-CSR and DFS temporary state. */
+    kosaraju(verts, fadj_col, fadj_row, sid);
+
+    /*@ Assert
+        exists sdl fadj_l radj_l fcol_l rcol_l fcl rcl,
+        twosat_kosaraju_graph(n, m, lit1_l, lit2_l, fcol_l, fadj_l, rcol_l, radj_l) &&
+        sid_matches_twosat_r13(sdl, n, m, lit1_l, lit2_l) &&
+        twosat_clause_input_wf(n, m, lit1_l, lit2_l) &&
+        verts == 2 * n && total_edges == 2 * m &&
+        IntArray::full(lit1, m, lit1_l) * IntArray::full(lit2, m, lit2_l) *
+        IntArray::full(fadj_row, verts + 1, fadj_l) *
+        IntArray::full(radj_row, verts + 1, radj_l) *
+        IntArray::full(fadj_col, total_edges, fcol_l) *
+        IntArray::full(radj_col, total_edges, rcol_l) *
+        IntArray::full(sid, verts, sdl) *
+        IntArray::full(fcur, verts + 1, fcl) * IntArray::full(rcur, verts + 1, rcl)
     */
 
     /* ================================================================ */
@@ -498,10 +479,12 @@ int main(int n, int m, int *lit1, int *lit2)
     int result = 0;
 
     /*@ Inv Assert
-        exists sdl v2l fadj_l radj_l fcol_l rcol_l v1l fnl tpl fcl rcl,
-        1 <= u && u <= n + 1 && 2 * (u - 1) >= 0 && (result == 0 || result == 1) &&
+        exists sdl fadj_l radj_l fcol_l rcol_l fcl rcl,
+        1 <= u && u <= n + 1 && 0 <= 2 * (u - 1) && (result == 0 || result == 1) &&
         n == n@pre && m == m@pre &&
         twosat_kosaraju_graph(n, m, lit1_l, lit2_l, fcol_l, fadj_l, rcol_l, radj_l) &&
+        sid_matches_twosat_r13(sdl, n, m, lit1_l, lit2_l) &&
+        twosat_clause_input_wf(n, m, lit1_l, lit2_l) &&
         (result == 0 => (forall (v : Z), (1 <= v && v < u) => Znth(2*(v-1), sdl, 0) != Znth(2*(v-1)+1, sdl, 0))) &&
         (result == 1 => (exists (vw : Z), (1 <= vw && vw < u) && Znth(2*(vw-1), sdl, 0) == Znth(2*(vw-1)+1, sdl, 0))) &&
         IntArray::full(lit1, m, lit1_l) *
@@ -510,21 +493,19 @@ int main(int n, int m, int *lit1, int *lit2)
         IntArray::full(radj_row, verts + 1, radj_l) *
         IntArray::full(fadj_col, total_edges, fcol_l) *
         IntArray::full(radj_col, total_edges, rcol_l) *
-        IntArray::full(vis1, verts, v1l) *
-        IntArray::full(fin, verts, fnl) *
-        IntArray::full(timer_p, 1, tpl) *
-        IntArray::full(vis2, verts, v2l) *
         IntArray::full(sid, verts, sdl) *
         IntArray::full(fcur, verts + 1, fcl) *
         IntArray::full(rcur, verts + 1, rcl)
     */
     for (int u = 1; u <= n && result == 0; u++) {
         /*@ Assert
-            exists sdl v2l fadj_l radj_l fcol_l rcol_l v1l fnl tpl fcl rcl,
-            1 <= u && u <= n && 2 * (u - 1) >= 0 && 2 * (u - 1) + 1 < verts &&
+            exists sdl fadj_l radj_l fcol_l rcol_l fcl rcl,
+            1 <= u && u <= n && 0 <= 2 * (u - 1) && 2 * (u - 1) + 1 < verts &&
             (result == 0 || result == 1) &&
             n == n@pre && m == m@pre &&
             twosat_kosaraju_graph(n, m, lit1_l, lit2_l, fcol_l, fadj_l, rcol_l, radj_l) &&
+            sid_matches_twosat_r13(sdl, n, m, lit1_l, lit2_l) &&
+            twosat_clause_input_wf(n, m, lit1_l, lit2_l) &&
             (result == 0 => (forall (v : Z), (1 <= v && v < u) => Znth(2*(v-1), sdl, 0) != Znth(2*(v-1)+1, sdl, 0))) &&
             (result == 1 => (exists (vw : Z), (1 <= vw && vw < u) && Znth(2*(vw-1), sdl, 0) == Znth(2*(vw-1)+1, sdl, 0))) &&
             IntArray::full(lit1, m, lit1_l) *
@@ -533,10 +514,6 @@ int main(int n, int m, int *lit1, int *lit2)
             IntArray::full(radj_row, verts + 1, radj_l) *
             IntArray::full(fadj_col, total_edges, fcol_l) *
             IntArray::full(radj_col, total_edges, rcol_l) *
-            IntArray::full(vis1, verts, v1l) *
-            IntArray::full(fin, verts, fnl) *
-            IntArray::full(timer_p, 1, tpl) *
-            IntArray::full(vis2, verts, v2l) *
             IntArray::full(sid, verts, sdl) *
             IntArray::full(fcur, verts + 1, fcl) *
             IntArray::full(rcur, verts + 1, rcl)
@@ -546,6 +523,18 @@ int main(int n, int m, int *lit1, int *lit2)
         }
     }
 
+    /*@ Assert exists fadj_l radj_l fcol_l rcol_l sdl fcl rcl,
+        twosat_conflict_scan_result_r13(sdl, n, result) &&
+        twosat_clause_input_wf(n, m, lit1_l, lit2_l) &&
+        twosat_return_contract_r12(n, m, lit1_l, lit2_l, result) &&
+        IntArray::full(lit1, m, lit1_l) * IntArray::full(lit2, m, lit2_l) *
+        IntArray::full(fadj_row, verts + 1, fadj_l) *
+        IntArray::full(radj_row, verts + 1, radj_l) *
+        IntArray::full(fadj_col, total_edges, fcol_l) *
+        IntArray::full(radj_col, total_edges, rcol_l) *
+        IntArray::full(sid, verts, sdl) *
+        IntArray::full(fcur, verts + 1, fcl) * IntArray::full(rcur, verts + 1, rcl)
+    */
     /* ---- Free all allocated arrays ---- */
     free_int_array(fadj_row);
     free_int_array(radj_row);
@@ -553,10 +542,6 @@ int main(int n, int m, int *lit1, int *lit2)
     free_int_array(radj_col);
     free_int_array(fcur);
     free_int_array(rcur);
-    free_int_array(vis1);
-    free_int_array(fin);
-    free_int_array(timer_p);
-    free_int_array(vis2);
     free_int_array(sid);
 
     return result;

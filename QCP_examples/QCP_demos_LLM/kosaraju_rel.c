@@ -7,6 +7,7 @@
 /*@ Extern Coq (KSt :: *) (AdjGraph :: *) (unit :: *) */
 /*@ Extern Coq
                (mutually_reachable: AdjGraph -> Z -> Z -> Prop)
+               (fin_values_in_int_range: list Z -> Z -> Prop)
                (order_spec: list Z -> list Z -> Z -> Prop)
                (transpose_spec: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Z -> Prop)
                (dfs1_high_level_post: AdjGraph -> list Z -> list Z -> list Z -> list Z -> list Z -> list Z -> Z -> Z -> Z -> Z -> Prop)
@@ -22,8 +23,11 @@
                (dfs_scc_fromK: AdjGraph -> list Z -> list Z -> Z -> Z -> Z -> unit -> program KSt unit)
                (pre_dfs1: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Z -> KSt -> Prop)
                (pre_dfs2: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Z -> KSt -> Prop)
+               (dfs1_timer_surplus_preserved: list Z -> list Z -> Z -> Z -> Prop)
+               (dfs1_active_timer_surplus: list Z -> list Z -> Z -> Z -> Prop)
                (csr_wf1: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Prop)
                (csr_wf2: AdjGraph -> list Z -> list Z -> list Z -> list Z -> Prop)
+               (csr_wf2_core: AdjGraph -> list Z -> list Z -> Prop)
                (radj_col_particular: AdjGraph -> list Z -> Prop)
                (csr1_faithful: AdjGraph -> list Z -> list Z -> Prop)
                (csr2_faithful: AdjGraph -> list Z -> list Z -> Prop)
@@ -74,9 +78,10 @@ void dfs1(int u, int n,
       csr_wf1(g, radj_col_l, radj_row_l, vis1_l, fin_l) &&
       csr1_faithful(g, radj_col_l, radj_row_l) &&
       adj_verts(g) == n &&
+      fin_values_in_int_range(fin_l, n) &&
       0 <= u && u < n && n <= 2147483647 &&
       Znth(u, vis1_l, 0) == 0 &&
-      0 <= timer_v &&
+      0 <= timer_v && timer_v <= count_nonzero(vis1_l) &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l) *
@@ -103,11 +108,12 @@ void dfs1(int u, int n,
       csr_wf1(g, radj_col_l, radj_row_l, vis1_l, fin_l) &&
       csr1_faithful(g, radj_col_l, radj_row_l) &&
       adj_verts(g) == n &&
+      fin_values_in_int_range(fin_l, n) &&
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l, fin_l, timer_v),
                bind(dfs_finish(g, u), f), X) &&
       0 <= u && u < n && n <= 2147483647 &&
       Znth(u, vis1_l, 0) == 0 &&
-      0 <= timer_v &&
+      0 <= timer_v && timer_v <= count_nonzero(vis1_l) &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l) *
@@ -119,7 +125,11 @@ void dfs1(int u, int n,
       adj_verts(g) == n &&
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l_, fin_l_, timer_v_),
                applyf(f, tt), X) &&
-      0 <= timer_v_ &&
+      0 <= timer_v_ && timer_v_ <= count_nonzero(vis1_l_) &&
+      timer_v <= timer_v_ &&
+      dfs1_timer_surplus_preserved(vis1_l, vis1_l_, timer_v, timer_v_) &&
+      fin_values_in_int_range(fin_l, n) &&
+      fin_values_in_int_range(fin_l_, n) &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l_) *
@@ -135,11 +145,12 @@ void dfs1(int u, int n,
       csr_wf1(g, radj_col_l, radj_row_l, vis1_l, fin_l) &&
       csr1_faithful(g, radj_col_l, radj_row_l) &&
       adj_verts(g) == n &&
+      fin_values_in_int_range(fin_l, n) &&
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l, fin_l, timer_v),
                dfs_finish(g, u), X) &&
       0 <= u && u < n && n <= 2147483647 &&
       Znth(u, vis1_l, 0) == 0 &&
-      0 <= timer_v &&
+      0 <= timer_v && timer_v <= count_nonzero(vis1_l) &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l) *
@@ -151,7 +162,11 @@ void dfs1(int u, int n,
       adj_verts(g) == n &&
       safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_l_, fin_l_, timer_v_),
                return(tt), X) &&
-      0 <= timer_v_ &&
+      0 <= timer_v_ && timer_v_ <= count_nonzero(vis1_l_) &&
+      timer_v <= timer_v_ &&
+      dfs1_timer_surplus_preserved(vis1_l, vis1_l_, timer_v, timer_v_) &&
+      fin_values_in_int_range(fin_l, n) &&
+      fin_values_in_int_range(fin_l_, n) &&
       IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
       IntArray::full(radj_row, n + 1, radj_row_l) *
       IntArray::full(vis1, n, vis1_l_) *
@@ -169,6 +184,8 @@ void dfs1(int u, int n,
         csr_wf1(g, radj_col_l, radj_row_l, vis1_m, fin_m) &&
         csr1_faithful(g, radj_col_l, radj_row_l) &&
         adj_verts(g) == n &&
+        fin_values_in_int_range(fin_l, n) &&
+        fin_values_in_int_range(fin_m, n) &&
         safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_m, fin_m, timer_m),
                  dfs_finish_from(g, radj_col_l, radj_row_l, u, i), X) &&
         u == u@pre && n == n@pre &&
@@ -177,7 +194,10 @@ void dfs1(int u, int n,
         lo == csr_lo(u, radj_row_l) && hi == csr_hi(u, radj_row_l) &&
         0 <= lo && lo <= i && i <= hi && hi <= m_of(radj_row_l) &&
         0 <= u && u < n && n <= 2147483647 &&
-        0 <= timer_m &&
+        0 <= timer_m && timer_m <= count_nonzero(vis1_m) &&
+        timer_v <= timer_m &&
+        timer_m + 1 <= count_nonzero(vis1_m) &&
+        dfs1_active_timer_surplus(vis1_l, vis1_m, timer_v, timer_m) &&
         IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
         IntArray::full(radj_row, n + 1, radj_row_l) *
         IntArray::full(vis1, n, vis1_m) *
@@ -193,6 +213,8 @@ void dfs1(int u, int n,
         csr_wf1(g, radj_col_l, radj_row_l, vis1_m, fin_m) &&
         csr1_faithful(g, radj_col_l, radj_row_l) &&
         adj_verts(g) == n &&
+        fin_values_in_int_range(fin_l, n) &&
+        fin_values_in_int_range(fin_m, n) &&
         safeExec(pre_dfs1(g, radj_col_l, radj_row_l, vis1_m, fin_m, timer_m),
                  dfs_finish_from(g, radj_col_l, radj_row_l, u, i), X) &&
         u == u@pre && n == n@pre &&
@@ -201,7 +223,10 @@ void dfs1(int u, int n,
         lo == csr_lo(u, radj_row_l) && hi == csr_hi(u, radj_row_l) &&
         0 <= lo && lo <= i && i < hi && hi <= m_of(radj_row_l) &&
         0 <= u && u < n && n <= 2147483647 &&
-        0 <= timer_m &&
+        0 <= timer_m && timer_m <= count_nonzero(vis1_m) &&
+        timer_v <= timer_m &&
+        timer_m + 1 <= count_nonzero(vis1_m) &&
+        dfs1_active_timer_surplus(vis1_l, vis1_m, timer_v, timer_m) &&
         0 <= v && v < n && v == Znth(i, radj_col_l, 0) &&
         IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
         IntArray::full(radj_row, n + 1, radj_row_l) *
@@ -472,6 +497,7 @@ void transpose(int n, int m,
   /*@ Inv Assert
       exists rr_m,
         0 <= v && v <= n && 1 <= n && n <= 2147483647 &&
+        store(&m, int, m) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(radj_col, m_of(fadj_row_l), radj_col_l) *
@@ -604,6 +630,7 @@ void sort_by_fin(int *order, int *fin, int n)
     With fin_l order_l
     Require
       1 <= n && n <= 2147483647 &&
+      fin_values_in_int_range(fin_l, n) &&
       IntArray::full(fin, n, fin_l) *
       IntArray::full(order, n, order_l)
     Ensure
@@ -617,6 +644,7 @@ void sort_by_fin(int *order, int *fin, int n)
     With fin_l order_l
     Require
       1 <= n && n <= 2147483647 &&
+      fin_values_in_int_range(fin_l, n) &&
       IntArray::full(fin, n, fin_l) *
       IntArray::full(order, n, order_l)
     Ensure
@@ -630,6 +658,7 @@ void sort_by_fin(int *order, int *fin, int n)
   /*@ Inv Assert
       exists om,
         1 <= n && n <= 2147483647 && 0 <= k && k <= n &&
+        fin_values_in_int_range(fin_l, n) &&
         IntArray::full(fin, n, fin_l) *
         IntArray::full(order, n, om)
   */
@@ -655,6 +684,7 @@ void sort_by_fin(int *order, int *fin, int n)
   /*@ Inv Assert
       exists om wjv fwv,
         1 <= n && n <= 2147483647 && 1 <= i && i <= n &&
+        fin_values_in_int_range(fin_l, n) &&
         store(&wj, wjv) *
         store(&fw, fwv) *
         IntArray::full(fin, n, fin_l) *
@@ -666,6 +696,7 @@ void sort_by_fin(int *order, int *fin, int n)
     /*@ Assert
         exists keyv,
         1 <= n && n <= 2147483647 && 1 <= i && i < n &&
+        fin_values_in_int_range(fin_l, n) &&
         0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
         store(&key, keyv) *
         store(&wj, wjv) *
@@ -678,6 +709,7 @@ void sort_by_fin(int *order, int *fin, int n)
     /*@ Assert
         exists fkeyv,
         1 <= n && n <= 2147483647 && 1 <= i && i < n &&
+        fin_values_in_int_range(fin_l, n) &&
         0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
         0 <= fkeyv && fkeyv <= 2147483647 && fkeyv == Znth(keyv, fin_l, 0) &&
         store(&key, keyv) *
@@ -692,6 +724,7 @@ void sort_by_fin(int *order, int *fin, int n)
     /*@ Assert
         exists jv,
         1 <= n && n <= 2147483647 && 1 <= i && i < n &&
+        fin_values_in_int_range(fin_l, n) &&
         0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
         0 <= fkeyv && fkeyv <= 2147483647 && fkeyv == Znth(keyv, fin_l, 0) &&
         -1 <= jv && jv < i && jv == i - 1 &&
@@ -707,6 +740,7 @@ void sort_by_fin(int *order, int *fin, int n)
     /*@ Inv Assert
         exists om2 wjv2 fwv2,
           1 <= n && n <= 2147483647 && 1 <= i && i < n &&
+          fin_values_in_int_range(fin_l, n) &&
           -1 <= jv && jv < i &&
           0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
           0 <= fkeyv && fkeyv <= 2147483647 && fkeyv == Znth(keyv, fin_l, 0) &&
@@ -724,6 +758,7 @@ void sort_by_fin(int *order, int *fin, int n)
       /*@ Assert
           exists wjv3,
           1 <= n && n <= 2147483647 && 0 <= jv && jv < i &&
+          fin_values_in_int_range(fin_l, n) &&
           0 <= keyv && keyv < n && 0 <= fkeyv && fkeyv <= 2147483647 &&
           0 <= wjv3 && wjv3 < n && wjv3 == Znth(jv, om2, 0) &&
           store(&key, keyv) *
@@ -739,6 +774,7 @@ void sort_by_fin(int *order, int *fin, int n)
       /*@ Assert
           exists fwv3,
           1 <= n && n <= 2147483647 && 0 <= jv && jv < i &&
+          fin_values_in_int_range(fin_l, n) &&
           0 <= keyv && keyv < n && 0 <= fkeyv && fkeyv <= 2147483647 &&
           0 <= wjv3 && wjv3 < n && wjv3 == Znth(jv, om2, 0) &&
           0 <= fwv3 && fwv3 <= 2147483647 && fwv3 == Znth(wjv3, fin_l, 0) &&
@@ -754,6 +790,7 @@ void sort_by_fin(int *order, int *fin, int n)
       if (fw < fkey) {
         /*@ Assert
             1 <= n && n <= 2147483647 && 0 <= jv && jv < i &&
+            fin_values_in_int_range(fin_l, n) &&
             0 <= keyv && keyv < n && 0 <= fkeyv && fkeyv <= 2147483647 &&
             0 <= wjv3 && wjv3 < n && wjv3 == Znth(jv, om2, 0) &&
             0 <= jv + 1 && jv + 1 < n &&
@@ -769,6 +806,7 @@ void sort_by_fin(int *order, int *fin, int n)
         /*@ Assert
             exists om2b,
             1 <= n && n <= 2147483647 && 0 <= jv && jv < i &&
+            fin_values_in_int_range(fin_l, n) &&
             0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
             0 <= fkeyv && fkeyv <= 2147483647 && fkeyv == Znth(keyv, fin_l, 0) &&
             store(&key, keyv) *
@@ -784,6 +822,7 @@ void sort_by_fin(int *order, int *fin, int n)
       } else {
         /*@ Assert
             1 <= n && n <= 2147483647 && 0 <= jv && jv < i &&
+            fin_values_in_int_range(fin_l, n) &&
             0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
             0 <= fkeyv && fkeyv <= 2147483647 && fkeyv == Znth(keyv, fin_l, 0) &&
             store(&key, keyv) *
@@ -800,6 +839,7 @@ void sort_by_fin(int *order, int *fin, int n)
     /*@ Assert
         exists om2 jf wjf fwf,
         1 <= n && n <= 2147483647 && 1 <= i && i < n &&
+        fin_values_in_int_range(fin_l, n) &&
         -1 <= jf && jf < i && 0 <= jf + 1 && jf + 1 < n &&
         0 <= keyv && keyv < n && keyv == Znth(i, om, 0) &&
         0 <= fkeyv && fkeyv <= 2147483647 && fkeyv == Znth(keyv, fin_l, 0) &&
@@ -832,6 +872,7 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
       1 <= n && n <= 2147483647 &&
       csr2_faithful(g, fadj_col_l, fadj_row_l) &&
       AdjGraphValid(g) &&
+      csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
       adj_verts(g) == n &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
       IntArray::full(fadj_row, n + 1, fadj_row_l) *
@@ -863,6 +904,9 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
       exists radj_col_l0 radj_row_l0 pos_l0 vis1_l0 fin_l0 vis2_l0 order_l0,
         n == n@pre && m == m_of(fadj_row_l) &&
         1 <= n && n <= 2147483647 &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -883,6 +927,9 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
         n == n@pre && m == m_of(fadj_row_l) &&
         fadj_col == fadj_col@pre && fadj_row == fadj_row@pre && sid == sid@pre &&
         1 <= n && n <= 2147483647 && 0 <= u && u <= n &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -908,6 +955,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
       exists vis1_zero fin_zero vis2_zero,
         n == n@pre && m == m_of(fadj_row_l) &&
         1 <= n && n <= 2147483647 &&
+        fin_values_in_int_range(fin_zero, n) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -930,6 +981,7 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
       1 <= n && n <= 2147483647 &&
       csr2_faithful(g, fadj_col_l, fadj_row_l) &&
       AdjGraphValid(g) && adj_verts(g) == n &&
+      csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
       IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
       IntArray::full(fadj_row, n + 1, fadj_row_l) *
       IntArray::full(sid, n, sid_l) *
@@ -953,6 +1005,9 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
         transpose_spec(g, fadj_col_l, fadj_row_l, radj_col_l, radj_row_l, n) &&
         n == n@pre && m == m_of(fadj_row_l) &&
         1 <= n && n <= 2147483647 && adj_verts(g) == n &&
+        fin_values_in_int_range(fin_zero, n) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) && AdjGraphValid(g) &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -975,6 +1030,9 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
         n == n@pre && m == m_of(fadj_row_l) &&
         fadj_col == fadj_col@pre && fadj_row == fadj_row@pre && sid == sid@pre &&
         1 <= n && n <= 2147483647 && 0 <= u && u <= n &&
+        fin_values_in_int_range(fin_m, n) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -993,9 +1051,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
           csr_wf1(g, radj_col_l, radj_row_l, vis1_m, fin_m) &&
           csr1_faithful(g, radj_col_l, radj_row_l) &&
           adj_verts(g) == n &&
+          fin_values_in_int_range(fin_m, n) &&
           0 <= u && u < n && n <= 2147483647 &&
           Znth(u, vis1_m, 0) == 0 &&
-          0 <= timer_m &&
+          0 <= timer_m && timer_m <= count_nonzero(vis1_m) &&
           IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
           IntArray::full(radj_row, n + 1, radj_row_l) *
           IntArray::full(vis1, n, vis1_m) *
@@ -1013,6 +1072,9 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
                                     vis1_m, fin_m, vis1_m_, fin_m_,
                                     u, timer_m, timer_m_, n) &&
             adj_verts(g) == n &&
+            fin_values_in_int_range(fin_m_, n) &&
+            csr2_faithful(g, fadj_col_l, fadj_row_l) && AdjGraphValid(g) &&
+            csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
             IntArray::full(radj_col, m_of(radj_row_l), radj_col_l) *
             IntArray::full(radj_row, n + 1, radj_row_l) *
             IntArray::full(vis1, n, vis1_m_) *
@@ -1028,6 +1090,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
   /*@ Assert
       exists vis1_m fin_m timer_m,
         n == n@pre && m == m_of(fadj_row_l) && 1 <= n && n <= 2147483647 &&
+        fin_values_in_int_range(fin_m, n) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -1048,6 +1114,9 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
       exists order_l,
         order_spec(fin_m, order_l, n) &&
         n == n@pre && m == m_of(fadj_row_l) && 1 <= n && n <= 2147483647 &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_l) *
@@ -1069,6 +1138,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
         n == n@pre && m == m_of(fadj_row_l) &&
         fadj_col == fadj_col@pre && fadj_row == fadj_row@pre &&
         1 <= n && n <= 2147483647 && 0 <= k && k <= n &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
+        csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_m) *
@@ -1087,6 +1160,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
     /*@ Assert
         1 <= n && n <= 2147483647 &&
         0 <= root && root < n && root == Znth(k, order_l, 0) &&
+        csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+        AdjGraphValid(g) && adj_verts(g) == n &&
+        csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
+        csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m) &&
         IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
         IntArray::full(fadj_row, n + 1, fadj_row_l) *
         IntArray::full(sid, n, sid_m) *
@@ -1109,6 +1186,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
           1 <= n && n <= 2147483647 &&
           0 <= root && root < n && root == Znth(k, order_l, 0) &&
           Znth(root, vis2_m, 0) == 0 &&
+          csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+          AdjGraphValid(g) && adj_verts(g) == n &&
+          csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
+          csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m, sid_m) &&
           IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
           IntArray::full(fadj_row, n + 1, fadj_row_l) *
           IntArray::full(sid, n, sid_m) *
@@ -1131,6 +1212,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
             1 <= n && n <= 2147483647 &&
             0 <= root && root < n && root == Znth(k, order_l, 0) &&
             Znth(root, vis2_m1, 0) == 1 &&
+            csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+            AdjGraphValid(g) && adj_verts(g) == n &&
+            csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
+            csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m1, sid_m) &&
             IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *
             IntArray::full(fadj_row, n + 1, fadj_row_l) *
             IntArray::full(sid, n, sid_m) *
@@ -1154,7 +1239,8 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
           exists vis2_m1 sid_m1,
             csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m1, sid_m1) &&
             csr2_faithful(g, fadj_col_l, fadj_row_l) &&
-            adj_verts(g) == n &&
+            AdjGraphValid(g) && adj_verts(g) == n &&
+            csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
             1 <= n && n <= 2147483647 &&
             0 <= root && root < n && root == Znth(k, order_l, 0) &&
             Znth(root, vis2_m1, 0) != 0 &&
@@ -1187,7 +1273,10 @@ void kosaraju(int n, int *fadj_col, int *fadj_row, int *sid)
             dfs2_high_level_post(g, fadj_col_l, fadj_row_l,
                                     vis2_m1, sid_m1, vis2_m_, sid_m_,
                                     root, root, n) &&
-            adj_verts(g) == n &&
+            csr_wf2(g, fadj_col_l, fadj_row_l, vis2_m_, sid_m_) &&
+            csr2_faithful(g, fadj_col_l, fadj_row_l) &&
+            AdjGraphValid(g) && adj_verts(g) == n &&
+            csr_wf2_core(g, fadj_col_l, fadj_row_l) &&
             1 <= n && n <= 2147483647 &&
             0 <= root && root < n && root == Znth(k, order_l, 0) &&
             IntArray::full(fadj_col, m_of(fadj_row_l), fadj_col_l) *

@@ -1,14 +1,99 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Lists.List.
+Require Import Coq.Sorting.Permutation.
 Require Import Lia.
+Require Import Algorithms.TwoSAT.TwoSAT.
 From AUXLib Require Import int_auto.
 From SimpleC.SL Require Import Mem SeparationLogic.
 From GraphLib Require Import reachable_basic.
+Require Import RelsDomain.
+From MonadLib.MonadErr Require Import monadesafe_lib.
 Import ListNotations.
 Local Open Scope Z_scope.
 
 From SimpleC.EE.QCP_demos_LLM Require Import kosaraju_rel_lib.
+
+Definition csr_layout
+  (g : AdjGraph) (col_l row_l : list Z) : Prop :=
+  Zlength row_l = adj_verts g + 1 /\
+  m_of row_l = Zlength col_l /\
+  csr_lo 0 row_l = 0 /\
+  (forall u, 0 <= u < adj_verts g ->
+     0 <= csr_lo u row_l /\
+     csr_lo u row_l <= csr_hi u row_l /\
+     csr_hi u row_l <= m_of row_l) /\
+  (forall u, 0 <= u < adj_verts g - 1 ->
+     csr_hi u row_l <= csr_hi (u + 1) row_l) /\
+  (forall j, 0 <= j < m_of row_l ->
+     0 <= Znth j col_l 0 < adj_verts g).
+
+Definition transpose_spec
+  (g : AdjGraph) (fadj_col_l fadj_row_l radj_col_l radj_row_l : list Z)
+  (n : Z) : Prop :=
+  adj_verts g = n /\
+  AdjGraphValid g /\
+  m_of fadj_row_l = m_of radj_row_l /\
+  csr2_faithful g fadj_col_l fadj_row_l /\
+  csr_layout g radj_col_l radj_row_l /\
+  csr1_faithful g radj_col_l radj_row_l.
+
+Definition fin_values_in_int_range (fin_l : list Z) (n : Z) : Prop :=
+  forall v, 0 <= v < n -> 0 <= Znth v fin_l 0 <= INT_MAX.
+
+Definition order_spec (fin_l order_l : list Z) (n : Z) : Prop :=
+  Zlength fin_l = n /\
+  fin_values_in_int_range fin_l n /\
+  Permutation order_l (map Z.of_nat (seq 0 (Z.to_nat n))) /\
+  (forall i j, 0 <= i /\ i < j /\ j < n ->
+     Znth (Znth i order_l 0) fin_l 0 >=
+     Znth (Znth j order_l 0) fin_l 0).
+
+Definition mutually_reachable (g : AdjGraph) (u v : Z) : Prop :=
+  reachable g u v /\ reachable g v u.
+
+Definition dfs1_timer_surplus_preserved
+  (vis1_l vis1_l_ : list Z) (timer_v timer_v_ : Z) : Prop :=
+  forall spare,
+    0 <= spare ->
+    timer_v + spare <= count_nonzero vis1_l ->
+    timer_v_ + spare <= count_nonzero vis1_l_.
+
+Definition dfs1_active_timer_surplus
+  (vis1_l vis1_m : list Z) (timer_v timer_m : Z) : Prop :=
+  forall spare,
+    0 <= spare ->
+    timer_v + spare <= count_nonzero vis1_l ->
+    timer_m + spare + 1 <= count_nonzero vis1_m.
+
+Definition dfs1_high_level_post
+  (g : AdjGraph) (radj_col_l radj_row_l vis1_l fin_l vis1_l_ fin_l_ : list Z)
+  (u timer_v timer_v_ n : Z) : Prop :=
+  adj_verts g = n /\
+  csr_wf1 g radj_col_l radj_row_l vis1_l_ fin_l_ /\
+  csr1_faithful g radj_col_l radj_row_l /\
+  0 <= u < n /\
+  0 <= timer_v <= timer_v_ /\
+  timer_v <= count_nonzero vis1_l /\
+  timer_v_ <= count_nonzero vis1_l_ /\
+  dfs1_timer_surplus_preserved vis1_l vis1_l_ timer_v timer_v_ /\
+  fin_values_in_int_range fin_l n /\
+  fin_values_in_int_range fin_l_ n /\
+  Znth u vis1_l_ 0 <> 0 /\
+  (forall w, 0 <= w < n ->
+     Znth w vis1_l 0 <> 0 -> Znth w vis1_l_ 0 <> 0).
+
+Definition dfs2_high_level_post
+  (g : AdjGraph) (fadj_col_l fadj_row_l vis2_l sid_l vis2_l_ sid_l_ : list Z)
+  (root u n : Z) : Prop :=
+  adj_verts g = n /\
+  csr_wf2 g fadj_col_l fadj_row_l vis2_l_ sid_l_ /\
+  csr2_faithful g fadj_col_l fadj_row_l /\
+  0 <= root < n /\
+  0 <= u < n /\
+  Znth u vis2_l_ 0 <> 0 /\
+  (forall w, 0 <= w < n ->
+     Znth w vis2_l 0 <> 0 -> Znth w vis2_l_ 0 <> 0).
 
 (* ================================================================ *)
 (* 2SAT → Implication Graph: Vertex Encoding (pure Z-level)         *)
@@ -303,10 +388,9 @@ Definition twosat_graph_edges
       exists k, 0 <= k /\ k < m /\
         twosat_clause_forward (Znth k lit1_l 0) (Znth k lit2_l 0) u v.
 
-(* Guarded graph validity for this Z-indexed case.  The shared graph
-   predicate quantifies its converse law over arbitrary integers; that is
-   incompatible with Z.to_nat on negative indices, so this case uses the
-   mathematically relevant valid-vertex restriction explicitly. *)
+(* Guarded graph validity for this Z-indexed case.  It matches the shared
+   valid-vertex graph predicate: Z.to_nat must not expose negative indices
+   as vertex zero. *)
 Definition twosat_adj_graph_valid (g : AdjGraph) : Prop :=
   Zlength (adj_fwd g) = adj_verts g /\
   Zlength (adj_rev g) = adj_verts g /\
@@ -1124,3 +1208,838 @@ Definition no_conflict_by_sid (sid_l : list Z) (n : Z) : Prop :=
 (* requirements of KosarajuGraph) and the csr*_faithful predicates  *)
 (* tie the concrete CSR encoding to the abstract step relation.     *)
 (* ================================================================ *)
+Require Import ListLib.General.Length.
+Import ListNotations.
+
+Lemma twosat_firstn_succ_nth_r13 :
+  forall (A : Type) (k : nat) (l : list A) (d : A),
+    (k < length l)%nat -> firstn (S k) l = firstn k l ++ (nth k l d :: nil).
+Proof.
+  intros A k. induction k as [|k IH]; intros l d H.
+  - destruct l as [|x xs]; [inversion H|reflexivity].
+  - destruct l as [|x xs]; [inversion H|].
+    change (x :: firstn (S k) xs = x :: (firstn k xs ++ (nth k xs d :: nil))).
+    f_equal. apply IH. apply (proj2 (Nat.succ_lt_mono k (length xs))). exact H.
+Qed.
+
+Lemma twosat_filter_length_snoc_r13 :
+  forall (A : Type) (f : A -> bool) (l : list A) (x : A),
+    Zlength (filter f (l ++ (x :: nil))) = Zlength (filter f l) + (if f x then 1 else 0).
+Proof.
+  intros. rewrite filter_app, Zlength_app. simpl.
+  destruct (f x); simpl; rewrite ?Zlength_cons, ?Zlength_nil; simpl; lia.
+Qed.
+
+Lemma twosat_firstn_Zsucc_nth_r13 :
+  forall (A : Type) (i : Z) (l : list A) (d : A),
+    0 <= i -> i < Zlength l ->
+    firstn (Z.to_nat (i + 1)) l = firstn (Z.to_nat i) l ++ (Znth i l d :: nil).
+Proof.
+  intros A i l d Hi Hil. replace (i + 1) with (Z.succ i) by lia.
+  rewrite Z2Nat.inj_succ by lia. apply twosat_firstn_succ_nth_r13.
+  assert (H : (Z.to_nat i < Z.to_nat (Z.of_nat (length l)))%nat).
+  { apply (proj1 (Z2Nat.inj_lt i (Z.of_nat (length l)) ltac:(lia) ltac:(lia))).
+    rewrite Zlength_correct in Hil. exact Hil. }
+  replace (Z.to_nat (Z.of_nat (length l))) with (length l) in H by lia. exact H.
+Qed.
+
+Lemma twosat_fdegree_succ_r13 :
+  forall i lit1_l lit2_l u, 0 <= i -> i < Zlength lit1_l -> i < Zlength lit2_l ->
+    twosat_fdegree (i + 1) lit1_l lit2_l u = twosat_fdegree i lit1_l lit2_l u +
+      (if Z.eqb (neg_vertex (Znth i lit1_l 0)) u then 1 else 0) +
+      (if Z.eqb (neg_vertex (Znth i lit2_l 0)) u then 1 else 0).
+Proof.
+  intros i lit1_l lit2_l u Hi H1 H2. unfold twosat_fdegree.
+  rewrite (twosat_firstn_Zsucc_nth_r13 Z i lit1_l 0 Hi H1).
+  rewrite (twosat_firstn_Zsucc_nth_r13 Z i lit2_l 0 Hi H2).
+  repeat rewrite twosat_filter_length_snoc_r13. lia.
+Qed.
+
+Lemma twosat_rdegree_succ_r13 :
+  forall i lit1_l lit2_l u, 0 <= i -> i < Zlength lit1_l -> i < Zlength lit2_l ->
+    twosat_rdegree (i + 1) lit1_l lit2_l u = twosat_rdegree i lit1_l lit2_l u +
+      (if Z.eqb (lit_to_vertex (Znth i lit2_l 0)) u then 1 else 0) +
+      (if Z.eqb (lit_to_vertex (Znth i lit1_l 0)) u then 1 else 0).
+Proof.
+  intros i lit1_l lit2_l u Hi H1 H2. unfold twosat_rdegree.
+  rewrite (twosat_firstn_Zsucc_nth_r13 Z i lit2_l 0 Hi H2).
+  rewrite (twosat_firstn_Zsucc_nth_r13 Z i lit1_l 0 Hi H1).
+  repeat rewrite twosat_filter_length_snoc_r13. lia.
+Qed.
+
+Lemma twosat_filter_firstn_length_mono_r13 :
+  forall (A : Type) (f : A -> bool) (i j : nat) (l : list A), (i <= j)%nat ->
+    Zlength (filter f (firstn i l)) <= Zlength (filter f (firstn j l)).
+Proof.
+  intros A f i j l Hij. pose proof (firstn_skipn i (firstn j l)) as Hsplit.
+  rewrite firstn_firstn, (min_l i j Hij) in Hsplit.
+  pose proof (f_equal (fun xs : list A => Zlength xs) (f_equal (filter f) Hsplit)) as Hlen.
+  rewrite filter_app, Zlength_app in Hlen.
+  pose proof (Zlength_nonneg (filter f (skipn i (firstn j l)))) as Hnonneg. lia.
+Qed.
+
+Lemma twosat_fdegree_mono_r13 :
+  forall i j lit1_l lit2_l u, 0 <= i -> i <= j -> j <= Zlength lit1_l -> j <= Zlength lit2_l ->
+    twosat_fdegree i lit1_l lit2_l u <= twosat_fdegree j lit1_l lit2_l u.
+Proof.
+  intros i j lit1_l lit2_l u Hi Hij Hj1 Hj2.
+  assert (Hj : 0 <= j) by (pose proof (Zlength_nonneg lit1_l); lia).
+  assert (Hin : (Z.to_nat i <= Z.to_nat j)%nat).
+  { apply (proj1 (Z2Nat.inj_le i j Hi Hj)); exact Hij. }
+  unfold twosat_fdegree.
+  pose proof (twosat_filter_firstn_length_mono_r13 Z (fun a => Z.eqb (neg_vertex a) u)
+    (Z.to_nat i) (Z.to_nat j) lit1_l Hin) as H1.
+  pose proof (twosat_filter_firstn_length_mono_r13 Z (fun b => Z.eqb (neg_vertex b) u)
+    (Z.to_nat i) (Z.to_nat j) lit2_l Hin) as H2. lia.
+Qed.
+
+Lemma twosat_rdegree_mono_r13 :
+  forall i j lit1_l lit2_l u, 0 <= i -> i <= j -> j <= Zlength lit1_l -> j <= Zlength lit2_l ->
+    twosat_rdegree i lit1_l lit2_l u <= twosat_rdegree j lit1_l lit2_l u.
+Proof.
+  intros i j lit1_l lit2_l u Hi Hij Hj1 Hj2.
+  assert (Hj : 0 <= j) by (pose proof (Zlength_nonneg lit1_l); lia).
+  assert (Hin : (Z.to_nat i <= Z.to_nat j)%nat).
+  { apply (proj1 (Z2Nat.inj_le i j Hi Hj)); exact Hij. }
+  unfold twosat_rdegree.
+  pose proof (twosat_filter_firstn_length_mono_r13 Z (fun b => Z.eqb (lit_to_vertex b) u)
+    (Z.to_nat i) (Z.to_nat j) lit2_l Hin) as H1.
+  pose proof (twosat_filter_firstn_length_mono_r13 Z (fun a => Z.eqb (lit_to_vertex a) u)
+    (Z.to_nat i) (Z.to_nat j) lit1_l Hin) as H2. lia.
+Qed.
+
+Lemma twosat_forward_slots_strict_r13 :
+  forall n m i lit1_l lit2_l fadj_l fcur_l a b na nb va vb p r,
+    0 <= i -> i < m -> Zlength lit1_l = m -> Zlength lit2_l = m ->
+    0 <= na < 2 * n -> 0 <= nb < 2 * n ->
+    a = Znth i lit1_l 0 -> b = Znth i lit2_l 0 ->
+    twosat_clause_encoding a b na nb va vb ->
+    (forall u, 0 <= u < 2 * n -> csr_hi u fadj_l = csr_lo u fadj_l + twosat_fdegree m lit1_l lit2_l u) ->
+    (forall u, 0 <= u < 2 * n -> Znth u fcur_l 0 = csr_lo u fadj_l + twosat_fdegree i lit1_l lit2_l u) ->
+    p = Znth na fcur_l 0 -> (na = nb -> r = Znth nb fcur_l 0 + 1) ->
+    (na <> nb -> r = Znth nb fcur_l 0) -> csr_lo na fadj_l <= p -> csr_lo nb fadj_l <= r ->
+    csr_lo na fadj_l <= p < csr_hi na fadj_l /\ csr_lo nb fadj_l <= r < csr_hi nb fadj_l.
+Proof.
+  intros n m i l1 l2 row cur a b na nb va vb p r Hi Him Hl1 Hl2 Hna Hnb Ha Hb Henc Hrows Hocc Hp Hsame Hdiff Hplo Hrlo.
+  destruct Henc as [Ena [Enb [Eva Evb]]].
+  assert (Ea : Z.eqb (neg_vertex (Znth i l1 0)) na = true).
+  { apply Z.eqb_eq. rewrite <- Ha, Ena. reflexivity. }
+  assert (Eb : Z.eqb (neg_vertex (Znth i l2 0)) nb = true).
+  { apply Z.eqb_eq. rewrite <- Hb, Enb. reflexivity. }
+  pose proof (twosat_fdegree_succ_r13 i l1 l2 na Hi ltac:(lia) ltac:(lia)) as Sna.
+  pose proof (twosat_fdegree_succ_r13 i l1 l2 nb Hi ltac:(lia) ltac:(lia)) as Snb.
+  rewrite Ea in Sna. rewrite Eb in Snb.
+  pose proof (twosat_fdegree_mono_r13 (i+1) m l1 l2 na ltac:(lia) ltac:(lia) ltac:(lia) ltac:(lia)) as Mna.
+  pose proof (twosat_fdegree_mono_r13 (i+1) m l1 l2 nb ltac:(lia) ltac:(lia) ltac:(lia) ltac:(lia)) as Mnb.
+  assert (Dna : twosat_fdegree i l1 l2 na + 1 <= twosat_fdegree m l1 l2 na).
+  { destruct (Z.eqb (neg_vertex (Znth i l2 0)) na); simpl in Sna; lia. }
+  assert (Dnb : twosat_fdegree i l1 l2 nb + 1 <= twosat_fdegree m l1 l2 nb).
+  { destruct (Z.eqb (neg_vertex (Znth i l1 0)) nb); simpl in Snb; lia. }
+  split.
+  - split; [exact Hplo|].
+    pose proof (Hocc na Hna) as Opa. pose proof (Hrows na Hna) as Rpa.
+    assert (Pna : p = csr_lo na row + twosat_fdegree i l1 l2 na).
+    { rewrite Hp. exact Opa. }
+    replace (csr_hi na row) with (csr_lo na row + twosat_fdegree m l1 l2 na) by (symmetry; exact Rpa).
+    lia.
+  - split; [exact Hrlo|]. destruct (Z.eq_dec na nb) as [Heq|Heq].
+    + pose proof (Hocc nb Hnb) as Opb. pose proof (Hrows nb Hnb) as Rpb.
+      assert (Rnb : r = csr_lo nb row + twosat_fdegree i l1 l2 nb + 1).
+      { rewrite (Hsame Heq), Opb. lia. }
+      assert (Dnb2 : twosat_fdegree i l1 l2 nb + 2 <= twosat_fdegree m l1 l2 nb).
+      { assert (E : Z.eqb (neg_vertex (Znth i l1 0)) nb = true).
+        { apply Z.eqb_eq. rewrite <- Ha, <- Heq, Ena. reflexivity. }
+        rewrite E in Snb. lia. }
+      replace (csr_hi nb row) with (csr_lo nb row + twosat_fdegree m l1 l2 nb) by (symmetry; exact Rpb).
+      pose proof Dnb2. lia.
+    + pose proof (Hocc nb Hnb) as Opb. pose proof (Hrows nb Hnb) as Rpb.
+      assert (Rnb : r = csr_lo nb row + twosat_fdegree i l1 l2 nb).
+      { rewrite (Hdiff Heq), Opb. exact eq_refl. }
+      replace (csr_hi nb row) with (csr_lo nb row + twosat_fdegree m l1 l2 nb) by (symmetry; exact Rpb).
+      lia.
+Qed.
+
+Lemma twosat_reverse_slots_strict_r13 :
+  forall n m i lit1_l lit2_l radj_l rcur_l a b na nb va vb q s,
+    0 <= i -> i < m -> Zlength lit1_l = m -> Zlength lit2_l = m ->
+    0 <= va < 2 * n -> 0 <= vb < 2 * n ->
+    a = Znth i lit1_l 0 -> b = Znth i lit2_l 0 -> twosat_clause_encoding a b na nb va vb ->
+    (forall u, 0 <= u < 2 * n -> csr_hi u radj_l = csr_lo u radj_l + twosat_rdegree m lit1_l lit2_l u) ->
+    (forall u, 0 <= u < 2 * n -> Znth u rcur_l 0 = csr_lo u radj_l + twosat_rdegree i lit1_l lit2_l u) ->
+    q = Znth vb rcur_l 0 -> (vb = va -> s = Znth va rcur_l 0 + 1) ->
+    (vb <> va -> s = Znth va rcur_l 0) -> csr_lo vb radj_l <= q -> csr_lo va radj_l <= s ->
+    csr_lo vb radj_l <= q < csr_hi vb radj_l /\ csr_lo va radj_l <= s < csr_hi va radj_l.
+Proof.
+  intros n m i l1 l2 row cur a b na nb va vb q s Hi Him Hl1 Hl2 Hva Hvb Ha Hb Henc Hrows Hocc Hq Hsame Hdiff Hqlo Hslo.
+  destruct Henc as [Ena [Enb [Eva Evb]]].
+  assert (Ea : Z.eqb (lit_to_vertex (Znth i l1 0)) va = true).
+  { apply Z.eqb_eq. rewrite <- Ha, Eva. reflexivity. }
+  assert (Eb : Z.eqb (lit_to_vertex (Znth i l2 0)) vb = true).
+  { apply Z.eqb_eq. rewrite <- Hb, Evb. reflexivity. }
+  pose proof (twosat_rdegree_succ_r13 i l1 l2 va Hi ltac:(lia) ltac:(lia)) as SvaSucc.
+  pose proof (twosat_rdegree_succ_r13 i l1 l2 vb Hi ltac:(lia) ltac:(lia)) as SvbSucc.
+  rewrite Ea in SvaSucc. rewrite Eb in SvbSucc.
+  pose proof (twosat_rdegree_mono_r13 (i+1) m l1 l2 va ltac:(lia) ltac:(lia) ltac:(lia) ltac:(lia)) as Mva.
+  pose proof (twosat_rdegree_mono_r13 (i+1) m l1 l2 vb ltac:(lia) ltac:(lia) ltac:(lia) ltac:(lia)) as Mvb.
+  assert (Dva : twosat_rdegree i l1 l2 va + 1 <= twosat_rdegree m l1 l2 va).
+  { destruct (Z.eqb (lit_to_vertex (Znth i l2 0)) va); simpl in SvaSucc; lia. }
+  assert (Dvb : twosat_rdegree i l1 l2 vb + 1 <= twosat_rdegree m l1 l2 vb).
+  { destruct (Z.eqb (lit_to_vertex (Znth i l1 0)) vb); simpl in SvbSucc; lia. }
+  split.
+  - split; [exact Hqlo|].
+    pose proof (Hocc vb Hvb) as Orvb. pose proof (Hrows vb Hvb) as Rrvb.
+    assert (Qvb : q = csr_lo vb row + twosat_rdegree i l1 l2 vb).
+    { rewrite Hq. exact Orvb. }
+    replace (csr_hi vb row) with (csr_lo vb row + twosat_rdegree m l1 l2 vb) by (symmetry; exact Rrvb).
+    lia.
+  - split; [exact Hslo|]. destruct (Z.eq_dec vb va) as [Heq|Heq].
+    + pose proof (Hocc va Hva) as Orva. pose proof (Hrows va Hva) as Rrva.
+      assert (Sva : s = csr_lo va row + twosat_rdegree i l1 l2 va + 1).
+      { rewrite (Hsame Heq), Orva. lia. }
+      assert (Dva2 : twosat_rdegree i l1 l2 va + 2 <= twosat_rdegree m l1 l2 va).
+      { assert (E : Z.eqb (lit_to_vertex (Znth i l2 0)) va = true).
+        { apply Z.eqb_eq. rewrite <- Hb, <- Heq, Evb. reflexivity. }
+        rewrite E in SvaSucc. lia. }
+      replace (csr_hi va row) with (csr_lo va row + twosat_rdegree m l1 l2 va) by (symmetry; exact Rrva).
+      pose proof Dva2. lia.
+    + pose proof (Hocc va Hva) as Orva. pose proof (Hrows va Hva) as Rrva.
+      assert (Sva : s = csr_lo va row + twosat_rdegree i l1 l2 va).
+      { rewrite (Hdiff Heq), Orva. exact eq_refl. }
+      replace (csr_hi va row) with (csr_lo va row + twosat_rdegree m l1 l2 va) by (symmetry; exact Rrva).
+      lia.
+Qed.
+
+Lemma twosat_old_cell_distinct_from_two_writes_r13 :
+  forall n row_l cur_l u j row_q row_s q s,
+    0 <= u < 2 * n -> 0 <= row_q < 2 * n -> 0 <= row_s < 2 * n ->
+    (forall x, 0 <= x < 2 * n -> csr_lo x row_l <= Znth x cur_l 0 /\ Znth x cur_l 0 <= csr_hi x row_l) ->
+    (forall x y, 0 <= x < 2 * n -> 0 <= y < 2 * n -> x < y -> csr_hi x row_l <= csr_lo y row_l) ->
+    q = Znth row_q cur_l 0 -> Znth row_s cur_l 0 <= s ->
+    csr_lo row_q row_l <= q -> q < csr_hi row_q row_l -> csr_lo row_s row_l <= s -> s < csr_hi row_s row_l ->
+    csr_lo u row_l <= j -> j < Znth u cur_l 0 -> j <> q /\ j <> s.
+Proof.
+  intros n row cur u j rq rs q s Hu Hrq Hrs Hb Hcut Hqcur Hscur Hqlo Hqhi Hslo Hshi Hjlo Hjcur.
+  assert (Hjhi : j < csr_hi u row).
+  { pose proof (proj2 (Hb u Hu)) as H. lia. }
+  split.
+  - destruct (Z.eq_dec u rq) as [E|E].
+    + subst u. intro X. subst j. rewrite Hqcur in Hjcur. lia.
+    + destruct (Z.lt_trichotomy u rq) as [L|L].
+      * pose proof (Hcut u rq Hu Hrq L) as C. intro X. subst j. lia.
+      * destruct L as [Eeq|G].
+        { exfalso; apply E; exact Eeq. }
+        pose proof (Hcut rq u Hrq Hu G) as C. intro X. subst j. lia.
+  - destruct (Z.eq_dec u rs) as [E|E].
+    + subst u. intro X. subst j. lia.
+    + destruct (Z.lt_trichotomy u rs) as [L|L].
+      * pose proof (Hcut u rs Hu Hrs L) as C. intro X. subst j. lia.
+      * destruct L as [Eeq|G].
+        { exfalso; apply E; exact Eeq. }
+        pose proof (Hcut rs u Hrs Hu G) as C. intro X. subst j. lia.
+Qed.
+
+
+
+Lemma twosat_replace_two_existential_transport_bounded_r18 :
+  forall (n : Z) (col : list Z) (lo oldcur newcur q s na nb u va vb : Z)
+         (P : Z -> Prop),
+    0 <= lo ->
+    0 <= q < Zlength col -> 0 <= s < Zlength col -> q <> s ->
+    lo <= q -> lo <= s -> q < newcur -> s < newcur ->
+    oldcur <= Zlength col -> newcur <= Zlength col ->
+    (forall j, lo <= j -> j < oldcur -> j <> q /\ j <> s) ->
+    (forall j, lo <= j -> j < oldcur -> j < newcur) ->
+    (forall j, lo <= j -> j < newcur ->
+      j = q \/ j = s \/ j < oldcur) ->
+    (forall j, lo <= j -> j < newcur -> j = q -> u = vb) ->
+    (forall j, lo <= j -> j < newcur -> j = s -> u = va) ->
+    (forall w, 0 <= w < 2 * n ->
+      (P w <->
+        exists j, lo <= j /\ j < oldcur /\ Znth j col 0 = w)) ->
+    forall v, 0 <= v < 2 * n ->
+      (P v \/ (u = vb /\ v = na) \/ (u = va /\ v = nb)) <->
+      exists j, lo <= j /\ j < newcur /\
+        Znth j (replace_Znth s nb (replace_Znth q na col)) 0 = v.
+Proof.
+  intros n col lo oldcur newcur q s na nb u va vb P Hlo Hq Hs Hqs Hqlo Hslo
+    Hqnew Hsnew Holdlen Hnewlen Hdistinct Hkeep Hdecomp Hqsrc Hssrc Hfaith
+    v Hv.
+  assert (Hq' : 0 <= q < Zlength (replace_Znth s nb (replace_Znth q na col))).
+  { rewrite Zlength_replace_Znth. rewrite Zlength_replace_Znth. exact Hq. }
+  assert (Hq_inner : 0 <= q < Zlength (replace_Znth q na col)).
+  { rewrite Zlength_replace_Znth. exact Hq. }
+  assert (Hs' : 0 <= s < Zlength (replace_Znth q na col)).
+  { rewrite Zlength_replace_Znth. exact Hs. }
+  assert (Hqv : Znth q (replace_Znth s nb (replace_Znth q na col)) 0 = na).
+  { rewrite Znth_replace_Znth_Diff.
+    - apply Znth_replace_Znth_Same. exact Hq.
+    - exact Hs'.
+    - exact Hq_inner.
+    - intro E. apply Hqs. symmetry. exact E. }
+  assert (Hsv : Znth s (replace_Znth s nb (replace_Znth q na col)) 0 = nb).
+  { apply Znth_replace_Znth_Same. exact Hs'. }
+  split.
+  - intros [HP|[Hvb|Hva]].
+    + destruct (proj1 (Hfaith v Hv) HP) as [j [Hjlo [Hjhi Hjv]]].
+      destruct (Hdistinct j Hjlo Hjhi) as [Hjq Hjs].
+      assert (Hjidx : 0 <= j < Zlength col) by lia.
+      assert (Hjidx' : 0 <= j < Zlength (replace_Znth q na col)).
+      { rewrite Zlength_replace_Znth. exact Hjidx. }
+      exists j. split; [exact Hjlo|]. split; [apply Hkeep; assumption|].
+      rewrite Znth_replace_Znth_Diff.
+      * rewrite Znth_replace_Znth_Diff.
+        -- exact Hjv.
+        -- exact Hq.
+        -- exact Hjidx.
+        -- intro E. apply Hjq. symmetry. exact E.
+      * exact Hs'.
+      * exact Hjidx'.
+      * intro E. apply Hjs. symmetry. exact E.
+    + exists q. split; [exact Hqlo|]. split; [exact Hqnew|].
+      rewrite Hqv. symmetry. exact (proj2 Hvb).
+    + exists s. split; [exact Hslo|]. split; [exact Hsnew|].
+      rewrite Hsv. symmetry. exact (proj2 Hva).
+  - intros [j [Hjlo [Hjhi Hjv]]].
+    destruct (Hdecomp j Hjlo Hjhi) as [Hjq|[Hjs|Hjold]].
+    + right. left. split.
+      * apply (Hqsrc j Hjlo Hjhi Hjq).
+      * subst j. rewrite Hqv in Hjv. symmetry. exact Hjv.
+    + right. right. split.
+      * apply (Hssrc j Hjlo Hjhi Hjs).
+      * subst j. rewrite Hsv in Hjv. symmetry. exact Hjv.
+    + left. apply (proj2 (Hfaith v Hv)). exists j.
+      split; [exact Hjlo|]. split; [exact Hjold|].
+      assert (Hjidx : 0 <= j < Zlength col) by lia.
+      assert (Hjidx' : 0 <= j < Zlength (replace_Znth q na col)).
+      { rewrite Zlength_replace_Znth. exact Hjidx. }
+      rewrite Znth_replace_Znth_Diff in Hjv.
+      * rewrite Znth_replace_Znth_Diff in Hjv.
+        -- exact Hjv.
+        -- exact Hq.
+        -- exact Hjidx.
+        -- destruct (Hdistinct j Hjlo Hjold) as [Hjq Hjs].
+           intro E. apply Hjq. symmetry. exact E.
+      * exact Hs'.
+      * exact Hjidx'.
+      * destruct (Hdistinct j Hjlo Hjold) as [Hjq Hjs].
+        intro E. apply Hjs. symmetry. exact E.
+Qed.
+
+
+Lemma twosat_prefix_reverse_edge_succ_r19_probe :
+  forall (i : Z) (lit1_l lit2_l : list Z) (a b na nb va vb u v : Z),
+    0 <= i ->
+    a = Znth i lit1_l 0 -> b = Znth i lit2_l 0 ->
+    twosat_clause_encoding a b na nb va vb ->
+    twosat_clause_reverse a b vb na ->
+    twosat_clause_reverse a b va nb ->
+    (twosat_prefix_reverse_edge i lit1_l lit2_l u v \/
+      (u = vb /\ v = na) \/ (u = va /\ v = nb)) <->
+    twosat_prefix_reverse_edge (i + 1) lit1_l lit2_l u v.
+Proof.
+  intros i l1 l2 a b na nb va vb u v Hi Ha Hb Henc Hna Hnb.
+  destruct Henc as [Hna0 [Hnb0 [Hva0 Hvb0]]].
+  split.
+  - intros [Hold|[Hnewa|Hnewb]].
+    + destruct Hold as [k [Hk0 [Hki Hcl]]].
+      exists k. repeat split; try assumption; lia.
+    + destruct Hnewa as [Hu Hv]. subst u. subst v.
+      exists i. split; [lia|]. split; [lia|].
+      rewrite <- Ha, <- Hb. exact Hna.
+    + destruct Hnewb as [Hu Hv]. subst u. subst v.
+      exists i. split; [lia|]. split; [lia|].
+      rewrite <- Ha, <- Hb. exact Hnb.
+  - intros [k [Hk0 [Hkhi Hcl]]].
+    destruct (Z.lt_trichotomy k i) as [Hlt|[Heq|Hgt]].
+    + left. exists k. repeat split; assumption.
+    + subst k. right.
+      rewrite <- Ha, <- Hb in Hcl.
+      unfold twosat_clause_reverse, twosat_clause_forward in Hcl.
+      destruct Hcl as [[Hv Hu]|[Hv Hu]].
+      * left. split.
+        -- exact (eq_trans Hu (eq_sym Hvb0)).
+        -- exact (eq_trans Hv (eq_sym Hna0)).
+      * right. split.
+        -- exact (eq_trans Hu (eq_sym Hva0)).
+        -- exact (eq_trans Hv (eq_sym Hnb0)).
+    + exfalso; lia.
+Qed.
+
+
+(* r13 independent graph/SAT bridge, accepted by annotation quality gate. *)
+(* Pure bridge only: this scratch file does not model a CSR update or DFS. *)
+Definition literal_to_vertex_r8 (l : TwoSAT.literal) : Z :=
+  (fst l - 1) * 2 + if snd l then 0 else 1.
+
+Definition vertex_to_literal_r8 (u : Z) : TwoSAT.literal :=
+  (u / 2 + 1, Z.even u).
+
+Definition twosat_c_literal_r8 (a : Z) : TwoSAT.literal :=
+  (Z.abs a, if Z.ltb 0 a then true else false).
+
+Definition twosat_formula_r8 (m : Z) (lit1_l lit2_l : list Z) : TwoSAT.formula :=
+  map (fun k => (twosat_c_literal_r8 (Znth (Z.of_nat k) lit1_l 0),
+                 twosat_c_literal_r8 (Znth (Z.of_nat k) lit2_l 0)))
+      (seq 0 (Z.to_nat m)).
+
+Lemma literal_to_vertex_range_r8 : forall n l,
+  TwoSAT.valid_literal n l -> 0 <= literal_to_vertex_r8 l < 2 * n.
+Proof.
+  intros n [v b] Hv. unfold TwoSAT.valid_literal in Hv. simpl in Hv.
+  unfold literal_to_vertex_r8. cbn [fst snd]. destruct b; lia.
+Qed.
+
+
+Lemma vertex_to_literal_valid_r8 : forall n u,
+  0 <= u < 2 * n -> TwoSAT.valid_literal n (vertex_to_literal_r8 u).
+Proof.
+  intros n u Hu. unfold vertex_to_literal_r8, TwoSAT.valid_literal. simpl.
+  split.
+  - assert (0 <= u / 2) by (apply Z.div_pos; lia). lia.
+  - assert (u / 2 < n) by (apply Z.div_lt_upper_bound; lia). lia.
+Qed.
+
+Lemma literal_vertex_roundtrip_r8 : forall n l,
+  TwoSAT.valid_literal n l -> vertex_to_literal_r8 (literal_to_vertex_r8 l) = l.
+Proof.
+  intros n [v b] Hv. unfold TwoSAT.valid_literal in Hv. simpl in Hv.
+  unfold vertex_to_literal_r8, literal_to_vertex_r8. cbn [fst snd].
+  destruct b.
+  - assert (Hq : ((v - 1) * 2) / 2 = v - 1).
+    { apply Z.div_mul; lia. }
+    rewrite Z.add_0_r. rewrite Hq. rewrite Z.even_mul, Z.even_2. simpl. f_equal; lia.
+  - assert (Hq : ((v - 1) * 2 + 1) / 2 = v - 1).
+    { symmetry. apply (Z.div_unique ((v - 1) * 2 + 1) 2 (v - 1) 1); [left; split; lia | ring]. }
+    rewrite Hq. replace (Z.even ((v - 1) * 2 + 1)) with false.
+    + f_equal; lia.
+    + rewrite Z.add_comm, Z.mul_comm.
+      rewrite Z.even_add_mul_even with (n := 1) (m := 2) (p := (v - 1)); [reflexivity | exists 1; ring].
+Qed.
+
+Lemma vertex_decode_encode_r8 : forall n u,
+  0 <= u < 2 * n -> literal_to_vertex_r8 (vertex_to_literal_r8 u) = u.
+Proof.
+  intros n u Hu. unfold literal_to_vertex_r8, vertex_to_literal_r8; simpl.
+  destruct (Z.even u) eqn: He.
+  - apply Z.even_spec in He. destruct He as [k Hk]. subst u.
+    rewrite (Z.mul_comm 2 k), Z.div_mul by lia.
+    replace (Z.even (2 * k)) with true by
+      (symmetry; apply Z.even_spec; exists k; lia). lia.
+  - destruct (Z.Even_or_Odd u) as [HE|HO].
+    + pose proof (proj2 (Z.even_spec u) HE) as Ht. rewrite Ht in He. discriminate.
+    + destruct HO as [k Hk]. subst u.
+      assert (Hd : (2 * k + 1) / 2 = k).
+      { symmetry. apply (Z.div_unique (2 * k + 1) 2 k 1); [left; split; lia|lia]. }
+      rewrite Hd. lia.
+Qed.
+
+Lemma twosat_c_literal_valid_r8 : forall n a,
+  1 <= Z.abs a <= n -> TwoSAT.valid_literal n (twosat_c_literal_r8 a).
+Proof. intros; unfold twosat_c_literal_r8, TwoSAT.valid_literal; simpl; exact H. Qed.
+
+(* This is the compile-gated r5 formula-validity proof, copied unchanged
+   modulo the r8 names. *)
+Lemma twosat_formula_valid_r8 : forall n m lit1_l lit2_l,
+  twosat_clause_input_wf n m lit1_l lit2_l ->
+  TwoSAT.valid_formula n (twosat_formula_r8 m lit1_l lit2_l).
+Proof.
+  intros n m l1 l2 Hw c Hin. unfold twosat_formula_r8 in Hin.
+  apply in_map_iff in Hin. destruct Hin as [k [Hc Hk]]. subst c.
+  apply in_seq in Hk. destruct Hw as [_ [_ [Hl1 [Hl2 Hrange]]]].
+  split; apply twosat_c_literal_valid_r8.
+  - apply Hrange. split.
+    + lia.
+    + apply (proj2 (Z2Nat.inj_lt (Z.of_nat k) m ltac:(lia) ltac:(lia))).
+      rewrite Nat2Z.id. exact (proj2 Hk).
+  - apply Hrange. split.
+    + lia.
+    + apply (proj2 (Z2Nat.inj_lt (Z.of_nat k) m ltac:(lia) ltac:(lia))).
+      rewrite Nat2Z.id. exact (proj2 Hk).
+Qed.
+
+Lemma decode_c_literal_r8 : forall a,
+  a <> 0 -> vertex_to_literal_r8 (lit_to_vertex a) =
+    (Z.abs a, Z.geb a 0).
+Proof.
+  intros a Ha. unfold vertex_to_literal_r8, lit_to_vertex.
+  destruct (Z.ltb a 0) eqn:Hlt.
+  - apply Z.ltb_lt in Hlt. rewrite Z.abs_neq by lia.
+    assert (Hd : (2 * (- a - 1) + 1) / 2 = -a - 1).
+    { symmetry. apply (Z.div_unique (2 * (-a-1)+1) 2 (-a-1) 1); [left; split; lia|lia]. }
+    rewrite Hd. replace (Z.even (2 * (-a-1)+1)) with false.
+    + destruct (Z.geb a 0) eqn:Hg; [apply Z.geb_le in Hg; lia|f_equal; lia].
+    + symmetry. apply Z.even_odd.
+  - apply Z.ltb_ge in Hlt. rewrite Z.abs_eq by lia.
+    assert (Hd : (2 * (a - 1)) / 2 = a - 1).
+    { symmetry. apply (Z.div_unique (2 * (a-1)) 2 (a-1) 0); [left; split; lia|lia]. }
+    rewrite Z.add_0_r. rewrite Hd. replace (Z.even (2 * (a-1))) with true.
+    + destruct (Z.geb a 0) eqn:Hg; [f_equal; lia|
+        assert (Ht : Z.geb a 0 = true) by (apply Z.geb_le; lia); rewrite Ht in Hg; discriminate].
+    + symmetry. apply Z.even_spec. exists (a-1). lia.
+Qed.
+
+Lemma decode_c_neg_literal_r8 : forall a,
+  a <> 0 -> vertex_to_literal_r8 (neg_vertex a) =
+    TwoSAT.negate (Z.abs a, Z.geb a 0).
+Proof.
+  intros a Ha. unfold neg_vertex. rewrite decode_c_literal_r8 by lia.
+  rewrite Z.abs_opp. unfold TwoSAT.negate; simpl.
+  destruct (Z.geb a 0) eqn:Hg; destruct (Z.geb (-a) 0) eqn:Hg'; try reflexivity.
+  - apply Z.geb_le in Hg. apply Z.geb_le in Hg'. lia.
+  - assert (Ht : Z.geb a 0 = true) by (apply Z.geb_le; lia); rewrite Ht in Hg; discriminate.
+Qed.
+
+Lemma c_literal_encode_r8 : forall a,
+  a <> 0 -> literal_to_vertex_r8 (Z.abs a, Z.geb a 0) = lit_to_vertex a.
+Proof.
+  intros a Ha. unfold literal_to_vertex_r8, lit_to_vertex.
+  destruct (Z.ltb a 0) eqn:Hlt.
+  - apply Z.ltb_lt in Hlt. rewrite Z.abs_neq by lia.
+    destruct (Z.geb a 0) eqn:Hg; [apply Z.geb_le in Hg; lia|
+      change ((-a - 1) * 2 + 1 = 2 * (-a - 1) + 1); ring].
+  - apply Z.ltb_ge in Hlt. rewrite Z.abs_eq by lia.
+    destruct (Z.geb a 0) eqn:Hg; [
+      change ((a - 1) * 2 + 0 = 2 * (a - 1) + 0); ring|
+      assert (Ht : Z.geb a 0 = true) by (apply Z.geb_le; lia); rewrite Ht in Hg; discriminate].
+Qed.
+
+Lemma c_neg_literal_encode_r8 : forall a,
+  a <> 0 -> literal_to_vertex_r8 (TwoSAT.negate (Z.abs a, Z.geb a 0)) = neg_vertex a.
+Proof.
+  intros a Ha. unfold neg_vertex, literal_to_vertex_r8, lit_to_vertex, TwoSAT.negate; simpl.
+  destruct (Z.ltb a 0) eqn:Hlt.
+  - apply Z.ltb_lt in Hlt. rewrite Z.abs_neq by lia.
+    destruct (Z.geb a 0) eqn:Hg; [apply Z.geb_le in Hg; lia|].
+    rewrite Z.abs_opp. assert (Ho : Z.ltb (-a) 0 = false) by (apply Z.ltb_ge; lia).
+    rewrite Ho. rewrite Z.abs_neq by lia. cbn.
+    change ((-a - 1) * 2 + 0 = 2 * (-a - 1) + 0); ring.
+  - apply Z.ltb_ge in Hlt. rewrite Z.abs_eq by lia.
+    destruct (Z.geb a 0) eqn:Hg; [|assert (Ht : Z.geb a 0 = true) by (apply Z.geb_le; lia); rewrite Ht in Hg; discriminate].
+    rewrite Z.abs_opp. assert (Ho : Z.ltb (-a) 0 = true) by (apply Z.ltb_lt; lia).
+    rewrite Ho. rewrite Z.abs_eq by lia. cbn.
+    change ((a - 1) * 2 + 1 = 2 * (a - 1) + 1); ring.
+Qed.
+
+Lemma twosat_c_literal_normalize_r8 : forall a,
+  a <> 0 -> twosat_c_literal_r8 a = (Z.abs a, Z.geb a 0).
+Proof.
+  intros a Ha. unfold twosat_c_literal_r8.
+  destruct (Z.ltb 0 a) eqn: Hp; destruct (Z.geb a 0) eqn: Hg; try reflexivity.
+  - apply Z.ltb_lt in Hp.
+    assert (Ht : Z.geb a 0 = true) by (apply Z.geb_le; lia).
+    rewrite Ht in Hg; discriminate.
+  - apply Z.ltb_ge in Hp. apply Z.geb_le in Hg. lia.
+Qed.
+
+Lemma twosat_formula_clause_in_r8 : forall m lit1_l lit2_l (k : Z),
+  0 <= k < m ->
+  In (twosat_c_literal_r8 (Znth k lit1_l 0),
+      twosat_c_literal_r8 (Znth k lit2_l 0))
+     (twosat_formula_r8 m lit1_l lit2_l).
+Proof.
+  intros m l1 l2 k Hk. unfold twosat_formula_r8.
+  apply in_map_iff. exists (Z.to_nat k). split.
+  - rewrite Z2Nat.id by lia. reflexivity.
+  - apply in_seq. split; [lia|].
+    apply (proj1 (Z2Nat.inj_lt k m ltac:(lia) ltac:(lia))). exact (proj2 Hk).
+Qed.
+
+Lemma twosat_formula_length_r8 : forall m lit1_l lit2_l,
+  0 <= m -> Zlength (twosat_formula_r8 m lit1_l lit2_l) = m.
+Proof.
+  intros. unfold twosat_formula_r8. rewrite Zlength_correct, length_map, length_seq, Z2Nat.id by lia. reflexivity.
+Qed.
+
+(* The central one-step representation equivalence.  The reverse direction
+   opens the DiGraph edge identifier and recovers its source formula clause;
+   it is not an appeal to an SCC or SAT theorem. *)
+Lemma twosat_canonical_step_iff_implication_r8 : forall n m lit1_l lit2_l u v
+  (Hw : twosat_clause_input_wf n m lit1_l lit2_l),
+  0 <= u < 2 * n -> 0 <= v < 2 * n ->
+  @step AdjGraph Z (Z * Z) AdjGraph_graph
+      (twosat_canonical_graph n m lit1_l lit2_l) u v <->
+  step (TwoSAT.implication_graph (twosat_formula_r8 m lit1_l lit2_l) n
+          (twosat_formula_valid_r8 n m lit1_l lit2_l Hw))
+       (vertex_to_literal_r8 u) (vertex_to_literal_r8 v).
+Proof.
+  intros n m l1 l2 u v Hw Hu Hv.
+  destruct Hw as [Hn [Hm [Hl1 [Hl2 Hlit]]]].
+  assert (Hw' : twosat_clause_input_wf n m l1 l2).
+  { exact (conj Hn (conj Hm (conj Hl1 (conj Hl2 Hlit)))). }
+  split.
+  - intro Hstep.
+    apply (proj1 (twosat_step_canonical_forward n m l1 l2 u v Hw' Hu Hv)) in Hstep.
+    apply (proj1 (twosat_forward_row_membership n m l1 l2 u v Hw')) in Hstep.
+    destruct Hstep as [k [Hk0 [Hkm Hedge]]].
+    assert (Ha : Znth k l1 0 <> 0).
+    { intro E. pose proof (Hlit k (conj Hk0 Hkm)) as R. rewrite E in R. simpl in R. lia. }
+    assert (Hb : Znth k l2 0 <> 0).
+    { intro E. pose proof (Hlit k (conj Hk0 Hkm)) as R. rewrite E in R. simpl in R. lia. }
+    assert (Hcl : In (twosat_c_literal_r8 (Znth k l1 0), twosat_c_literal_r8 (Znth k l2 0))
+      (twosat_formula_r8 m l1 l2)).
+    { apply twosat_formula_clause_in_r8; lia. }
+    pose proof (TwoSAT.step_implication (twosat_formula_r8 m l1 l2) n
+      (twosat_formula_valid_r8 n m l1 l2 (conj Hn (conj Hm (conj Hl1 (conj Hl2 Hlit)))))
+      (twosat_c_literal_r8 (Znth k l1 0), twosat_c_literal_r8 (Znth k l2 0)) Hcl) as Himp.
+    destruct Hedge as [[Eu Ev]|[Eu Ev]]; subst u; subst v.
+    + rewrite decode_c_neg_literal_r8 by exact Ha.
+      rewrite decode_c_literal_r8 by exact Hb.
+      rewrite !twosat_c_literal_normalize_r8 in Himp by assumption.
+      exact (proj1 Himp).
+    + rewrite decode_c_neg_literal_r8 by exact Hb.
+      rewrite decode_c_literal_r8 by exact Ha.
+      rewrite !twosat_c_literal_normalize_r8 in Himp by assumption.
+      exact (proj2 Himp).
+  - intro Hstep.
+    destruct Hstep as [e [He Hsrc Hdst Hfst Hsnd]].
+    unfold TwoSAT.implication_graph in He, Hfst, Hsnd; simpl in He, Hfst, Hsnd.
+    assert (Hflen : Zlength (twosat_formula_r8 m l1 l2) = m).
+    { apply twosat_formula_length_r8; lia. }
+    assert (He' : 0 <= e < 2 * m).
+    { rewrite <- Hflen; exact He. }
+    assert (Hk : 0 <= e / 2 < Zlength (twosat_formula_r8 m l1 l2)).
+    { rewrite Hflen. split; [apply Z.div_pos; lia|apply Z.div_lt_upper_bound; lia]. }
+    assert (Hin : In (TwoSAT.nth_clause (twosat_formula_r8 m l1 l2) (e / 2))
+      (twosat_formula_r8 m l1 l2)).
+    { apply TwoSAT.nth_clause_in; exact Hk. }
+    unfold twosat_formula_r8 in Hin.
+    apply in_map_iff in Hin. destruct Hin as [j [Hcl Hj]].
+    apply in_seq in Hj.
+    assert (Hj0 : 0 <= Z.of_nat j < m).
+    { split; [lia|]. apply (proj2 (Z2Nat.inj_lt (Z.of_nat j) m ltac:(lia) ltac:(lia))).
+      rewrite Nat2Z.id. exact (proj2 Hj). }
+    assert (Ha : Znth (Z.of_nat j) l1 0 <> 0).
+    { intro E. pose proof (Hlit (Z.of_nat j) Hj0) as R. rewrite E in R. simpl in R. lia. }
+    assert (Hb : Znth (Z.of_nat j) l2 0 <> 0).
+    { intro E. pose proof (Hlit (Z.of_nat j) Hj0) as R. rewrite E in R. simpl in R. lia. }
+    apply (proj2 (twosat_step_canonical_forward n m l1 l2 u v Hw' Hu Hv)).
+    apply (proj2 (twosat_forward_row_membership n m l1 l2 u v Hw')).
+    exists (Z.of_nat j). split; [exact (proj1 Hj0)|].
+    split; [exact (proj2 Hj0)|].
+    unfold twosat_clause_forward.
+    change
+      ((if Z.even e then TwoSAT.negate (fst (TwoSAT.nth_clause (twosat_formula_r8 m l1 l2) (e / 2)))
+        else TwoSAT.negate (snd (TwoSAT.nth_clause (twosat_formula_r8 m l1 l2) (e / 2)))) =
+       vertex_to_literal_r8 u) in Hfst.
+    change
+      ((if Z.even e then snd (TwoSAT.nth_clause (twosat_formula_r8 m l1 l2) (e / 2))
+        else fst (TwoSAT.nth_clause (twosat_formula_r8 m l1 l2) (e / 2))) =
+       vertex_to_literal_r8 v) in Hsnd.
+    unfold twosat_formula_r8 in Hfst, Hsnd.
+    rewrite <- Hcl in Hfst, Hsnd.
+    destruct (Z.even e) eqn: Heven.
+    + left. split.
+      * rewrite <- (vertex_decode_encode_r8 n u Hu).
+        rewrite <- Hfst. cbn. rewrite twosat_c_literal_normalize_r8 by exact Ha.
+        apply c_neg_literal_encode_r8; exact Ha.
+      * rewrite <- (vertex_decode_encode_r8 n v Hv).
+        rewrite <- Hsnd. cbn. rewrite twosat_c_literal_normalize_r8 by exact Hb.
+        apply c_literal_encode_r8; exact Hb.
+    + right. split.
+      * rewrite <- (vertex_decode_encode_r8 n u Hu).
+        rewrite <- Hfst. cbn. rewrite twosat_c_literal_normalize_r8 by exact Hb.
+        apply c_neg_literal_encode_r8; exact Hb.
+      * rewrite <- (vertex_decode_encode_r8 n v Hv).
+        rewrite <- Hsnd. cbn. rewrite twosat_c_literal_normalize_r8 by exact Ha.
+        apply c_literal_encode_r8; exact Ha.
+Qed.
+
+
+(* Fresh r10 nsteps transport experiments follow. *)
+
+Lemma twosat_path_forward_r10 : forall n m l1 l2 u v
+  (Hw : twosat_clause_input_wf n m l1 l2),
+  0 <= u < 2*n -> 0 <= v < 2*n ->
+  reachable (twosat_canonical_graph n m l1 l2) u v ->
+  reachable (TwoSAT.implication_graph (twosat_formula_r8 m l1 l2) n
+    (twosat_formula_valid_r8 n m l1 l2 Hw))
+    (vertex_to_literal_r8 u) (vertex_to_literal_r8 v).
+Proof.
+  intros n m l1 l2 u v Hw Hu Hv H.
+  unfold reachable, clos_refl_trans in H.
+  destruct H as [k H].
+  revert u v Hu Hv H.
+  induction k as [|k IH]; intros u v Hu Hv H.
+  - simpl in H. change (u = v) in H. subst v. reflexivity.
+  - simpl in H. destruct H as [w [Huw Hwv]].
+    destruct Huw as [e [He [Hu' [Hw' Hin]]]].
+    eapply reachable_trans.
+    + apply step_rt.
+      apply (proj1 (twosat_canonical_step_iff_implication_r8 n m l1 l2 u w Hw Hu Hw')).
+      exact (ex_intro (fun e => adj_step_aux (twosat_canonical_graph n m l1 l2) e u w)
+        e (conj He (conj Hu' (conj Hw' Hin)))).
+    + apply IH with (u:=w); assumption.
+Qed.
+
+Lemma twosat_path_backward_r10 : forall n m l1 l2 u v
+  (Hw : twosat_clause_input_wf n m l1 l2),
+  0 <= u < 2*n -> 0 <= v < 2*n ->
+  reachable (TwoSAT.implication_graph (twosat_formula_r8 m l1 l2) n
+    (twosat_formula_valid_r8 n m l1 l2 Hw))
+    (vertex_to_literal_r8 u) (vertex_to_literal_r8 v) ->
+  reachable (twosat_canonical_graph n m l1 l2) u v.
+Proof.
+  intros n m l1 l2 u v Hw Hu Hv H.
+  unfold reachable, clos_refl_trans in H.
+  destruct H as [k H].
+  pose (Hform := twosat_formula_valid_r8 n m l1 l2 Hw).
+  assert (Hdecodeu : TwoSAT.valid_literal n (vertex_to_literal_r8 u)).
+  { apply vertex_to_literal_valid_r8; exact Hu. }
+  assert (Hdecodev : TwoSAT.valid_literal n (vertex_to_literal_r8 v)).
+  { apply vertex_to_literal_valid_r8; exact Hv. }
+  rewrite <- (vertex_decode_encode_r8 n u Hu),
+          <- (vertex_decode_encode_r8 n v Hv).
+  revert Hdecodeu Hdecodev H.
+  generalize (vertex_to_literal_r8 u) as x.
+  generalize (vertex_to_literal_r8 v) as y.
+  induction k as [|k IH]; intros y x Hx Hy Hpath.
+  - simpl in Hpath. change (x = y) in Hpath. subst y. reflexivity.
+  - simpl in Hpath. destruct Hpath as [w [Hxw Hwy]].
+    unfold step in Hxw. destruct Hxw as [e Hxw].
+    change (TwoSAT.dig_step_aux
+      (TwoSAT.implication_graph (twosat_formula_r8 m l1 l2) n Hform) e x w) in Hxw.
+    unfold SetsDomain.Sets.lift1 in Hwy.
+    destruct Hxw as [He Hx' Hw' Hfst Hsnd].
+    change (TwoSAT.valid_literal n x) in Hx'.
+    change (TwoSAT.valid_literal n w) in Hw'.
+    eapply reachable_trans.
+    + apply step_rt.
+      apply (proj2 (twosat_canonical_step_iff_implication_r8 n m l1 l2
+        (literal_to_vertex_r8 x) (literal_to_vertex_r8 w) Hw
+        (literal_to_vertex_range_r8 n x Hx')
+        (literal_to_vertex_range_r8 n w Hw'))).
+      rewrite (literal_vertex_roundtrip_r8 n x Hx'),
+              (literal_vertex_roundtrip_r8 n w Hw').
+      exists e. exact (@DigStepAux TwoSAT.literal Z _ e x w He Hx' Hw' Hfst Hsnd).
+    + apply IH with (x:=w); assumption.
+Qed.
+
+Lemma twosat_mutually_reachable_iff_r10 : forall n m l1 l2 u v
+  (Hw : twosat_clause_input_wf n m l1 l2),
+  0 <= u < 2*n -> 0 <= v < 2*n ->
+  (reachable (twosat_canonical_graph n m l1 l2) u v /\
+   reachable (twosat_canonical_graph n m l1 l2) v u) <->
+  TwoSAT.mutually_reachable (TwoSAT.implication_graph (twosat_formula_r8 m l1 l2) n
+    (twosat_formula_valid_r8 n m l1 l2 Hw))
+    (vertex_to_literal_r8 u) (vertex_to_literal_r8 v).
+Proof.
+  intros n m l1 l2 u v Hw Hu Hv.
+  unfold TwoSAT.mutually_reachable; split; intros [Huv Hvu]; split.
+  - apply twosat_path_forward_r10 with (n:=n) (m:=m) (l1:=l1) (l2:=l2) (Hw:=Hw); assumption.
+  - apply twosat_path_forward_r10 with (n:=n) (m:=m) (l1:=l1) (l2:=l2) (Hw:=Hw); assumption.
+  - apply twosat_path_backward_r10 with (n:=n) (m:=m) (l1:=l1) (l2:=l2) (Hw:=Hw); assumption.
+  - apply twosat_path_backward_r10 with (n:=n) (m:=m) (l1:=l1) (l2:=l2) (Hw:=Hw); assumption.
+Qed.
+Definition sid_matches_graph_r11 (sid_l : list Z) (g : AdjGraph) (n : Z) : Prop :=
+  forall u v, 0 <= u < n -> 0 <= v < n ->
+    (Znth u sid_l 0 = Znth v sid_l 0 <->
+     reachable g u v /\ reachable g v u).
+
+(* C-facing spelling of the high-level Kosaraju postcondition, fixed to
+   the concrete implication graph determined by the input clauses. *)
+Definition sid_matches_twosat_r13 (sid_l : list Z) (n m : Z)
+  (lit1_l lit2_l : list Z) : Prop :=
+  sid_matches_graph_r11 sid_l (twosat_canonical_graph n m lit1_l lit2_l) (2 * n).
+
+Lemma sid_no_conflict_iff_twosat_no_conflict_r11 : forall n m l1 l2 sid_l
+  (Hw : twosat_clause_input_wf n m l1 l2),
+  sid_matches_graph_r11 sid_l (twosat_canonical_graph n m l1 l2) (2*n) ->
+  (no_conflict_by_sid sid_l n <->
+   TwoSAT.no_conflict (TwoSAT.implication_graph (twosat_formula_r8 m l1 l2) n
+     (twosat_formula_valid_r8 n m l1 l2 Hw)) n).
+Proof.
+  intros n m l1 l2 sid_l Hw Hsid.
+  unfold no_conflict_by_sid, TwoSAT.no_conflict.
+  split.
+  - intros Hnc v Hv Hmut.
+    apply (Hnc v Hv).
+    apply (proj2 (Hsid (2*(v-1)) (2*(v-1)+1) ltac:(lia) ltac:(lia))).
+    apply (proj2 (twosat_mutually_reachable_iff_r10 n m l1 l2
+      (2*(v-1)) (2*(v-1)+1) Hw ltac:(lia) ltac:(lia))).
+    assert (HdecT : vertex_to_literal_r8 (2 * (v - 1)) = (v, true)).
+    { replace (2 * (v - 1)) with (literal_to_vertex_r8 (v, true)) by
+        (unfold literal_to_vertex_r8; cbn [fst snd]; ring).
+      apply (literal_vertex_roundtrip_r8 n (v, true)). unfold TwoSAT.valid_literal; simpl; exact Hv. }
+    assert (HdecF : vertex_to_literal_r8 (2 * (v - 1) + 1) = (v, false)).
+    { replace (2 * (v - 1) + 1) with (literal_to_vertex_r8 (v, false)) by
+        (unfold literal_to_vertex_r8; cbn [fst snd]; ring).
+      apply (literal_vertex_roundtrip_r8 n (v, false)). unfold TwoSAT.valid_literal; simpl; exact Hv. }
+    rewrite HdecT, HdecF.
+    exact Hmut.
+(*    unfold vertex_to_literal_r8 in Hmut; simpl in Hmut.
+    assert (Hdiv : (2 * (v - 1)) / 2 + 1 = v) by lia.
+    assert (Hdiv' : (2 * (v - 1) + 1) / 2 + 1 = v) by
+      (symmetry; apply (Z.div_unique (2 * (v - 1) + 1) 2 (v - 1) 1); [left; split; lia|lia]).
+    rewrite Hdiv, Hdiv' in Hmut.
+    replace (Z.even (2 * (v - 1))) with true in Hmut by
+      (symmetry; apply Z.even_spec; exists (v-1); lia).
+    replace (Z.even (2 * (v - 1) + 1)) with false in Hmut by
+      (symmetry; apply Z.even_odd).
+    exact Hmut. *)
+  - intros Hnc v Hv Hsame.
+    apply (Hnc v Hv).
+    assert (Hgraph : reachable (twosat_canonical_graph n m l1 l2) (2*(v-1)) (2*(v-1)+1) /\
+                     reachable (twosat_canonical_graph n m l1 l2) (2*(v-1)+1) (2*(v-1))).
+    { apply (proj1 (Hsid (2*(v-1)) (2*(v-1)+1) ltac:(lia) ltac:(lia))). exact Hsame. }
+    pose proof (proj1 (twosat_mutually_reachable_iff_r10 n m l1 l2
+      (2*(v-1)) (2*(v-1)+1) Hw ltac:(lia) ltac:(lia)) Hgraph) as Htrans.
+    assert (HdecT : vertex_to_literal_r8 (2 * (v - 1)) = (v, true)).
+    { replace (2 * (v - 1)) with (literal_to_vertex_r8 (v, true)) by
+        (unfold literal_to_vertex_r8; cbn [fst snd]; ring).
+      apply (literal_vertex_roundtrip_r8 n (v, true)). unfold TwoSAT.valid_literal; simpl; exact Hv. }
+    assert (HdecF : vertex_to_literal_r8 (2 * (v - 1) + 1) = (v, false)).
+    { replace (2 * (v - 1) + 1) with (literal_to_vertex_r8 (v, false)) by
+        (unfold literal_to_vertex_r8; cbn [fst snd]; ring).
+      apply (literal_vertex_roundtrip_r8 n (v, false)). unfold TwoSAT.valid_literal; simpl; exact Hv. }
+    rewrite HdecT, HdecF in Htrans. exact Htrans.
+Qed.
+
+Lemma sid_no_conflict_iff_satisfiable_r11 : forall n m l1 l2 sid_l,
+  twosat_clause_input_wf n m l1 l2 ->
+  sid_matches_graph_r11 sid_l (twosat_canonical_graph n m l1 l2) (2*n) ->
+  (no_conflict_by_sid sid_l n <-> TwoSAT.satisfiable (twosat_formula_r8 m l1 l2)).
+Proof.
+  intros n m l1 l2 sid_l Hw Hsid.
+  rewrite (sid_no_conflict_iff_twosat_no_conflict_r11 n m l1 l2 sid_l Hw Hsid).
+  symmetry. apply (TwoSAT.two_sat_characterization
+    (twosat_formula_r8 m l1 l2) n (twosat_formula_valid_r8 n m l1 l2 Hw)).
+Qed.
+
+(* The externally visible return convention; it is a declarative SAT
+   property, not a model of CSR construction or DFS. *)
+Definition twosat_return_contract_r12 (n m : Z) (lit1_l lit2_l : list Z)
+  (result : Z) : Prop :=
+  (result = 0 <-> TwoSAT.satisfiable (twosat_formula_r8 m lit1_l lit2_l)) /\
+  (result = 1 <-> ~ TwoSAT.satisfiable (twosat_formula_r8 m lit1_l lit2_l)).
+
+(* This abstracts only the result of the caller's conflict scan.  It does
+   not encode CSR construction, DFS, or the loop's operational steps. *)
+Definition twosat_conflict_scan_result_r13
+  (sid_l : list Z) (n result : Z) : Prop :=
+  (result = 0 \/ result = 1) /\
+  (result = 0 -> no_conflict_by_sid sid_l n) /\
+  (result = 1 -> ~ no_conflict_by_sid sid_l n).
+
+Lemma twosat_conflict_scan_return_contract_r13 :
+  forall n m lit1_l lit2_l sid_l result,
+    twosat_clause_input_wf n m lit1_l lit2_l ->
+    sid_matches_twosat_r13 sid_l n m lit1_l lit2_l ->
+    twosat_conflict_scan_result_r13 sid_l n result ->
+    twosat_return_contract_r12 n m lit1_l lit2_l result.
+Proof.
+  intros n m lit1_l lit2_l sid_l result Hinput Hsid [Hresult [Hzero Hone]].
+  pose proof (sid_no_conflict_iff_satisfiable_r11 n m lit1_l lit2_l sid_l
+    Hinput Hsid) as Hsat.
+  unfold twosat_return_contract_r12.
+  split.
+  - split.
+    + intro H0. apply (proj1 Hsat). apply Hzero. exact H0.
+    + intro HS. destruct Hresult as [H0 | H1].
+      * exact H0.
+      * exfalso. apply (Hone H1). apply (proj2 Hsat). exact HS.
+  - split.
+    + intros H1 HS. apply (Hone H1). apply (proj2 Hsat). exact HS.
+    + intro HNS. destruct Hresult as [H0 | H1].
+      * exfalso. apply HNS. apply (proj1 Hsat). apply Hzero. exact H0.
+      * exact H1.
+Qed.

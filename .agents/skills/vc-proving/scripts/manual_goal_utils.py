@@ -36,6 +36,14 @@ REQUIRE_IMPORT_LINE_RE = re.compile(
 )
 SIMPLEC_EE_PREFIX = "SimpleC.EE"
 ROCQ_MEMORY_LIMIT_BYTES = 4 * 1024 * 1024 * 1024
+# A single retry absorbs sporadic worker/compiler termination without
+# concealing deterministic Rocq proof failures.
+COQC_TRANSIENT_RETRIES = 1
+TRANSIENT_COQC_SIGNALS = {
+    -signal.SIGABRT,
+    -signal.SIGKILL,
+    -signal.SIGSEGV,
+}
 DEFAULT_HELPER_IMPORT_ROOTS = (
     "Coq",
     "AUXLib",

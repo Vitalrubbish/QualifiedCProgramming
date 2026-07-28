@@ -17,15 +17,18 @@ Import ListNotations.
 Local Open Scope Z_scope.
 
 (* ================================================================ *)
-(* DiGraph: Record for directed graphs, used by Kosaraju.SCC       *)
+(* DiGraph: proof-carrying class for directed graphs, used by Kosaraju.SCC *)
 (* ================================================================ *)
 
-Record DiGraph (V E : Type) : Type := {
+Class DiGraph (V E : Type) : Type := {
   dig_vvalid : V -> Prop;
   dig_evalid : E -> Prop;
   dig_fst : E -> V;
   dig_snd : E -> V;
   dig_listV : list V;
+  dgp_fst_valid     : forall e, dig_evalid e -> dig_vvalid (dig_fst e);
+  dgp_snd_valid     : forall e, dig_evalid e -> dig_vvalid (dig_snd e);
+  dgp_list_complete : forall v, dig_vvalid v -> In v dig_listV;
 }.
 
 Arguments dig_vvalid {V E} _ _.
@@ -50,14 +53,8 @@ Arguments dig_step_aux {V E} _ _ _ _.
   step_aux := fun g e x y => dig_step_aux g e x y;
 |}.
 
-Record DiGraphProp (V E : Type) (g : DiGraph V E) : Prop := {
-  dgp_fst_valid     : forall e, dig_evalid g e -> dig_vvalid g (dig_fst g e);
-  dgp_snd_valid     : forall e, dig_evalid g e -> dig_vvalid g (dig_snd g e);
-  dgp_list_complete : forall v, dig_vvalid g v -> In v (dig_listV g);
-}.
-
 #[export] Instance dig_GValid (V E : Type) : GValid (DiGraph V E) :=
-  @DiGraphProp V E.
+  fun _ => True.
 
 #[export] Instance dig_StepValid (V E : Type) : StepValid (DiGraph V E) V E.
 Proof.
@@ -71,8 +68,7 @@ Defined.
 Proof.
   refine {| listV := dig_listV; |}.
   intros g Hg Hv.
-  destruct (Hg : DiGraphProp V E g) as [_ _ Hcomplete].
-  apply Hcomplete; auto.
+  apply dgp_list_complete; auto.
 Defined.
 
 (* ================================================================ *)
@@ -177,8 +173,20 @@ Qed.
 Definition nth_clause (f : formula) (i : Z) : clause :=
   nth (Z.to_nat i) f ((0, false), (0, false)).
 
-Definition implication_graph (f : formula) (numVars : Z) : DiGraph literal Z :=
-  {|
+Lemma nth_clause_in : forall f i, 0 <= i < Zlength f ->
+  In (nth_clause f i) f.
+Proof.
+  intros f i Hrange.
+  unfold nth_clause.
+  apply nth_In.
+  rewrite (Zlength_correct f) in Hrange.
+  lia.
+Qed.
+
+Definition implication_graph (f : formula) (numVars : Z)
+  (Hvalid : valid_formula numVars f) : DiGraph literal Z.
+Proof.
+  refine {|
     dig_vvalid := fun (l : literal) => valid_literal numVars l;
     dig_evalid := fun (e : Z) => 0 <= e < 2 * Zlength f;
     dig_fst := fun (e : Z) =>
@@ -191,26 +199,8 @@ Definition implication_graph (f : formula) (numVars : Z) : DiGraph literal Z :=
       if Z.even e then snd c else fst c;
     dig_listV := literal_list numVars;
   |}.
-
-Lemma nth_clause_in : forall f i, 0 <= i < Zlength f ->
-  In (nth_clause f i) f.
-Proof.
-  intros f i Hrange.
-  unfold nth_clause.
-  apply nth_In.
-  rewrite (Zlength_correct f) in Hrange.
-  lia.
-Qed.
-
-Lemma implication_graph_gvalid : forall f numVars,
-  valid_formula numVars f ->
-  DiGraphProp literal Z (implication_graph f numVars).
-Proof.
-  intros f numVars Hvalid.
-  set (g := implication_graph f numVars).
-  constructor.
   - intros e He.
-    unfold g, implication_graph; simpl in *.
+    simpl in *.
     destruct He as [He1 He2].
     set (i := e / 2).
     assert (Hi_range : 0 <= i < Zlength f)
@@ -224,7 +214,7 @@ Proof.
       destruct (Hvalid (nth_clause f i) (nth_clause_in f i Hi_range)) as [_ Hl2].
       exact Hl2.
   - intros e He.
-    unfold g, implication_graph; simpl in *.
+    simpl in *.
     destruct He as [He1 He2].
     set (i := e / 2).
     assert (Hi_range : 0 <= i < Zlength f)
@@ -236,18 +226,25 @@ Proof.
     + destruct (Hvalid (nth_clause f i) (nth_clause_in f i Hi_range)) as [Hl1 _].
       exact Hl1.
   - intros v Hv.
-    unfold g, implication_graph; simpl in *.
+    simpl in *.
     apply literal_list_complete; auto.
+Defined.
+
+Lemma implication_graph_gvalid : forall f numVars
+  (Hvalid : valid_formula numVars f),
+  gvalid (implication_graph f numVars Hvalid).
+Proof.
+  intros; exact I.
 Qed.
 
-Lemma step_implication : forall f numVars,
-  valid_formula numVars f ->
+Lemma step_implication : forall f numVars
+  (Hvalid : valid_formula numVars f),
   forall c, In c f ->
-  step (implication_graph f numVars) (negate (fst c)) (snd c) /\
-  step (implication_graph f numVars) (negate (snd c)) (fst c).
+  step (implication_graph f numVars Hvalid) (negate (fst c)) (snd c) /\
+  step (implication_graph f numVars Hvalid) (negate (snd c)) (fst c).
 Proof.
   intros f numVars Hvalid [l1 l2] Hc.
-  set (g := implication_graph f numVars).
+  set (g := implication_graph f numVars Hvalid).
   assert (Hpos: exists i : Z, 0 <= i < Zlength f /\
     nth (Z.to_nat i) f ((0,false),(0,false)) = (l1, l2)).
   { apply In_nth with (d := ((0,false),(0,false))) in Hc.
@@ -326,12 +323,13 @@ Definition no_conflict (g : DiGraph literal Z) (numVars : Z) : Prop :=
 
 Lemma eval_preserved_along_step : forall f numVars a,
   satisfies a f ->
+  forall Hvalid : valid_formula numVars f,
   forall l1 l2,
-  step (implication_graph f numVars) l1 l2 ->
+  step (implication_graph f numVars Hvalid) l1 l2 ->
   eval_literal a l1 = true -> eval_literal a l2 = true.
 Proof.
-  intros f numVars a Hsat l1 l2 Hstep Heval.
-  set (g := implication_graph f numVars) in *.
+  intros f numVars a Hsat Hvalid l1 l2 Hstep Heval.
+  set (g := implication_graph f numVars Hvalid) in *.
   destruct Hstep as [e Hstep].
   destruct Hstep as [He Hx Hy Hfx Hsy].
   unfold g, implication_graph in Hfx, Hsy; simpl in Hfx, Hsy.
@@ -362,11 +360,12 @@ Qed.
 
 Lemma eval_preserved_along_path : forall f numVars a,
   satisfies a f ->
+  forall Hvalid : valid_formula numVars f,
   forall l1 l2,
-  reachable (implication_graph f numVars) l1 l2 ->
+  reachable (implication_graph f numVars Hvalid) l1 l2 ->
   eval_literal a l1 = true -> eval_literal a l2 = true.
 Proof.
-  intros f numVars a Hsat l1 l2 Hreach Heval.
+  intros f numVars a Hsat Hvalid l1 l2 Hreach Heval.
   unfold reachable in Hreach.
   unfold reachable in Hreach.
   let X := eval unfold clos_refl_trans in Hreach in
@@ -381,36 +380,32 @@ Proof.
     unfold Rels.concat in Hn.
     destruct Hn as [z [Hz1 Hz2]].
     apply (IH z l2 Hz2).
-    apply (eval_preserved_along_step f numVars a Hsat l1 z Hz1 Heval).
+    apply (eval_preserved_along_step f numVars a Hsat Hvalid l1 z Hz1 Heval).
 Qed.
 
-Lemma forward : forall f numVars,
-  valid_formula numVars f ->
-  satisfiable f -> no_conflict (implication_graph f numVars) numVars.
+Lemma forward : forall f numVars
+  (Hvalid : valid_formula numVars f),
+  satisfiable f -> no_conflict (implication_graph f numVars Hvalid) numVars.
 Proof.
   intros f numVars Hvalid [a Hsat] v Hv Hmr.
-  set (g := implication_graph f numVars) in *.
+  set (g := implication_graph f numVars Hvalid) in *.
   destruct Hmr as [Hftb Hbtf].
   destruct (classic (a v = true)) as [Hav | Hav].
   - assert (Heval: eval_literal a (v, true) = true)
       by (unfold eval_literal; simpl; rewrite Hav; auto).
-    apply eval_preserved_along_path with (f := f) (numVars := numVars) (a := a)
-      (l1 := (v, true)) (l2 := (v, false)) in Heval.
-    + unfold eval_literal in Heval; simpl in Heval.
-      rewrite Hav in Heval; simpl in Heval.
-      discriminate.
-    + exact Hsat.
-    + unfold g; exact Hftb.
+    pose proof (eval_preserved_along_path f numVars a Hsat Hvalid
+      (v, true) (v, false) Hftb Heval) as Heval_false.
+    unfold eval_literal in Heval_false; simpl in Heval_false.
+    rewrite Hav in Heval_false; simpl in Heval_false.
+    discriminate.
   - apply Bool.not_true_is_false in Hav.
     assert (Heval: eval_literal a (v, false) = true)
       by (unfold eval_literal; simpl; rewrite Hav; auto).
-    apply eval_preserved_along_path with (f := f) (numVars := numVars) (a := a)
-      (l1 := (v, false)) (l2 := (v, true)) in Heval.
-    + unfold eval_literal in Heval; simpl in Heval.
-      rewrite Hav in Heval; simpl in Heval.
-      discriminate.
-    + exact Hsat.
-    + unfold g; exact Hbtf.
+    pose proof (eval_preserved_along_path f numVars a Hsat Hvalid
+      (v, false) (v, true) Hbtf Heval) as Heval_true.
+    unfold eval_literal in Heval_true; simpl in Heval_true.
+    rewrite Hav in Heval_true; simpl in Heval_true.
+    discriminate.
 Qed.
 
 (* ================================================================ *)
@@ -422,7 +417,7 @@ Section BACKWARD.
 Variables (f : formula) (numVars : Z).
 Hypothesis (Hvalid : valid_formula numVars f).
 
-Let g : DiGraph literal Z := implication_graph f numVars.
+Let g : DiGraph literal Z := implication_graph f numVars Hvalid.
 
 Let Hgvalid_g : gvalid g := implication_graph_gvalid f numVars Hvalid.
 
@@ -553,8 +548,8 @@ End BACKWARD.
 (* ================================================================ *)
 
 Theorem two_sat_characterization :
-  forall f numVars, valid_formula numVars f ->
-  (satisfiable f <-> no_conflict (implication_graph f numVars) numVars).
+  forall f numVars (Hvalid : valid_formula numVars f),
+  (satisfiable f <-> no_conflict (implication_graph f numVars Hvalid) numVars).
 Proof.
   intros f numVars Hvalid.
   split.
